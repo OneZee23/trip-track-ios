@@ -29,7 +29,8 @@ enum GPXExporter {
     /// missing element is a cleaner signal than one with nothing inside it.
     static func gpx(for trip: Trip, points: [TrackPoint]) -> String {
         let name = escape(displayName(for: trip))
-        let sorted = points.sorted { $0.timestamp < $1.timestamp }
+        // Экспорт — записанный трек: достроенных точек в нём нет (спека §2.4).
+        let sorted = points.filter { !$0.isInterpolated }.sorted { $0.timestamp < $1.timestamp }
 
         var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         xml += "<gpx version=\"1.1\" creator=\"TripTrack\" "

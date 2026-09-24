@@ -33,7 +33,8 @@ enum CSVExporter {
     /// An empty track yields the header line alone — a legitimate, openable
     /// (if uninteresting) CSV, not an error.
     static func csv(for trip: Trip, points: [TrackPoint]) -> String {
-        let sorted = points.sorted { $0.timestamp < $1.timestamp }
+        // Экспорт — записанный трек: достроенных точек в нём нет (спека §2.4).
+        let sorted = points.filter { !$0.isInterpolated }.sorted { $0.timestamp < $1.timestamp }
         var lines = [header]
         lines.reserveCapacity(sorted.count + 1)
         for point in sorted {

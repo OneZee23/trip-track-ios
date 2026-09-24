@@ -456,18 +456,20 @@ struct RouteMapView: UIViewRepresentable {
                 guard segCoords.count >= 2 else { continue }
 
                 if segSpeeds.count == segCoords.count {
-                    let simplified = Self.simplifyWithSpeeds(segCoords, speeds: segSpeeds, epsilon: epsilon)
-                    // Group consecutive points in the same speed zone into single polylines
-                    let grouped = Self.groupBySpeedZone(simplified)
-                    for group in grouped {
-                        var coords = group.coords
-                        let poly = SpeedPolyline(coordinates: &coords, count: coords.count)
-                        poly.speed = group.speed
-                        mapView.addOverlay(poly, level: routeLevel)
-                        unionRect = unionRect.union(poly.boundingMapRect)
-                        runTotal += GeometryUtils.polylineLength(group.coords)
-                        speedRun.append(poly)
-                        runMetres.append(runTotal)
+                    for (runCoords, runSpeeds) in Self.splitByKnownSpeed(segCoords, speeds: segSpeeds) {
+                        let simplified = Self.simplifyWithSpeeds(runCoords, speeds: runSpeeds, epsilon: epsilon)
+                        // Group consecutive points in the same speed zone into single polylines
+                        let grouped = Self.groupBySpeedZone(simplified)
+                        for group in grouped {
+                            var coords = group.coords
+                            let poly = SpeedPolyline(coordinates: &coords, count: coords.count)
+                            poly.speed = group.speed
+                            mapView.addOverlay(poly, level: routeLevel)
+                            unionRect = unionRect.union(poly.boundingMapRect)
+                            runTotal += GeometryUtils.polylineLength(group.coords)
+                            speedRun.append(poly)
+                            runMetres.append(runTotal)
+                        }
                     }
                 } else {
                     let simplified = GeometryUtils.simplifyRDP(segCoords, epsilon: epsilon)
@@ -777,10 +779,46 @@ struct RouteMapView: UIViewRepresentable {
         return groups
     }
 
+    /// Скорость неизвестна только у достроенной точки (спека §2.3) — у неё
+    /// своя зона, свой отрезок, и рисуется он серым пунктиром.
+    static let unknownSpeedZone = -1
+    static let unknownSpeedColor = UIColor(white: 0.62, alpha: 0.9)
+    static let unknownSpeedDash: [NSNumber] = [6, 6]
+
     /// Map speed to zone index for grouping. Delegates to `SpeedColorScale`
     /// so grouping, polyline colour, and the on-map legend never drift apart.
     private static func speedZone(_ speedMS: Double) -> Int {
-        SpeedColorScale.zone(forSpeedMS: speedMS)
+        speedMS < 0 ? unknownSpeedZone : SpeedColorScale.zone(forSpeedMS: speedMS)
+    }
+
+    /// Режет отрезок на прогоны «скорость известна / неизвестна». Пунктир идёт
+    /// от последней настоящей точки перед дырой до первой после неё — это края
+    /// дыры, и они общие с соседними прогонами, поэтому линия не рвётся.
+    /// Резать нужно ДО упрощения: иначе прямая достройка на прямой дороге
+    /// схлопнулась бы вместе с соседями в одну цветную линию.
+    static func splitByKnownSpeed(_ coords: [CLLocationCoordinate2D],
+                                  speeds: [Double]) -> [([CLLocationCoordinate2D], [Double])] {
+        guard coords.count == speeds.count, coords.count > 1 else { return [(coords, speeds)] }
+        var runs: [([CLLocationCoordinate2D], [Double])] = []
+        var start = 0
+        var index = 0
+        while index < coords.count {
+            guard speeds[index] < 0 else { index += 1; continue }
+            var end = index
+            while end + 1 < coords.count, speeds[end + 1] < 0 { end += 1 }
+            let left = max(index - 1, 0)
+            let right = min(end + 1, coords.count - 1)
+            if left > start {
+                runs.append((Array(coords[start...left]), Array(speeds[start...left])))
+            }
+            runs.append((Array(coords[left...right]), Array(repeating: -1, count: right - left + 1)))
+            start = right
+            index = end + 1
+        }
+        if start < coords.count - 1 {
+            runs.append((Array(coords[start...]), Array(speeds[start...])))
+        }
+        return runs.filter { $0.0.count > 1 }
     }
 
     // MARK: - Simplification with speeds
@@ -1634,6 +1672,17 @@ struct RouteMapView: UIViewRepresentable {
                 return FogVeilRenderer(veil: veil)
             }
             if let speedLine = overlay as? SpeedPolyline {
+                // Неизвестная скорость — достройка: серый пунктир без обводки
+                // (обводка сплошная и превратила бы пунктир обратно в дорогу),
+                // и цвет «Плюса» его не перекрашивает.
+                if speedLine.speed < 0 {
+                    let renderer = MKPolylineRenderer(polyline: speedLine)
+                    renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
+                    renderer.lineCap = .butt
+                    renderer.strokeColor = RouteMapView.unknownSpeedColor
+                    renderer.lineDashPattern = RouteMapView.unknownSpeedDash
+                    return renderer
+                }
                 let renderer = routeRenderer(for: speedLine)
                 // Выбранный цвет «Плюса» перебивает градиент скорости — и
                 // только он: `nil` у `currentUIColor` это и есть «градиент»,

@@ -496,7 +496,7 @@ struct FullscreenMapSheet: View {
     /// already answer "how fast was I going here".
     @ViewBuilder
     private var speedBubble: some View {
-        if canReplay, followsCar, engine.headCoord != nil, engine.hasSpeeds {
+        if canReplay, followsCar, engine.headCoord != nil, engine.hasSpeeds, engine.currentSpeedKnown {
             let c = AppTheme.colors(for: scheme)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 let speed = Measure.speedParts(
@@ -1177,6 +1177,9 @@ final class TripReplayEngine: NSObject, ObservableObject {
     /// Метры в секунду — как в самом треке. Переводит их `Measure` на
     /// экране: движок реплея про выбор единицы не знает и знать не должен.
     @Published private(set) var currentSpeedMS: Double = 0
+    /// Скорость в этой точке известна. У достроенного участка её нет (спека
+    /// §2.3), и пузырь скорости там прячется, а не врёт нулём.
+    @Published private(set) var currentSpeedKnown = true
     /// Whether this playback carries speeds at all — the readout is hidden
     /// rather than parked at zero when it does not.
     var hasSpeeds: Bool { !speeds.isEmpty }
@@ -1270,6 +1273,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         progress = 0
         distanceFraction = 0
         currentSpeedMS = 0
+        currentSpeedKnown = true
         headCoord = nil
         trailIndex = -1
         cursor = 0
@@ -1324,6 +1328,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         progress = 0
         distanceFraction = 0
         currentSpeedMS = 0
+        currentSpeedKnown = true
         cursor = 0
         holdingIndex = nil
     }
@@ -1403,8 +1408,10 @@ final class TripReplayEngine: NSObject, ObservableObject {
         )
         trailIndex = lo
         if !speeds.isEmpty {
+            let known = speeds[lo] >= 0 && speeds[hi] >= 0
+            currentSpeedKnown = known
             let s = speeds[lo] + (speeds[hi] - speeds[lo]) * frac
-            currentSpeedMS = max(0, s)
+            currentSpeedMS = known ? max(0, s) : 0
         }
         if cumulativeMetres.count == coords.count, let total = cumulativeMetres.last, total > 0 {
             let covered = cumulativeMetres[lo] + (cumulativeMetres[hi] - cumulativeMetres[lo]) * frac
