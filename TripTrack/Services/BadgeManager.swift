@@ -134,16 +134,18 @@ enum BadgeManager {
             if let vid = trip.vehicleId { vehicleCounts[vid, default: 0] += 1 }
             if trip.isPrivate { privateCount += 1 }
 
-            // Track points analysis
-            for point in trip.trackPoints {
+            // Высота и «уровень моря» — только по точкам, которым можно верить:
+            // значок это награда, а высота грубой точки — шум.
+            let measured = trip.measuredPoints
+            for point in measured {
                 maxAltitude = max(maxAltitude, point.altitude)
                 maxLatitude = max(maxLatitude, abs(point.latitude))
             }
 
             // Sea level check: mostly at low altitude, decent distance
-            if trip.rewardKm >= 20 && !trip.trackPoints.isEmpty {
-                let lowPoints = trip.trackPoints.filter { $0.altitude < 10 && $0.altitude >= 0 }
-                if Double(lowPoints.count) / Double(trip.trackPoints.count) > 0.8 {
+            if trip.rewardKm >= 20 && !measured.isEmpty {
+                let lowPoints = measured.filter { $0.altitude < 10 && $0.altitude >= 0 }
+                if Double(lowPoints.count) / Double(measured.count) > 0.8 {
                     hasSeaLevel = true
                 }
             }

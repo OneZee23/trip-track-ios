@@ -44,6 +44,24 @@ enum TripDistanceGate {
     /// на пять метров, и шум внутри этого круга в километры не попадает.
     static let minStep: Double = 5.0
 
+    // MARK: - Кому одометр верит
+
+    /// Хуже этого фикс в километры не идёт (спека §2.2). Число — прежний
+    /// потолок записи, поэтому километры старых поездок пересчитываются в то же
+    /// самое: у их точек лежит оценка фильтра, и она не больше 65 м по
+    /// построению (на 38 896 точках базы владельца максимум — 63.98).
+    static let odometerAccuracyLimit: Double = 65
+
+    /// Вправе ли точка двигать одометр, рекорд скорости, высоту и проезды мест.
+    ///
+    /// Одна дверь на все счётчики пути: запись, финализация, пост-обработка,
+    /// `Trip.movementSplit`, `TripRouteLocator.distancePrefix`, пейлоад синка,
+    /// значки, графики поездки и `PlaceMatcher`. Точность 0 — у вписанной рукой
+    /// поездки, и такая точка считается, как считалась.
+    static func countsForDistance(horizontalAccuracy: Double, isInterpolated: Bool) -> Bool {
+        !isInterpolated && horizontalAccuracy <= odometerAccuracyLimit
+    }
+
     /// Точка трека в виде, достаточном для подсчёта расстояния.
     struct Sample {
         let latitude: Double

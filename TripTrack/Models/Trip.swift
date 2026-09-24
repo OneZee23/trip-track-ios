@@ -202,6 +202,10 @@ struct Trip: Identifiable, Codable {
         source.earnsRewards ? scoringKm : 0
     }
 
+    /// Точки, которым можно верить для чисел: без грубых и без достроенных.
+    /// Форму маршрута рисуют ВСЕ точки, считают — только эти (спека §2.4).
+    var measuredPoints: [TrackPoint] { trackPoints.filter(\.countsForDistance) }
+
     /// Time spent actually moving vs sitting stationary (engine running but
     /// not making progress — traffic, lights, parked-but-recording). Computed
     /// from track points: walks pairs of points, classifies each gap by the
@@ -213,7 +217,11 @@ struct Trip: Identifiable, Codable {
     /// engine, acceleration profile). Showing "Driving 1h / Stopped 4h" is
     /// honest data the user calibrates their own intuition against.
     private var movementSplit: (driving: TimeInterval, stopped: TimeInterval, movingDistance: Double) {
-        guard trackPoints.count >= 2 else { return (0, 0, 0) }
+        // Только точки, которым можно верить: у достройки скорости нет вовсе,
+        // а грубая точка принесла бы в «среднюю в движении» метры, которых
+        // одометр не видел.
+        let points = measuredPoints
+        guard points.count >= 2 else { return (0, 0, 0) }
         // 5 км/ч, записанные в СИ: порог остаётся тем же физическим, а сравнение
         // идёт с тем, в чём скорость лежит в точке — метрами в секунду. Умножать
         // каждую пару точек на 3.6, чтобы сравнить с числом «5», значило бы
@@ -230,10 +238,10 @@ struct Trip: Identifiable, Codable {
         // одометром, который считает по-другому. Якорь сбрасывается на каждой
         // остановке и на каждом разрыве — там отсчёт начинается заново.
         var movingAnchor: TrackPoint?
-        for i in 1..<trackPoints.count {
-            let dt = trackPoints[i].timestamp.timeIntervalSince(trackPoints[i - 1].timestamp)
+        for i in 1..<points.count {
+            let dt = points[i].timestamp.timeIntervalSince(points[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { movingAnchor = nil; continue }
-            let avgMS = (trackPoints[i].speed + trackPoints[i - 1].speed) / 2.0
+            let avgMS = (points[i].speed + points[i - 1].speed) / 2.0
             if avgMS < idleSpeedMS {
                 stp += dt
                 movingAnchor = nil
@@ -242,9 +250,9 @@ struct Trip: Identifiable, Codable {
                 // drivingTime counts, so the moving average stays consistent on
                 // sparse-GPS trips (the full trip distance includes long cross-gap
                 // segments that drivingTime excludes — dividing by it would inflate).
-                let anchor = movingAnchor ?? trackPoints[i - 1]
+                let anchor = movingAnchor ?? points[i - 1]
                 let a = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
-                let b = CLLocation(latitude: trackPoints[i].latitude, longitude: trackPoints[i].longitude)
+                let b = CLLocation(latitude: points[i].latitude, longitude: points[i].longitude)
                 let segDist = b.distance(from: a)
                 // Reject GPS-teleport segments: a stale/low reported .speed paired
                 // with a huge geometric jump (multipath, dropout snap-back) would
@@ -255,7 +263,7 @@ struct Trip: Identifiable, Codable {
                 // dt берём до ЯКОРЯ, а не до соседней точки: отрезок теперь
                 // может охватывать несколько шагов, и подставить сюда чужую
                 // секунду значило бы объявить телепортом честный разгон.
-                let anchorDt = trackPoints[i].timestamp.timeIntervalSince(anchor.timestamp)
+                let anchorDt = points[i].timestamp.timeIntervalSince(anchor.timestamp)
                 if !TripDistanceGate.isPlausibleSegment(meters: segDist, dt: anchorDt) {
                     movingAnchor = nil
                     continue
@@ -266,9 +274,9 @@ struct Trip: Identifiable, Codable {
                 drv += dt
                 if segDist >= TripDistanceGate.minStep {
                     movingDist += segDist
-                    movingAnchor = trackPoints[i]
+                    movingAnchor = points[i]
                 } else if movingAnchor == nil {
-                    movingAnchor = trackPoints[i - 1]
+                    movingAnchor = points[i - 1]
                 }
             }
         }

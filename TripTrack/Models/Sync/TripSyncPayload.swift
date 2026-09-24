@@ -115,13 +115,13 @@ extension TripSyncPayload {
         self.averageSpeed = trip.averageSpeed
         self.fuelUsed = trip.fuelUsed
         self.elevation = trip.elevation
-        // Extended metrics — derived from track points. Send only when we
-        // have data to compute from; empty-track-point trips (manual entry,
-        // pre-0.5.6 imports) get nil so the server doesn't store a misleading
-        // "0" that the social UI would later have to special-case.
-        if !trip.trackPoints.isEmpty {
-            self.maxAltitude = trip.trackPoints.map(\.altitude).max()
-            let split = TripSyncPayload.computeMovementSplit(trip.trackPoints)
+        // Extended metrics — derived from track points. Грубые и достроенные
+        // точки в эти числа не идут (спека §2.4): у достройки скорость −1, и
+        // счёт ниже записал бы тоннель в «стоянку».
+        let measured = trip.measuredPoints
+        if !measured.isEmpty {
+            self.maxAltitude = measured.map(\.altitude).max()
+            let split = TripSyncPayload.computeMovementSplit(measured)
             self.drivingTime = Int(split.driving)
             self.stoppedTime = Int(split.stopped)
         } else {

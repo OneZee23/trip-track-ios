@@ -132,9 +132,15 @@ enum TripRouteLocator {
         var prefix = [Double](repeating: 0, count: points.count)
         guard points.count > 1 else { return prefix }
 
+        // Якорь — только точка, которой одометр верит. Грубые и достроенные
+        // получают накопленное к ним число, но сами его не двигают: иначе
+        // «до моря 143 км» у отметки разошлось бы с «всего 210 км» поездки.
+        guard var anchorIndex = points.firstIndex(where: \.countsForDistance) else { return prefix }
         var total: Double = 0
-        var anchor = points[0]
-        for i in 1..<points.count {
+        for i in (anchorIndex + 1)..<points.count {
+            defer { prefix[i] = total }
+            guard points[i].countsForDistance else { continue }
+            let anchor = points[anchorIndex]
             let metres = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
                 .distance(from: CLLocation(latitude: points[i].latitude, longitude: points[i].longitude))
             if metres >= TripDistanceGate.minStep {
@@ -142,9 +148,8 @@ enum TripRouteLocator {
                 if TripDistanceGate.isPlausibleSegment(meters: metres, dt: dt) {
                     total += metres
                 }
-                anchor = points[i]
+                anchorIndex = i
             }
-            prefix[i] = total
         }
         return prefix
     }

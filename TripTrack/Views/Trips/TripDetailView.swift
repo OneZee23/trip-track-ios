@@ -1359,41 +1359,14 @@ struct TripDetailView: View {
             cachedSpeeds = pts.map(\.speed)
             cachedTimestamps = pts.map(\.timestamp)
 
-            // Distance travelled at every point. Computed from the coordinates
-            // directly rather than through CLLocation objects — a ten-hour
-            // trip is tens of thousands of points, and that many allocations
-            // are felt as a stutter when the screen opens.
-            var cumulativeKm = [Double](repeating: 0, count: pts.count)
-            var running = 0.0
-            for i in 1..<pts.count {
-                running += GeometryUtils.haversineDistance(
-                    cachedCoordinates[i - 1], cachedCoordinates[i]
-                )
-                cumulativeKm[i] = running / 1000
-            }
-            let totalKm = running / 1000
-
-            let altitudes = pts.map(\.altitude)
+            // Графики — не по всем точкам (спека §2.4). Скорость: грубые точки
+            // да (доплер честен и при плохой позиции), достроенные нет — у них
+            // скорости нет вовсе. Высота: только точки, которым можно верить.
+            // Километры каждого ряда набираются по его же точкам.
+            let elev = Self.chartSeries(t.measuredPoints) { $0.altitude }
             // Метры в секунду, а не километры в час: график красится по
-            // `SpeedColorScale` (СИ) и подписывается `Measure` (СИ), и
-            // переводить туда-обратно ради хранения в середине незачем.
-            let speedsMS = pts.map { max(0, $0.speed) }
-            // The timestamps ride along so a touch on either chart can say
-            // when that kilometre happened.
-            let elevBuckets = ChartSeriesBuilder.buckets(
-                cumulativeKm: cumulativeKm, values: altitudes,
-                dates: cachedTimestamps, totalKm: totalKm
-            )
-            let speedBuckets = ChartSeriesBuilder.buckets(
-                cumulativeKm: cumulativeKm, values: speedsMS,
-                dates: cachedTimestamps, totalKm: totalKm
-            )
-            let elev = elevBuckets.enumerated().map { i, b in
-                DetailChartPoint(id: i, x: b.km, y: b.mean, date: b.date, yMin: b.low, yMax: b.high)
-            }
-            let spd = speedBuckets.enumerated().map { i, b in
-                DetailChartPoint(id: i, x: b.km, y: b.mean, date: b.date, yMin: b.low, yMax: b.high)
-            }
+            // `SpeedColorScale` (СИ) и подписывается `Measure` (СИ).
+            let spd = Self.chartSeries(pts.filter { !$0.isInterpolated }) { max(0, $0.speed) }
             // A dead-flat altitude series (simulator, barometer-less data)
             // renders as a meaningless line — hide the section instead.
             let altValues = elev.map(\.y)
@@ -1403,13 +1376,14 @@ struct TripDetailView: View {
 
             cachedDrivingTime = t.drivingTime
             cachedStoppedTime = t.stoppedTime
+            let measured = t.measuredPoints
             var gain: Double = 0
-            for i in 1..<pts.count {
-                let delta = pts[i].altitude - pts[i - 1].altitude
+            for i in measured.indices.dropFirst() {
+                let delta = measured[i].altitude - measured[i - 1].altitude
                 if delta > 0 { gain += delta }
             }
             cachedElevationGain = gain
-            cachedMaxAltitude = pts.map(\.altitude).max() ?? 0
+            cachedMaxAltitude = measured.map(\.altitude).max() ?? 0
         } else if let preview = t.previewPolyline {
             // Trips synced down via /sync/pull only carry metadata + the
             // preview polyline (server doesn't return full trackPoints).
@@ -1424,6 +1398,27 @@ struct TripDetailView: View {
             // nothing to draw and no bounds to zoom to. A stranger's intercity
             // trip opened onto a world map with two pins on it.
             isPreviewRoute = true
+        }
+    }
+
+    /// Ряд графика по своим точкам. Километры считаются по координатам
+    /// напрямую, без `CLLocation`: десятичасовая поездка — десятки тысяч
+    /// точек, и столько аллокаций заметны рывком при открытии экрана.
+    private static func chartSeries(_ points: [TrackPoint],
+                                    value: (TrackPoint) -> Double) -> [DetailChartPoint] {
+        guard points.count > 1 else { return [] }
+        var cumulativeKm = [Double](repeating: 0, count: points.count)
+        var running = 0.0
+        for i in 1..<points.count {
+            running += GeometryUtils.haversineDistance(points[i - 1].coordinate, points[i].coordinate)
+            cumulativeKm[i] = running / 1000
+        }
+        let buckets = ChartSeriesBuilder.buckets(
+            cumulativeKm: cumulativeKm, values: points.map(value),
+            dates: points.map(\.timestamp), totalKm: running / 1000
+        )
+        return buckets.enumerated().map { i, b in
+            DetailChartPoint(id: i, x: b.km, y: b.mean, date: b.date, yMin: b.low, yMax: b.high)
         }
     }
 

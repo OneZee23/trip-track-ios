@@ -814,12 +814,16 @@ final class TripManager: ObservableObject {
         // ПЕРЕЗАПИСЫВАЕТ километры, набранные во время записи, — то есть именно
         // она и есть одометр поездки. Считай она подряд по плотным точкам 0.6.5,
         // весь разговор про «расстояние не меняется» кончился бы здесь.
+        let trusted = points.filter {
+            TripDistanceGate.countsForDistance(horizontalAccuracy: $0.horizontalAccuracy,
+                                               isInterpolated: $0.isInterpolated)
+        }
         let totalDistance = TripDistanceGate.totalDistance(
-            points.map {
+            trusted.map {
                 TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
             }
         )
-        let maxSpeed = points.dropFirst().reduce(0.0) { max($0, $1.speed) }
+        let maxSpeed = trusted.dropFirst().reduce(0.0) { max($0, $1.speed) }
 
         entity.distance = totalDistance
         entity.maxSpeed = maxSpeed

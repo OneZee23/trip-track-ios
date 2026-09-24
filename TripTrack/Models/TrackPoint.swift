@@ -41,4 +41,10 @@ struct TrackPoint: Identifiable, Codable {
         self.timestamp = location.timestamp
         self.isInterpolated = isInterpolated
     }
+
+    /// Вправе ли точка двигать одометр — см. `TripDistanceGate.countsForDistance`.
+    var countsForDistance: Bool {
+        TripDistanceGate.countsForDistance(horizontalAccuracy: horizontalAccuracy,
+                                           isInterpolated: isInterpolated)
+    }
 }

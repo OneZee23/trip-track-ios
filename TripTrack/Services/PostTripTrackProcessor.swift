@@ -257,14 +257,16 @@ final class PostTripTrackProcessor {
         // Тот же пятиметровый шаг, что у записи и финализации: три копии этого
         // цикла расходились бы на плотных точках 0.6.5, а побеждала бы та, что
         // отработала последней.
+        let trusted = sorted.filter {
+            TripDistanceGate.countsForDistance(horizontalAccuracy: $0.horizontalAccuracy,
+                                               isInterpolated: $0.isInterpolated)
+        }
         let totalDistance = TripDistanceGate.totalDistance(
-            sorted.map {
+            trusted.map {
                 TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
             }
         )
-        let maxSpeed = sorted.dropFirst()
-            .filter { !$0.isInterpolated }
-            .reduce(0.0) { max($0, $1.speed) }
+        let maxSpeed = trusted.dropFirst().reduce(0.0) { max($0, $1.speed) }
 
         entity.distance = totalDistance
         entity.maxSpeed = maxSpeed

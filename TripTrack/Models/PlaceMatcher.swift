@@ -46,13 +46,17 @@ enum PlaceMatcher {
 
     /// Все проезды поездки мимо места.
     static func passes(through place: Place, tripId: UUID, points: [TrackPoint], startDate: Date) -> [PlacePass] {
-        TripRouteLocator
-            .passes(near: place.coordinate, in: points, radius: passRadius, startDate: startDate)
+        // Проезд — только по точкам, которым можно верить (спека §2.4): грубая
+        // точка гуляет на сотню метров, достроенная — догадка о дороге.
+        // `fix.index` указывает в ЭТОТ массив, поэтому и курс читается из него.
+        let measured = points.filter(\.countsForDistance)
+        return TripRouteLocator
+            .passes(near: place.coordinate, in: measured, radius: passRadius, startDate: startDate)
             .map { fix in
                 PlacePass(placeId: place.id, tripId: tripId, timestamp: fix.timestamp,
                           elapsedFromStart: fix.elapsedFromStart,
                           distanceFromStart: fix.distanceFromStart,
-                          course: course(at: fix.index, in: points))
+                          course: course(at: fix.index, in: measured))
             }
     }
 
