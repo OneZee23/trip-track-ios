@@ -1091,7 +1091,14 @@ final class MapViewModel: ObservableObject {
                     // блокировки.
                     lastCompletedTrip = nil
                     lastCompletionData = nil
-                    LiveActivityManager.shared.endActivity()
+                    // `endActivity()` гасит ВСЮ систему активностей, а не
+                    // карточку этой поездки (ревью раунда 2, пункт 1): гасить
+                    // можно только когда ничего не пишется, иначе черновик X,
+                    // решённый из кармана, погасил бы Live Activity уже
+                    // едущей поездки Y.
+                    if tripManager.activeTrip == nil {
+                        LiveActivityManager.shared.endActivity()
+                    }
                 }
                 NotificationCenter.default.post(name: .tripDeleted, object: id)
             }

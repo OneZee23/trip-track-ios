@@ -16,6 +16,16 @@ final class ApplyDraftDecisionsTests: XCTestCase {
     private var insertedTripIds: [UUID] = []
     private let t0 = Date(timeIntervalSince1970: 1_765_000_000)
 
+    // «Моя» идёт через полный `processCompletedTrip` — единственную дверь
+    // наград, — и пишет опыт в ЖИВУЮ строку настроек `PersistenceController
+    // .shared` (ревью раунда 2, пункт 2): без снимка/возврата тест сдвигал
+    // бы уровень и стрик человека, который потом откроет тот же симулятор.
+    private var savedProfileXP: Int64 = 0
+    private var savedProfileLevel: Int32 = 1
+    private var savedCurrentStreak: Int32 = 0
+    private var savedBestStreak: Int32 = 0
+    private var savedLastTripDate: Date?
+
     override func setUp() {
         super.setUp()
         cloudSyncBefore = SettingsManager.shared.cloudSyncEnabled
@@ -25,6 +35,13 @@ final class ApplyDraftDecisionsTests: XCTestCase {
         // авторизации подменяется, как в `JourneyPublishTests`.
         SyncEnqueuer.isAuthorizedToEnqueue = { true }
         vm = MapViewModel()
+        if let settings = vm.gamificationManager.fetchSettingsEntity() {
+            savedProfileXP = settings.profileXP
+            savedProfileLevel = settings.profileLevel
+            savedCurrentStreak = settings.currentStreak
+            savedBestStreak = settings.bestStreak
+            savedLastTripDate = settings.lastTripDate
+        }
     }
 
     override func tearDown() {
@@ -34,8 +51,16 @@ final class ApplyDraftDecisionsTests: XCTestCase {
             req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
             if let entity = try? ctx.fetch(req).first { ctx.delete(entity) }
         }
-        try? ctx.save()
         insertedTripIds = []
+        // Возврат — ПОКА `vm` ещё жив: `gamificationManager` его собственный.
+        if let settings = vm?.gamificationManager.fetchSettingsEntity() {
+            settings.profileXP = savedProfileXP
+            settings.profileLevel = savedProfileLevel
+            settings.currentStreak = savedCurrentStreak
+            settings.bestStreak = savedBestStreak
+            settings.lastTripDate = savedLastTripDate
+        }
+        try? ctx.save()
         _ = DraftDecisionQueue.shared.drain() // не оставить чужому тесту наш мусор
         SyncQueue.shared.clearAll()
         SettingsManager.shared.cloudSyncEnabled = cloudSyncBefore
