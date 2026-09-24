@@ -7,7 +7,9 @@ import MapKit
 /// Дорога вместо прямой (спека §2.3) и проход по старым поездкам (§2.5).
 /// Раунд 1 ревью добавил сюда: три фазы `fill` не текут на главный актёр
 /// (§A), дренаж переживает поездку, финишировавшую посреди себя (§C), и
-/// таблицу кодов `MKError` (§D).
+/// таблицу кодов `MKError` (§D). Раунд 2 добавил: остановка без единого
+/// маршрута не пишет ничего (пункт 1), и двустороннюю проверку дыры —
+/// пустую дыру односторонняя проверка пропускала бы молча (пункт 3).
 @MainActor
 final class RoadGapFillerTests: XCTestCase {
     private var pc: PersistenceController!
@@ -129,6 +131,23 @@ final class RoadGapFillerTests: XCTestCase {
         let third = await filler(router).fill(tripId: id)
         XCTAssertEqual(third, .done)
         XCTAssertEqual(router.calls, 2, "дорогу второй раз не спрашивают")
+    }
+
+    /// Ревью раунд 2, пункт 1: остановка без единого маршрута обязана не
+    /// писать НИЧЕГО. Поездка искусственно стоит `done`, хотя дыра всё ещё
+    /// прямая (могло случиться до фикса, или руками) — без охранника
+    /// «Применить» пересохранила бы её и откатила `done` обратно в
+    /// `pending`, хотя писать было нечего.
+    func testEarlyStopWithNothingCollectedLeavesADoneTripAlone() async throws {
+        let entity = try await processedTunnelTrip()
+        entity.roadFillState = RoadFillState.done.rawValue
+        try pc.container.viewContext.save()
+
+        let router = StubRoadRouter { _, _ in throw RoadRouteError.throttled }
+        let outcome = await filler(router).fill(tripId: try XCTUnwrap(entity.id))
+
+        XCTAssertEqual(outcome, .stillPending)
+        XCTAssertEqual(entity.roadFillState, RoadFillState.done.rawValue, "писать было нечего — «Применить» не звали")
     }
 
     func testNotAllowedToRunLeavesEverythingAsIs() async throws {
@@ -281,6 +300,59 @@ final class RoadGapFillerTests: XCTestCase {
         XCTAssertTrue(enqueued.isEmpty)
     }
 
+    // MARK: Двусторонняя проверка — раунд 2
+
+    /// Ревью раунд 2, пункт 3: у ПУСТОЙ дыры нет своих id, которые могли бы
+    /// разойтись — односторонняя проверка (только «мои старые id ещё живы»)
+    /// пропустила бы её молча. Пока «Спросить» ждёт ответ, пул успевает
+    /// принести в то же окно СВОЮ прямую достройку — двусторонняя проверка
+    /// обязана заметить НОВУЮ точку и не положить дорогу поверх нею.
+    func testPulledStraightFillIntoAnEmptyGapDuringTheRouterCallIsNotOverwritten() async throws {
+        // Без PostTripTrackProcessor — дыра совсем пустая, ни одной точки.
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs())
+        let id = try XCTUnwrap(entity.id)
+        let pcRef = pc!
+
+        let router = StubRoadRouter { _, _ in
+            let bg = pcRef.newBackgroundContext()
+            bg.performAndWait {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                if let trip = try? bg.fetch(request).first {
+                    let pulled = TrackPointEntity(context: bg)
+                    pulled.id = UUID()
+                    let c = TrackTestKit.coordinate(east: 0, north: 500)
+                    pulled.latitude = c.latitude
+                    pulled.longitude = c.longitude
+                    pulled.altitude = 30
+                    pulled.speed = -1
+                    pulled.horizontalAccuracy = -1
+                    pulled.timestamp = TrackTestKit.epoch.addingTimeInterval(50)
+                    pulled.isInterpolated = true
+                    pulled.trip = trip
+                    try? bg.save()
+                }
+            }
+            return self.road()
+        }
+        var enqueued: [UUID] = []
+        let outcome = await filler(router, enqueue: { enqueued.append($0) }).fill(tripId: id)
+
+        // Проход окончен (роутер ответил, лимит не мешал) — но состояние
+        // самой поездки осталось `pending`: см. доккомментарий `Outcome.done`.
+        XCTAssertEqual(outcome, .done)
+        pc.container.viewContext.refreshAllObjects()
+        XCTAssertEqual(entity.roadFillState, RoadFillState.pending.rawValue)
+        XCTAssertTrue(enqueued.isEmpty, "дыру пропустили — синку нечего доставлять")
+        let insideGap = fills(entity).filter {
+            guard let ts = $0.timestamp else { return false }
+            return ts > TrackTestKit.epoch.addingTimeInterval(20) && ts < TrackTestKit.epoch.addingTimeInterval(80)
+        }
+        XCTAssertEqual(insideGap.count, 1, "только притянутая пулом точка — без дублей и без дороги рядом")
+        XCTAssertTrue(insideGap.allSatisfy { abs($0.longitude - TrackTestKit.origin.longitude) < 0.0001 },
+                      "дорога не легла поверх — дыра осталась прямой (чужой)")
+    }
+
     // MARK: Review Focus B — пауза сама уводит в фон
 
     /// Вторая дыра: пауза перед её запросом сама переключает
@@ -412,6 +484,10 @@ final class RoadGapFillerTests: XCTestCase {
         _ = await filler(routerB, reveal: { revealedDraft.append($0) })
             .fill(tripId: try XCTUnwrap(draft.id))
         XCTAssertTrue(revealedDraft.isEmpty, "черновик не открывает туман (спека §3.2)")
+        // «Нет реплея» не должно быть враньём от «ничего не применилось»:
+        // дорога у черновика всё равно легла, реплея нет только у тумана.
+        XCTAssertTrue(fills(draft).contains { $0.longitude > TrackTestKit.origin.longitude + 0.001 },
+                      "дорога у черновика тоже легла — не реплеится только туман")
     }
 
     // MARK: Правило E — флаг синка

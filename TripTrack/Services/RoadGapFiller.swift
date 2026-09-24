@@ -139,17 +139,28 @@ private enum ApplyResult {
 /// переднем плане и в сети», — и она ничего не пишет, только копит дороги.
 /// «Применить» — ВТОРОЙ, свежий фоновый контекст: между «Анализом» и
 /// «Применить» прошла сетевая пауза, за которую трек мог смениться под
-/// ногами (пул с другого телефона, удаление), поэтому внутренние точки
-/// каждой дыры ищутся заново по `NSManagedObjectID`, а не несутся из фазы 1.
-/// Она же единственный писатель за весь `fill`: до неё не сохранено ничего,
-/// и «наполовину применённое, несортированное» состояние после раннего
-/// выхода физически невозможно, а не просто маловероятно.
+/// ногами (пул с другого телефона, удаление), поэтому каждая дыра сверяется
+/// заново — и в ОБЕ стороны: не только «мои старые точки ещё живы», но и
+/// «ничего НОВОГО не появилось в этом же окне» (пустую дыру односторонняя
+/// проверка пропустила бы молча, ревью раунд 2). Она же единственный
+/// писатель за весь `fill`: до неё не сохранено ничего, и «наполовину
+/// применённое, несортированное» состояние после раннего выхода физически
+/// невозможно, а не просто маловероятно.
 @MainActor
 final class RoadGapFiller {
     static let shared = RoadGapFiller()
     static let requestSpacing: Duration = .seconds(2)
 
-    enum Outcome: Equatable { case done, stillPending, notFound }
+    enum Outcome: Equatable {
+        /// Проход ЭТОЙ поездки закончен — не «поездка полностью досчитана».
+        /// Дыра, которую «Применить» пропустила из-за несогласованного
+        /// трека (двусторонняя проверка, ревью раунд 2), оставляет
+        /// `roadFillState == .pending`: её досчитает СЛЕДУЮЩИЙ дренаж, а не
+        /// повтор внутри этого же прохода.
+        case done
+        case stillPending
+        case notFound
+    }
 
     private let router: RoadRouter
     private let persistence: PersistenceController
@@ -212,6 +223,13 @@ final class RoadGapFiller {
     @discardableResult
     func scanLibrary() async -> Int {
         let context = persistence.newBackgroundContext()
+        // Отказ вместо тихого слияния (ревью раунд 2, пункт 2): между тем,
+        // как мы прочли поездку, и тем, как её сохраняем, другой контекст
+        // (пул, мягкое удаление) мог сохранить СВОЮ правку той же строки.
+        // Property-trump молча переписал бы её нашим флагом и воскресил бы
+        // поездку, уже помеченную на удаление, — отказ ловит эту гонку и
+        // оставляет строку как была (см. `catch` ниже).
+        context.mergePolicy = NSMergePolicy.error
         // Читаем ДО фонового блока и несём готовым `Bool`: `SettingsManager`
         // не MainActor, но снаружи `perform` это решение видно одной строкой,
         // а не спрятано внутрь цикла по всей библиотеке.
@@ -328,6 +346,13 @@ final class RoadGapFiller {
             return .done
         case .gaps(let pending):
             let (resolved, askedAll) = await ask(pending)
+            // Встали раньше конца и не собрали НИ ОДНОЙ дороги — писать
+            // нечего. Без этой проверки «Применить» всё равно пересохранила
+            // бы `roadFillState` (то же значение, но CoreData помечает
+            // объект изменённым и это уходит в сохранение и слияние), а
+            // поездку, уже стоявшую `done` с прямой дырой, откатила бы
+            // обратно в `pending` (ревью раунд 2, пункт 1).
+            guard askedAll || !resolved.isEmpty else { return .stillPending }
             // Читаем ПРЯМО перед фоновым блоком «Применить» — тот же приём,
             // что в `scanLibrary`.
             let cloudSyncOn = cloudSyncEnabled()
@@ -395,7 +420,11 @@ final class RoadGapFiller {
 
             guard !pending.isEmpty else {
                 entity.roadFillState = RoadFillState.done.rawValue
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    fillLog.error("road fill analyse save failed: \(String(describing: error), privacy: .public)")
+                }
                 return .nothingToAsk
             }
             return .gaps(pending)
@@ -442,14 +471,19 @@ final class RoadGapFiller {
 
     /// Второй, СВЕЖИЙ фоновый контекст — объекты фазы 1 в нём не живут
     /// (между «Анализом» и «Применить» прошла сетевая пауза, а с ней и шанс,
-    /// что трек сменился под ногами), поэтому внутренние точки каждой дыры
-    /// ищутся заново по `NSManagedObjectID`. Единственный писатель за весь
-    /// `fill`: до неё не сохранено ровно ничего, и «наполовину применённое»
-    /// состояние после раннего выхода из `fill` невозможно физически, а не
-    /// по соглашению.
+    /// что трек сменился под ногами), поэтому каждая дыра сверяется заново
+    /// по ЖИВОМУ треку, а не по тому, что запомнила фаза 1. Единственный
+    /// писатель за весь `fill`: до неё не сохранено ровно ничего, и
+    /// «наполовину применённое» состояние после раннего выхода из `fill`
+    /// невозможно физически, а не по соглашению.
     private func apply(tripId: UUID, resolved: [ResolvedGap], askedAll: Bool,
                        cloudSyncEnabled: Bool) async -> ApplyResult {
         let context = persistence.newBackgroundContext()
+        // Та же причина, что у скана (см. её комментарий): между «Спросить»
+        // (сетевая пауза) и этим сохранением другой контекст мог тронуть ТУ
+        // ЖЕ поездку — отказ вместо тихого слияния ловит гонку вместо того,
+        // чтобы переписать её нашим флагом (ревью раунд 2, пункт 2).
+        context.mergePolicy = NSMergePolicy.error
         return await context.perform {
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@ AND syncStatus != %d",
@@ -457,23 +491,33 @@ final class RoadGapFiller {
             // Поездку могли удалить, пока «Спросить» ждало сеть — тот же
             // предикат, что у «Анализа», исключает и её саму, и надгробие.
             guard let entity = try? context.fetch(request).first else { return .notFound }
+            // Снимок трека ДО правок этого прохода: дыры не пересекаются по
+            // времени, поэтому один снимок безопасно читать для каждой из
+            // них, даже после того как предыдущая дыра в этом же цикле уже
+            // что-то удалила/вставила.
+            let stored = PostTripTrackProcessor.liveTrackPoints(of: entity)
 
             var replaced = false
             var anySkipped = false
             for gap in resolved {
-                let insidePoints: [TrackPointEntity] = gap.insideIds.compactMap { id in
-                    guard let object = try? context.existingObject(with: id), !object.isDeleted,
-                          let point = object as? TrackPointEntity, point.trip == entity
-                    else { return nil }
-                    return point
+                // ЖИВЫЕ интерполированные точки строго внутри окна дыры — а
+                // не то, что запомнила фаза 1. Проверка в ОБЕ стороны (ревью
+                // раунд 2, пункт 3): односторонняя («мои старые id ещё
+                // живы») пропускала бы ПУСТУЮ дыру — у неё нет id, которые
+                // могли бы разойтись, — и пока «Спросить» ждало ответ, пул
+                // успел бы принести в то же окно СВОЮ прямую достройку;
+                // дорога легла бы рядом с чужой прямой, а не вместо неё.
+                let currentInside = stored.filter {
+                    guard $0.isInterpolated, let ts = $0.timestamp else { return false }
+                    return ts > gap.fromTimestamp && ts < gap.toTimestamp
                 }
-                guard insidePoints.count == gap.insideIds.count else {
+                guard Set(currentInside.map(\.objectID)) == Set(gap.insideIds) else {
                     // Трек сменился под ногами (пул с другого телефона) —
                     // дыру пропускаем, следующий проход посчитает её заново.
                     anySkipped = true
                     continue
                 }
-                insidePoints.forEach(context.delete)
+                currentInside.forEach(context.delete)
                 for point in GapFill.resample(gap.route.coordinates, from: gap.fromTimestamp, to: gap.toTimestamp,
                                               altitudeFrom: gap.fromAltitude, altitudeTo: gap.toAltitude) {
                     PostTripTrackProcessor.insert(point, into: entity, context: context)
