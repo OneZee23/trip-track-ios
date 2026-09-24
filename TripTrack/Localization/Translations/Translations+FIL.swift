@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Sa iyo?",
         "draftConfirm": "Akin",
         "draftDiscard": "Burahin",
+        "draftBadge": "Hindi kumpirmado",
+        "draftSectionTitle": "Naghihintay sa iyo",
+        "draftBannerTitle": "Sa iyo ba ang biyaheng ito?",
+        "draftBannerBody": "Ni-record ito ng auto-tracking. Hangga't hindi mo kinukumpirma, wala ito sa Atlas at sa iyong stats.",
+        "draftRecordingLabel": "Draft",
     ]
 
 }

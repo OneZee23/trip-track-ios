@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. ¿Tuyo?",
         "draftConfirm": "Mío",
         "draftDiscard": "Eliminar",
+        "draftBadge": "Sin confirmar",
+        "draftSectionTitle": "Esperando confirmación",
+        "draftBannerTitle": "¿Es tu viaje?",
+        "draftBannerBody": "La grabó el registro automático. Hasta que confirmes, no aparece en el Atlas ni en tus estadísticas.",
+        "draftRecordingLabel": "Borrador",
     ]
 
 }

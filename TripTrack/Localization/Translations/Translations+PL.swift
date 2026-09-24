@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Twoja?",
         "draftConfirm": "Moja",
         "draftDiscard": "Usuń",
+        "draftBadge": "Niepotwierdzona",
+        "draftSectionTitle": "Czekają na ciebie",
+        "draftBannerTitle": "Czy to twoja podróż?",
+        "draftBannerBody": "Nagrało ją automatyczne śledzenie. Dopóki nie potwierdzisz, nie ma jej w Atlasie ani w statystykach.",
+        "draftRecordingLabel": "Szkic",
     ]
 
 }

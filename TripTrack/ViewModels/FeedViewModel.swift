@@ -97,7 +97,11 @@ final class FeedViewModel: ObservableObject {
             NotificationCenter.default.publisher(for: .tripDeleted),
             // 0.8.0: вписанная рукой поездка появляется в базе мимо
             // записи, и без этого её карточка ждала бы следующего пула.
-            NotificationCenter.default.publisher(for: .manualTripCreated)
+            NotificationCenter.default.publisher(for: .manualTripCreated),
+            // 0.8.1: «Моя» решает поездку из уведомления, пока «Мои» не
+            // открыты, — без этого триггера подтверждённая карточка ждала бы
+            // следующего события, которого может не случиться вовсе.
+            NotificationCenter.default.publisher(for: .draftTripResolved)
         )
         .throttle(for: .milliseconds(800), scheduler: DispatchQueue.main, latest: true)
         .sink { [weak self] _ in

@@ -124,6 +124,14 @@ struct TrackingView: View {
                                     isTransfer: viewModel.tripManager.activeTrip?.isTransfer ?? false) {
                             showVehiclePicker = true
                         }
+                        if viewModel.tripManager.activeTrip?.isDraft == true {
+                            Text(AppStrings.draftRecordingLabel(lang.language))
+                                .font(.inter(12, weight: .semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .glassPill()
+                                .accessibilityIdentifier("recording_draft_label")
+                        }
                     }
                     Spacer()
                     if !(viewModel.locationDenied && !viewModel.isRecording) {

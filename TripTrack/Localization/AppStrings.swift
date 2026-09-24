@@ -2904,6 +2904,27 @@ enum AppStrings {
     static func draftDiscard(_ lang: LanguageManager.Language) -> String {
         tr(lang, "draftDiscard", ru: "Удалить", en: "Delete")
     }
+    /// Пометка черновика в «Я» (спека §3.3).
+    static func draftBadge(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftBadge", ru: "Не подтверждена", en: "Not confirmed")
+    }
+    static func draftSectionTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftSectionTitle", ru: "Ждут подтверждения", en: "Waiting for you")
+    }
+    static func draftBannerTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftBannerTitle", ru: "Это твоя поездка?", en: "Is this your trip?")
+    }
+    /// Объясняет цену молчания: пока не подтверждена, поездки нет ни в атласе,
+    /// ни в статистике (спека §3.2).
+    static func draftBannerBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftBannerBody",
+           ru: "Её записал автотрекинг. Пока ты не подтвердишь, её нет ни в атласе, ни в статистике.",
+           en: "Auto-tracking recorded it. Until you confirm, it stays out of the Atlas and your stats.")
+    }
+    /// Метка на экране записи (спека §3.1).
+    static func draftRecordingLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftRecordingLabel", ru: "Черновик", en: "Draft")
+    }
     static func bluetoothAudio(_ lang: LanguageManager.Language) -> String {
         tr(lang, "bluetoothAudio", ru: "Bluetooth-аудио", en: "Bluetooth Audio")
     }

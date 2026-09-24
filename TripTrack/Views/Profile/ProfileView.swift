@@ -170,6 +170,9 @@ struct ProfileView: View {
     /// Every completed trip, newest first. `agg.recentTrips` stops at 10,
     /// which made a date filter over История meaningless.
     @State private var allTrips: [Trip] = []
+    /// Черновики — отдельно от `allTrips`: в мир они не вошли, и ни
+    /// статистика, ни путешествия, ни календарь их не видят (спека §3.2).
+    @State private var drafts: [Trip] = []
     /// `allTrips` after the calendar range. See `refreshVisibleTrips`.
     @State private var visibleTrips: [Trip] = []
     /// Which awards are earned — the one thing `AchievementDetailView` needs
@@ -391,6 +394,12 @@ struct ProfileView: View {
                         // надо доскроллить.
                         journeyPrompts()
 
+                        if !drafts.isEmpty {
+                            ProfileDraftsSection(drafts: drafts, level: settings.profileLevel,
+                                                 vehicles: settings.vehicles) { openTrip($0) }
+                                .padding(.bottom, 12)
+                        }
+
                         if !allTrips.isEmpty {
                             historyBlock(c)
                         } else if agg != nil {
@@ -578,6 +587,11 @@ struct ProfileView: View {
         // would make loadAggregates recompute over the stale cached [Trip]
         // array and keep the old globe/lock icon.
         .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
+            StatsCache.invalidate()
+            Task { await loadAggregates() }
+        }
+        // «Моя» уводит черновик в историю, «Удалить» — в никуда.
+        .onReceive(NotificationCenter.default.publisher(for: .draftTripResolved)) { _ in
             StatsCache.invalidate()
             Task { await loadAggregates() }
         }
@@ -1991,5 +2005,7 @@ struct ProfileView: View {
         // цепочка «туда и обратно» не должна рваться из-за фильтра, который
         // человек поставил совсем для другого.
         await refreshJourneyPrompts(trips: crunched.history.trips)
+        // Черновиков единицы, и выборка без точек трека — дёшево и здесь.
+        drafts = tripManager.fetchDraftTrips()
     }
 }

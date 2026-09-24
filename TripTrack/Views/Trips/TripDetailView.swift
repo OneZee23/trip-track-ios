@@ -1161,6 +1161,15 @@ struct TripDetailView: View {
             reloadPlaceChips()
             reloadSegmentHistory()
         }
+        // Черновик решён — здесь или из уведомления, пока экран открыт.
+        .onReceive(NotificationCenter.default.publisher(for: .draftTripResolved)) { note in
+            guard let id = note.object as? UUID, id == tripId else { return }
+            if let local = viewModel.tripDetail(id: tripId) {
+                trip = local
+            } else {
+                dismiss()
+            }
+        }
         .overlay {
             if showReactionPicker {
                 ReactionPickerOverlay(
@@ -2343,6 +2352,14 @@ isOwn
             VStack(alignment: .leading, spacing: 10) {
                 titleBlock(trip: trip, c: c)
                 chipsRow(trip: trip, c: c)
+            }
+
+            // Черновик спрашивает там, где на него смотрят (спека §3.3).
+            // Удаление — тем же диалогом, что «Удалить поездку» в «…»: у
+            // черновика нет копии на сервере, и `deleteTrip` стирает строку
+            // сразу, без надгробия.
+            if isOwn, trip.isDraft {
+                DraftTripBanner(tripId: trip.id) { showDeleteConfirm = true }
             }
 
             VStack(alignment: .leading, spacing: 10) {

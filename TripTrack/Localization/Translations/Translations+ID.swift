@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Milikmu?",
         "draftConfirm": "Milikku",
         "draftDiscard": "Hapus",
+        "draftBadge": "Belum dikonfirmasi",
+        "draftSectionTitle": "Menunggu kamu",
+        "draftBannerTitle": "Ini perjalananmu?",
+        "draftBannerBody": "Pelacakan otomatis merekamnya. Sampai kamu konfirmasi, perjalanan ini tidak masuk Atlas maupun statistikmu.",
+        "draftRecordingLabel": "Draf",
     ]
 
 }

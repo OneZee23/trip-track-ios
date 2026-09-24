@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Senin mi?",
         "draftConfirm": "Benim",
         "draftDiscard": "Sil",
+        "draftBadge": "Onaylanmadı",
+        "draftSectionTitle": "Onayını bekliyor",
+        "draftBannerTitle": "Bu senin yolculuğun mu?",
+        "draftBannerBody": "Otomatik takip kaydetti. Onaylayana kadar Atlas'ta ve istatistiklerinde yer almaz.",
+        "draftRecordingLabel": "Taslak",
     ]
 
 }

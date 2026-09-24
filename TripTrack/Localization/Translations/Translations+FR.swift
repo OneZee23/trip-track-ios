@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Le tien ?",
         "draftConfirm": "Le mien",
         "draftDiscard": "Supprimer",
+        "draftBadge": "Non confirmé",
+        "draftSectionTitle": "En attente",
+        "draftBannerTitle": "Est-ce ton trajet ?",
+        "draftBannerBody": "Le suivi automatique l'a enregistré. Tant que tu ne confirmes pas, il n'apparaît ni dans l'Atlas ni dans tes statistiques.",
+        "draftRecordingLabel": "Brouillon",
     ]
 
 }

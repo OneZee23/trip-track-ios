@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Твоя?",
         "draftConfirm": "Моя",
         "draftDiscard": "Видалити",
+        "draftBadge": "Не підтверджено",
+        "draftSectionTitle": "Чекають на тебе",
+        "draftBannerTitle": "Це твоя поїздка?",
+        "draftBannerBody": "Її записав автотрекінг. Доки ти не підтвердиш, її немає ні в атласі, ні в статистиці.",
+        "draftRecordingLabel": "Чернетка",
     ]
 
 }

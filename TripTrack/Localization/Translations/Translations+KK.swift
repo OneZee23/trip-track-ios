@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Сенікі ме?",
         "draftConfirm": "Менікі",
         "draftDiscard": "Жою",
+        "draftBadge": "Расталмаған",
+        "draftSectionTitle": "Сені күтуде",
+        "draftBannerTitle": "Бұл сенің сапарың ба?",
+        "draftBannerBody": "Оны автотрекинг жазды. Растамайынша ол атласта да, статистикада да жоқ.",
+        "draftRecordingLabel": "Жоба",
     ]
 
 }

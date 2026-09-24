@@ -1424,6 +1424,11 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Tuo?",
         "draftConfirm": "Mio",
         "draftDiscard": "Elimina",
+        "draftBadge": "Non confermato",
+        "draftSectionTitle": "In attesa",
+        "draftBannerTitle": "È il tuo viaggio?",
+        "draftBannerBody": "L'ha registrato il tracciamento automatico. Finché non confermi, non entra nell'Atlante né nelle statistiche.",
+        "draftRecordingLabel": "Bozza",
     ]
 
 }

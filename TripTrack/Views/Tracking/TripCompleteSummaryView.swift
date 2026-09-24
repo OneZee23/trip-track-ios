@@ -54,6 +54,7 @@ struct TripCompleteSummaryView: View {
     /// What the editor is typing into until it is saved. See the sheet below.
     @State private var notesDraft: String = ""
     @State private var showNotesEditor = false
+    @State private var showDraftDiscard = false
     @State private var selectedBadge: Badge?
     /// Выгорание тумана на герое (0.7.0). Живёт у экрана, а не у блока
     /// «Открыто»: играет его ГЕРОЙ, а блок только рассказывает словами.
@@ -78,6 +79,14 @@ struct TripCompleteSummaryView: View {
                 .font(.inter(22, weight: .heavy))
                 .foregroundStyle(c.text)
                 .padding(.top, 8)
+
+            // Черновик: вопрос «Твоя?» — прямо в итогах, человек уже смотрит
+            // на экран (спека §3.3).
+            if trip.isDraft {
+                DraftTripBanner(tripId: trip.id) { showDraftDiscard = true }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+            }
 
             // Route preview (speed-gradient polylines via RouteMapView).
             //
@@ -148,9 +157,13 @@ struct TripCompleteSummaryView: View {
                 .padding(.top, 14)
 
             // Publish row (Figma 147:1251): OFF by default. Applied on «Готово».
-            publishRow(c)
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
+            // Не у черновика: публиковать то, что ещё не вошло в мир, нечего
+            // — гейт синка всё равно отбил бы.
+            if !trip.isDraft {
+                publishRow(c)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+            }
         }
         }
         // Pinned, not scrolled: the actions belong to the sheet, not to the
@@ -172,6 +185,17 @@ struct TripCompleteSummaryView: View {
             .environmentObject(lang)
             .presentationDetents([.medium, .large])
         }
+        .appConfirm(
+            isPresented: $showDraftDiscard,
+            title: AppStrings.deleteTrip(lang.language),
+            actions: [
+                AppDialogAction(AppStrings.delete(lang.language), kind: .destructive) {
+                    DraftDecisionQueue.shared.enqueue(trip.id, .discard)
+                    NotificationCenter.default.post(name: .draftTripDecisionQueued, object: nil)
+                    onDone()
+                }
+            ]
+        )
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
