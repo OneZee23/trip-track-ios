@@ -138,6 +138,14 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         for location in locations {
             let decision = evaluate(location)
             recordDiagnostics(location, decision)
+            // Сырой фикс — и принятый, и отброшенный, с причиной (спека
+            // §2.7): лог сводок не отвечает на «фиксов не было или их
+            // выбросили», а этот журнал только на записи, иначе холостой ход
+            // копил бы файлы без единой поездки.
+            if isRecording {
+                let line = RawFixLog.line(for: location, decision: decision)
+                Task { await RawFixLog.shared.record(line: line) }
+            }
             guard case .accept = decision else { continue }
 
             let update = LocationUpdate.from(location)

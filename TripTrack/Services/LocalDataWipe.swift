@@ -73,6 +73,9 @@ enum LocalDataWipe {
             .appendingPathComponent("TripPhotos", isDirectory: true)
         try? FileManager.default.removeItem(at: photos)
         try? FileManager.default.removeItem(at: VehiclePhotoStore.directory)
+        // Журнал сырых фиксов — координаты поездок с точностью до метра; он
+        // уходит вместе со снимками (0.8.1).
+        try? FileManager.default.removeItem(at: RawFixLog.defaultDirectory)
 
         // Дом и отказ от подсказки лежат в UserDefaults, но настройками НЕ
         // являются: `homeLatitude`/`homeLongitude` — это домашний адрес с

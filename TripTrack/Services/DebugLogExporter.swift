@@ -138,6 +138,18 @@ enum DebugLogExporter {
             lines.append("[\(ts)] [\(level)] [\(log.subsystem)/\(log.category)] \(log.composedMessage)")
         }
 
+        // Сырые фиксы поездок за те же дни, что архив журнала (спека §2.7):
+        // ответ на «фиксов не было или их выбросили». Хвост файла, до трёх
+        // самых свежих поездок.
+        let rawSince = Date().addingTimeInterval(-Double(LogArchive.retentionDays) * 86_400)
+        for url in await RawFixLog.shared.files(modifiedSince: rawSince).prefix(3) {
+            lines.append("")
+            lines.append("--- raw fixes: \(url.lastPathComponent) ---")
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                lines.append(String(text.suffix(4 * 1024 * 1024)))
+            }
+        }
+
         let data = lines.joined(separator: "\n").data(using: .utf8) ?? Data()
         let dir = FileManager.default.temporaryDirectory
         let url = dir.appendingPathComponent("triptrack-log-\(Int(Date().timeIntervalSince1970)).txt")

@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Отметки жизни процесса для журнала сырых фиксов (0.8.1): фоновый
+        // запуск по геолокации — тоже запуск, и он должен быть виден.
+        RawFixLog.startObservingLifecycle()
         return true
     }
 

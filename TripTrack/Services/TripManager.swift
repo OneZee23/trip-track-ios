@@ -156,6 +156,10 @@ final class TripManager: ObservableObject {
 
         activeTripEntity = entity
         guard let tripId = entity.id, let startDate = entity.startDate else { return }
+        // Журнал сырых фиксов открывается вместе с поездкой (спека §2.7):
+        // без файла на диске «GPS не работал» и «GPS работал, но фиксы
+        // выбросили» неразличимы даже по экспорту лога.
+        Task { await RawFixLog.shared.begin(tripId: tripId) }
         // Carry the vehicle into the in-memory Trip too — it's already stamped
         // on the entity above, but consumers reading activeTrip.vehicleId (e.g.
         // the recording UI) would otherwise see nil.
@@ -199,6 +203,7 @@ final class TripManager: ObservableObject {
     @discardableResult
     func stopTrip(suggestedEndDate: Date? = nil) -> Trip? {
         locationManager.stopTracking()
+        Task { await RawFixLog.shared.end() }
         isRecording = false
 
         guard let entity = activeTripEntity else { return nil }

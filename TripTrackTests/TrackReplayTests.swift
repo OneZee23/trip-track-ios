@@ -1,0 +1,41 @@
+import XCTest
+@testable import TripTrack
+
+/// Приёмка спеки §5 на стенде.
+@MainActor
+final class TrackReplayTests: XCTestCase {
+    func testCityEveningNoLongerTearsTheTrack() async {
+        let old = await TrackReplay.run(SyntheticDrives.cityEvening(), recordingLimit: 65)
+        let new = await TrackReplay.run(SyntheticDrives.cityEvening())
+        XCTAssertGreaterThanOrEqual(old.recordedGaps, 5, "фикстура обязана повторять 8 сентября")
+        XCTAssertEqual(new.recordedGaps, 0, "грубые фиксы закрыли все окна плохого неба")
+        XCTAssertEqual(new.openGaps, 0)
+        XCTAssertGreaterThan(new.coarsePoints, 0)
+        XCTAssertEqual(new.distance, old.distance, accuracy: old.distance * 0.01, "одометр — в пределах 1 %")
+    }
+
+    func testTunnelIsFilledAndNotCounted() async {
+        let old = await TrackReplay.run(SyntheticDrives.tunnel(), recordingLimit: 65)
+        let new = await TrackReplay.run(SyntheticDrives.tunnel())
+        XCTAssertEqual(new.recordedGaps, 1)
+        XCTAssertEqual(new.openGaps, 0)
+        XCTAssertGreaterThan(new.filledPoints, 0)
+        XCTAssertEqual(new.distance, old.distance, accuracy: old.distance * 0.01)
+    }
+
+    func testSuspensionIsFilledAndNotCounted() async {
+        let new = await TrackReplay.run(SyntheticDrives.suspension())
+        XCTAssertEqual(new.recordedGaps, 1)
+        XCTAssertEqual(new.openGaps, 0)
+        XCTAssertGreaterThan(new.filledPoints, 0)
+    }
+
+    /// «Каждая дыра закрыта ровно одной достройкой» — с дорогой от заглушки.
+    func testEachGapIsClosedByExactlyOneFill() async {
+        let tunnel = await TrackReplay.run(SyntheticDrives.tunnel(), router: StubRoadRouter.straightLine())
+        XCTAssertEqual(tunnel.openGaps, 0)
+        XCTAssertEqual(tunnel.fillRuns, 1)
+        let suspension = await TrackReplay.run(SyntheticDrives.suspension(), router: StubRoadRouter.straightLine())
+        XCTAssertEqual(suspension.fillRuns, 1)
+    }
+}
