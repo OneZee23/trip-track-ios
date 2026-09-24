@@ -81,7 +81,7 @@ final class PostTripTrackProcessorTests: XCTestCase {
 
         await processor.processTrip(tripId)
 
-        // Interpolated points are NOT saved to CoreData (only used for preview polyline)
+        // Дыра короче 150 м — не дыра (спека §2.3): точек достройки нет.
         let points = fetchTrackPoints(tripId: tripId)
         let interpolated = points.filter { $0.isInterpolated }
         XCTAssertEqual(interpolated.count, 0, "Interpolated points should not be persisted")
@@ -111,7 +111,7 @@ final class PostTripTrackProcessorTests: XCTestCase {
 
     func testLargeGapNotInterpolated() async {
         let t0 = Date()
-        // Gap > 5km — should not interpolate
+        // 11 км за 60 с — прыжок GPS, а не дыра: достройки нет.
         let tripId = createTrip(points: [
             (lat: 45.0, lon: 39.0, speed: 10, course: 0, timestamp: t0),
             (lat: 45.001, lon: 39.0, speed: 10, course: 0, timestamp: t0.addingTimeInterval(1)),

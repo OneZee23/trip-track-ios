@@ -2,20 +2,12 @@ import Foundation
 import CoreData
 import CoreLocation
 
-/// Post-trip track reconstruction: fills GPS gaps with interpolated points
-/// and regenerates trip statistics.
+/// Post-trip track reconstruction: removes GPS spikes, fills gaps with
+/// straight interpolated points (a road comes later from `RoadGapFiller`) and
+/// regenerates trip statistics.
 final class PostTripTrackProcessor {
 
     private let persistenceController: PersistenceController
-
-    /// Minimum time gap between consecutive points to trigger interpolation (seconds)
-    private let gapThreshold: TimeInterval = 3.0
-
-    /// Maximum distance for interpolation — beyond this the gap is left as-is (meters)
-    private let maxInterpolationDistance: Double = 5000.0
-
-    /// Time interval between interpolated points (seconds)
-    private let interpolationInterval: TimeInterval = 2.0
 
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
@@ -64,6 +56,7 @@ final class PostTripTrackProcessor {
             .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
 
         guard originalPoints.count >= 2 else {
+            entity.roadFillState = RoadFillState.done.rawValue
             entity.isTrackProcessed = true
             persistenceController.save()
             return
@@ -71,63 +64,37 @@ final class PostTripTrackProcessor {
 
         // Remove spike points (GPS multipath / jumps)
         let cleanedPoints = removeSpikePoints(originalPoints, context: context)
-
         guard cleanedPoints.count >= 2 else {
+            entity.roadFillState = RoadFillState.done.rawValue
             entity.isTrackProcessed = true
             persistenceController.save()
             return
         }
+        // Удалённые выбросы уходят из связи только после обработки изменений:
+        // без этого достройка ниже считала бы дыры по точкам, которых уже нет.
+        context.processPendingChanges()
 
-        // Build combined coordinate array (GPS + interpolated) for preview polyline only.
-        // Interpolated points are NOT saved to CoreData — they only improve the preview.
-        var combinedCoords: [CLLocationCoordinate2D] = []
-        for i in 0..<cleanedPoints.count {
-            combinedCoords.append(CLLocationCoordinate2D(
-                latitude: cleanedPoints[i].latitude,
-                longitude: cleanedPoints[i].longitude
-            ))
+        // Прямая достройка — сразу; дорогу спросит `RoadGapFiller`, когда
+        // будет сеть (спека §2.3).
+        let filled = Self.fillOpenGaps(entity: entity, context: context)
+        entity.roadFillState = (filled > 0 ? RoadFillState.pending : .done).rawValue
 
-            // Interpolate gap if needed
-            if i < cleanedPoints.count - 1 {
-                let p1 = cleanedPoints[i]
-                let p2 = cleanedPoints[i + 1]
-                guard let t1 = p1.timestamp, let t2 = p2.timestamp else { continue }
-                let dt = t2.timeIntervalSince(t1)
-                guard dt > gapThreshold else { continue }
-
-                let loc1 = CLLocation(latitude: p1.latitude, longitude: p1.longitude)
-                let loc2 = CLLocation(latitude: p2.latitude, longitude: p2.longitude)
-                let distance = loc2.distance(from: loc1)
-                guard distance <= maxInterpolationDistance else { continue }
-
-                let p0 = i > 0 ? cleanedPoints[i - 1] : p1
-                let p3 = (i + 2) < cleanedPoints.count ? cleanedPoints[i + 2] : p2
-
-                let numPoints = max(1, Int(dt / interpolationInterval) - 1)
-                for j in 1...numPoints {
-                    let t = Double(j) / Double(numPoints + 1)
-                    let coord = catmullRom(
-                        p0: CLLocationCoordinate2D(latitude: p0.latitude, longitude: p0.longitude),
-                        p1: CLLocationCoordinate2D(latitude: p1.latitude, longitude: p1.longitude),
-                        p2: CLLocationCoordinate2D(latitude: p2.latitude, longitude: p2.longitude),
-                        p3: CLLocationCoordinate2D(latitude: p3.latitude, longitude: p3.longitude),
-                        t: t
-                    )
-                    combinedCoords.append(coord)
-                }
-            }
-        }
-
-        // Regenerate preview polyline from combined coords (GPS + interpolated)
-        regeneratePreviewPolyline(for: entity, coordinates: combinedCoords)
-
-        // Recalculate stats from GPS-only points
+        Self.regeneratePreviewPolyline(for: entity)
         recalculateStats(for: entity)
 
-        // Mark as processed
         entity.isTrackProcessed = true
         entity.lastModifiedAt = Date()
+        if filled > 0 {
+            // Правка трека = правка поездки: иначе пул вернул бы трек без
+            // достройки и заменил бы его целиком.
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
         persistenceController.save()
+        if filled > 0 {
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+            }
+        }
     }
 
     // MARK: - Spike Removal
@@ -191,52 +158,80 @@ final class PostTripTrackProcessor {
         return zip(points, keepFlags).compactMap { $1 ? $0 : nil }
     }
 
-    // MARK: - Catmull-Rom Interpolation
+    // MARK: - Достройка
 
-    private func catmullRom(
-        p0: CLLocationCoordinate2D,
-        p1: CLLocationCoordinate2D,
-        p2: CLLocationCoordinate2D,
-        p3: CLLocationCoordinate2D,
-        t: Double
-    ) -> CLLocationCoordinate2D {
-        let t2 = t * t
-        let t3 = t2 * t
-
-        let lat = 0.5 * (
-            (2 * p1.latitude) +
-            (-p0.latitude + p2.latitude) * t +
-            (2 * p0.latitude - 5 * p1.latitude + 4 * p2.latitude - p3.latitude) * t2 +
-            (-p0.latitude + 3 * p1.latitude - 3 * p2.latitude + p3.latitude) * t3
-        )
-
-        let lon = 0.5 * (
-            (2 * p1.longitude) +
-            (-p0.longitude + p2.longitude) * t +
-            (2 * p0.longitude - 5 * p1.longitude + 4 * p2.longitude - p3.longitude) * t2 +
-            (-p0.longitude + 3 * p1.longitude - 3 * p2.longitude + p3.longitude) * t3
-        )
-
-        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    /// Закрыть прямыми все открытые дыры поездки. Возвращает число дыр.
+    /// Общая для финиша и прохода по истории (`RoadGapFiller.scanLibrary`),
+    /// поэтому контекст — параметром: проход идёт на фоновом.
+    @discardableResult
+    static func fillOpenGaps(entity: TripEntity, context: NSManagedObjectContext) -> Int {
+        let stored = liveTrackPoints(of: entity)
+        let gaps = TrackGapFinder.openGaps(in: stored.compactMap(gapPoint)).filter(GapFill.isFillable)
+        guard !gaps.isEmpty else { return 0 }
+        let altitudes = altitudeLookup(stored)
+        for gap in gaps {
+            let fill = GapFill.resample([gap.from.coordinate, gap.to.coordinate],
+                                        from: gap.from.timestamp, to: gap.to.timestamp,
+                                        altitudeFrom: altitudes[gap.from.timestamp] ?? 0,
+                                        altitudeTo: altitudes[gap.to.timestamp] ?? 0)
+            for point in fill { insert(point, into: entity, context: context) }
+        }
+        sortTrackPoints(of: entity)
+        return gaps.count
     }
 
-    /// Interpolate course (heading) handling the 0°/360° wraparound
-    private func interpolateCourse(from c1: Double, to c2: Double, t: Double) -> Double {
-        guard c1 >= 0 && c2 >= 0 else { return max(c1, c2) }
+    /// Точки поездки без помеченных на удаление.
+    static func liveTrackPoints(of entity: TripEntity) -> [TrackPointEntity] {
+        (entity.trackPoints?.array as? [TrackPointEntity] ?? []).filter { !$0.isDeleted }
+    }
 
-        var delta = c2 - c1
-        if delta > 180 { delta -= 360 }
-        if delta < -180 { delta += 360 }
+    static func gapPoint(_ p: TrackPointEntity) -> TrackGapFinder.Point? {
+        guard let ts = p.timestamp else { return nil }
+        return .init(latitude: p.latitude, longitude: p.longitude, timestamp: ts,
+                     isInterpolated: p.isInterpolated)
+    }
 
-        var result = c1 + delta * t
-        if result < 0 { result += 360 }
-        if result >= 360 { result -= 360 }
-        return result
+    /// Высота настоящих точек по времени — края дыры берут её отсюда.
+    static func altitudeLookup(_ points: [TrackPointEntity]) -> [Date: Double] {
+        var map: [Date: Double] = [:]
+        for p in points where !p.isInterpolated {
+            if let ts = p.timestamp { map[ts] = p.altitude }
+        }
+        return map
+    }
+
+    static func insert(_ point: TrackPoint, into entity: TripEntity, context: NSManagedObjectContext) {
+        let e = TrackPointEntity(context: context)
+        e.id = point.id
+        e.latitude = point.latitude
+        e.longitude = point.longitude
+        e.altitude = point.altitude
+        e.speed = point.speed
+        e.course = point.course
+        e.horizontalAccuracy = point.horizontalAccuracy
+        e.timestamp = point.timestamp
+        e.isInterpolated = point.isInterpolated
+        e.trip = entity
+    }
+
+    /// Связь с точками ордерная, и новые точки встают в КОНЕЦ. Трек читают без
+    /// сортировки (карта, реплей, пейлоад синка с его `sortOrder`), поэтому
+    /// после вставки порядок чинится по времени.
+    static func sortTrackPoints(of entity: TripEntity) {
+        let sorted = liveTrackPoints(of: entity)
+            .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
+        entity.trackPoints = NSOrderedSet(array: sorted)
     }
 
     // MARK: - Preview Polyline
 
-    private func regeneratePreviewPolyline(for entity: TripEntity, coordinates: [CLLocationCoordinate2D]) {
+    /// Превью — из ВСЕХ сохранённых точек: настоящих, грубых и достроенных. До
+    /// 0.8.1 интерполяция жила только в превью, и «Атлас» с картой поездки
+    /// спорили о том, где машина ехала (спека §2.3).
+    static func regeneratePreviewPolyline(for entity: TripEntity) {
+        let coordinates = liveTrackPoints(of: entity)
+            .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
+            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
         guard coordinates.count >= 2 else { return }
         let simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
         entity.previewPolyline = Trip.encodePolyline(simplified)
