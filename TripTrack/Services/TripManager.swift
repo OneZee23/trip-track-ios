@@ -689,8 +689,9 @@ final class TripManager: ObservableObject {
         // Грубый фикс (хуже 65 м) рисует форму, но в километры не идёт
         // (спека §2.2). Фильтр Калмана его видит: дисперсия измерения у него
         // `accuracy²`, и такой фикс сдвигает оценку во много раз слабее
-        // хорошего.
-        let countsForDistance = location.horizontalAccuracy <= TripDistanceGate.odometerAccuracyLimit
+        // хорошего. Живой фикс никогда не интерполирован.
+        let countsForDistance = TripDistanceGate.countsForDistance(
+            horizontalAccuracy: location.horizontalAccuracy, isInterpolated: false)
 
         // Smooth through Kalman filter
         let filtered = kalmanFilter.processGPSUpdate(location)

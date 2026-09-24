@@ -3,7 +3,9 @@ import SwiftUI
 /// GPS accuracy pill (Figma 428:124): word label + colored dot, four states —
 /// точный (≤10м, green) / средний (10–35м, yellow) / слабый (>35м, red) /
 /// потерян (stale fix, amber). Thresholds mirror the recording pipeline
-/// (`maxRecordAccuracy` 65м drops points beyond). Tap shows the legend.
+/// (`FixGate.recordingAccuracyLimit` 200м drops points outright;
+/// `TripDistanceGate.odometerAccuracyLimit` 65м is where the odometer stops
+/// counting them). Tap shows the legend.
 struct GPSIndicatorView: View {
     let accuracy: Double // meters; 0 = no fix yet
     var isStale: Bool = false
