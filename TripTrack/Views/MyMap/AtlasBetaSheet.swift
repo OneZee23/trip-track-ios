@@ -11,14 +11,35 @@ import SwiftUI
 /// без обращения к `body`.
 struct AtlasBetaSheetModel {
     let feedbackURL: URL?
+    /// Что именно в бете. Параметром, а не двумя карточками: вопрос у них
+    /// один («почему тут ещё меняется»), и разводить его по двум экранам
+    /// значило бы завести вторую копию кнопки «Написать».
+    let subject: Subject
 
-    static func make(feedbackAddress: String? = ProfileSettingsSheet.authorEmail) -> AtlasBetaSheetModel {
+    enum Subject { case atlas, places }
+
+    static func make(_ subject: Subject = .atlas,
+                     feedbackAddress: String? = ProfileSettingsSheet.authorEmail) -> AtlasBetaSheetModel {
         guard let feedbackAddress, !feedbackAddress.isEmpty,
               let url = URL(string: "mailto:\(feedbackAddress)")
         else {
-            return AtlasBetaSheetModel(feedbackURL: nil)
+            return AtlasBetaSheetModel(feedbackURL: nil, subject: subject)
         }
-        return AtlasBetaSheetModel(feedbackURL: url)
+        return AtlasBetaSheetModel(feedbackURL: url, subject: subject)
+    }
+
+    func title(_ lang: LanguageManager.Language) -> String {
+        switch subject {
+        case .atlas: return AppStrings.atlasBetaTitle(lang)
+        case .places: return AppStrings.placesBetaTitle(lang)
+        }
+    }
+
+    func body(_ lang: LanguageManager.Language) -> String {
+        switch subject {
+        case .atlas: return AppStrings.atlasBetaBody(lang)
+        case .places: return AppStrings.placesBetaBody(lang)
+        }
     }
 }
 
@@ -39,11 +60,11 @@ struct AtlasBetaSheet: View {
         let c = AppTheme.colors(for: scheme)
 
         VStack(alignment: .leading, spacing: 12) {
-            Text(AppStrings.atlasBetaTitle(lang.language))
-                .font(.inter(19, weight: .heavy))
+            Text(model.title(lang.language))
+                .font(.inter(19, weight: .semibold))
                 .foregroundStyle(c.text)
 
-            Text(AppStrings.atlasBetaBody(lang.language))
+            Text(model.body(lang.language))
                 .font(.inter(14))
                 .lineSpacing(3)
                 .foregroundStyle(c.textSecondary)
@@ -56,7 +77,7 @@ struct AtlasBetaSheet: View {
                         openURL(feedbackURL)
                     } label: {
                         Text(AppStrings.writeAuthor(lang.language))
-                            .font(.inter(15, weight: .heavy))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)

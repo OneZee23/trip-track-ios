@@ -1,13 +1,7 @@
 import SwiftUI
 
-/// The permanent sheet of «Моя карта» (canon: «Sheet постоянный: свёрнут =
-/// сводка + шеринг; тап по объекту подменяет контент; потянуть вверх = полная
-/// детализация; смахнуть вниз / ✕ = назад к сводке»).
-///
-/// Deliberately NOT a system `.sheet`: this screen owns a floating tab bar,
-/// and the collapsed summary has to float *above* it (canon frame 1) while a
-/// selected card covers it (frames 2–5). A presented sheet can do one or the
-/// other, never both, and its detents fight the tab bar the whole way.
+/// Native atlas sheet: overview, region, road and trip share the same map.
+/// The summary expands in place; object cards preserve the selected route.
 struct MyMapSheet: View {
     @ObservedObject var vm: MyMapViewModel
     /// Owned by the screen so it can hide the tab bar under the open panel.
@@ -18,69 +12,37 @@ struct MyMapSheet: View {
     /// вызов на экране, а не строка внутри списка.
     var onOpenDiscovery: (UUID) -> Void
     var onShare: () -> Void
+    var onSettings: () -> Void = {}
+    var onExplain: () -> Void = {}
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
 
-    /// `CustomTabBar` caps its pill at 380; Figma draws the collapsed card
-    /// 10 pt narrower than the bar, so the card caps 10 lower.
-    static let summaryMaxWidth: CGFloat = 370
+    /// Full-width sheet, aligned to the map attribution at the 16 pt inset.
+    static let summaryMaxWidth: CGFloat = .infinity
 
-    /// Высота самой карточки: ручка (4 + 8 сверху), строка 32, отступы 8 и 12.
-    static let collapsedCardHeight: CGFloat = 86
+    /// HTML A1: 166 pt content plus the tab bar clearance = 278 pt.
+    static let collapsedCardHeight: CGFloat = 166
 
-    /// Сколько низа экрана занимает свёрнутый лист вместе с зазором до
-    /// плавающего таб-бара.
-    ///
-    /// Это же число карта отдаёт в `additionalSafeAreaInsets.bottom`: логотип
-    /// Apple и ссылка «Legal» — сабвью `MKMapView`, и под непрозрачным туманом
-    /// лист накрыл бы их насовсем. Прятать «Legal» нельзя (API нет, а попытка
-    /// рискует ревью), поэтому её поднимают ровно на свёрнутый лист —
-    /// развёрнутый не считается, он состояние на пару секунд.
-    static func collapsedHeight(bottomInset: CGFloat) -> CGFloat {
-        collapsedCardHeight + CustomTabBar.clearance(bottomInset: bottomInset) + 6
-    }
-
-    static var collapsedHeight: CGFloat {
-        collapsedHeight(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
-    }
-
-    /// Высота журнала под его содержимое: ручка с шапкой, затем три группы —
-    /// строки регионов, ряды печатей по пять в ряду, строки загадок.
-    ///
-    /// Считается по числу строк, а не берётся константой: лист на 520 при трёх
-    /// регионах был наполовину пустым, и это уже чинили однажды. Пустая группа
-    /// не занимает ничего — кроме «Находок», у которых есть своя пустая
-    /// строка.
-    static func journalHeight(regions: Int, finds: Int, riddles: Int) -> CGFloat {
-        let head: CGFloat = 50
-        let opened = group(rows: max(regions, 1), rowHeight: 56)
-        let sealRows = max(1, Int(ceil(Double(finds) / Double(sealsPerRow))))
-        let found = group(rows: sealRows, rowHeight: 60)
-        let near = riddles == 0 ? 0 : group(rows: riddles, rowHeight: 52)
-        return head + opened + found + near + 24
-    }
-
-    /// Заголовок группы (22 сверху, 4 снизу, 15 строка) плюс её строки.
-    private static func group(rows: Int, rowHeight: CGFloat) -> CGFloat {
-        41 + CGFloat(rows) * rowHeight
-    }
-
-    /// Печатей в ряду. Пять по 44 pt с зазорами укладываются даже на самом
-    /// узком экране (SE: 375 − 32 поля = 343).
-    static let sealsPerRow = 5
+    /// HTML A1 measures the sheet and its own bar from the physical bottom.
+    /// Use the same height for MapKit attribution, without querying UIWindow
+    /// while SwiftUI is building the map's view graph.
+    static let collapsedHeight = collapsedCardHeight + CustomTabBar.clearance + 2
 
     @State private var isExpanded = false
     @State private var showAllTrips = false
-    /// Находка, чья карточка открыта НАД журналом. Печать, а не id: сетка
-    /// журнала уже держит готовые находки, и второй поход за ней в `vm` в
-    /// момент показа ничего бы не уточнил.
-    @State private var cardDiscovery: Discovery?
-    /// Карточка НЕрешённой загадки из группы «Загадки рядом» — та же, что
-    /// открывает тап по кругу на карте. Строка, которая ничего не открывает,
-    /// была бы обещанием без содержания (канон «нажатие обязано отвечать»).
-    @State private var cardRiddle: RiddleHintCardModel?
+    /// Высота содержимого свёрнутой карточки, измеренная на прошлом кадре.
+    ///
+    /// Свёрнутая карточка региона стояла на литерале 350 pt, а её содержимое
+    /// (три плитки + города + подсказка) занимает около 260 — под «Потяни
+    /// вверх» оставалось двести точек пустоты, и владелец увидел ровно её
+    /// 26 сентября. Теперь карточка облегает содержимое; литерал остался
+    /// только как ответ до первого замера.
+    @State private var measuredContentHeight: CGFloat = 0
+    /// То же для раскрытой: у неё содержимое другое (список поездок), и
+    /// одним числом эти два состояния не описать.
+    @State private var measuredExpandedHeight: CGFloat = 0
     @GestureState private var drag: CGFloat = 0
 
     var body: some View {
@@ -88,17 +50,10 @@ struct MyMapSheet: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 if vm.selection == nil {
-                    if isSummaryExpanded {
-                        journalPanel(maxHeight: geo.size.height, safeBottom: geo.safeAreaInsets.bottom)
-                            .transition(.move(edge: .bottom))
-                    } else {
-                        summaryCard
-                            .padding(.horizontal, 16)
-                            // Уйти из-под плавающего бара: клиренс + 6 = прежние 14 pt зазора над
-                            // пилюлей (тот же приём, что у `RecordingBanner` в ленте).
-                            .padding(.bottom, CustomTabBar.clearance + 6)
-                            .transition(.opacity)
-                    }
+                    AtlasOverviewSheet(vm: vm, isFull: $isSummaryExpanded,
+                                       availableHeight: geo.size.height,
+                                       onShare: onShare, onSettings: onSettings,
+                                       onExplain: onExplain, onOpenTrip: onOpenTrip)
                 } else {
                     detailPanel(maxHeight: geo.size.height, safeBottom: geo.safeAreaInsets.bottom)
                         .transition(.move(edge: .bottom))
@@ -114,403 +69,6 @@ struct MyMapSheet: View {
             isSummaryExpanded = false
             showAllTrips = false
         }
-        .sheet(item: $cardDiscovery) { find in
-            DiscoveryCardSheet(discovery: find, showsOnMap: true) {
-                // Сначала убрать карточку, потом вести камеру: `focusDiscovery`
-                // выбирает печать, а выбор схлопывает журнал под листом — и
-                // лист остался бы висеть над уже закрытым журналом.
-                cardDiscovery = nil
-                onOpenDiscovery(find.id)
-            }
-            .padding(.bottom, 20)
-            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
-        }
-        .sheet(item: $cardRiddle) { model in
-            RiddleHintCard(model: model)
-                .padding(.bottom, 20)
-                .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
-        }
-    }
-
-    // MARK: - Summary, pulled up
-
-    /// «Журнал первооткрывателя» (спека §5): три группы — что открыто, что
-    /// найдено, какие загадки рядом.
-    ///
-    /// The collapsed summary carries a grabber in the canon frame, and a
-    /// grabber that does nothing is a lie. Pulling it up opens the journal —
-    /// the same «полная детализация» rule the object cards follow, applied to
-    /// the summary's own subject.
-    ///
-    /// Процентов, колец покрытия и «закрытых» регионов здесь больше нет:
-    /// журнал отвечает на вопрос «что я открыл и нашёл», а не «сколько
-    /// процентов края мне осталось закрасить» — карта территорий, из-за
-    /// которой экран читался как Risk, ушла вместе с ними.
-    ///
-    /// Всё, что печатают эти строки, посчитано вне `body` — в
-    /// `MyMapViewModel.journal`.
-    private func journalPanel(maxHeight: CGFloat, safeBottom: CGFloat) -> some View {
-        let c = AppTheme.colors(for: scheme)
-        return VStack(spacing: 0) {
-            grabber(c)
-                .gesture(
-                    DragGesture(minimumDistance: 8)
-                        .updating($drag) { value, state, _ in
-                            state = min(value.translation.height, 0)
-                        }
-                        .onEnded { value in
-                            if value.translation.height > 60 {
-                                Haptics.tap()
-                                isSummaryExpanded = false
-                            }
-                        }
-                )
-
-            HStack(spacing: 8) {
-                Text(openedSummary)
-                .font(.inter(15, weight: .bold))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                Spacer(minLength: 44)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    openedGroup(c)
-                    // Находки отложены до после 1.0.0 (`DiscoveriesAvailability`)
-                    // — вся группа (шапка, пустая строка, сетка печатей) не
-                    // рисуется вовсе, а не показывается пустой.
-                    if DiscoveriesAvailability.isActive {
-                        findsGroup(c)
-                    }
-                    riddlesGroup(c)
-                }
-                .padding(.bottom, 20 + safeBottom)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        // Sized to what is in it. A fixed 520 meant three regions floated at
-        // the top of a panel that was mostly empty white.
-        .frame(height: max(180, min(Self.journalHeight(regions: vm.journal.regions.count,
-                                                       finds: vm.journal.finds.count,
-                                                       riddles: vm.journal.riddles.count) + safeBottom,
-                                    min(560, maxHeight * 0.74) + safeBottom) - drag))
-        .background(c.bg, in: UnevenRoundedRectangle(
-            topLeadingRadius: 22, bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous
-        ))
-        .overlay(alignment: .topTrailing) {
-            Button {
-                Haptics.tap()
-                isSummaryExpanded = false
-            } label: {
-                NavCircleIcon(systemImage: "xmark")
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 16)
-            .padding(.top, 14)
-            .accessibilityIdentifier("mymap_close")
-        }
-        .shadow(color: .black.opacity(0.25), radius: 18, y: -4)
-        .accessibilityElement(children: .contain)
-        // Имя осталось прежним нарочно: по нему панель находит обход
-        // `MyMapTourTests`, а первая его кнопка — по-прежнему строка региона.
-        .accessibilityIdentifier("mymap_region_list")
-    }
-
-    // MARK: - Журнал · Открыто
-
-    /// Первая группа: сколько открыто и где. Итог печатает шапка панели —
-    /// второй раз число не повторяется.
-    @ViewBuilder
-    private func openedGroup(_ c: AppTheme.Colors) -> some View {
-        sectionTitle(AppStrings.journalOpenedSection(lang.language), c)
-        ForEach(vm.journal.regions) { region in
-            Button {
-                Haptics.tap()
-                vm.select(.region(region.id))
-            } label: {
-                regionRow(region, c)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - Журнал · Находки
-
-    /// Вторая группа: печати сеткой, свежая первая.
-    ///
-    /// Группа показывается ВСЕГДА, и пустая тоже: находки — половина замысла
-    /// версии, и человек, у которого их ещё нет, обязан узнать, что они
-    /// бывают. Загадки ниже так себя не ведут — «рядом» без единого круга это
-    /// не обещание, а пустое место.
-    @ViewBuilder
-    private func findsGroup(_ c: AppTheme.Colors) -> some View {
-        sectionTitle(
-            AppStrings.journalFindsSection(lang.language, count: vm.journal.finds.count), c)
-
-        if vm.journal.finds.isEmpty {
-            Text(AppStrings.journalNoFindsYet(lang.language))
-                .font(.inter(13))
-                .foregroundStyle(c.textTertiary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-        } else {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 10),
-                               count: Self.sealsPerRow),
-                spacing: 10
-            ) {
-                ForEach(vm.journal.finds) { find in
-                    Button {
-                        Haptics.tap()
-                        // Карточка ложится ЛИСТОМ ПОВЕРХ журнала, а не
-                        // подменяет его: человек разглядывает сетку печатей, и
-                        // закрытая карточка обязана вернуть его в ту же сетку,
-                        // а не на карту. На карту уводит кнопка внутри
-                        // карточки — то есть по его решению.
-                        cardDiscovery = find
-                    } label: {
-                        // Картинка кэширована по (вид, символ, масштаб) —
-                        // `SealPainter` рисует её один раз на всё приложение.
-                        Image(uiImage: SealPainter.image(
-                            kind: find.kind, symbol: find.symbol, size: 44, scale: 3))
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(PressableCardStyle())
-                    .accessibilityLabel(DiscoveryCopy.accessibility(for: find, lang.language))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
-        }
-    }
-
-    // MARK: - Журнал · Загадки рядом
-
-    /// Третья группа: те же три круга, что стоят на карте, — строкой про то,
-    /// что ищется, и расстоянием до края круга.
-    @ViewBuilder
-    private func riddlesGroup(_ c: AppTheme.Colors) -> some View {
-        if !vm.journal.riddles.isEmpty {
-            sectionTitle(AppStrings.journalRiddlesSection(lang.language), c)
-            ForEach(vm.journal.riddles) { riddle in
-                riddleRow(riddle, c)
-            }
-        }
-    }
-
-    private func riddleRow(_ riddle: Journal.NearbyRiddle, _ c: AppTheme.Colors) -> some View {
-        Button {
-            Haptics.tap()
-            cardRiddle = RiddleHintCardModel.make(
-                riddle: riddle, unit: distanceUnit, lang: lang.language)
-        } label: {
-            riddleRowLabel(riddle, c)
-        }
-        .buttonStyle(PressableCardStyle())
-    }
-
-    private func riddleRowLabel(
-        _ riddle: Journal.NearbyRiddle, _ c: AppTheme.Colors
-    ) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text("?")
-                .font(.inter(15, weight: .heavy))
-                .foregroundStyle(Color(SealPainter.ring(for: .riddle)))
-                .frame(width: 22, height: 22)
-                .background(Color(SealPainter.ring(for: .riddle)).opacity(0.14), in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(RiddleCopy.line(for: riddle.type, lang.language))
-                    .font(.inter(14, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                // Внутри круга расстояния нет: «0 км до круга» — это не ответ,
-                // а след формулы.
-                if riddle.metresToEdge > 0 {
-                    Text(AppStrings.journalRiddleDistance(
-                        lang.language,
-                        distance: Measure.distance(
-                            metres: riddle.metresToEdge, unit: distanceUnit,
-                            lang: lang.language)))
-                        .font(.inter(12))
-                        .foregroundStyle(c.textTertiary)
-                }
-            }
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
-    private func regionRow(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
-            Text(RegionAtlas.flag(for: region.countryCode))
-                .font(.system(size: 15))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(region.localizedName(lang.language))
-                    .font(.inter(15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                // Дата уже посчитана `MapExploration.build` вне главного
-                // актёра: строка только печатает её.
-                if let since = region.firstVisited {
-                    Text(AppStrings.mapRegionSince(lang.language, date: since))
-                        .font(.inter(12))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 8)
-            Text(Measure.distance(
-                km: region.openedKm, unit: distanceUnit, lang: lang.language))
-                .font(.inter(12, weight: .bold))
-                .foregroundStyle(AppTheme.accent)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
-    }
-
-    /// Одна строка итога, та же на карточке и над списком: «1 910 км открыто ·
-    /// 4 региона». Километры — из слоя открытого, а не из суммы поездок.
-    /// Одно расстояние, уже с единицей: число-герой свёрнутой карточки.
-    private var openedDistance: String {
-        Measure.distance(km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language)
-    }
-
-    /// «2 региона» — хвост под числом.
-    private var openedRegions: String {
-        let count = vm.exploration.regionCount
-        return "\(AppStrings.groupedNumber(count, lang.language)) "
-            + AppStrings.regionsGenitive(lang.language, count: count)
-    }
-
-    private var openedSummary: String {
-        AppStrings.mapOpenedSummary(
-            lang.language,
-            distance: Measure.distance(
-                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
-            regions: vm.exploration.regionCount
-        )
-    }
-
-    // MARK: - Collapsed summary
-
-    /// Figma `sheet-collapsed` (1114:250): 328 wide inside a 360 frame, 64
-    /// tall, grabber centred on the CARD, text and share button on one row
-    /// below it.
-    ///
-    /// Two things were off. The grabber sat in a column with the text, so it
-    /// was centred over the text rather than the card and read as nudged left.
-    /// And the card had no width cap while the tab bar has one at 380 — on a
-    /// Pro Max that made the card 408 against the bar's 380, so the thing meant
-    /// to be 10 pt NARROWER than the bar came out 28 pt wider. Hence the cap
-    /// below: 370 keeps the Figma relationship at every screen size.
-    private var summaryCard: some View {
-        let c = AppTheme.colors(for: scheme)
-        return VStack(spacing: 0) {
-            // Ручка и шеврон — ОДИН знак «тяни вверх», собранный в одном
-            // месте. До 23 сентября шеврон стоял в середине фразы, между
-            // числом и кнопкой, и читался как знак препинания, а не как
-            // управление: «дизайн этой плашки не нравится» — владелец.
-            VStack(spacing: 3) {
-                Capsule()
-                    .fill(c.textTertiary.opacity(0.4))
-                    .frame(width: 36, height: 4)
-                if !vm.isEmpty {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(c.textTertiary.opacity(0.6))
-                }
-            }
-            .padding(.top, 8)
-
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    // Подпись над числом, а не вокруг него: «Открыто» — это
-                    // заголовок величины, и в нём нет ни склонения, ни
-                    // согласования с числом ни на одном из тринадцати языков.
-                    Text(AppStrings.mapOpenedLabel(lang.language).uppercased(lang.language))
-                        .font(.inter(10, weight: .bold))
-                        .kerning(0.6)
-                        .foregroundStyle(c.textTertiary)
-
-                    // Число — герой карточки: за ним сюда и приходят, а до
-                    // 23 сентября оно было набрано тем же кеглем, что слово
-                    // «Открыто» и счёт регионов.
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(openedDistance)
-                            .font(.inter(20, weight: .heavy))
-                            .foregroundStyle(vm.isEmpty ? c.textTertiary : c.text)
-                        if !vm.isEmpty {
-                            Text("· " + openedRegions)
-                                .font(.inter(13, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
-                        }
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                }
-                .layoutPriority(1)
-
-                Spacer(minLength: 8)
-
-                if !vm.isEmpty {
-                    Button {
-                        Haptics.tap()
-                        onShare()
-                    } label: {
-                        // The iOS share glyph, not a bare arrow: nothing about
-                        // «↑» said what the button did until you pressed it.
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppTheme.accent)
-                            .frame(width: 38, height: 38)
-                            .background(AppTheme.accent.opacity(0.12), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(AppStrings.share(lang.language))
-                    .accessibilityIdentifier("mymap_share")
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 12)
-        }
-        .frame(maxWidth: Self.summaryMaxWidth)
-        .background(c.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-        .contentShape(Rectangle())
-        .onTapGesture { expandSummary() }
-        .gesture(
-            DragGesture(minimumDistance: 10)
-                .onEnded { value in if value.translation.height < -40 { expandSummary() } }
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("mymap_summary")
-    }
-
-    /// Nothing to open when you have not driven anywhere yet — the empty
-    /// state already says so on the map itself.
-    ///
-    /// Прежнего обхода «один регион — сразу его карточка» здесь больше нет:
-    /// он был верен, пока лист был СПИСКОМ РЕГИОНОВ и при одном регионе
-    /// повторял строку, по которой только что нажали. Журнал при одном
-    /// регионе несёт ещё находки и загадки, и увести человека мимо них было
-    /// бы потерей, а не сокращением.
-    private func expandSummary() {
-        guard !vm.journal.isEmpty else { return }
-        Haptics.selection()
-        isSummaryExpanded = true
     }
 
     // MARK: - Selected object
@@ -521,7 +79,7 @@ struct MyMapSheet: View {
         // прижато к её верху, и без этого запаса последняя строка ложилась в
         // семи точках от пилюли — «сливается всё» (владелец, 23 сен).
         let target = (isExpanded ? min(expandedHeight, maxHeight * 0.86) : baseHeight)
-            + CustomTabBar.clearance(bottomInset: safeBottom)
+            + CustomTabBar.clearance
         return VStack(spacing: 0) {
             grabber(c).gesture(dragGesture)
 
@@ -537,20 +95,51 @@ struct MyMapSheet: View {
                         regionCard(region, c)
                     }
                 }
-                .padding(.bottom, 20 + CustomTabBar.clearance(bottomInset: safeBottom))
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: SheetContentHeightKey.self,
+                                               value: proxy.size.height)
+                    }
+                }
+                .padding(.bottom, 20 + CustomTabBar.clearance)
             }
+            // Свёрнутой карточке скроллить нечего — она облегает содержимое.
+            // Пока скролл был включён, он съедал жест вверх, и «потяни
+            // вверх» работало только за саму ручку в 36 pt.
             .scrollDisabled(!isExpanded)
         }
+        // Свёрнутая карточка ТЯНЕТСЯ ЦЕЛИКОМ: подсказка зовёт тянуть, и
+        // отвечать на это обязана вся она. Развёрнутая — только ручкой,
+        // иначе жест снова отнимет скролл у списка поездок (урок 0.7.0:
+        // «карточка, содержимое которой нельзя достать»).
+        .gesture(isExpanded ? nil : dragGesture)
         .frame(maxWidth: .infinity)
         .frame(height: max(120, target - drag))
-        .background(c.bg, in: UnevenRoundedRectangle(
-            topLeadingRadius: 22, bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous
+        .background(AtlasTheme.background, in: UnevenRoundedRectangle(
+            topLeadingRadius: 28, bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0, topTrailingRadius: 28, style: .continuous
         ))
-        .overlay(alignment: .topTrailing) { closeButton(c) }
-        .shadow(color: .black.opacity(0.25), radius: 18, y: -4)
+        .overlay(alignment: .topTrailing) {
+            if vm.selectedRegion == nil { closeButton(c) }
+        }
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.16), radius: 20, y: -6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(panelIdentifier)
+        .onPreferenceChange(SheetContentHeightKey.self) { height in
+            // Только в свёрнутом виде: развёрнутая карточка содержит список
+            // поездок, и её замер сделал бы свёрнутую во весь экран. И только
+            // на ЗАМЕТНОЕ изменение — запись на каждый кадр разметки это тот
+            // самый цикл, о котором предупреждает `ContentView`.
+            guard height > 0 else { return }
+            if isExpanded {
+                guard abs(height - measuredExpandedHeight) > 1 else { return }
+                measuredExpandedHeight = height
+            } else {
+                guard abs(height - measuredContentHeight) > 1 else { return }
+                measuredContentHeight = height
+            }
+        }
     }
 
     /// The drag handle, and the ONLY thing that drags.
@@ -561,11 +150,11 @@ struct MyMapSheet: View {
     /// is also what every sheet on iOS does.
     private func grabber(_ c: AppTheme.Colors) -> some View {
         Capsule()
-            .fill(c.textTertiary.opacity(0.4))
-            .frame(width: 36, height: 4)
+            .fill(AtlasTheme.handle)
+            .frame(width: 36, height: 5)
             .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
+            .padding(.top, 8)
+            .padding(.bottom, vm.selectedRegion == nil ? 12 : 0)
             .contentShape(Rectangle())
             .accessibilityIdentifier("mymap_grabber")
     }
@@ -586,7 +175,12 @@ struct MyMapSheet: View {
         if vm.selectedDiscovery != nil { return 300 }
         // Header plus three rows — enough to read as a list worth pulling up.
         if vm.selectedRoad != nil { return 260 }
-        return 214
+        // Регион облегает содержимое: плитки, города и подсказка «потяни
+        // вверх» — и ничего сверх них. 350 остаётся ответом до первого
+        // замера, а потолок держит карточку края с длинным списком городов
+        // в разумных границах.
+        guard measuredContentHeight > 0 else { return 350 }
+        return min(max(measuredContentHeight + 26, 200), 420)
     }
 
     /// Карточки, под которыми есть ещё что-то: список поездок региона, список
@@ -595,7 +189,14 @@ struct MyMapSheet: View {
         vm.selectedRegion != nil || vm.selectedRoad != nil || vm.selectedDiscovery != nil
     }
 
-    private var expandedHeight: CGFloat { canExpand ? 560 : baseHeight }
+    /// Раскрытая карточка тоже облегает содержимое — просто содержимого у
+    /// неё больше. Потолок ставит вызывающий (`maxHeight * 0.86`): выше него
+    /// карточка накрыла бы карту, ради которой экран и открыт.
+    private var expandedHeight: CGFloat {
+        guard canExpand else { return baseHeight }
+        guard measuredExpandedHeight > 0 else { return 560 }
+        return max(measuredExpandedHeight + 26, baseHeight)
+    }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 8)
@@ -624,7 +225,7 @@ struct MyMapSheet: View {
         } label: {
             NavCircleIcon(systemImage: "xmark")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
         .padding(.trailing, 16)
         .padding(.top, 14)
         .accessibilityIdentifier("mymap_close")
@@ -635,79 +236,93 @@ struct MyMapSheet: View {
 
     @ViewBuilder
     private func regionCard(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        regionHeader(region, c)
-
-        // Крайние плитки прижаты к полям карточки, средняя по центру: до
-        // 23 сентября все три стояли по центрам равных третей, и числа висели
-        // сами по себе — левое в двух сантиметрах от флага с названием, правое
-        // не доходя до края. «Вёрстка кривая» — владелец про этот экран.
-        HStack(spacing: 8) {
-            statColumn(Measure.distanceValue(km: region.km, unit: distanceUnit,
-                                             lang: lang.language, style: .grouped),
-                       AppStrings.mapKmDriven(lang.language, unit: distanceUnit), c,
-                       alignment: .leading)
-            statColumn("\(region.tripCount)",
-                       AppStrings.tripsGenitive(lang.language, count: region.tripCount), c,
-                       alignment: .center)
-            statColumn(region.totalCities > 0
-                       ? AppStrings.mapCitiesOfTotal(lang.language,
-                                                     opened: region.visitedCityCount,
-                                                     total: region.totalCities)
-                       : "—",
-                       AppStrings.citiesGenitive(lang.language, count: region.totalCities), c,
-                       alignment: .trailing)
+        AtlasStatRow {
+            AtlasStatTile(
+                value: Measure.distance(km: region.openedKm, unit: distanceUnit, lang: lang.language),
+                label: vm.period == .allTime
+                    ? AppStrings.atlasNewRoads(lang.language)
+                    : AppStrings.atlasUniqueRoads(lang.language),
+                accent: true)
+            AtlasStatTile(
+                value: Measure.distance(km: region.km, unit: distanceUnit, lang: lang.language),
+                label: AppStrings.atlasTotalTravelled(lang.language))
+            AtlasStatTile(
+                value: "\(region.tripCount)",
+                label: AppStrings.tripsGenitive(lang.language, count: region.tripCount),
+                action: { isExpanded = true; showAllTrips = true; Haptics.selection() })
         }
         .padding(.horizontal, 16)
-        .padding(.top, 16)
+        .padding(.top, 14)
+
+        if !region.cities.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(AppStrings.atlasCities(lang.language)).atlasSectionStyle()
+                    Spacer()
+                    Text(AppStrings.mapCitiesOfTotal(lang.language, opened: region.visitedCityCount, total: region.totalCities))
+                        .font(AppType.itemValue).foregroundStyle(AtlasTheme.accent)
+                }
+                .padding(.horizontal, 16)
+                if region.totalCities > 0 {
+                    ProgressView(value: min(1, Double(region.visitedCityCount) / Double(region.totalCities)))
+                        .tint(AtlasTheme.accent)
+                        .padding(.horizontal, 16)
+                }
+                // Лента чипов доходит до КРАЯ карточки, а не до её поля:
+                // обрезанный на полуслове «Геленджик» читался поломкой, а не
+                // приглашением листать (владелец, 26 сен). Поля возвращает
+                // `contentMargins`, поэтому первый и последний чип стоят там
+                // же, где заголовок.
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(region.cities) { city in
+                            Button {
+                                vm.select(nil, zoom: false)
+                                vm.cameraCommand = .fit(GeoBounds(around: city.coordinate, metres: 12_000), padding: .overview)
+                                Haptics.selection()
+                            } label: {
+                                Label(city.localizedName(lang.language), systemImage: "checkmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(AtlasTheme.accentInk)
+                                    .padding(.horizontal, 12).frame(height: 40)
+                                    .background(AtlasTheme.accentSoft, in: Capsule())
+                            }
+                            .buttonStyle(PressableCardStyle())
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .contentMargins(.horizontal, 16, for: .scrollContent)
+            }
+            .foregroundStyle(AtlasTheme.ink)
+            .padding(.vertical, 16)
+            .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 16).padding(.top, 14)
+        }
 
         if isExpanded {
             tripsSection(region, c)
         } else {
-            Text(AppStrings.mapPullHint(lang.language))
-                .font(.inter(12))
-                .foregroundStyle(c.textTertiary)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 20)
+            // Подсказка — КНОПКА: она обещает раскрытие, значит обязана его
+            // и давать, а не только описывать жест.
+            Button {
+                Haptics.selection()
+                isExpanded = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(AppStrings.mapPullHint(lang.language))
+                        .font(.inter(12))
+                }
+                .foregroundStyle(AtlasTheme.secondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("mymap_expand_trips")
+            .padding(.top, 4)
         }
-    }
-
-    /// 17, not 19: the panel swaps this header in place for the road and the
-    /// locked card, so all three follow the one canon size (1117:229). The flag
-    /// stays on `.system` — Inter carries no emoji.
-    private func regionHeader(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 8) {
-            Text(RegionAtlas.flag(for: region.countryCode))
-                .font(.system(size: 17))
-            Text(region.localizedName(lang.language))
-                .font(.inter(17, weight: .heavy))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Spacer(minLength: 44)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-    }
-
-    /// The value drew in SF while the label right under it drew in Inter — two
-    /// typefaces stacked inside one card, and at heavy weight the digits gave
-    /// it away. Canon: 18 ExtraBold over 10 SemiBold (1117:230/231).
-    private func statColumn(
-        _ value: String, _ label: String, _ c: AppTheme.Colors,
-        alignment: HorizontalAlignment = .center
-    ) -> some View {
-        VStack(alignment: alignment, spacing: 3) {
-            Text(value)
-                .font(.inter(18, weight: .heavy))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.inter(10, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
 
     // MARK: - Region · expanded
@@ -719,8 +334,10 @@ struct MyMapSheet: View {
 
     @ViewBuilder
     private func tripsSection(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        let trips = region.tripIds.compactMap { vm.exploration.trip(id: $0) }
-            .sorted { $0.startDate > $1.startDate }
+        // Готовый отсортированный список из вью-модели, а не выборка по id
+        // с сортировкой прямо здесь: этот `body` перерисовывается на каждый
+        // кадр перетаскивания ручки.
+        let trips = vm.selectedRegionTrips
 
         // «Все N» rides the section heading rather than sitting under the
         // last row: at the bottom of a scrolling card it was below the fold
@@ -733,14 +350,19 @@ struct MyMapSheet: View {
                 : nil
         )
 
-        ForEach(showAllTrips ? trips : Array(trips.prefix(4))) { trip in
-            Button {
-                Haptics.tap()
-                vm.select(.trip(trip.id))
-            } label: {
-                tripRow(trip, c)
+        // ЛЕНИВЫЙ столбец: у края с тысячей поездок обычный `ForEach` строил
+        // тысячу строк разом, каждую с мини-картой маршрута, — и делал это
+        // до первого кадра списка.
+        LazyVStack(spacing: 0) {
+            ForEach(showAllTrips ? trips : Array(trips.prefix(4))) { trip in
+                Button {
+                    Haptics.tap()
+                    vm.select(.trip(trip.id))
+                } label: {
+                    tripRow(trip, c)
+                }
+                .buttonStyle(PressableCardStyle())
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -750,18 +372,18 @@ struct MyMapSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(TripAutoTitle.localized(trip.title, startDate: trip.startDate, language: lang.language)
                      ?? (AppStrings.tripTitle(lang.language)))
-                    .font(.inter(15, weight: .semibold))
-                    .foregroundStyle(c.text)
+                    .font(AppType.itemTitle)
+                    .foregroundStyle(AtlasTheme.ink)
                     .lineLimit(1)
                 Text(tripSubtitle(trip))
                     .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
+                    .foregroundStyle(AtlasTheme.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
+                .foregroundStyle(AtlasTheme.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
@@ -782,8 +404,7 @@ struct MyMapSheet: View {
     ) -> some View {
         HStack(spacing: 8) {
             Text(text)
-                .font(.inter(11, weight: .bold))
-                .foregroundStyle(c.textTertiary)
+                .atlasSectionStyle()
             Spacer(minLength: 8)
             if let action {
                 Button {
@@ -792,16 +413,16 @@ struct MyMapSheet: View {
                 } label: {
                     HStack(spacing: 3) {
                         Text(action.title)
-                            .font(.inter(13, weight: .bold))
+                            .font(.inter(13, weight: .semibold))
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 10, weight: .semibold))
                     }
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(AtlasTheme.accent)
                     // A comfortable target without pushing the heading around.
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableCardStyle())
                 .accessibilityIdentifier("mymap_see_all")
             }
         }
@@ -819,8 +440,8 @@ struct MyMapSheet: View {
     private func roadCard(_ trips: [MapTripPin], _ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.mapRoadTrips(lang.language, count: trips.count))
-                .font(.inter(17, weight: .heavy))
-                .foregroundStyle(c.text)
+                .font(.inter(17, weight: .semibold))
+                .foregroundStyle(AtlasTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Spacer(minLength: 44)
@@ -836,13 +457,13 @@ struct MyMapSheet: View {
             } label: {
                 tripRow(trip, c)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableCardStyle())
         }
 
         if !isExpanded, trips.count > 2 {
             Text(AppStrings.mapRoadPullHint(lang.language))
                 .font(.inter(12))
-                .foregroundStyle(c.textTertiary)
+                .foregroundStyle(AtlasTheme.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
         }
@@ -858,15 +479,15 @@ struct MyMapSheet: View {
                 Text(TripAutoTitle.localized(trip.title, startDate: trip.startDate, language: lang.language)
                      ?? (AppStrings.tripTitle(lang.language)))
                     .font(.inter(16, weight: .bold))
-                    .foregroundStyle(c.text)
+                    .foregroundStyle(AtlasTheme.ink)
                     .lineLimit(1)
                 Text(tripHeadline(trip))
                     .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
+                    .foregroundStyle(AtlasTheme.secondary)
                     .lineLimit(1)
                 Text(tripSpeeds(trip))
                     .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
+                    .foregroundStyle(AtlasTheme.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 40)
@@ -883,9 +504,9 @@ struct MyMapSheet: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(AppTheme.accent, in: Capsule())
+                .background(AtlasTheme.accent, in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .accessibilityIdentifier("mymap_open_trip")
@@ -944,5 +565,16 @@ struct MapTripThumb: View {
                 guard let filename = trip.photoFilename else { return }
                 photo = await PhotoStorageService.loadThumbnail(filename: filename, maxSize: size * 3)
             }
+    }
+}
+
+
+/// Высота содержимого карточки. Ключ — не «ещё один PreferenceKey ради
+/// красоты»: без замера свёрнутая карточка региона стояла на литерале и
+/// оставляла под собой пустое поле.
+private struct SheetContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

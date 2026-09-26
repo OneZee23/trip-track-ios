@@ -113,7 +113,7 @@ final class FogVeilView: UIView {
 
     /// Один растр: мировой прямоугольник, его размер в точках и полосы,
     /// каждая своим слоем.
-    private final class Raster {
+    final class Raster {
         let rect: MKMapRect
         let sizePoints: CGSize
         let scale: CGFloat
@@ -132,6 +132,7 @@ final class FogVeilView: UIView {
         /// стрелке. Считается той же матрицей, что и привязка слоя, поэтому
         /// верен и при повороте карты; пустой, пока привязки не было.
         var quad: [CGPoint] = []
+        private var canReuseBands = true
 
         init(rect: MKMapRect, sizePoints: CGSize, scale: CGFloat, expected: Int) {
             self.rect = rect
@@ -147,12 +148,16 @@ final class FogVeilView: UIView {
 
         var isComplete: Bool { bands.count >= expected }
 
+        /// Keep the displayed image until its replacement arrives, but never
+        /// copy pixels with the previous palette into the new raster.
+        func invalidateBands() { canReuseBands = false }
+
         /// Готовая полоса ровно на этот мировой прямоугольник и тот же
         /// масштаб — её можно взять, не рисуя.
         func band(
             for band: MKMapRect, scale other: CGFloat, sizePoints other2: CGSize
         ) -> (image: CGImage, drawn: MKMapRect)? {
-            guard abs(scale - other) < 0.0001,
+            guard canReuseBands, abs(scale - other) < 0.0001,
                   abs(sizePoints.width - other2.width) < 0.5,
                   abs(sizePoints.height - other2.height) < 0.5 else { return nil }
             guard let hit = bands.first(where: { FogVeilBitmap.sameRect($0.rect, band) })
@@ -464,6 +469,16 @@ final class FogVeilView: UIView {
         gate.invalidate()
         guard let map else { return }
         render(map: map)
+    }
+
+    /// Unlike a camera update, a palette change makes otherwise reusable
+    /// bands stale even when their world rectangle and resolution match.
+    func invalidateAppearance() {
+        rasters.forEach { $0.invalidateBands() }
+        // Palette colours are baked into the cloud texture too. This serial
+        // queue prepares it before the new band's render jobs, off the UI thread.
+        if hasLayer { queue.async { CloudTexture.shared.prepare() } }
+        invalidate()
     }
 
     // MARK: Встраивание в иерархию MKMapView
@@ -904,13 +919,14 @@ final class FogVeilView: UIView {
         // зависят ни от полос, ни от их порядка, а растру достаётся только
         // туман.
         let veinRect = rect
+        let veinPalette = FogVeilPainter.palette
         queue.async { [weak self] in
             guard let self, self.isLive(token) else { return }
             let lod = FogVeilRenderer.lod(
                 for: MKZoomScale(sizePoints.width / CGFloat(veinRect.width)))
             let strokes = FogVeilVein.strokes(
                 rect: veinRect, sizePoints: sizePoints,
-                chunks: indexRef.ready(for: lod), selected: route)
+                chunks: indexRef.ready(for: lod), selected: route, palette: veinPalette)
             Task { @MainActor [weak self] in
                 self?.installVein(strokes, token: token)
             }
@@ -1316,12 +1332,13 @@ enum FogVeilBitmap {
         // Жилка сети — тем же индексом и теми же правилами, что у
         // `RouteVeinRenderer`: источник один, разъехаться им нельзя.
         if vein {
+            let colors = RouteVeinRenderer.resolvedColors()
             if let chunks {
                 drawVein(context: context, rect: band, chunks: chunks,
-                         zoomScale: zoomScale, lod: lod)
+                         zoomScale: zoomScale, lod: lod, colors: colors)
             }
             if selected.count > 1 {
-                drawSelected(context: context, points: selected, zoomScale: zoomScale)
+                drawSelected(context: context, points: selected, zoomScale: zoomScale, colors: colors)
             }
         }
 
@@ -1334,10 +1351,11 @@ enum FogVeilBitmap {
 
     private static func drawVein(
         context: CGContext, rect: MKMapRect, chunks: MapPathChunks,
-        zoomScale: MKZoomScale, lod: RevealedLayer.LOD
+        zoomScale: MKZoomScale, lod: RevealedLayer.LOD, colors: RouteVeinRenderer.Colors
     ) {
         let screenWidth = RouteVeinRenderer.width(for: lod)
-        let widest = max(screenWidth, RouteVeinRenderer.halo(for: lod)?.width ?? 0)
+        let casedWidth = screenWidth + (colors.networkCasing != nil ? RouteVeinRenderer.casingExtra : 0)
+        let widest = max(casedWidth, RouteVeinRenderer.halo(for: lod)?.width ?? 0)
             / CGFloat(zoomScale)
         let paths = chunks.visiblePaths(
             in: rect.insetBy(dx: -Double(widest) - 1, dy: -Double(widest) - 1),
@@ -1345,8 +1363,6 @@ enum FogVeilBitmap {
         guard !paths.isEmpty else { return }
         context.setLineCap(.round)
         context.setLineJoin(.round)
-        // Один снимок на оба прохода — см. `FogVeilVein.strokes`.
-        let veinColor = RouteVeinRenderer.resolvedVeinColor()
         if let halo = RouteVeinRenderer.halo(for: lod) {
             let metre = MKMapPointsPerMeterAtLatitude(
                 MKMapPoint(x: rect.midX, y: rect.midY).coordinate.latitude)
@@ -1355,18 +1371,26 @@ enum FogVeilBitmap {
             paths.forEach(context.addPath)
             context.setLineWidth(min(halo.width / CGFloat(zoomScale), ceiling))
             context.setStrokeColor(
-                veinColor.withAlphaComponent(halo.alpha).cgColor)
+                colors.network.withAlphaComponent(halo.alpha).cgColor)
+            context.strokePath()
+        }
+        if let casing = colors.networkCasing {
+            context.beginPath()
+            paths.forEach(context.addPath)
+            context.setLineWidth(casedWidth / CGFloat(zoomScale))
+            context.setStrokeColor(casing.cgColor)
             context.strokePath()
         }
         context.beginPath()
         paths.forEach(context.addPath)
         context.setLineWidth(screenWidth / CGFloat(zoomScale))
-        context.setStrokeColor(veinColor.withAlphaComponent(0.9).cgColor)
+        context.setStrokeColor(colors.network.withAlphaComponent(0.9).cgColor)
         context.strokePath()
     }
 
     private static func drawSelected(
-        context: CGContext, points: [MKMapPoint], zoomScale: MKZoomScale
+        context: CGContext, points: [MKMapPoint], zoomScale: MKZoomScale,
+        colors: RouteVeinRenderer.Colors
     ) {
         let path = CGMutablePath()
         path.move(to: CGPoint(x: points[0].x, y: points[0].y))
@@ -1377,12 +1401,12 @@ enum FogVeilBitmap {
         context.addPath(path)
         context.setLineWidth((RouteVeinRenderer.selectedWidth + RouteVeinRenderer.casingExtra)
                              / CGFloat(zoomScale))
-        context.setStrokeColor(RouteVeinRenderer.casingColor.cgColor)
+        context.setStrokeColor(colors.casing.cgColor)
         context.strokePath()
         context.beginPath()
         context.addPath(path)
         context.setLineWidth(RouteVeinRenderer.selectedWidth / CGFloat(zoomScale))
-        context.setStrokeColor(RouteVeinRenderer.selectedColor.cgColor)
+        context.setStrokeColor(colors.selected.cgColor)
         context.strokePath()
     }
 }

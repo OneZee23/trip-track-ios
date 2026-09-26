@@ -124,13 +124,33 @@ enum AtlasSharePoster {
         in cg: CGContext, rect: MKMapRect, size: CGSize, scale: CGFloat, layer: RevealedLayer
     ) {
         guard !layer.isEmpty else { return }
+        let palette = FogVeilPainter.palette
         if FogMetalAvailability.isActive,
            let image = FogOffscreen.render(
                layer: layer, rect: rect, sizePoints: size, scale: scale,
-               palette: FogVeilPainter.palette) {
+               palette: palette) {
             // Кадр офскрина лежит РОВНО на `rect`, без припуска, — значит и
             // кладётся он на всю картинку.
             place(image, in: cg, box: CGRect(origin: .zero, size: size), size: size)
+            // Metal draws fog only. The live Atlas has a VeinLayer above it;
+            // the poster needs those same strokes too.
+            let index = MapPathIndex()
+            index.prepare(source: { layer.polylines(for: $0) },
+                          transform: { CGPoint(x: $0.x, y: $0.y) })
+            let lod = FogVeilRenderer.lod(for: MKZoomScale(size.width / CGFloat(rect.width)))
+            let strokes = FogVeilVein.strokes(rect: rect, sizePoints: size,
+                                             chunks: index.ready(for: lod), selected: [], palette: palette)
+            cg.saveGState()
+            cg.setLineCap(.round)
+            cg.setLineJoin(.round)
+            cg.setShouldAntialias(true)
+            for stroke in strokes {
+                cg.addPath(stroke.path)
+                cg.setLineWidth(stroke.width)
+                cg.setStrokeColor(stroke.color.cgColor)
+                cg.strokePath()
+            }
+            cg.restoreGState()
             return
         }
         // Облака — синхронно, как и индекс: постер собирается в фоне и один

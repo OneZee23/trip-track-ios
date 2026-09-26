@@ -44,7 +44,8 @@ enum FogVeilVein {
     /// потеря места в дереве меняла бы толщину линии.
     static func strokes(
         rect: MKMapRect, sizePoints: CGSize,
-        chunks: MapPathChunks?, selected: [MKMapPoint]
+        chunks: MapPathChunks?, selected: [MKMapPoint],
+        palette: FogVeilPainter.Palette = FogVeilPainter.palette
     ) -> [Stroke] {
         guard rect.width > 0, rect.height > 0, sizePoints.width > 0 else { return [] }
         // Масштаб растра: точек экрана на точку карты. Он же `zoomScale` —
@@ -55,14 +56,16 @@ enum FogVeilVein {
         // Один снимок цвета на весь набор проходов: он же лежит в рендерере
         // (`RouteVeinRenderer.veinColor`), и спрашивать его дважды значит
         // дважды сходить в `UserDefaults` за одним и тем же ответом.
-        let veinColor = RouteVeinRenderer.resolvedVeinColor()
+        let colors = RouteVeinRenderer.resolvedColors(palette: palette)
         // Сдвиг к левому верхнему углу растра, затем масштаб: `p' = (p − o)·z`.
         let transform = CGAffineTransform(scaleX: CGFloat(zoomScale), y: CGFloat(zoomScale))
             .translatedBy(x: CGFloat(-rect.minX), y: CGFloat(-rect.minY))
         var out: [Stroke] = []
 
         if let chunks {
-            let widest = max(RouteVeinRenderer.width(for: lod),
+            let casedWidth = RouteVeinRenderer.width(for: lod)
+                + (colors.networkCasing != nil ? RouteVeinRenderer.casingExtra : 0)
+            let widest = max(casedWidth,
                              RouteVeinRenderer.halo(for: lod)?.width ?? 0) / CGFloat(zoomScale)
             let paths = chunks.visiblePaths(
                 in: rect.insetBy(dx: -Double(widest) - 1, dy: -Double(widest) - 1),
@@ -78,11 +81,14 @@ enum FogVeilVein {
                         * 1.2 * CGFloat(zoomScale)
                     out.append(Stroke(
                         path: net, width: min(halo.width, ceiling),
-                        color: veinColor.withAlphaComponent(halo.alpha)))
+                        color: colors.network.withAlphaComponent(halo.alpha)))
+                }
+                if let casing = colors.networkCasing {
+                    out.append(Stroke(path: net, width: casedWidth, color: casing))
                 }
                 out.append(Stroke(
                     path: net, width: RouteVeinRenderer.width(for: lod),
-                    color: veinColor.withAlphaComponent(0.9)))
+                    color: colors.network.withAlphaComponent(0.9)))
             }
         }
 
@@ -97,10 +103,10 @@ enum FogVeilVein {
                 out.append(Stroke(
                     path: line,
                     width: RouteVeinRenderer.selectedWidth + RouteVeinRenderer.casingExtra,
-                    color: RouteVeinRenderer.casingColor))
+                    color: colors.casing))
                 out.append(Stroke(
                     path: line, width: RouteVeinRenderer.selectedWidth,
-                    color: RouteVeinRenderer.selectedColor))
+                    color: colors.selected))
             }
         }
         return out
@@ -129,8 +135,8 @@ final class VeinLayer: CALayer {
     /// Сколько проходов сейчас нарисовано — для теста.
     var strokeCount: Int { shapes.filter { !$0.isHidden && $0.path != nil }.count }
 
-    /// Ставит проходы. Слои переиспользуются: их не больше четырёх (ореол,
-    /// сердцевина, обводка выбранного, сам выбранный).
+    /// Ставит проходы. Слои переиспользуются: ореол, белая подложка светлой
+    /// палитры, сердцевина, обводка выбранного и сам выбранный.
     func apply(_ strokes: [FogVeilVein.Stroke], bounds: CGRect, scale: CGFloat) {
         frame = bounds
         while shapes.count < strokes.count {

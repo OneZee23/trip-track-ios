@@ -104,7 +104,7 @@ final class RegionLabelView: MKAnnotationView {
 
     /// Тот же тёплый светлый серый, которым раньше на «Атласе» рисовались
     /// границы стран — подпись региона и он обязаны читаться как один язык.
-    private static let warmColor = FogVeilPainter.borderColor
+    private static var warmColor: UIColor { FogVeilPainter.borderColor }
     /// Список уже отфильтрован по открытым километрам, поэтому подпись у
     /// региона всегда «посещённая» яркость.
     private static let brightAlpha: CGFloat = 0.85
@@ -178,12 +178,17 @@ final class RegionLabelView: MKAnnotationView {
         didSet { configure() }
     }
 
+    func refreshPalette() { configure() }
+
     private func configure() {
         guard let region = annotation as? RegionLabelAnnotation else { return }
         // Под светлой дымкой тёплый светлый текст исчезает — там подпись
         // тёмная (#1E2230), а обводка, наоборот, светлая.
         let base = FogVeilPainter.palette.isDark ? Self.warmColor : Self.darkText
         let color = base.withAlphaComponent(Self.brightAlpha)
+        for label in [nameLabel, kmLabel] {
+            label.layer.shadowColor = Self.haloColor.cgColor
+        }
 
         // Разрядка 0.08 em: капитель без нее читается сплошным пятном,
         // разряженная — гравюрой. Заглавные буквы приходят готовыми в

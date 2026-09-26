@@ -236,13 +236,15 @@ enum FogVeilPainter {
             border: UIColor(red: 0xE4/255, green: 0xDC/255, blue: 0xCF/255, alpha: 1),
             alpha: 0.70, opacityRange: 0.62...0.78, isDark: true)
 
-        /// Бледная дымка светлой темы: тот же приём, вывернутый по светлоте.
+        /// The 0.8.1 paper atlas: neutral #EEEEEC at 87%, with a small
+        /// density variation in the raster fallback. Metal uses the same
+        /// colour and nominal opacity.
         static let mist = Palette(
-            top: UIColor(red: 0xE9/255, green: 0xEC/255, blue: 0xF2/255, alpha: 1),
-            bottom: UIColor(red: 0xDC/255, green: 0xE1/255, blue: 0xEA/255, alpha: 1),
-            haze: UIColor(red: 0xFA/255, green: 0xFB/255, blue: 0xFF/255, alpha: 1),
+            top: UIColor(red: 0xEE/255, green: 0xEE/255, blue: 0xEC/255, alpha: 1),
+            bottom: UIColor(red: 0xEE/255, green: 0xEE/255, blue: 0xEC/255, alpha: 1),
+            haze: UIColor(red: 0x7D/255, green: 0x87/255, blue: 0x92/255, alpha: 1),
             border: UIColor(red: 0x4A/255, green: 0x50/255, blue: 0x60/255, alpha: 1),
-            alpha: 0.72, opacityRange: 0.64...0.80, isDark: false)
+            alpha: 0.87, opacityRange: 0.85...0.89, isDark: false)
     }
 
     /// Какая палитра сейчас. Пишет её экран (`ThemeManager`), читают кисть и

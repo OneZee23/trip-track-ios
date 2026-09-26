@@ -99,13 +99,13 @@ struct PublicMapView: View {
     private func titlePill(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         VStack(spacing: 1) {
             Text(ownerName ?? AppStrings.profileMapEntryTitle(l))
-                .font(.system(size: 13, weight: .heavy))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.text)
             // Рамка обязательна: счётчики профиля считаются по ВСЕМ поездкам,
             // а карта рисует только публичные. Без подписи расхождение между
             // «47 поездок» в профиле и дюжиной маршрутов здесь читается как баг.
             Text(AppStrings.publicRoutesCaption(l))
-                .font(.system(size: 10, weight: .medium))
+                .font(.inter(10, weight: .medium))
                 .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 12)
@@ -132,11 +132,11 @@ struct PublicMapView: View {
                 // Отказ загрузки — НЕ «человек ничего не опубликовал». Второе
                 //утверждение о другом человеке, которого мы не проверяли.
                 Text(AppStrings.publicDataLoadFailed(l))
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text)
                 Button { Task { await vm.loadRemote() } } label: {
                     Text(AppStrings.retry(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                 }
                 .buttonStyle(.plain)
@@ -144,10 +144,10 @@ struct PublicMapView: View {
                 // Ноль публичных поездок — это пустое состояние, а не отказ
                 // загрузки: человек просто ничего не опубликовал.
                 Text(AppStrings.publicMapEmptyTitle(l))
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text)
                 Text(AppStrings.publicMapEmptyBody(l))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -156,7 +156,7 @@ struct PublicMapView: View {
                 // что числа под ним занижены.
                 if vm.remoteFailed {
                     Text(AppStrings.publicDataPartial(l))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -177,7 +177,7 @@ struct PublicMapView: View {
                 if let name = ownerName?.trimmingCharacters(in: .whitespaces),
                    !name.isEmpty {
                     Text(AppStrings.publicRoutesExplainer(l, name: name))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -202,10 +202,10 @@ struct PublicMapView: View {
     private func cell(_ value: String, _ label: String, _ c: AppTheme.Colors) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .semibold))
                 .foregroundStyle(c.text)
             Text(label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.inter(10.5, weight: .medium))
                 .foregroundStyle(c.textTertiary)
         }
         .frame(maxWidth: .infinity)

@@ -18,8 +18,21 @@ import SwiftUI
 /// появления (19 сен), и нашёл это владелец на устройстве. Пустое место
 /// колонки и `Spacer` жестов и так не берут — их берёт только нарисованное,
 /// поэтому запрет и переехал на две надписи. Держит `AtlasBetaChipTests`.
+/// **Высота пилюли — по заглавным «Атласа», а не меньше их.** Замер кадра
+/// 26 сентября: буквы заголовка занимают полосу 101…165 (3×, то есть 21.3 pt
+/// заглавных), пилюля — 104…161 (19 pt). Центры сходились с точностью до
+/// трети пункта, но верх пилюли упирался в линию заглавных, а низ не доходил
+/// до базовой на 1.3 pt — и читалось это как «висит выше» (владелец на
+/// устройстве). Ровные поля сверху и снизу даёт вертикальный отступ 5, а не 3:
+/// пилюля становится чуть выше заглавных и ОБНИМАЕТ слово вместо того, чтобы
+/// висеть у его верхнего края.
+/// С 26 сентября значок стоит и у «Мест»: вкладка переделана в 0.8.1 вместе
+/// с «Атласом» и дорабатывается так же — повод у неё тот же, а второй копии
+/// этого кода быть не должно. Различаются только якорь для тестов и текст
+/// карточки, которую значок открывает.
 struct AtlasBetaChip: View {
     let action: () -> Void
+    var identifier: String = "atlas_beta_chip"
 
     @EnvironmentObject private var lang: LanguageManager
 
@@ -28,17 +41,23 @@ struct AtlasBetaChip: View {
             Haptics.tap()
             action()
         } label: {
-            Text(AppStrings.atlasBetaChip(lang.language))
-                .font(.inter(10, weight: .heavy))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(AppTheme.accent.opacity(0.28), in: Capsule())
-                .overlay(Capsule().stroke(AppTheme.accent.opacity(0.6), lineWidth: 1))
+            HStack(spacing: 3) {
+                Text(AppStrings.atlasBetaChip(lang.language))
+                    .font(.inter(11, weight: .bold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(AtlasTheme.accentInk)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(AtlasTheme.accentSoft, in: Capsule())
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
         .allowsHitTesting(true)
-        .accessibilityIdentifier("atlas_beta_chip")
+        .accessibilityIdentifier(identifier)
         .accessibilityLabel(AppStrings.atlasBetaTitle(lang.language))
     }
 }

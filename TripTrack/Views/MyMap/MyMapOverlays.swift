@@ -66,6 +66,8 @@ final class CityDotView: MKAnnotationView {
         didSet { configure() }
     }
 
+    func refreshPalette() { configure() }
+
     /// Не закрыта ли точка города синей точкой «я здесь» — считает карта
     /// (`updateLabelVisibility`) на каждом кадре жеста и на каждом обновлении
     /// местоположения. Применяется БЕЗУСЛОВНО: MapKit вправе показать скрытую
@@ -84,6 +86,10 @@ final class CityDotView: MKAnnotationView {
 
     private func configure() {
         guard let city = annotation as? CityDotAnnotation else { return }
+        label.textColor = FogVeilPainter.palette.isDark
+            ? UIColor.white.withAlphaComponent(0.92) : RegionLabelView.darkText
+        label.layer.shadowColor = RegionLabelView.haloColor.cgColor
+        dot.layer.shadowColor = RegionLabelView.haloColor.cgColor
         let size = 6 + CGFloat(min(1, city.coverage)) * 4
         dot.frame = CGRect(x: (8 - size) / 2, y: (8 - size) / 2, width: size, height: size)
         dot.layer.cornerRadius = size / 2

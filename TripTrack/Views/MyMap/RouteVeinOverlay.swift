@@ -70,7 +70,7 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     /// Чем красить жилку ПРЯМО СЕЙЧАС. Спрашивают её ровно там, где готовят
     /// новую картинку: `init` этого рендерера, растр экранной вуали и постер.
     ///
-    /// С 0.8.0 янтарь перебивает выбранный цвет линии маршрута
+    /// С 0.8.0 стандартный цвет перебивает выбранный цвет линии маршрута
     /// (`RouteLineStyle`) — тот же цвет, которым рисуется маршрут на экране
     /// поездки: две карты в одном приложении обязаны рисовать пройденное
     /// одинаково. Ответ лежит в `UserDefaults`, а не в главноактёрном
@@ -78,6 +78,25 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     /// (см. `RouteLineStyle.plusMirrorKey`).
     static func resolvedVeinColor() -> UIColor {
         RouteLineStyle.currentUIColor ?? defaultVeinColor
+    }
+
+    /// One palette snapshot shared by the tiled, vector and poster paths.
+    /// Light paper needs terracotta with a narrow white casing; night keeps
+    /// the original warm light. A chosen route colour takes priority in both.
+    struct Colors {
+        let network: UIColor
+        let selected: UIColor
+        let casing: UIColor
+        let networkCasing: UIColor?
+    }
+
+    static func resolvedColors(palette: FogVeilPainter.Palette = FogVeilPainter.palette) -> Colors {
+        let chosen = RouteLineStyle.currentUIColor
+        return Colors(
+            network: chosen ?? (palette.isDark ? nightVeinColor : paperVeinColor),
+            selected: chosen ?? (palette.isDark ? selectedColor : paperVeinColor),
+            casing: palette.isDark ? casingColor : UIColor.white.withAlphaComponent(0.94),
+            networkCasing: palette.isDark ? nil : UIColor.white.withAlphaComponent(0.94))
     }
 
     /// Цвет этого рендерера — СНИМОК, сделанный один раз в `init`.
@@ -94,8 +113,15 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     /// поля на месте была бы записью с главного потока в то, что читают потоки
     /// отрисовки, — то самое, из-за чего у `revealAround` свой замок.
     let veinColor: UIColor
+    private let selectedVeinColor: UIColor
+    private let routeCasingColor: UIColor
+    private let networkCasingColor: UIColor?
 
-    static let defaultVeinColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
+    static var defaultVeinColor: UIColor {
+        FogVeilPainter.palette.isDark ? nightVeinColor : paperVeinColor
+    }
+    private static let nightVeinColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
+    private static let paperVeinColor = UIColor(red: 0xc8/255, green: 0x47/255, blue: 0x2d/255, alpha: 1)
     /// Выбранная поездка — тот же цвет, светлее и плотнее.
     static let selectedColor = UIColor(red: 0xf6/255, green: 0xb9/255, blue: 0x8a/255, alpha: 1)
     /// Тёмная обводка: без неё выбранная линия сливается с прочищенным
@@ -125,8 +151,12 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     }
 
     init(vein: RouteVeinOverlay) {
+        let colors = Self.resolvedColors()
         self.vein = vein
-        self.veinColor = Self.resolvedVeinColor()
+        self.veinColor = colors.network
+        self.selectedVeinColor = colors.selected
+        self.routeCasingColor = colors.casing
+        self.networkCasingColor = colors.networkCasing
         super.init(overlay: vein)
         // Индекс — вне главного потока, как у вуали; `point(for:)` при этом
         // зовётся с фоновой очереди, и это законно: MapKit сам зовёт
@@ -168,7 +198,8 @@ final class RouteVeinRenderer: MKOverlayRenderer {
         let width = screenWidth / zoomScale
         // Запрос расширяется по САМОМУ широкому проходу: ореол вылезает за
         // сердцевину втрое, и бакет за краем тайла всё равно светит в него.
-        let widest = max(screenWidth, Self.halo(for: lod)?.width ?? 0) / zoomScale
+        let casedWidth = screenWidth + (vein.style == .selected || networkCasingColor != nil ? Self.casingExtra : 0)
+        let widest = max(casedWidth, Self.halo(for: lod)?.width ?? 0) / zoomScale
         let reach = Double(widest) + 1
         // Индекс ещё собирается — жилки просто нет: её отсутствие на долю
         // секунды честнее, чем ожидание на потоке отрисовки.
@@ -192,11 +223,12 @@ final class RouteVeinRenderer: MKOverlayRenderer {
             context.strokePath()
         }
 
-        if vein.style == .selected {
+        let casing = vein.style == .selected ? routeCasingColor : networkCasingColor
+        if let casing {
             context.beginPath()
             paths.forEach(context.addPath)
             context.setLineWidth(width + Self.casingExtra / zoomScale)
-            context.setStrokeColor(Self.casingColor.cgColor)
+            context.setStrokeColor(casing.cgColor)
             context.strokePath()
         }
 
@@ -205,7 +237,7 @@ final class RouteVeinRenderer: MKOverlayRenderer {
         context.setLineWidth(width)
         context.setStrokeColor(
             vein.style == .selected
-                ? Self.selectedColor.cgColor
+                ? selectedVeinColor.cgColor
                 : veinColor.withAlphaComponent(0.9).cgColor
         )
         context.strokePath()
