@@ -132,6 +132,13 @@ final class FogMetalSeat {
         veil?.startTracking(tail: tail)
     }
 
+    /// Карта сообщила новую камеру — кадр рисуется СЕЙЧАС, в этом же витке
+    /// главного цикла. Подробности и цена — у `FogMetalVeil.followCamera`.
+    func followCamera() {
+        guard isSeated else { return }
+        veil?.followCamera()
+    }
+
     /// Камера встала: досмотреть хвост и погаснуть. Заказывать чёткий кадр,
     /// как растровой вуали, металу нечего — он и так рисует каждый кадр.
     func extendTracking(tail: TimeInterval = FogMetalVeil.trackingTail) {

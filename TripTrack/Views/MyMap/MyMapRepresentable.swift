@@ -1511,11 +1511,23 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard let host, host.screenVeilAttached else { return }
             // Ловит движения, начавшиеся без `regionWillChange` (программный
             // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
-            // нет, и продлевает хвост, если есть. Своего `sync` здесь нет —
-            // привязку в том же кадре сделает тот же `CADisplayLink`, а два
-            // вызова подряд считают одно и то же дважды.
+            // нет, и продлевает хвост, если есть.
             host.screenVeil.startTracking()
             host.fogMetal.startTracking()
+            // И ПРИВЯЗЫВАЕМСЯ ПРЯМО ЗДЕСЬ, а не ждём своего тика.
+            //
+            // Здесь MapKit только что назвал новую камеру, и его плитки поедут
+            // в транзакции ЭТОГО витка главного цикла. Тик `CADisplayLink` —
+            // другой момент кадра, и всё, что нарисовано по камере, взятой в
+            // нём, отстаёт от карты на кадр: на жесте это видно как «туман и
+            // надписи плывут вместе с пальцем» (владелец на устройстве,
+            // 26 сен). Прежняя редакция этого комментария объясняла, почему
+            // `sync` здесь НЕ нужен («тот же кадр сделает `CADisplayLink`»), —
+            // и была неверна. Двойной работы нет: `redrawIfNeeded` и `sync`
+            // на неизменившейся камере считают то же самое и стоят десятки
+            // микросекунд, а расхождение стоило всей плавности.
+            host.fogMetal.followCamera()
+            host.screenVeil.sync(map: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
