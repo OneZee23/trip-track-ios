@@ -10,6 +10,7 @@ build_secrets.py --authored --out ФАЙЛ
 install_brand_assets.py, install_vehicle_sprites.py,
 normalize_vehicle.py, recolor_vehicle.py
                        картинки машин и бренда в Assets.xcassets
+build_app_icons.py      SVG из AppIcon/ → D2, dark, tinted, DEV и Live Activity
 
 
 Авторские секреты (0.7.0)
