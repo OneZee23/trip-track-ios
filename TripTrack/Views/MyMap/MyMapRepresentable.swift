@@ -1568,25 +1568,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             handleTap(at: recognizer.location(in: map), on: map)
         }
 
-        /// Минимальная цель нажатия — 44 pt, как требует HIG, и у булавки
-        /// МЕСТА она обязательна.
+        /// Радиус цели у булавки места — половина минимальной цели HIG (44 pt).
         ///
-        /// Диск места — 28 pt, с прежним запасом в 6 выходило 40, и попасть
-        /// по нему можно было только сильно приблизившись («надо очень
-        /// хорошо приблизить, чтобы по ним попасть» — владелец 26 сен).
-        /// Цель строится вокруг ЦЕНТРА вида, а не растягиванием рамки:
-        /// подпись выбранной булавки рисуется ВЫШЕ диска и перекосила бы
-        /// прямоугольник вверх, уведя цель с самой точки.
-        static func touchTarget(of view: MKAnnotationView, annotation: MKAnnotation) -> CGRect {
-            let padded = view.frame.insetBy(dx: -6, dy: -6)
-            guard annotation is AtlasPlaceAnnotation else { return padded }
-            let side = max(padded.width, padded.height, placeTouchSide)
-            return CGRect(x: view.center.x - side / 2, y: view.center.y - side / 2,
-                          width: side, height: side)
-        }
-
-        /// 44 pt — минимальная цель нажатия из HIG.
-        static let placeTouchSide: CGFloat = 44
+        /// Круг, а не прямоугольник: булавка круглая, и палец, промахнувшийся
+        /// по диагонали, промахивается одинаково во все стороны.
+        static let placeTouchRadius: CGFloat = 22
 
         /// Тот же тап, но ТОЧКОЙ: распознаватель остаётся снаружи, и разбор
         /// «что под пальцем» проверяется тестом, а не открытым экраном
@@ -1608,8 +1594,27 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // on:)` ниже. В общем списке она мерилась бы рамкой значка, и
                 // кольцо остались бы не нажать.
                 guard !(annotation is RiddleHintAnnotation) else { continue }
+                // Булавка МЕСТА меряется КООРДИНАТОЙ, а не рамкой вида.
+                //
+                // Рамка живёт в системе координат контейнера аннотаций
+                // MapKit, а не карты, и существует она только пока MapKit
+                // держит вид: `map.view(for:)` отдаёт `nil` у всего, что он
+                // решил не показывать. Тест `AtlasPlaceTapTests` ловил на
+                // этом промах даже РОВНО ПО ТОЧКЕ — то есть попадание
+                // зависело не от пальца, а от того, выдал ли MapKit вид.
+                // Координата же есть всегда и переводится в точку экрана той
+                // же проекцией, которой нарисована сама булавка.
+                if let place = annotation as? AtlasPlaceAnnotation {
+                    let centre = map.convert(place.coordinate, toPointTo: map)
+                    let distance = hypot(centre.x - point.x, centre.y - point.y)
+                    guard distance <= Self.placeTouchRadius else { continue }
+                    if nearest == nil || distance < nearest!.distance {
+                        nearest = (annotation, distance)
+                    }
+                    continue
+                }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
-                let target = Self.touchTarget(of: view, annotation: annotation)
+                let target = view.frame.insetBy(dx: -6, dy: -6)
                 guard target.contains(point) else { continue }
                 let distance = hypot(view.center.x - point.x, view.center.y - point.y)
                 if nearest == nil || distance < nearest!.distance {

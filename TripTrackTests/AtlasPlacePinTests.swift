@@ -47,49 +47,9 @@ final class AtlasPlacePinTests: XCTestCase {
         XCTAssertFalse(view.isLabelled)
     }
 
-    /// Цель нажатия у булавки места — не меньше сорока четырёх точек и ровно
-    /// вокруг самой точки.
-    ///
-    /// Диск места 28 pt, с прежним запасом в 6 выходило 40 — меньше минимума
-    /// HIG, и попасть по булавке можно было только сильно приблизившись.
-    func testPlacePinTouchTargetClearsTheMinimumFinger() {
-        let annotation = AtlasPlaceAnnotation(pin: pin(), language: .ru)
-        let view = PlacePinView(annotation: annotation, reuseIdentifier: PlacePinView.reuseID)
-        view.center = CGPoint(x: 200, y: 300)
-
-        let target = MyMapRepresentable.Coordinator.touchTarget(of: view, annotation: annotation)
-
-        XCTAssertGreaterThanOrEqual(target.width, 44)
-        XCTAssertGreaterThanOrEqual(target.height, 44)
-        XCTAssertEqual(target.midX, view.center.x, accuracy: 0.001, "цель съехала по горизонтали")
-        XCTAssertEqual(target.midY, view.center.y, accuracy: 0.001, "цель съехала по вертикали")
-        XCTAssertTrue(target.contains(CGPoint(x: 200, y: 300 - 21)),
-                      "палец в 21 pt над точкой мимо цели")
-    }
-
-    /// Выбранная булавка несёт подпись ВЫШЕ диска — и цель нажатия от этого не
-    /// уезжает вверх. Строится она вокруг центра вида, а не растяжением рамки.
-    func testLabelDoesNotDragTheTouchTargetUpwards() {
-        let place = pin(name: "Очень длинное имя места")
-        let annotation = AtlasPlaceAnnotation(pin: place, language: .ru)
-        let view = PlacePinView(annotation: annotation, reuseIdentifier: PlacePinView.reuseID)
-        view.center = CGPoint(x: 120, y: 240)
-        MyMapRepresentable.Coordinator().paint(view, with: annotation, selectedId: place.id)
-
-        let target = MyMapRepresentable.Coordinator.touchTarget(of: view, annotation: annotation)
-        XCTAssertEqual(target.midY, view.center.y, accuracy: 0.001)
-    }
-
-    /// Остальным булавкам цель не меняли: правило заведено ради мест, и
-    /// раздача его всем подряд съела бы тапы по дорогам под ними.
-    func testOtherAnnotationsKeepTheOldTarget() {
-        let annotation = MKPointAnnotation()
-        annotation.coordinate = centre
-        let view = MKAnnotationView(annotation: annotation, reuseIdentifier: "x")
-        view.frame = CGRect(x: 0, y: 0, width: 20, height: 20)
-        view.center = CGPoint(x: 50, y: 50)
-
-        let target = MyMapRepresentable.Coordinator.touchTarget(of: view, annotation: annotation)
-        XCTAssertEqual(target.width, 32, accuracy: 0.001, "запас перестал быть 6 pt")
-    }
+    // Попадание пальцем по булавке проверяет `AtlasPlaceTapTests` — там оно
+    // спрашивается ПОВЕДЕНИЕМ (тап по точке экрана открывает место), а не
+    // геометрией вида. Прежние три теста мерили рамку `MKAnnotationView`, и
+    // ровно на неё хит-тест и опирался — то есть проверяли ту самую
+    // конструкцию, которая и промахивалась.
 }
