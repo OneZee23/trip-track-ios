@@ -1,7 +1,7 @@
 import SwiftUI
 import MapKit
 
-/// Atlas 0.8.1: live roads under the paper map, with period and appearance
+/// Atlas 0.8.1: live roads under the paper map, with appearance
 /// controls and a permanent sheet for exploring regions, cities and trips.
 struct MyMapView: View {
     @EnvironmentObject private var mapVM: MapViewModel
@@ -31,7 +31,6 @@ struct MyMapView: View {
     /// Единственное, о чём «Атлас» говорит всплывающей строкой, — несобравшийся
     /// постер: остальное он показывает самой картой.
     @State private var toast: ToastItem?
-    @State private var showPeriod = false
     @State private var showAppearance = false
     @State private var showExplanation = false
     @State private var appearance = AtlasMapAppearance.saved
@@ -167,20 +166,20 @@ struct MyMapView: View {
             AtlasBetaSheet(model: .make(), onDismiss: { showBetaSheet = false })
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
-        .sheet(isPresented: $showPeriod) {
-            AtlasPeriodSheet(period: vm.period) { period in
-                showPeriod = false
-                Task { await vm.setPeriod(period) }
-            }
-        }
         .sheet(isPresented: $showAppearance) {
-            // Высота ПО СОДЕРЖИМОМУ, а не половина экрана: в листе три
-            // плитки и один тумблер, а `.medium` оставлял под ними пустое
-            // поле в треть высоты телефона — владелец 26 сен: «зачем столько
-            // пустого места под „Фото из поездок“». Тот же домашний
-            // модификатор, что у обзорного листа и у пикеров.
+            // Высота ЧИСЛОМ, а не измерением.
+            //
+            // `.medium` оставлял под тумблером пустое поле в треть телефона
+            // (владелец 26 сен), а `contentSizedSheet` на этом листе
+            // схлопывал его до одной шапки: у листа внутри растягивающиеся
+            // дети, измерение уходит вниз и не возвращается. Две попытки
+            // мерить кончились сломанным экраном у владельца, поэтому здесь
+            // стоит константа: три плитки (150) + тумблер (56) + шапка (64) +
+            // поля. Меняешь содержимое листа — меняй и её; это честная цена
+            // за то, что лист не может схлопнуться ни при каком порядке
+            // проходов разметки.
             AtlasAppearanceSheet(appearance: $appearance)
-                .contentSizedSheet(background: AtlasTheme.background)
+                .presentationDetents([.height(340)])
         }
         .sheet(isPresented: $showExplanation) {
             AtlasExplanationSheet()
@@ -228,31 +227,6 @@ struct MyMapView: View {
 
                         AtlasBetaChip { showBetaSheet = true }
                         Spacer(minLength: 4)
-                        // Круглая кнопка того же размера и стиля, что слои и
-                        // «я здесь» справа внизу (`control(_:label:id:)`).
-                        // Пилюля со словами «Всё время» и шевроном была вдвое
-                        // шире и забирала внимание у самой карты — владелец на
-                        // устройстве 26 сен. Календарь и так говорит, что за
-                        // ним время, а КАКОЕ именно — вопрос второй и живёт в
-                        // листе.
-                        //
-                        // Выбранный период при этом виден: кнопка горит
-                        // терракотой. Иначе фильтр, из-за которого на карте
-                        // половина дорог, ничем бы себя не выдавал. Слово для
-                        // озвучки остаётся полным — значок VoiceOver не
-                        // прочитает.
-                        Button { showPeriod = true; Haptics.tap() } label: {
-                            Image(systemName: "calendar")
-                                .font(.system(size: 19, weight: .medium))
-                                .foregroundStyle(vm.period == .allTime ? AtlasTheme.ink : AtlasTheme.accentInk)
-                                .frame(width: 44, height: 44)
-                                .background(vm.period == .allTime ? AtlasTheme.control : AtlasTheme.accentSoft,
-                                            in: Circle())
-                                .shadow(color: .black.opacity(0.12), radius: 7, y: 2)
-                        }
-                        .buttonStyle(PressableCardStyle())
-                        .accessibilityLabel(periodTitle)
-                        .accessibilityIdentifier("atlas_period")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -287,15 +261,6 @@ struct MyMapView: View {
         let country = RegionAtlas.shared.countryName(region.countryCode, lang.language) ?? region.countryCode
         guard let date = region.firstVisited else { return country }
         return country + " · " + AppStrings.mapRegionSince(lang.language, date: date)
-    }
-
-    private var periodTitle: String {
-        switch vm.period {
-        case .allTime: return AppStrings.atlasAllTime(lang.language)
-        case .thisYear: return AppStrings.atlasThisYear(lang.language)
-        case .last30Days: return AppStrings.atlasLast30Days(lang.language)
-        case .custom: return AppStrings.atlasCustomPeriod(lang.language)
-        }
     }
 
     private var mapControls: some View {
@@ -369,27 +334,13 @@ struct MyMapView: View {
                     .font(.system(size: 32, weight: .light))
                     .foregroundStyle(AtlasTheme.secondary)
             }
-            Text(vm.period == .allTime ? AppStrings.emptyMapTitle(lang.language) : AppStrings.atlasNoTripsInPeriod(lang.language))
+            Text(AppStrings.emptyMapTitle(lang.language))
                 .font(.inter(18, weight: .semibold))
                 .foregroundStyle(AtlasTheme.ink)
-            Text(vm.period == .allTime ? AppStrings.emptyMapSubtitle(lang.language) : AppStrings.atlasPeriodEmptyBody(lang.language))
+            Text(AppStrings.emptyMapSubtitle(lang.language))
                 .font(.inter(13))
                 .foregroundStyle(AtlasTheme.secondary)
                 .multilineTextAlignment(.center)
-            if vm.period != .allTime {
-                Button {
-                    Haptics.tap()
-                    Task { await vm.setPeriod(.allTime) }
-                } label: {
-                    Text(AppStrings.atlasResetPeriod(lang.language))
-                        .font(.inter(15, weight: .semibold))
-                        .foregroundStyle(AtlasTheme.accentInk)
-                        .padding(.horizontal, 18).frame(minHeight: 44)
-                        .background(AtlasTheme.accentSoft, in: Capsule())
-                }
-                .buttonStyle(PressableCardStyle())
-                .accessibilityIdentifier("atlas_reset_period")
-            }
         }
         .frame(maxWidth: 280)
         .padding(.bottom, MyMapSheet.collapsedHeight * 0.5)
