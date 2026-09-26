@@ -204,7 +204,7 @@ struct GlassPill: ViewModifier {
         content
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .font(.system(size: 13, weight: .medium))
+            .font(.inter(13, weight: .medium))
             .foregroundStyle(isActive ? .white : c.textSecondary)
             .background(
                 isActive ? AppTheme.accent : c.card,

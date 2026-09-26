@@ -79,7 +79,7 @@ struct CustomNavBar<Trailing: View>: View {
                     .truncationMode(.tail)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)

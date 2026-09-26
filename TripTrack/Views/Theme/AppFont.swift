@@ -1,17 +1,27 @@
 import SwiftUI
 
-/// Inter — the Figma design's actual typeface, bundled (OFL, Resources/
-/// Fonts) and registered at runtime in `TripTrackApp`. SF Pro stood in
-/// during the redesign, but at equal nominal weights SF reads visibly
-/// thinner than Inter (SF Heavy vs Inter ExtraBold bit us on the feed
-/// metric digits), so screens the user signs off against Figma migrate
-/// to `.inter` per-screen.
+/// Inter — гарнитура приложения, ОДНА на все экраны. Зашита в бандл
+/// (OFL, `Resources/Fonts`), регистрируется в `TripTrackApp`.
+///
+/// До 26 сентября 2026 гарнитур было две: Inter на 239 местах и системный SF
+/// на 1244, и делились они по экранам случайно — «SF стоял времянкой, экраны
+/// мигрируют по одному», и миграцию не закончили. «Атлас» 0.8.1 при этом
+/// нарисовали в SF, потому что так было в HTML-макетах, и соседние вкладки
+/// стали выглядеть разными приложениями — тот же разъезд, что был у двух
+/// таб-баров. Владелец: «Inter должен быть везде, и в атласе в том числе».
+/// Теперь на SF остаются только SF Symbols (им системный шрифт обязателен) и
+/// намеренные `design: .rounded`/`.monospaced`.
+///
+/// Роли набора — в `AppType` ниже; руками размеры и веса больше не
+/// подбираются.
 ///
 /// Always `fixedSize`: the app sizes ALL type with fixed
 /// `.system(size:)` values, and `Font.custom(_:size:)` — unlike
 /// `.system(size:)` — scales with the user's Dynamic Type setting. On a
 /// device with enlarged text the Inter runs ballooned while the SF text
-/// around them stayed put (feed metrics, 2026-08-06).
+/// around them stayed put (feed metrics, 2026-08-06). Теперь, когда SF в
+/// тексте не осталось, это ограничение можно снять — но снимать его надо
+/// отдельной волной, с проверкой каждой раскладки на крупном шрифте.
 extension Font {
     static func inter(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let name: String
@@ -28,4 +38,79 @@ extension Font {
         }
         return .custom(name, fixedSize: size)
     }
+}
+
+/// Единая типографическая концепция приложения. Одна гарнитура — Inter, —
+/// и один набор ролей на все экраны.
+///
+/// До 0.8.1 гарнитур было ДВЕ: Inter на 239 местах и системный SF на 1244, и
+/// делились они по экранам случайно — как когда-то разъехались два таб-бара.
+/// Владелец 26 сентября: «а как же стиль в приложении? надо тогда шрифт
+/// подобрать правильный везде… Inter должен быть везде, и в атласе в том
+/// числе, но надо сделать в единой концепции».
+///
+/// Эталон набора — экран «Я» (`ProfileSectionLabel`, `ProfileTripCardView`):
+/// владелец 26 сентября, глядя на него, — «он офигенен, я хочу чтобы также
+/// было по всему приложению, атлас и места сейчас другие». Поэтому роли ниже
+/// не выдуманы заново, а СНЯТЫ с него, и оба места показа теперь читают их
+/// отсюда: разойтись эталону и копии больше нечем.
+///
+/// Концепция: иерархию держат РАЗМЕР и ЦВЕТ, вес лишь помогает. Вес 800/900
+/// (`Inter-ExtraBold`) достаётся РОВНО ОДНОЙ роли — числу в плитке итога
+/// (`statValue`) и заголовку экрана (`title`) — обеим снятым с эталона, — а
+/// больше нигде: именно раздача его всем подряд и делала
+/// экраны «жирнючими» («не нравится весь этот жирнючий стиль», тот же день).
+/// Дальше потолок — `bold` (700) у заголовков, `semibold` у чисел, `medium`
+/// у имён, `regular` у всего остального.
+///
+/// Роли названы по СМЫСЛУ, а не по размеру: место показа выбирает «это
+/// заголовок секции», а не «это тринадцать полужирных». Размер меняется
+/// тогда в одном месте.
+enum AppType {
+    /// Крупное число-герой. ОДНО на экран; размер задаёт место показа,
+    /// потому что у «189 миль» и «1 697 км» разная длина.
+    static func display(_ size: CGFloat = 34) -> Font { .inter(size, weight: .semibold) }
+    /// Заголовок экрана — 28/800, трекинг −0.56. Снято с «Ленты»
+    /// (`feed_title`): вторая из двух ролей, которым достаётся
+    /// `Inter-ExtraBold`. У «Мест» он стоял на 700 и читался мягче соседней
+    /// вкладки.
+    static let title = Font.inter(28, weight: .heavy)
+    static let titleTracking: CGFloat = -0.56
+    /// Заголовок листа или модального экрана.
+    static let sheetTitle = Font.inter(22, weight: .bold)
+    /// Заголовок выбранного объекта в шапке (регион, дорога).
+    static let headerTitle = Font.inter(20, weight: .semibold)
+    /// Число в плитке итога — их несколько в ряд, поэтому мельче героя.
+    ///
+    /// ЕДИНСТВЕННОЕ место `Inter-ExtraBold` во всём приложении. Снято с
+    /// карточки поездки в «Я», где этот вес и держит всю плитку: рядом с ним
+    /// подпись (`statCaption`) может позволить себе быть мелкой и тихой.
+    static let statValue = Font.inter(19, weight: .heavy)
+    static let statValueTracking: CGFloat = -0.19
+    /// Единица ПРИ числе плитки — «мили» рядом с «4.2»: вдвое мельче и
+    /// вторичным цветом, чтобы число читалось первым.
+    static let statUnit = Font.inter(11, weight: .semibold)
+    /// Подпись ПОД числом плитки («ДИСТАНЦИЯ»): прописные, третичным цветом.
+    /// Прописные здесь законны — это не заголовок, а ярлык величины.
+    static let statCaption = Font.inter(11, weight: .bold)
+    static let statCaptionTracking: CGFloat = 0.55
+    /// Заголовок секции — ТЁМНЫЙ, полужирный и В ОБЫЧНОМ РЕГИСТРЕ.
+    ///
+    /// Мелкие серые прописные, которыми «Атлас» и «Места» подписывали секции
+    /// по HTML-макету, и были тем, чем эти вкладки отличались от остального
+    /// приложения: на соседнем экране «Клубы» и «История» стоят крупными
+    /// чернилами. Прописные остались только у `statCaption`.
+    static let section = Font.inter(16, weight: .bold)
+    static let sectionTracking: CGFloat = -0.16
+    /// Имя карточки или строки списка.
+    static let itemTitle = Font.inter(16, weight: .medium)
+    /// Число справа в строке списка.
+    static let itemValue = Font.inter(16, weight: .semibold)
+    /// Слова при числе-герое: они его поясняют, а не спорят с ним.
+    static let unit = Font.inter(17)
+    static let body = Font.inter(15)
+    static let meta = Font.inter(13)
+    static let caption = Font.inter(12)
+    static let button = Font.inter(16, weight: .semibold)
+    static let chip = Font.inter(13, weight: .medium)
 }

@@ -1,15 +1,17 @@
 import SwiftUI
-import UIKit
 
-/// Floating glass tab bar — 0.6.0 redesign, 5 tabs: Лента / Карта / Запись /
-/// Места / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
-/// 74pt-tall pill, radius 30, glass background; regular tabs are a 20pt icon
-/// over a 9pt label, active = filled glyph + accent, inactive = tertiary
-/// grey; the center Record item is a 46pt accent disc with a white steering
-/// wheel that stays INSIDE the pill (does not protrude), and its label stays
-/// grey in every state — Record is an action, never an "active tab".
-/// There is deliberately no underline/pill indicator — the active state is
-/// purely the color + fill swap.
+/// Плавающий таб-бар — Лента / Атлас / Запись / Места / Я.
+///
+/// Геометрия и палитра — из макетов 0.8.1 («Атлас», A1): бумажная капсула в
+/// 68 pt, приподнятый на 12 pt диск записи, терракотовый акцент. До 0.8.1
+/// этот вид был ТОЛЬКО на «Атласе», а остальные четыре вкладки несли стеклянную
+/// пилюлю 0.6.0 в 74 pt — два разных бара в одном приложении, и владелец на
+/// устройстве 26 сентября увидел именно это («у нас в атласе вот так, а в
+/// остальных местах по-другому»). Бар теперь ОДИН на все вкладки; подпись при
+/// этом мельче макетной (10 pt против 11) — решение владельца там же.
+///
+/// Подпись у диска записи не рисуется вовсе: запись — действие, а не вкладка,
+/// и в макете она подписана только иконкой.
 struct CustomTabBar: View {
     @Binding var selectedTab: AppTab
     @EnvironmentObject private var lang: LanguageManager
@@ -17,112 +19,70 @@ struct CustomTabBar: View {
 
     // MARK: - Геометрия
 
-    /// Одно место, откуда пилюлю читают и сам бар, и экраны, которым надо
-    /// увести последнюю строку из-под неё (`clearance`). 74 — из канона;
-    /// фактическая высота складывается из содержимого (иконка 20 + подпись
-    /// + отступы), меняешь содержимое — сверь.
-    static let pillHeight: CGFloat = 74
-    static let sideMargin: CGFloat = 11
-    /// Верх индикатора «домой» от физического низа экрана: 5 pt высоты
-    /// + 8 pt отступа (Apple Design Resources; одинаково на всех iPhone
-    /// без кнопки).
-    static let homeIndicatorTop: CGFloat = 13
-    /// Подъём пилюли над физическим низом. С индикатором зазор до него
-    /// равен боковому полю — одинаковый воздух с трёх сторон, как у
-    /// плавающего бара iOS 26; без индикатора (телефоны с кнопкой,
-    /// `bottomInset == 0`) остаются канонные 14 pt. Канон ставил 14 везде,
-    /// и на телефонах с индикатором пилюля садилась на него с зазором в
-    /// один пункт. Чистая функция — держится `CustomTabBarLiftTests`.
-    static func bottomLift(bottomInset: CGFloat) -> CGFloat {
-        bottomInset > 0 ? homeIndicatorTop + sideMargin : 14
-    }
+    /// Капсула без приподнятого диска.
+    static let pillHeight: CGFloat = 68
+    /// Боковое поле капсулы от края экрана.
+    static let sideMargin: CGFloat = 16
+    /// Зазор от ФИЗИЧЕСКОГО низа окна. От индикатора «домой» не зависит:
+    /// макет ставит бар в 22 pt на любом телефоне, и приподнятый центр уже
+    /// заложен в `clearance` ниже.
+    static let bottomGap: CGFloat = 22
+    /// Насколько диск записи выступает над капсулой.
+    static let recordRise: CGFloat = 12
+
     /// Сколько места снизу оставить контенту экрана, над которым висит бар:
-    /// пилюля + подъём + 8 pt воздуха. Было литералом 96 (74 + 14 + 8) в
-    /// каждом экране-вкладке, поэтому подъём нельзя было поменять, не
-    /// спрятав под бар последнюю строку ленты. Чистая версия — под тестом.
-    static func clearance(bottomInset: CGFloat) -> CGFloat {
-        pillHeight + bottomLift(bottomInset: bottomInset) + 8
-    }
-    /// То же от живого окна. `tt_safeAreaInsets` — nil, пока окна нет (первый
-    /// кадр; при подъёме в фоне — дольше): тогда 14 pt, верное значение
-    /// придёт с первой перерисовкой после появления окна.
-    static var clearance: CGFloat {
-        clearance(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
-    }
+    /// зазор + капсула + подъём диска + 8 pt воздуха. Одно место, откуда это
+    /// число читают все вкладки — до 0.6.8 оно было литералом 96 в каждом
+    /// экране, и подъём нельзя было поменять, не спрятав под бар последнюю
+    /// строку ленты. Держит `CustomTabBarLiftTests`.
+    static let clearance: CGFloat = bottomGap + pillHeight + recordRise + 8
+
     /// Тот же клиренс для скролла, который УВАЖАЕТ безопасную зону снизу —
     /// экраны внутри `NavigationStack` (профиль, гараж, паспорт, лента):
-    /// их содержимое кончается на границе зоны, а пилюля стоит от физического
-    /// низа, и без вычета под последней строкой было 42 pt вместо 8.
+    /// их содержимое кончается на границе зоны, а капсула стоит от
+    /// физического низа, и без вычета под последней строкой остаётся лишнее.
     static func clearanceAboveSafeArea(bottomInset: CGFloat) -> CGFloat {
-        max(0, clearance(bottomInset: bottomInset) - bottomInset)
+        max(0, clearance - bottomInset)
     }
+    /// Читает ПОСЛЕДНЮЮ завершённую разметку окна, а не UIKit во время `body`:
+    /// живой `UIWindow` из тела SwiftUI зацикливал обновление на переходах
+    /// (0.8.1). Observation перерисовывает читателей, когда приедет первый
+    /// замер.
     static var clearanceAboveSafeArea: CGFloat {
-        clearanceAboveSafeArea(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
+        clearanceAboveSafeArea(bottomInset: WindowLayoutMetrics.shared.safeAreaInsets?.bottom ?? 0)
     }
+
+    // MARK: - Бар
 
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
-
-        HStack(spacing: 4) {
-            tabItem(tab: .home, label: AppStrings.feed(lang.language), c: c) { active in
-                FeedTabIcon(filled: active)
-            }
-            tabItem(tab: .maps, label: AppStrings.tabMap(lang.language), c: c) { active in
-                sfIcon(active ? "map.fill" : "map", active: active, size: 16)
-            }
-
-            recordItem(c: c)
-
-            // «Места» (0.6.8) в слоте «Групп». У `mappin.and.ellipse` в SF
-            // Symbols нет залитого варианта, поэтому активное состояние здесь
-            // несёт только цвет и bounce — как и задумано у бара: индикатора
-            // нет, активность = цвет (+ заливка там, где она у глифа есть).
-            tabItem(tab: .places, label: AppStrings.tabPlaces(lang.language), c: c) { active in
-                sfIcon("mappin.and.ellipse", active: active, size: 16)
-            }
-            tabItem(tab: .profile, label: AppStrings.tabMe(lang.language), c: c) { active in
-                sfIcon(active ? "person.fill" : "person", active: active, size: 17)
-            }
+        HStack(spacing: 0) {
+            tab(.home, label: AppStrings.feed(lang.language))
+            tab(.maps, label: AppStrings.tabMap(lang.language))
+            record
+            tab(.places, label: AppStrings.tabPlaces(lang.language))
+            tab(.profile, label: AppStrings.tabMe(lang.language))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .frame(maxWidth: 380)
+        .padding(.horizontal, 6)
+        .frame(height: Self.pillHeight)
         .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: 30)
-                    // Над картой материал плотнее: в светлой теме серые
-                    // подписи сквозь тонкое стекло на почти чёрной карте
-                    // не читались (QA 0.6.8). На остальных вкладках под
-                    // пилюлей свой фон, и тонкое стекло там на месте.
-                    .fill(selectedTab == .maps ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(.ultraThinMaterial))
-                RoundedRectangle(cornerRadius: 30)
-                    .stroke(c.glassBorder, lineWidth: 1)
-            }
+            Capsule()
+                .fill(AtlasTheme.navSurface.opacity(0.94))
+                .overlay {
+                    Capsule()
+                        .strokeBorder(scheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(scheme == .dark ? 0.28 : 0.16), radius: 14, y: 8)
         }
-        .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.06), radius: 3, y: 3)
         .padding(.horizontal, Self.sideMargin)
-        // ContentView игнорирует безопасную зону снизу, поэтому пилюля
-        // поднимается сама — над индикатором «домой», а не на нём: см.
-        // `bottomLift`. `tt_safeAreaInsets` — nil только до первого окна;
-        // тогда берём 0 → 14 pt, верное придёт с первой перерисовкой после
-        // появления окна.
-        .padding(.bottom, Self.bottomLift(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0))
+        .padding(.bottom, Self.bottomGap)
     }
 
-    // MARK: - Tab cells
-
-    /// Standard peer tab — Лента, Карта, Места, Я. The icon closure gets
-    /// the active flag so callers can swap outline/filled variants.
-    private func tabItem(
-        tab: AppTab,
-        label: String,
-        c: AppTheme.Colors,
-        @ViewBuilder icon: @escaping (Bool) -> some View
-    ) -> some View {
+    private func tab(_ tab: AppTab, label: String) -> some View {
         let isActive = selectedTab == tab
-
         return Button {
-            if isActive && tab == .home {
+            // Повторный тап по уже открытой ленте увозит её наверх — это
+            // поведение старого бара, и терять его при сведении нельзя.
+            if isActive, tab == .home {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
             }
             withAnimation(.snappy(duration: 0.22)) {
@@ -131,119 +91,103 @@ struct CustomTabBar: View {
             Haptics.tap()
         } label: {
             VStack(spacing: 3) {
-                icon(isActive)
-                    .frame(width: 20, height: 20)
-                tabLabel(label, tint: isActive ? AppTheme.accent : c.textTertiary)
+                glyph(tab)
+                Text(label)
+                    .font(.inter(10, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isActive ? AppTheme.accent : c.textTertiary)
-            .padding(.horizontal, 15)
-            .padding(.vertical, 7)
+            .foregroundStyle(isActive ? AtlasTheme.accent : AtlasTheme.navInactive)
             .frame(maxWidth: .infinity)
+            .frame(height: 56)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityIdentifier("tab_\(tab.rawValue)")
     }
 
-    /// Center Record item: 46pt accent disc + steering wheel, subtle orange
-    /// glow. Label is ALWAYS tertiary grey (Figma: record is an action, not
-    /// a tab that reads "active"). The bar is hidden on the Record tab
-    /// itself, so no recording/stop state is needed here.
-    private func recordItem(c: AppTheme.Colors) -> some View {
+    /// Диск 60 pt в кольце подложки 68 pt; `-12` поднимает его центр ровно на
+    /// `recordRise`, который уже заложен в `clearance`.
+    private var record: some View {
         Button {
             withAnimation(.snappy(duration: 0.22)) {
                 selectedTab = .record
             }
             Haptics.tap()
         } label: {
-            VStack(spacing: 3) {
-                ZStack {
+            Circle()
+                .fill(AtlasTheme.navSurface)
+                .frame(width: 68, height: 68)
+                .overlay {
                     Circle()
-                        .fill(AppTheme.accent)
-                        .frame(width: 46, height: 46)
-                        .shadow(color: AppTheme.accent.opacity(0.3), radius: 3, y: 1)
-                    SteeringWheelIcon()
-                        .foregroundStyle(.white)
+                        .fill(AtlasTheme.accent)
+                        .frame(width: 60, height: 60)
+                        .overlay {
+                            glyph(.record)
+                                .scaleEffect(28.0 / 24.0)
+                                .foregroundStyle(.white)
+                        }
                 }
-                tabLabel(AppStrings.record(lang.language), tint: c.textTertiary)
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+                .shadow(color: AtlasTheme.accent.opacity(0.35), radius: 8, y: 6)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .offset(y: -Self.recordRise)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(AppStrings.recordTripCta(lang.language))
         .accessibilityIdentifier("tab_record")
     }
 
-    /// Glyph sizes are tuned per symbol so every icon's VISIBLE bounds match
-    /// the Figma 20×20 box — SF Symbols pad differently (person.2 renders
-    /// much wider than person at the same point size).
-    private func sfIcon(_ name: String, active: Bool, size: CGFloat) -> some View {
-        Image(systemName: name)
-            .font(.system(size: size, weight: .regular))
-            .symbolEffect(.bounce, value: active)
-    }
-
-    private func tabLabel(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-    }
-}
-
-/// The record-disc steering wheel from Figma: thin-stroke outline — rim +
-/// three spokes (left/right/down) + a small filled hub. SF's `steeringwheel`
-/// is a heavy filled automotive glyph and reads too bold at 24pt, so the
-/// Figma geometry is drawn directly (24×24 box, 2.5pt round-cap strokes).
-struct SteeringWheelIcon: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(lineWidth: 2.5)
-            Path { p in
-                let c = CGPoint(x: 12, y: 12)
-                p.move(to: c); p.addLine(to: CGPoint(x: 3.2, y: 12))
-                p.move(to: c); p.addLine(to: CGPoint(x: 20.8, y: 12))
-                p.move(to: c); p.addLine(to: CGPoint(x: 12, y: 20.8))
+    /// Точная геометрия 24×24 из SVG макета. Контурные пути, а не SF Symbols:
+    /// у тех другая оптическая плотность и залитая карта.
+    private func glyph(_ tab: AppTab) -> some View {
+        Path { path in
+            switch tab {
+            case .home:
+                path.addRoundedRect(in: CGRect(x: 4, y: 4, width: 16, height: 16),
+                                    cornerSize: CGSize(width: 3.5, height: 3.5))
+                path.move(to: CGPoint(x: 4, y: 12))
+                path.addLine(to: CGPoint(x: 20, y: 12))
+            case .maps:
+                path.move(to: CGPoint(x: 3, y: 6.5))
+                for point in [CGPoint(x: 9, y: 3.5), CGPoint(x: 15, y: 6.5),
+                              CGPoint(x: 21, y: 3.5), CGPoint(x: 21, y: 17.5),
+                              CGPoint(x: 15, y: 20.5), CGPoint(x: 9, y: 17.5),
+                              CGPoint(x: 3, y: 20.5)] {
+                    path.addLine(to: point)
+                }
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 9, y: 3.5))
+                path.addLine(to: CGPoint(x: 9, y: 17.5))
+                path.move(to: CGPoint(x: 15, y: 6.5))
+                path.addLine(to: CGPoint(x: 15, y: 20.5))
+            case .record:
+                path.addEllipse(in: CGRect(x: 3.5, y: 3.5, width: 17, height: 17))
+                path.addEllipse(in: CGRect(x: 9.8, y: 9.8, width: 4.4, height: 4.4))
+                path.move(to: CGPoint(x: 3.8, y: 10.5))
+                path.addCurve(to: CGPoint(x: 12, y: 9),
+                              control1: CGPoint(x: 6.3, y: 9.5), control2: CGPoint(x: 9, y: 9))
+                path.addCurve(to: CGPoint(x: 20.2, y: 10.5),
+                              control1: CGPoint(x: 15, y: 9), control2: CGPoint(x: 17.7, y: 9.5))
+                path.move(to: CGPoint(x: 12, y: 14.2))
+                path.addLine(to: CGPoint(x: 12, y: 20.5))
+            case .places:
+                path.addEllipse(in: CGRect(x: 8.5, y: 4, width: 7, height: 7))
+                path.move(to: CGPoint(x: 12, y: 11))
+                path.addLine(to: CGPoint(x: 12, y: 20))
+                path.move(to: CGPoint(x: 8, y: 20.5))
+                path.addLine(to: CGPoint(x: 16, y: 20.5))
+            case .profile:
+                path.addEllipse(in: CGRect(x: 8.2, y: 4.2, width: 7.6, height: 7.6))
+                path.move(to: CGPoint(x: 4.5, y: 20.5))
+                path.addCurve(to: CGPoint(x: 12, y: 14.9),
+                              control1: CGPoint(x: 5.9, y: 16.8), control2: CGPoint(x: 8.7, y: 14.9))
+                path.addCurve(to: CGPoint(x: 19.5, y: 20.5),
+                              control1: CGPoint(x: 15.3, y: 14.9), control2: CGPoint(x: 18.1, y: 16.8))
             }
-            .stroke(style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-            Circle()
-                .frame(width: 5, height: 5)
         }
+        .stroke(style: StrokeStyle(lineWidth: tab == .record ? 2 : 1.8, lineCap: .round, lineJoin: .round))
         .frame(width: 24, height: 24)
-    }
-}
-
-/// The Лента glyph from Figma has no SF Symbol equivalent: a rounded card
-/// with a horizontal caption bar. Outline variant = stroked 12.4pt rect +
-/// bar; filled variant = 14pt filled rect with a white bar knocked out.
-/// Drawn in a fixed 20×20 box to match the other tab icons.
-struct FeedTabIcon: View {
-    var filled: Bool
-
-    var body: some View {
-        // Bar offsets from the Figma SVG: bar center sits at ~62% of the
-        // card height — a clear gap above the card's bottom edge, not
-        // merged into it.
-        ZStack {
-            if filled {
-                RoundedRectangle(cornerRadius: 3.5)
-                    .frame(width: 14, height: 14)
-                RoundedRectangle(cornerRadius: 0.9)
-                    .fill(.white)
-                    .frame(width: 10, height: 1.8)
-                    .offset(y: 1.5)
-            } else {
-                RoundedRectangle(cornerRadius: 2.7)
-                    .strokeBorder(lineWidth: 1.6)
-                    .frame(width: 13.5, height: 13.5)
-                RoundedRectangle(cornerRadius: 0.8)
-                    .frame(width: 9.5, height: 1.6)
-                    .offset(y: 1.2)
-            }
-        }
-        .frame(width: 20, height: 20)
     }
 }
