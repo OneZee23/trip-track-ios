@@ -69,6 +69,33 @@ final class FogMetalVeilTrackingTests: XCTestCase {
         XCTAssertEqual(veil.frames, before + 2, "снятое окно — тоже перемена")
     }
 
+    /// Смена стиля «Клетки» ⇄ «Туман» доезжает до экрана на СТОЯЩЕЙ карте.
+    ///
+    /// Латч «кадр покоя уже нарисован» ключуется тем, от чего кадр зависит, —
+    /// палитрой, вырезом и, с 0.8.2, клетками. Клетки в ключ сперва не
+    /// попали, и переключение стиля на неподвижной карте применялось
+    /// наполовину: палитра менялась (её ключ был), а квантование оставалось
+    /// прежним до первого движения пальцем. Владелец на устройстве 26 сен:
+    /// «переключаешься после „клеток“ на „ночь“ и оно не успевает
+    /// обновиться».
+    func testSwitchingCellsDrawsAFrameOnAStandingMap() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        veil.attach(map: map)
+        veil.invalidate()
+
+        let before = veil.frames
+        veil.setUsesCells(true)
+        XCTAssertEqual(veil.frames, before + 1, "включённые клетки обязаны доехать сами")
+
+        veil.setUsesCells(true)
+        XCTAssertEqual(veil.frames, before + 1, "то же состояние второй раз кадра не стоит")
+
+        veil.setUsesCells(false)
+        XCTAssertEqual(veil.frames, before + 2, "снятые клетки — тоже перемена")
+    }
+
     // MARK: Фон
 
     /// В ФОНЕ GPU НЕ ТРОГАЕМ ВОВСЕ, и это про жизнь процесса, а не про

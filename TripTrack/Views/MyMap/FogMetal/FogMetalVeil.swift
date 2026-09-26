@@ -124,6 +124,13 @@ final class FogMetalVeil: MTKView {
     /// экрана само: ждать движения пальца значило бы держать подпись Apple
     /// под полной мглой ровно до него.
     private var drawnCarve: FogCarveWindow?
+    /// Квантовал ли последний нарисованный кадр открытое клетками.
+    ///
+    /// Третий ключ латча «кадр покоя нарисован», наравне с палитрой и вырезом.
+    /// Без него смена стиля на СТОЯЩЕЙ карте применялась наполовину: палитра
+    /// доезжала (её ключ был), а клетки оставались прежними до первого
+    /// движения пальцем — `invalidate()` выходил на `restFrameDrawn`.
+    private var drawnUsesCells: Bool?
 
     /// Последний нарисованный кадр: прямоугольник карты и три его угла на
     /// экране. Совпало — GPU не трогаем вовсе, иначе на стоящей карте мы жгли
@@ -462,7 +469,8 @@ final class FogMetalVeil: MTKView {
     /// туда и обратно на стоящей карте, застряла бы до первого движения
     /// пальца.
     func invalidate() {
-        if drawnPaletteIsDark != FogVeilPainter.palette.isDark || drawnCarve != carve {
+        if drawnPaletteIsDark != FogVeilPainter.palette.isDark || drawnCarve != carve
+            || drawnUsesCells != usesCells {
             restFrameDrawn = false
         }
         guard !restFrameDrawn else { return }
@@ -539,6 +547,7 @@ final class FogMetalVeil: MTKView {
         frames += 1
         drawnPaletteIsDark = FogVeilPainter.palette.isDark
         drawnCarve = carve
+        drawnUsesCells = usesCells
         // Рисовать нечем (вид только что встал в дерево, drawable не выдан) —
         // кадр пропускаем, но ПАМЯТЬ о нём стираем целиком: иначе
         // `redrawIfNeeded` посчитал бы камеру нарисованной, а `invalidate()`
