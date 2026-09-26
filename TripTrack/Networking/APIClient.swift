@@ -65,7 +65,11 @@ final class APIClient {
         // as aggressively. Use shared session — earlier custom-session
         // experiments (waitsForConnectivity + long timeouts) made
         // everything fail with -1005, so we stay conservative.
+        #if DEBUG && targetEnvironment(simulator)
+        self.session = DebugForeignTripFixture.isRequested ? DebugForeignTripFixture.session : session
+        #else
         self.session = session
+        #endif
         self.tokenStore = tokenStore
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
