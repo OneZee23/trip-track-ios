@@ -52,6 +52,7 @@ final class SyncCoordinator {
         // — outbound is safe.
         if TripManager.isAnyRecording {
             await queue.processQueue()
+            await AuthService.shared.syncProgressToServer()
             return
         }
         // Cloud Sync OFF mode (privacy-first): we still process the queue —
@@ -68,6 +69,7 @@ final class SyncCoordinator {
             enqueuePendingOriginals()
             await queue.processQueue()
             await queue.retryFailed()
+            await AuthService.shared.syncProgressToServer()
             return
         }
         isPulling = true
@@ -90,6 +92,7 @@ final class SyncCoordinator {
         // permanent "0/1" until they manually tap Retry. retryFailed has
         // its own 2^maxRetry backoff sleep so we won't hot-spin.
         await queue.retryFailed()
+        await AuthService.shared.syncProgressToServer()
     }
 
     private func runPull() async {

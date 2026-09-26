@@ -209,6 +209,8 @@ final class AuthService: ObservableObject {
             APIClient.shared.sessionBoundaryCrossed()
             TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
             TokenStore.shared.setAccountId(response.account.id)
+            progressReadAccountId = nil
+            lastSyncedProfileProgress = nil
             isSignedIn = true
             // A fresh session settles any earlier soft expiry.
             KeychainHelper.delete(key: Keys.sessionExpired)
@@ -670,6 +672,8 @@ final class AuthService: ObservableObject {
         // previous account's «confirmed» behind would swallow its first push
         // and leave it nameless — the very failure this latch exists to catch.
         ProfileSyncLatch.reset()
+        progressReadAccountId = nil
+        lastSyncedProfileProgress = nil
         // Следующий Apple ID на этом телефоне — другой человек с другим
         // публичным профилем; он тоже имеет право узнать, что о нём видно.
         VisibilityNoticeLatch.reset()
@@ -758,14 +762,66 @@ final class AuthService: ObservableObject {
 
     // MARK: - Profile sync to server
 
+    private var progressReadAccountId: UUID?
+    private var lastSyncedProfileProgress: (accountId: UUID, progress: ProfileProgress)?
+
+    /// A first launch on another phone can have an empty library while the
+    /// account already has years of progress. Cloud Sync is optional, so the
+    /// ordinary settings pull is not a prerequisite we can rely on here.
+    /// Read the account once per session before publishing earned progress.
+    /// On failure callers may still send cosmetics, but omit progress.
+    private func profileProgressForPush(client: APIClient, settings: SettingsManager) async -> ProfileProgress? {
+        guard isSignedIn, let accountId = TokenStore.shared.accountId else { return nil }
+        if progressReadAccountId != accountId {
+            do {
+                let response: MeResponse = try await client.post(
+                    APIEndpoint.authMe, body: EmptyRequest())
+                guard isSignedIn, TokenStore.shared.accountId == accountId,
+                      response.id == nil || response.id == accountId else { return nil }
+                settings.applyRemoteProfileProgress(
+                    level: response.profileLevel, xp: response.profileXp)
+                progressReadAccountId = accountId
+            } catch {
+                authLog.error("profile progress read failed: \(error.localizedDescription)")
+                return nil
+            }
+        }
+        return settings.profileProgressForSync()
+    }
+
+    /// Rewards used to reach only `/settings/upsert`, which no longer writes
+    /// account.profile_level. Retry the account mirror independently of Cloud
+    /// Sync and of the display-name latch. Once per changed snapshot/session
+    /// also repairs an account reset by an older client, using saved XP only.
+    func syncProgressToServer(client: APIClient = .shared, settings: SettingsManager = .shared) async {
+        guard isSignedIn, let accountId = TokenStore.shared.accountId,
+              let progress = await profileProgressForPush(client: client, settings: settings), progress.hasProgress,
+              isSignedIn, TokenStore.shared.accountId == accountId else { return }
+        if lastSyncedProfileProgress?.accountId == accountId,
+           lastSyncedProfileProgress?.progress == progress { return }
+        do {
+            let _: EmptyResponse = try await client.post(
+                APIEndpoint.profileUpdate, body: progress.request)
+            guard isSignedIn, TokenStore.shared.accountId == accountId else { return }
+            lastSyncedProfileProgress = (accountId, progress)
+        } catch {
+            // No acknowledgement: the next foreground sync retries, even
+            // when the name was confirmed years ago or Cloud Sync is off.
+            authLog.error("profile progress sync failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Push all mutable client-authoritative profile fields to the server so
     /// social feeds / public profile render the user correctly. Covers name,
     /// avatar, background, driver level/XP, streaks, and the active-vehicle
     /// selection for the "Your car" card on the public profile.
     /// Fire-and-forget; failure is logged but not surfaced.
-    func syncProfileToServer(refreshFeedAfter: Bool = true) async {
+    func syncProfileToServer(refreshFeedAfter: Bool = true,
+                             client: APIClient = .shared, settings: SettingsManager = .shared) async {
         guard isSignedIn else { return }
-        let settings = SettingsManager.shared
+        let accountId = TokenStore.shared.accountId
+        let progress = await profileProgressForPush(client: client, settings: settings)
+        guard isSignedIn, TokenStore.shared.accountId == accountId else { return }
         // `displayName` is nil for users who signed in before SIWA returned a
         // name — pass nil (skipped in JSON via `encodeIfPresent`) instead of
         // null, otherwise the server would CLEAR a previously-stored name.
@@ -779,10 +835,10 @@ final class AuthService: ObservableObject {
             displayName: userName,
             avatarEmoji: settings.avatarEmoji,
             profileBackground: settings.profileBackground,
-            profileLevel: settings.profileLevel,
-            profileXp: settings.profileXP,
-            currentStreak: settings.currentStreak,
-            bestStreak: settings.bestStreak,
+            profileLevel: progress?.level,
+            profileXp: progress?.xp,
+            currentStreak: progress?.currentStreak,
+            bestStreak: progress?.bestStreak,
             activeVehicleId: settings.selectedVehicleId?.uuidString,
             language: preferredLanguage,
             showOnPublicMap: settings.showOnPublicMap
@@ -795,13 +851,18 @@ final class AuthService: ObservableObject {
         req.avatarFrame = settings.avatarFrame ?? ""
         req.showPlusBadge = settings.showPlusBadge
         do {
-            let _: EmptyResponse = try await APIClient.shared.post(
+            let _: EmptyResponse = try await client.post(
                 APIEndpoint.profileUpdate, body: req)
             // Only record against a session that is still ours. A sign-out
             // that lands while this is in flight has already cleared the
             // latch; writing "confirmed" afterwards would suppress the NEXT
             // account's first push and leave IT nameless.
-            if isSignedIn { ProfileSyncLatch.markConfirmed() }
+            if isSignedIn, TokenStore.shared.accountId == accountId {
+                ProfileSyncLatch.markConfirmed()
+                if let accountId, let progress {
+                    lastSyncedProfileProgress = (accountId, progress)
+                }
+            }
             authLog.log("profile synced to server")
             // Feed cards cache `displayName` from `/social/feed`; without a
             // refresh after the profile push, an account that just got a
@@ -818,7 +879,7 @@ final class AuthService: ObservableObject {
             // over-long Apple name, a future field) rejects the name too —
             // and without this the rejection was permanent. Scoped to a live
             // session for the same reason as the success branch.
-            if isSignedIn { ProfileSyncLatch.markUnconfirmed() }
+            if isSignedIn, TokenStore.shared.accountId == accountId { ProfileSyncLatch.markUnconfirmed() }
             authLog.error("profile sync failed: \(error.localizedDescription)")
         }
     }
@@ -876,6 +937,7 @@ final class AuthService: ObservableObject {
 
     func refreshMe() async {
         guard isSignedIn else { return }
+        let accountId = TokenStore.shared.accountId
         let gen = publicProfileGeneration
         // Снимок поколений ПО БЛОКАМ. `setVisibility` намеренно не трогает
         // общий счётчик (иначе он отменял бы запись «Публичного профиля»), так
@@ -886,6 +948,11 @@ final class AuthService: ObservableObject {
         do {
             let res: MeResponse = try await APIClient.shared.post(
                 APIEndpoint.authMe, body: EmptyRequest())
+            guard isSignedIn, TokenStore.shared.accountId == accountId,
+                  res.id == nil || res.id == accountId else { return }
+            SettingsManager.shared.applyRemoteProfileProgress(
+                level: res.profileLevel, xp: res.profileXp)
+            progressReadAccountId = accountId
             if gen == publicProfileGeneration {
                 isPublicProfile = res.isPublic
                 // nil, если сервер не знает этих флагов — тумблеры тогда

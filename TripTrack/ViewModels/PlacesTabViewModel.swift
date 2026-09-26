@@ -13,6 +13,14 @@ import Combine
 final class PlacesTabViewModel: ObservableObject {
     @Published private(set) var items: [PlaceListItem] = []
     @Published private(set) var suggestions: [PlaceSuggestion] = []
+    /// Последние поездки — секция «Отметить в поездке» у новичка (S3).
+    /// Отметку ставят В ПОЕЗДКЕ, и пока мест нет, дорога туда — единственное
+    /// действие, которое вообще есть на этой вкладке кроме подсказки.
+    @Published private(set) var recentTrips: [Trip] = []
+
+    /// Сколько поездок показывать в «Отметить в поездке». Три — это «недавно»;
+    /// дальше это уже лента, а она на своей вкладке.
+    static let recentTripsShown = 3
     private let manager: PlaceManager
     private let repository: TripRepository
     private var cancellables = Set<AnyCancellable>()
@@ -51,6 +59,9 @@ final class PlacesTabViewModel: ObservableObject {
         items = PlaceListItem.sorted(manager.places.map {
             PlaceListItem.build(place: $0, passes: manager.passes(for: $0.id))
         })
+        // Поднимаются только когда их будут показывать: у человека с сотней
+        // мест эта секция не рисуется, и выборка ему ни к чему.
+        recentTrips = items.isEmpty ? repository.fetchTrips(limit: Self.recentTripsShown, offset: 0) : []
         refreshSuggestions()
     }
 

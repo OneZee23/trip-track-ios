@@ -78,11 +78,14 @@ final class GamificationManager {
 
         // Update XP and level
         let newXP = previousXP + xpBreakdown.total
-        let newLevel = LevelSystem.level(for: newXP)
+        // Older account snapshots can know the level without carrying XP.
+        // A new trip must not turn that restored level back into level one.
+        let newLevel = max(previousLevel, LevelSystem.level(for: newXP))
         let newRank = DriverRank.from(level: newLevel)
 
         settingsEntity?.profileXP = Int64(newXP)
         settingsEntity?.profileLevel = Int32(newLevel)
+        settingsEntity?.lastModifiedAt = Date()
 
         // Update streak
         let currentStreak = updateStreak(
@@ -124,7 +127,6 @@ final class GamificationManager {
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
         }
-        SettingsManager.shared.scheduleSettingsSync()
 
         // Badge evaluation: milestones + repeatable badges
         let badgeResult = BadgeManager.evaluateBadgesForTrip(trip, allTrips: allTrips)
@@ -228,9 +230,10 @@ final class GamificationManager {
 
     // MARK: - Backfill
 
-    func backfillIfNeeded(trips: [Trip], settingsEntity: UserSettingsEntity?) {
+    @discardableResult
+    func backfillIfNeeded(trips: [Trip], settingsEntity: UserSettingsEntity?) -> Bool {
         guard !defaults.bool(forKey: Self.backfillKey),
-              let entity = settingsEntity else { return }
+              let entity = settingsEntity else { return false }
 
         // Only back-fill a profile that has no XP yet — and DO NOT latch when
         // there is nothing to count.
@@ -241,7 +244,7 @@ final class GamificationManager {
         // flags. Even once his trips came home, level, badges and fog would
         // have stayed at zero permanently: the flags said the work was
         // finished and nothing ever reconsiders.
-        guard entity.profileXP == 0, !trips.isEmpty else { return }
+        guard entity.profileXP == 0, !trips.isEmpty else { return false }
 
         var totalXP = 0
         // Разовая досдача опыта по библиотеке — тот же вопрос, что и на
@@ -270,7 +273,8 @@ final class GamificationManager {
         }
 
         entity.profileXP = Int64(totalXP)
-        entity.profileLevel = Int32(LevelSystem.level(for: totalXP))
+        entity.profileLevel = max(entity.profileLevel, Int32(LevelSystem.level(for: totalXP)))
+        entity.lastModifiedAt = Date()
 
         // Одометр — НЕ награда в этом смысле: километры вписанной рукой
         // поездки машина честно проехала, и спека §2 их засчитывает. Поэтому
@@ -281,6 +285,7 @@ final class GamificationManager {
         // Latch only after real work — this is the line the guard above used
         // to reach without doing any.
         defaults.set(true, forKey: Self.backfillKey)
+        return true
     }
 
     private func backfillVehicleOdometers(trips: [Trip]) {

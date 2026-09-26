@@ -41,6 +41,7 @@ enum TripWorldEntry {
             settingsEntity: gamification.fetchSettingsEntity(),
             vehicleEntity: gamification.fetchVehicleEntity(id: trip.vehicleId)
         )
+        SettingsManager.shared.earnedProgressDidChange()
         tripManager.saveBadgesJSON(tripId: trip.id, badgeIds: data.newBadges.map(\.id))
         var final = data
         final.roadCard = roads.processTrip(trip)

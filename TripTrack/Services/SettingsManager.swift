@@ -1223,4 +1223,46 @@ final class SettingsManager: ObservableObject {
         }
         loadVehicles()
     }
+
+    /// Called by the app's reward entry points after CoreData has saved.
+    /// Keeping network/UI work here leaves an injected GamificationManager
+    /// independent of the singleton store (including in-memory backfills).
+    @MainActor
+    func earnedProgressDidChange() {
+        reloadGamificationState()
+        scheduleSettingsSync()
+        Task { await AuthService.shared.syncProgressToServer() }
+    }
+
+    /// Read the saved rewards, not the UI mirror. Rewards and backfills write
+    /// CoreData directly; the profile screen may not have opened since then.
+    func profileProgressForSync() -> ProfileProgress? {
+        let request: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+        request.fetchLimit = 1
+        guard let entity = try? persistenceController.container.viewContext.fetch(request).first else { return nil }
+        settingsEntity = entity
+        profileXP = Int(entity.profileXP)
+        profileLevel = max(Int(entity.profileLevel), LevelSystem.level(for: profileXP))
+        currentStreak = Int(entity.currentStreak)
+        bestStreak = Int(entity.bestStreak)
+        return ProfileProgress(entity: entity)
+    }
+
+    /// Account progress is available even with Cloud Sync off. Merge only
+    /// earned progress: a stale account must never lower this phone, and a
+    /// missing XP field on an older server must never invent XP locally.
+    func applyRemoteProfileProgress(level: Int?, xp: Int?) {
+        let request: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+        request.fetchLimit = 1
+        guard let entity = try? persistenceController.container.viewContext.fetch(request).first else { return }
+        let mergedXP = max(entity.profileXP, Int64(xp ?? 0))
+        let mergedLevel = max(Int(entity.profileLevel), level ?? 1,
+                              LevelSystem.level(for: Int(mergedXP)))
+        if mergedXP != entity.profileXP || mergedLevel != Int(entity.profileLevel) {
+            entity.profileXP = mergedXP
+            entity.profileLevel = Int32(clamping: mergedLevel)
+            persistenceController.save()
+        }
+        _ = profileProgressForSync()
+    }
 }

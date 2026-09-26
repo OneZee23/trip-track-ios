@@ -14,6 +14,25 @@ final class PlaceDetailViewModel: ObservableObject {
     @Published private(set) var passes: [PlacePass] = []
     @Published private(set) var routes: [[CLLocationCoordinate2D]] = []
     @Published private(set) var directionLabels: [UUID: String] = [:]
+    /// «Краснодар → Горячий Ключ» на строку проезда, по его поездке.
+    /// Считается здесь, а не в `body`: концы берутся у превью, а имена — из
+    /// кэша геокодера, то есть из базы.
+    @Published private(set) var routeNames: [UUID: String] = [:]
+    /// Имя, которое даёт этому месту геокодер («Горячий Ключ»). Хранится
+    /// СЫРЫМ, без сравнения с именем места: лист переименования показывает
+    /// его и тогда, когда они совпали, — туда за ним и приходят, чтобы
+    /// вернуть название по адресу.
+    @Published private(set) var geocodedName: String?
+    /// Строка под именем на экране. Пусто, когда имя места И ЕСТЬ этот
+    /// город: повторять его второй строкой нечего.
+    var address: String? {
+        guard let geocodedName else { return nil }
+        return geocodedName.caseInsensitiveCompare(place?.name ?? "") == .orderedSame ? nil : geocodedName
+    }
+    /// Плитки «Последних проездов»: по одной на ДЕНЬ.
+    @Published private(set) var tiles: [PlaceScreen.DateTile] = []
+    /// «Все 23 проезда» нажали — список больше не подрезается.
+    @Published var showsAllPasses = false
 
     let placeId: UUID
     private let manager: PlaceManager
@@ -57,6 +76,35 @@ final class PlaceDetailViewModel: ObservableObject {
             }
         }
         directionLabels = labels
+        tiles = PlaceScreen.tiles(from: all)
+        // Из того же кэша геокодера, что и всё остальное; своего запроса
+        // экран не делает (правило 0.8.0: пять сетевых кругов на открытие).
+        geocodedName = place.flatMap { localityLookup($0.coordinate) }.flatMap { $0.isEmpty ? nil : $0 }
+        routeNames = composeRouteNames(previews: previews)
+    }
+
+    /// Подписи «откуда → куда» на все проезды разом.
+    ///
+    /// Кэш геокодера спрашивается по ЯЧЕЙКЕ (geohash-5), а не по координате:
+    /// у двадцати трёх проездов из одного города концов пара, а не сорок
+    /// шесть, и без этого дедупа список стоил бы по выборке на строку.
+    private func composeRouteNames(previews: [UUID: TripPreviewRef]) -> [UUID: String] {
+        var cache: [String: String?] = [:]
+        func name(_ coordinate: CLLocationCoordinate2D) -> String? {
+            let key = TripManager.geocodeCacheKey(for: coordinate)
+            if let hit = cache[key] { return hit }
+            let value = localityLookup(coordinate)
+            cache[key] = value
+            return value
+        }
+        var result: [UUID: String] = [:]
+        for tripId in Set(passes.map(\.tripId)) {
+            guard let ends = PlaceScreen.endpoints(of: previews[tripId]?.previewCoordinates ?? []) else { continue }
+            if let line = PlaceScreen.route(from: name(ends.start), to: name(ends.end)) {
+                result[tripId] = line
+            }
+        }
+        return result
     }
 
     func rename(_ name: String?) { manager.rename(placeId: placeId, to: name) }

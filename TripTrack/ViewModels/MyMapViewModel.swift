@@ -75,6 +75,37 @@ final class MyMapViewModel: ObservableObject {
     @Published private(set) var selection: Selection?
     /// One-shot camera command consumed by the map (`nil` once applied).
     @Published var cameraCommand: MapCameraCommand?
+    /// Поездки выбранного региона, уже отсортированные.
+    ///
+    /// Считаются ОДИН раз на выбор и на смену данных, а не в `body`: лист
+    /// перерисовывается на каждый кадр перетаскивания ручки, а внутри —
+    /// выборка по id и сортировка. У региона с тысячей поездок это тысяча
+    /// поисков и сортировка шестьдесят раз в секунду (CLAUDE.md: «вью-модели
+    /// считают вне `body`»).
+    @Published private(set) var selectedRegionTrips: [MapTripPin] = []
+
+    /// Свои места на карте «Атласа» (макет S8). Серые — вне выбранного
+    /// периода: место не перестаёт существовать оттого, что окно его не
+    /// захватило, и убирать его значило бы соврать про карту.
+    @Published private(set) var placePins: [AtlasPlacePin] = []
+    /// Нажатая булавка места — под ней встаёт карточка. `nil` — карточки нет.
+    @Published var selectedPlaceId: UUID?
+
+    @Published private(set) var period: AtlasPeriod = .allTime
+    @Published private(set) var isFiltering = false
+    @Published private(set) var overview = AtlasOverviewIndex.empty
+    var countryCount: Int { overview.countries.count }
+
+    private var cachedTrips: [Trip] = []
+    /// Даты проездов поднимаются ОДИН раз на смену данных: `passes(for:)`
+    /// ходит в CoreData на каждое место, а период человек крутит пальцем.
+    private var placeSeeds: [AtlasPlaces.Seed] = []
+    private var placesReloadTask: Task<Void, Never>?
+    /// Окно склейки заказов на перечитывание мест. Не `let` — тест не должен
+    /// ждать треть секунды на каждую проверку.
+    var placesReloadDebounce: TimeInterval = 0.3
+    private var cachedAllTime: (exploration: MapExploration, layer: RevealedLayer)?
+    private var filterGeneration = 0
 
     var isEmpty: Bool { !isLoading && exploration.isEmpty }
 
@@ -169,19 +200,7 @@ final class MyMapViewModel: ObservableObject {
     private nonisolated static func remoteLayer(
         trips: [Trip], atlas: RegionAtlas
     ) -> RevealedLayer {
-        var claimed: [String: Set<RevealGrid.Cell>] = [:]
-        var runs: [[CLLocationCoordinate2D]] = []
-        for trip in trips.sorted(by: { $0.startDate < $1.startDate }) {
-            let coords = trip.previewCoordinates
-            guard coords.count > 1 else { continue }
-            let patches = RevealBuilder.patches(for: coords) { claimed[$0] ?? [] }
-            for (key, patch) in patches {
-                claimed[key, default: []].formUnion(patch.cells)
-                runs.append(contentsOf: patch.runs)
-            }
-        }
-        return RevealedLayer.build(
-            runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
+        AtlasPreviewLayer.build(trips: trips, atlas: atlas)
     }
 
     /// Каталог загадок берётся у `DiscoveryProcessor.shared` — ЧИТАЕТСЯ, а не
@@ -241,7 +260,85 @@ final class MyMapViewModel: ObservableObject {
                 Task { await self.reloadDiscoveries() }
             }
         }
+        // Места — тоже отдельной подпиской, мимо коалесера и мимо тумана:
+        // заведённое место это одна строка на карте, а пересборка тумана —
+        // проход по всей библиотеке превью.
+        NotificationCenter.default.addObserver(
+            forName: .placesChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.schedulePlacesReload() }
+        }
         StartupTrace.mark("MyMapViewModel.init end")
+    }
+
+    // MARK: - Места на карте
+
+    /// Заказ на перечитывание — со СКЛЕЙКОЙ, как у подсказок вкладки «Места».
+    ///
+    /// `PlaceManager.reconcile()` постит `.placesChanged` на КАЖДОЙ поездке с
+    /// изменениями, а `reloadPlaces` ходит в CoreData за проездами каждого
+    /// места. Без склейки первый запуск после обновления делал бы это сотню
+    /// раз подряд с главного актёра — ровно тот класс, что дал Sentry
+    /// «App Hanging ≥ 2 с» (см. `PlaceManager.reconcile` в CLAUDE.md).
+    /// Держит `PlaceReconcileMainThreadTests`.
+    func schedulePlacesReload() {
+        // Гейт стоит ЗДЕСЬ, а не только внутри `reloadPlaces`: сверка мест
+        // постит `.placesChanged` на каждой из сотен поездок, и четыреста
+        // заведённых-и-отменённых задач на главном актёре — это работа,
+        // которую видно сторожем, даже если каждая из них ничего не делает.
+        guard loaded else { return }
+        placesReloadTask?.cancel()
+        let debounce = placesReloadDebounce
+        placesReloadTask = Task { [weak self] in
+            if debounce > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(debounce * 1_000_000_000))
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.reloadPlaces()
+        }
+    }
+
+    /// Перечитать места и пересобрать булавки. Зовётся на загрузке и по
+    /// `.placesChanged`; смена периода сюда не ходит — ей хватает семян.
+    func reloadPlaces(manager: PlaceManager = .shared) {
+        // «Атлас» ещё не открывали — читать нечего и незачем: проезды каждого
+        // места это выборка в CoreData с главного актёра, а сверка мест
+        // (`PlaceManager.reconcile`) идёт НА ЗАПУСКЕ, когда человек стоит на
+        // ленте. Открытие вкладки зовёт `reload()`, и тот зовёт нас сам —
+        // поэтому пропуск здесь ничего не теряет. Держит бюджет главного
+        // потока `PlaceReconcileMainThreadTests`.
+        guard loaded else { return }
+        // Чужая карта своих мест не показывает: места живут только на
+        // телефоне (правило 0.6.8), и рисовать на чужом атласе СВОИ значило
+        // бы приписать их хозяину профиля.
+        guard remoteSource == nil else {
+            placeSeeds = []
+            placePins = []
+            return
+        }
+        placeSeeds = manager.places.map { place in
+            let passes = manager.passes(for: place.id)
+            return AtlasPlaces.Seed(
+                id: place.id, coordinate: place.coordinate, name: place.name,
+                usual: PlaceStats.build(from: passes).medianElapsed,
+                passDates: passes.map(\.timestamp))
+        }
+        rebuildPlacePins()
+    }
+
+    /// Только пересчёт «в периоде» — без похода в базу.
+    private func rebuildPlacePins() {
+        placePins = AtlasPlaces.build(seeds: placeSeeds, period: period)
+        // Выбранная булавка могла исчезнуть вместе с местом (удалили на
+        // экране места, пока «Атлас» стоял в стеке).
+        if let selectedPlaceId, !placePins.contains(where: { $0.id == selectedPlaceId }) {
+            self.selectedPlaceId = nil
+        }
+    }
+
+    /// Место под карточкой на карте.
+    var selectedPlace: AtlasPlacePin? {
+        selectedPlaceId.flatMap { id in placePins.first { $0.id == id } }
     }
 
     func loadIfNeeded(tripManager: TripManager, territory: TerritoryManager) async {
@@ -298,11 +395,84 @@ final class MyMapViewModel: ObservableObject {
         // A newer reload superseded this one while the build was detached.
         guard generation == loadGeneration else { return }
 
-        apply(exploration: built.0, layer: built.1)
-        isLoading = false
+        cachedTrips = trips
+        cachedAllTime = (built.0, built.1)
+        _ = await applyCurrentPeriod()
+        reloadPlaces()
         StartupTrace.mark("MyMapViewModel.reload apply done")
         await reloadDiscoveries()
         StartupTrace.mark("MyMapViewModel.reload end")
+    }
+
+    // MARK: - Atlas controls
+
+    func setPeriod(_ newPeriod: AtlasPeriod) async {
+        guard newPeriod != period else { return }
+        period = newPeriod
+        select(nil)
+        rebuildPlacePins()
+        let applied = await applyCurrentPeriod()
+        // An explicit period change should leave its roads on screen, even
+        // when they are far from the neighbourhood the user was inspecting.
+        if applied, period == newPeriod, !isFiltering { fitAll() }
+    }
+
+    /// Cache the all-time snapshot once per data change. Picking a period
+    /// rebuilds only value data off the main actor; returning to all time is
+    /// immediate and restores the persistent layer exactly.
+    private func applyCurrentPeriod() async -> Bool {
+        filterGeneration += 1
+        let generation = filterGeneration
+        guard let cachedAllTime else { return false }
+        if period == .allTime {
+            apply(exploration: cachedAllTime.exploration, layer: cachedAllTime.layer)
+            isFiltering = false
+            isLoading = false
+            return true
+        }
+        isFiltering = true
+        let selectedPeriod = period
+        let allTrips = cachedTrips
+        let now = Date()
+        let calendar = Calendar.current
+        let atlas = RegionAtlas.shared
+        let built = await Task.detached(priority: .userInitiated) {
+            let trips = allTrips.filter {
+                $0.previewPolyline?.isEmpty == false
+                    && selectedPeriod.contains($0.startDate, now: now, calendar: calendar)
+            }
+            let layer = AtlasPreviewLayer.build(trips: trips, atlas: atlas)
+            let hashes = TerritoryManager.geohashes(
+                fromTrips: trips.map(\.previewCoordinates), precision: 6)
+            let exploration = MapExploration.build(
+                trips: trips, visitedHashes: hashes, atlas: atlas,
+                openedKmByRegion: layer.regionKm)
+            return (exploration, layer)
+        }.value
+        guard generation == filterGeneration else { return false }
+        apply(exploration: built.0, layer: built.1)
+        isFiltering = false
+        isLoading = false
+        return true
+    }
+
+    private func reloadSelectedRegionTrips() {
+        guard case .region(let id)? = selection, let region = exploration.region(id: id) else {
+            if !selectedRegionTrips.isEmpty { selectedRegionTrips = [] }
+            return
+        }
+        selectedRegionTrips = region.tripIds
+            .compactMap { exploration.trip(id: $0) }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    func fitAll() {
+        guard let bounds = GeoBounds(covering: exploration.trips.flatMap(\.route)) else { return }
+        cameraCommand = .fit(bounds, padding: .overview)
+    }
+
+    func locateUser() {
+        cameraCommand = .userLocation
     }
 
     // MARK: - Находки
@@ -368,6 +538,10 @@ final class MyMapViewModel: ObservableObject {
     /// Единственное место, где меняются модель экрана и оверлеи — вместе.
     private func apply(exploration: MapExploration, layer: RevealedLayer) {
         self.exploration = exploration
+        overview = AtlasOverviewIndex(
+            exploration: exploration, catalogRegions: RegionAtlas.shared.regions,
+            catalogCities: RegionAtlas.shared.citiesByRegion.values.flatMap { $0 },
+            historical: cachedAllTime?.exploration)
         revealed = layer
         fogRebuilds += 1
         // Вуаль есть ВСЕГДА, даже над пустым слоем: угол без неё читался бы
@@ -379,6 +553,7 @@ final class MyMapViewModel: ObservableObject {
         // another device, region emptied by a rebuild).
         if let current = selection, resolve(current) == nil { selection = nil }
         refreshSelectedRoute()
+        reloadSelectedRegionTrips()
         rebuildJournal()
     }
 
@@ -446,6 +621,7 @@ final class MyMapViewModel: ObservableObject {
         guard new != selection else { return }
         selection = new
         refreshSelectedRoute()
+        reloadSelectedRegionTrips()
         guard zoom, let new else { return }
         switch new {
         case .region(let id):
@@ -537,18 +713,73 @@ final class MyMapViewModel: ObservableObject {
 /// One-shot camera instructions from the VM to the map view.
 enum MapCameraCommand: Equatable {
     case fit(GeoBounds, padding: Padding)
+    case userLocation
 
     enum Padding {
-        /// Region card is 214 pt tall — leave the region visible above it.
+        /// Collapsed atlas plus navigation. Also used for search targets
+        /// which frame the map without opening a detail card.
+        case overview
+        /// The region card and its navigation clearance occupy 460 points.
         case region
-        /// Trip card is 176 pt.
+        /// The trip card includes the navigation clearance below its body.
         case trip
 
-        var insets: UIEdgeInsets {
+        /// Сколько хрома закрывает карту, считая от КРАЁВ экрана.
+        var chrome: UIEdgeInsets {
             switch self {
-            case .region: return UIEdgeInsets(top: 130, left: 32, bottom: 250, right: 32)
-            case .trip:   return UIEdgeInsets(top: 130, left: 44, bottom: 220, right: 44)
+            case .overview: return UIEdgeInsets(top: 110, left: 40, bottom: 300, right: 40)
+            case .region: return UIEdgeInsets(top: 110, left: 32, bottom: 480, right: 32)
+            case .trip:   return UIEdgeInsets(top: 110, left: 44, bottom: 310, right: 44)
             }
+        }
+
+        /// Минимум, который обязан остаться карте после всех полей. Ниже
+        /// этого просить бессмысленно: MapKit на отрицательном остатке
+        /// отвечает кадром во весь мир.
+        static let minimumViewport: CGFloat = 120
+
+        /// Отступы для `setVisibleMapRect`, посчитанные от ФАКТИЧЕСКОЙ
+        /// безопасной зоны карты.
+        ///
+        /// MapKit кадрирует камеру по СУММЕ безопасной зоны (полей разметки)
+        /// и переданного `edgePadding` — это записано в CLAUDE.md с 0.7.0 и
+        /// ровно на этом здесь всё и ломалось. Карта «Атласа» отдаёт листу
+        /// ~290 pt снизу через `additionalSafeAreaInsets`, а `.region` просил
+        /// ещё 480: по вертикали на экране 874 pt оставалось −68, и MapKit
+        /// отвечал кадром в пять раз шире запрошенного — «нажал регион, а
+        /// меня унесло куда-то вникуда» (владелец на устройстве 26 сен).
+        ///
+        /// Поэтому просим ДОБАВКУ к тому, что зона уже дала, и обрезаем её,
+        /// если карте не остаётся `minimumViewport`. Чистая функция — потому
+        /// что проверить это можно только числом, а не открытым экраном.
+        static func insets(chrome: UIEdgeInsets, safeArea: UIEdgeInsets,
+                           size: CGSize) -> UIEdgeInsets {
+            func extra(_ want: CGFloat, _ have: CGFloat) -> CGFloat { max(0, want - have) }
+            var top = extra(chrome.top, safeArea.top)
+            var bottom = extra(chrome.bottom, safeArea.bottom)
+            var left = extra(chrome.left, safeArea.left)
+            var right = extra(chrome.right, safeArea.right)
+
+            // Остаток считается от того же, от чего его считает MapKit:
+            // размер минус безопасная зона минус наша добавка.
+            func fit(_ a: inout CGFloat, _ b: inout CGFloat,
+                     total: CGFloat, safe: CGFloat) {
+                let free = total - safe
+                guard free > 0 else { a = 0; b = 0; return }
+                let room = free - minimumViewport
+                guard room < a + b else { return }
+                guard room > 0 else { a = 0; b = 0; return }
+                let scale = room / (a + b)
+                a *= scale
+                b *= scale
+            }
+            fit(&top, &bottom, total: size.height, safe: safeArea.top + safeArea.bottom)
+            fit(&left, &right, total: size.width, safe: safeArea.left + safeArea.right)
+            return UIEdgeInsets(top: top, left: left, bottom: bottom, right: right)
+        }
+
+        func insets(safeArea: UIEdgeInsets, size: CGSize) -> UIEdgeInsets {
+            Self.insets(chrome: chrome, safeArea: safeArea, size: size)
         }
     }
 }

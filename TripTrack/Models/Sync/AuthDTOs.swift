@@ -64,6 +64,9 @@ struct MeResponse: Codable {
     let avatarFrame: String?
     let showPlusBadge: Bool?
     let profileLevel: Int?
+    /// Added in 0.8.1. Older servers return only the level; absent XP must
+    /// not be interpreted as zero or reconstructed from a level threshold.
+    var profileXp: Int? = nil
     let isPublic: Bool
     let showOnPublicMap: Bool?
     let notifyReactions: Bool?

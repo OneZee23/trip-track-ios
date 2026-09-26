@@ -373,7 +373,9 @@ final class MapViewModel: ObservableObject {
 
             let allTrips = tripManager.fetchTrips()
             let settingsEntity = gamificationManager.fetchSettingsEntity()
-            gamificationManager.backfillIfNeeded(trips: allTrips, settingsEntity: settingsEntity)
+            if gamificationManager.backfillIfNeeded(trips: allTrips, settingsEntity: settingsEntity) {
+                SettingsManager.shared.earnedProgressDidChange()
+            }
 
             await territoryManager.backfillIfNeeded()
             // Места (0.6.8): отметки без места и поездки без сверки. После
