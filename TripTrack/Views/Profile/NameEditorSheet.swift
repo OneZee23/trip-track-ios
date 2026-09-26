@@ -39,7 +39,7 @@ struct NameEditorSheet: View {
             // Отмена / Имя / Готово
             ZStack {
                 Text(AppStrings.nameEditorTitle(lang.language))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
 
                 HStack {
@@ -48,7 +48,7 @@ struct NameEditorSheet: View {
                         dismiss()
                     } label: {
                         Text(AppStrings.cancel(lang.language))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(c.textSecondary)
                     }
                     .buttonStyle(.plain)
@@ -60,7 +60,7 @@ struct NameEditorSheet: View {
                         commit()
                     } label: {
                         Text(AppStrings.done(lang.language))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.inter(15, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                             .opacity(canSave ? 1 : 0.4)
                     }
@@ -78,7 +78,7 @@ struct NameEditorSheet: View {
                     AppStrings.nameEditorEGAlex(lng),
                     text: $text,
                 )
-                .font(.system(size: 17, weight: .semibold))
+                .font(.inter(17, weight: .semibold))
                 .foregroundStyle(c.text)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
@@ -131,13 +131,13 @@ struct NameEditorSheet: View {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.system(size: 11))
                         Text(err)
-                            .font(.system(size: 11))
+                            .font(.inter(11))
                     }
                     .foregroundStyle(AppTheme.red)
                     .transition(.opacity)
                 } else {
                     Text(AppStrings.nameHelper(lang.language, max: Self.maxLength))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

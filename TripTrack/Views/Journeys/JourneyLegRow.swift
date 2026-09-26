@@ -36,16 +36,16 @@ struct JourneyLegRow<Trailing: View>: View {
             thumbnail(c)
             VStack(alignment: .leading, spacing: 2) {
                 Text(JourneyFormat.tripTitle(trip, language: language))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
                 if let caption {
                     Text(caption)
-                        .font(.system(size: 10.5, weight: .heavy))
+                        .font(.inter(10.5, weight: .bold))
                         .foregroundStyle(captionColor)
                 }
             }

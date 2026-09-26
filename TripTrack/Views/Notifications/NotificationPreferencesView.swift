@@ -126,10 +126,10 @@ struct NotificationPreferencesView: View {
     private func intro(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(AppStrings.notificationPreferencesWhatToNotify(lng))
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .bold))
                 .foregroundStyle(c.text)
             Text(AppStrings.notificationPreferencesPickWhatYou(lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -151,10 +151,10 @@ struct NotificationPreferencesView: View {
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -190,7 +190,7 @@ struct NotificationPreferencesView: View {
 
     private func footer(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Text(AppStrings.notificationPreferencesNotificationsYouTurn(lng))
-            .font(.system(size: 11))
+            .font(.inter(11))
             .foregroundStyle(c.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 4)

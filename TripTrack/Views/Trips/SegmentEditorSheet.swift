@@ -53,10 +53,10 @@ struct SegmentEditorSheet: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.checkpointLeg(language).uppercased(language))
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(.inter(12, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                     Text(title)
-                        .font(.system(size: 19, weight: .heavy))
+                        .font(.inter(19, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -74,7 +74,7 @@ struct SegmentEditorSheet: View {
             // Счётчик появляется только у предела — как у имени отметки.
             VStack(alignment: .trailing, spacing: 4) {
                 TextField(AppStrings.segmentNameField(language), text: $name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.inter(16, weight: .semibold))
                     .foregroundStyle(c.text)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -98,7 +98,7 @@ struct SegmentEditorSheet: View {
                 confirmingDelete = true
             } label: {
                 Text(AppStrings.segmentDelete(language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(AppTheme.red)
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)

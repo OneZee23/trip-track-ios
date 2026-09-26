@@ -41,12 +41,12 @@ struct RecoveryPromptSheet: View {
             .padding(.bottom, 16)
 
             Text(AppStrings.recoveryTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.bottom, 8)
 
             Text(AppStrings.recoveryBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -72,7 +72,7 @@ struct RecoveryPromptSheet: View {
                     mapVM.continueRecoveredTrip()
                 } label: {
                     Text(AppStrings.recoveryContinue(lang.language))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.inter(16, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
@@ -86,7 +86,7 @@ struct RecoveryPromptSheet: View {
                     mapVM.finishRecoveredTrip()
                 } label: {
                     Text(AppStrings.recoveryFinish(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.text)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)

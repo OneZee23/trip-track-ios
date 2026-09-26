@@ -111,7 +111,7 @@ struct VehicleChip: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
             Text(AppStrings.tripTransferTitle(lang.language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(1)
         }
@@ -128,10 +128,10 @@ struct VehicleChip: View {
                 .scaledToFit()
                 .frame(width: 16, height: 16)
         } else {
-            Text(vehicle.avatarEmoji).font(.system(size: 14))
+            Text(vehicle.avatarEmoji).font(.inter(14))
         }
         Text(displayName ?? vehicle.name)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(.white.opacity(0.9))
             .lineLimit(1)
     }
@@ -146,7 +146,7 @@ struct VehicleChip: View {
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white.opacity(0.75))
         Text(AppStrings.noVehicleOption(lang.language))
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(.white.opacity(0.9))
             .lineLimit(1)
     }

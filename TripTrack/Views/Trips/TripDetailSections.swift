@@ -212,7 +212,7 @@ struct DetailSectionHeader: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 17, weight: .heavy))
+            .font(.inter(17, weight: .bold))
             .foregroundStyle(AppTheme.colors(for: scheme).text)
     }
 }
@@ -227,7 +227,7 @@ struct DetailChipSurface<Content: View>: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         HStack(spacing: 5) { content }
-            .font(.system(size: 12, weight: .medium))
+            .font(.inter(12, weight: .medium))
             .foregroundStyle(c.textSecondary)
             .padding(.leading, 11)
             .padding(.trailing, 12)
@@ -365,10 +365,10 @@ private struct ChartScrubTooltip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(primary)
-                .font(.system(size: 12, weight: .bold))
+                .font(.inter(12, weight: .bold))
                 .foregroundStyle(.white)
             Text(secondary)
-                .font(.system(size: 10.5))
+                .font(.inter(10.5))
                 .foregroundStyle(.white.opacity(0.6))
         }
         .padding(.horizontal, 10)
@@ -554,12 +554,12 @@ struct ElevationChartCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(AppStrings.chartAltitudeLabel(language))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.inter(10, weight: .bold))
                     .tracking(0.2)
                     .foregroundStyle(c.textTertiary)
                 Spacer()
                 Text(summary)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
             }
 
@@ -623,14 +623,14 @@ struct ElevationChartCard: View {
 
             HStack(alignment: .firstTextBaseline) {
                 Text(leftLabel)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.inter(9, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
                 Spacer()
                 // 14pt vs the 9pt left label is a Figma inconsistency —
                 // shipped verbatim per spec caveat 4.
                 Text(rightLabel)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.inter(14, weight: .medium))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -686,12 +686,12 @@ struct SpeedChartCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(AppStrings.chartSpeedLabel(language))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.inter(10, weight: .bold))
                     .tracking(0.2)
                     .foregroundStyle(c.textTertiary)
                 Spacer()
                 Text(summary)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
             }
 
@@ -774,13 +774,13 @@ struct MovingStopsCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(AppStrings.movingDot(language, Trip.formattedTimeHuman(movingSeconds, lang: language)))
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.inter(12.5, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 8)
                 Text(AppStrings.stopsDot(language, Trip.formattedTimeHuman(stoppedSeconds, lang: language)))
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.inter(12.5, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -824,7 +824,7 @@ struct DetailDescriptionCard: View {
 
         HStack(alignment: .top, spacing: 10) {
             Text(text)
-                .font(.system(size: 13.5))
+                .font(.inter(13.5))
                 .lineSpacing(4.5)
                 .foregroundStyle(bodyColor)
                 .multilineTextAlignment(.leading)
@@ -884,7 +884,7 @@ struct TripAchievementsGrid: View {
                                 .foregroundStyle(badge.color)
                         }
                         Text(badge.title(language))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.inter(11, weight: .semibold))
                             .foregroundStyle(c.text)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
@@ -995,24 +995,24 @@ struct PublishTripSheet: View {
         let c = AppTheme.colors(for: scheme)
         VStack(alignment: .leading, spacing: 12) {
             Text(AppStrings.publishTripTitle(language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
 
             Text(message)
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .lineSpacing(3.5)
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(AppStrings.publishOptionalDescLabel(language))
-                .font(.system(size: 10, weight: .bold))
+                .font(.inter(10, weight: .bold))
                 .tracking(0.5)
                 .foregroundStyle(c.textTertiary)
                 .padding(.top, 4)
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $descriptionText)
-                    .font(.system(size: 15))
+                    .font(.inter(15))
                     .foregroundStyle(c.text)
                     .scrollContentBackground(.hidden)
                     .padding(.horizontal, 8)
@@ -1020,7 +1020,7 @@ struct PublishTripSheet: View {
                     .focused($descFocused)
                 if descriptionText.isEmpty {
                     Text(AppStrings.publishDescPlaceholder(language))
-                        .font(.system(size: 15))
+                        .font(.inter(15))
                         .foregroundStyle(c.textTertiary)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 12)
@@ -1036,7 +1036,7 @@ struct PublishTripSheet: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                         .padding(.horizontal, 22)
                         .padding(.vertical, 15)
@@ -1049,7 +1049,7 @@ struct PublishTripSheet: View {
                     onPublish(text)
                 } label: {
                     Text(AppStrings.publishAction(language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -1165,7 +1165,7 @@ struct PublishStatusOverlay: View {
                 .controlSize(.small)
                 .tint(AppTheme.accent)
             Text(AppStrings.publishing(language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.text)
         }
         .padding(.horizontal, 14)
@@ -1189,7 +1189,7 @@ struct PublishStatusOverlay: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(AppTheme.red)
                 Text(AppStrings.publishFailed(language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 0)
                 Button {
@@ -1203,7 +1203,7 @@ struct PublishStatusOverlay: View {
                 }
             }
             Text(AppStrings.publishFailedBody(language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .lineSpacing(3)
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1213,7 +1213,7 @@ struct PublishStatusOverlay: View {
                 Task { await SyncQueue.shared.retryFailedNow() }
             } label: {
                 Text(AppStrings.retry(language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)
@@ -1255,12 +1255,12 @@ struct TripLoadErrorView: View {
             .padding(.bottom, 4)
 
             Text(AppStrings.tripLoadFailed(language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
             Text(AppStrings.tripLoadFailedBody(language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .lineSpacing(3.5)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -1274,7 +1274,7 @@ struct TripLoadErrorView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 14, weight: .bold))
                     Text(AppStrings.tryAgain(language))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)

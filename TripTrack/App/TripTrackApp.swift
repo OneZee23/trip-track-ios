@@ -70,6 +70,13 @@ struct TripTrackApp: App {
             DebugMapSeed.runHangStressIfNeeded()
         }
         #endif
+        #if DEBUG && targetEnvironment(simulator)
+        if DebugForeignTripFixture.isRequested {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
+            UserDefaults.standard.set(false, forKey: "feedSegmentFollowingV2")
+        }
+        #endif
         // Crash reporting MUST start first — otherwise any panic in the
         // services below would crash silently. No-op when SENTRY_DSN
         // is empty (dev / simulator).

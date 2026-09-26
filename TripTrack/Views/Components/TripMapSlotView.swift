@@ -15,34 +15,38 @@ import UIKit
 /// просто чёрный прямоугольник»).
 ///
 /// Здесь SwiftUI владеет ГНЕЗДОМ и волен создавать и разбирать его сколько
-/// угодно: карта лежит внутри и переходит к тому гнезду, которое сейчас
-/// раскладывают. Разобранное гнездо уносит с собой пустоту.
+/// угодно: карта лежит внутри и явно передаётся активному контейнеру.
+/// Разобранное гнездо уносит с собой пустоту.
 ///
-/// Забирает гнездо карту в `layoutSubviews`, а не только при сборке, потому
-/// что именно разметка — единственное событие, которое ТОЧНО приходит после
-/// переезда: `updateUIView` SwiftUI вправе не прислать вовсе, а слот, который
-/// показали на экране, обязан быть разложен.
+/// Передача карты явная: `adopt` отзывает владение у прежнего гнезда.
+/// Во время push SwiftUI вправе раскладывать оба гнезда одновременно.
+/// Если каждое забирает карту обратно в `layoutSubviews`, разметка не
+/// заканчивается вовсе: два вида бесконечно переносят одну MKMapView.
 final class TripMapSlotView: UIView {
+
     /// Карта, живущая в этом гнезде. `weak` — держит её хост, а не гнездо:
     /// гнёзд за жизнь экрана несколько, карта одна.
     private(set) weak var map: MKMapView?
+    private var lastReportedMapSize: CGSize?
 
     /// Забрать карту себе — СРАЗУ, не дожидаясь разметки.
     ///
-    /// Ждать её нельзя: карту вынимает из прежнего гнезда `TripMapHost
-    /// .map(orMake:)`, то есть чужой `makeUIView`, и если разметки этого
-    /// гнезда после того больше не случится, карта останется без родителя
-    /// вовсе. Разметка ниже — страховка на обратный порядок, а не первый ход.
+    /// Ждать разметки нельзя: SwiftUI может сначала снять прежний слот.
+    /// Только новый слот получает карту; прежний остаётся пустым даже если
+    /// его `updateUIView` или `layoutSubviews` придут после передачи.
     func adopt(_ map: MKMapView) {
-        self.map = map
         guard map.superview !== self else { return }
-        let resized = map.bounds.size != bounds.size
+        if let previous = map.superview as? TripMapSlotView {
+            previous.map = nil
+        }
+        self.map = map
+        lastReportedMapSize = nil
         map.removeFromSuperview()
         map.frame = bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(map)
         onAdopt?()
-        if resized { onResize?() }
+        reportSizeIfChanged()
     }
 
     /// Гнездо забрало карту себе. Повод перечитать то, что считается от места
@@ -57,12 +61,16 @@ final class TripMapSlotView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let map else { return }
-        guard map.superview === self else { return adopt(map) }
-        // Автомаска ведёт карту сама, но первый кадр после переезда она
-        // считает от размера, который был у карты ДО него.
-        guard map.frame != bounds else { return }
-        let resized = map.bounds.size != bounds.size
-        map.frame = bounds
-        if resized { onResize?() }
+        guard map.superview === self else { return }
+        // Автомаска может выставить frame ДО этого callback. Даже тогда
+        // координатор обязан узнать новый размер и выполнить ожидающий fit.
+        if map.frame != bounds { map.frame = bounds }
+        reportSizeIfChanged()
+    }
+
+    private func reportSizeIfChanged() {
+        guard lastReportedMapSize != bounds.size else { return }
+        lastReportedMapSize = bounds.size
+        onResize?()
     }
 }

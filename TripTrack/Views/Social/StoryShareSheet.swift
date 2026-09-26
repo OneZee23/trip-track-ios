@@ -158,7 +158,7 @@ struct StoryShareSheet: View {
                     formatChips(c)
 
                     Text(AppStrings.shareCardCaption(lang.language))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
@@ -242,7 +242,7 @@ struct StoryShareSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.shareTripTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -390,7 +390,7 @@ struct StoryShareSheet: View {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .semibold))
                     Text(AppStrings.share(lang.language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -410,7 +410,7 @@ struct StoryShareSheet: View {
                     Text(savedToPhotos
                          ? (AppStrings.storyShareSaved(lng))
                          : AppStrings.save(lang.language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -429,7 +429,7 @@ struct StoryShareSheet: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             Text(url)
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -441,7 +441,7 @@ struct StoryShareSheet: View {
                 Text(linkCopied
                      ? (AppStrings.sharedTripLinkCopied(lng))
                      : AppStrings.shareCopyLink(lang.language))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(linkCopied ? AppTheme.green : AppTheme.accent)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)

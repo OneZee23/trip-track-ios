@@ -424,9 +424,9 @@ struct TripDetailView: View {
                     Circle()
                         .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
                         .frame(width: 28, height: 28)
-                        .overlay { Text(author.avatarEmoji ?? "🚗").font(.system(size: 16)) }
+                        .overlay { Text(author.avatarEmoji ?? "🚗").font(.inter(16)) }
                     Text(author.displayName ?? (AppStrings.companionsNoName(lang.language)))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -723,7 +723,7 @@ struct TripDetailView: View {
                 ) { dismiss() }
                 Spacer()
                 Text(AppStrings.tripTitle(lang.language))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer()
                 Color.clear.frame(width: 36, height: 36)
@@ -741,12 +741,12 @@ struct TripDetailView: View {
                 .padding(.bottom, 26)
 
             Text(AppStrings.tripPrivateTitle(lang.language))
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .bold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
             Text(AppStrings.tripPrivateBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -771,7 +771,7 @@ struct TripDetailView: View {
                 ) { dismiss() }
                 Spacer()
                 Text(AppStrings.tripTitle(lang.language))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer()
                 // Balances the chevron so the title sits centred.
@@ -788,12 +788,12 @@ struct TripDetailView: View {
                 .padding(.bottom, 26)
 
             Text(AppStrings.tripLoadFailed(lang.language))
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .bold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
             Text(AppStrings.tripLoadFailedBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -812,7 +812,7 @@ struct TripDetailView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 14, weight: .bold))
                     Text(AppStrings.tryAgain(lang.language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 22)
@@ -2143,6 +2143,7 @@ isOwn
         heroMapFrame = heroMapFrameInWindow() ?? .zero
         mapWindowSafeArea = mapHost.mapView?.window?.safeAreaInsets ?? mapWindowSafeArea
         mapHost.captureSnapshot()
+        mapHost.activePresentation = .fullscreen
         // ВНЕ анимации: этот переход меняет ветку `if` в слоте героя (живая
         // карта → снимок) и монтирует слой. Анимированная смена ветки держала
         // бы в дереве ДВА представления одной `MKMapView` разом — второе
@@ -2180,6 +2181,7 @@ isOwn
         } completion: {
             guard mapExpansion == .collapsing else { return }
             // Снова ВНЕ анимации — по той же причине, что и монтирование.
+            mapHost.activePresentation = .hero
             mapExpansion = .collapsed
             mapFitTick += 1
             mapHost.clearSnapshot()
@@ -2329,7 +2331,7 @@ isOwn
                 .minimumScaleFactor(0.6)
 
             Text(heading)
-                .font(.system(size: 26, weight: .heavy))
+                .font(.inter(26, weight: .bold))
                 .tracking(-0.52)
                 .foregroundStyle(c.text)
                 .lineLimit(2)
@@ -2591,7 +2593,7 @@ isOwn
                             .scaledToFit()
                             .frame(width: 14, height: 14)
                     } else {
-                        Text(v.avatarEmoji).font(.system(size: 12))
+                        Text(v.avatarEmoji).font(.inter(12))
                     }
                     Text(v.name).lineLimit(1)
                 }
@@ -2615,7 +2617,7 @@ isOwn
             } label: {
                 DetailChipSurface {
                     Text(v.displayEmoji)
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                     Text(v.name)
                         .lineLimit(1)
                     Image(systemName: "chevron.right")
@@ -2822,7 +2824,7 @@ isOwn
                         Image(systemName: "square.and.pencil")
                             .font(.system(size: 15, weight: .semibold))
                         Text(AppStrings.addNotesCTA(lang.language))
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.inter(14, weight: .medium))
                         Spacer(minLength: 0)
                     }
                     .foregroundStyle(AppTheme.accent)
@@ -2882,7 +2884,7 @@ isOwn
                             .foregroundStyle(c.textTertiary)
                     }
                     Text(AppStrings.noReactionsYet(lang.language))
-                        .font(.system(size: 14.5))
+                        .font(.inter(14.5))
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(2)
 
@@ -2902,7 +2904,7 @@ isOwn
                                 Image(systemName: "plus")
                                     .font(.system(size: 12, weight: .bold))
                                 Text(AppStrings.beFirstToReact(lang.language))
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.inter(13, weight: .semibold))
                             }
                             .foregroundStyle(AppTheme.accent)
                             .padding(.horizontal, 12)
@@ -3089,11 +3091,11 @@ isOwn
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.leading)
                     Text(body)
-                        .font(.system(size: 12.5))
+                        .font(.inter(12.5))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3221,10 +3223,10 @@ isOwn
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 18)) }
+                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.inter(18)) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(entry.user.profileLevel)")
@@ -3750,7 +3752,7 @@ isOwn
                             .font(.system(size: 24))
                             .foregroundStyle(c.textTertiary)
                         Text(AppStrings.addPhotos(lang.language))
-                            .font(.system(size: 12))
+                            .font(.inter(12))
                             .foregroundStyle(c.textTertiary)
                     }
                     Spacer()
@@ -3905,26 +3907,29 @@ private struct TripDetailLocalReactorDestination: ViewModifier {
 /// Своим типом, а не строкой в `body`: у этого экрана вывод типов уже упирался
 /// в таймаут, и всё, что можно вынести за его пределы, туда и выносится.
 ///
-/// `enabled` — по той же причине, по какой гейт есть у
-/// `TripDetailLocalReactorDestination`: два безусловных места назначения на
-/// одном экране этот `NavigationStack` уже ронял вспышкой на глубине 4+.
-/// Спрашиваем `isOwn`, а не «открыто ли сейчас»: пункт «Открыть путешествие»
-/// живёт только в меню владельца, а само значение выставляется при загрузке и
-/// больше не меняется — то есть регистрация не появляется и не исчезает в том
-/// же обновлении, в котором ставится id (именно это и ломает переход).
+/// Гейт ограничивает невидимый navigation anchor, а не структуру содержимого.
+/// `isOwn` определяется при загрузке: у чужой поездки меняется с true на false.
+/// Условный wrapper оставлял две живые копии героя с одной MKMapView — они
+/// либо бесконечно отбирали карту друг у друга, либо одна оставалась пустой.
+/// Стабильный background сохраняет один экран и право владельца открывать
+/// путешествие, в том числе у собственной поездки, пришедшей из ленты.
+/// Для чужой поездки destination по-прежнему не регистрируется: лишние
+/// вложенные destination раньше ломали глубокие цепочки профилей.
 private struct TripDetailJourneyDestination: ViewModifier {
     @Binding var journeyId: UUID?
     let lang: LanguageManager
     let enabled: Bool
 
     func body(content: Content) -> some View {
-        if enabled {
-            content.navigationDestination(item: $journeyId) { id in
-                JourneyDetailView(journeyId: id)
-                    .environmentObject(lang)
+        content.background {
+            if enabled {
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .navigationDestination(item: $journeyId) { id in
+                        JourneyDetailView(journeyId: id)
+                            .environmentObject(lang)
+                    }
             }
-        } else {
-            content
         }
     }
 }

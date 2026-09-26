@@ -64,7 +64,7 @@ struct BadgeDetailOverlay: View {
                 // nothing to fall back on a longer name would either clip or
                 // stretch the card into a slab.
                 Text(isUnlocked || !badge.isHidden ? badge.title(language) : "???")
-                    .font(.system(size: 22, weight: .heavy))
+                    .font(.inter(22, weight: .bold))
                     .foregroundStyle(isUnlocked ? badge.color : c.text)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -74,7 +74,7 @@ struct BadgeDetailOverlay: View {
                 Text(isUnlocked || !badge.isHidden
                     ? badge.description(language, unit: distanceUnit)
                     : (AppStrings.badgeDetailHiddenAchievement(lng)))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
 
@@ -95,13 +95,13 @@ struct BadgeDetailOverlay: View {
                     .background(c.cardAlt, in: Capsule())
 
                     Text(badge.category.title(language))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                 }
 
                 if isUnlocked, let recordValue {
                     Text(recordValue)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.inter(12, weight: .bold))
                         .foregroundStyle(badge.color)
                 }
 
@@ -114,7 +114,7 @@ struct BadgeDetailOverlay: View {
                                 .truncationMode(.tail)
                         }
                     }
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
                     .multilineTextAlignment(.center)
                 }

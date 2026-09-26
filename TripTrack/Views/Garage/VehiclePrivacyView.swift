@@ -62,7 +62,7 @@ struct VehiclePrivacyView: View {
                     }
 
                     Text(AppStrings.vehiclePrivacyFooter(l))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 2)
@@ -91,7 +91,7 @@ struct VehiclePrivacyView: View {
     private func nav(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         ZStack {
             Text(AppStrings.vehicleWhoSees(l))
-                .font(.system(size: 17, weight: .bold))
+                .font(.inter(17, weight: .bold))
                 .foregroundStyle(c.text)
             HStack {
                 Button { dismiss() } label: {
@@ -116,7 +116,7 @@ struct VehiclePrivacyView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
                 Text(title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -125,7 +125,7 @@ struct VehiclePrivacyView: View {
                     .tint(AppTheme.accent)
             }
             Text(hint)
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }

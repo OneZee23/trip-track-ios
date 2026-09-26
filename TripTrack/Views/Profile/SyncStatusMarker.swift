@@ -98,7 +98,7 @@ struct SyncStatusMarker: View {
             }
 
             Text(state.shortLabel(language))
-                .font(.system(size: 13, weight: .medium))
+                .font(.inter(13, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
                 .monospacedDigit()
                 .lineLimit(1)

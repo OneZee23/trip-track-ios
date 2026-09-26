@@ -68,7 +68,7 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             .padding(.horizontal, 8)
 
             Text(footnote)
-                .font(.system(size: 11.5))
+                .font(.inter(11.5))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,7 +92,7 @@ struct SettingsOptionPicker<Option: Hashable>: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 16, weight: .heavy))
+                .font(.inter(16, weight: .bold))
                 .tracking(-0.16)
                 .foregroundStyle(c.text)
                 .lineLimit(1)
@@ -203,7 +203,7 @@ struct SettingsOptionPicker<Option: Hashable>: View {
                     .foregroundStyle(isSelected ? AppTheme.accent : c.text)
             } else {
                 Text(badge(option))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)

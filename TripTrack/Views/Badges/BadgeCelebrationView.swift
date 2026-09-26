@@ -56,7 +56,7 @@ struct BadgeCelebrationView: View {
 
                 // Subtitle
                 Text(AppStrings.achievementUnlocked(lang.language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(badge.color)
                     .textCase(.uppercase)
                     .tracking(3)
@@ -64,14 +64,14 @@ struct BadgeCelebrationView: View {
 
                 // Badge name
                 Text(badge.title(lang.language))
-                    .font(.system(size: 28, weight: .heavy))
+                    .font(.inter(28, weight: .bold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .opacity(appear ? 1 : 0)
 
                 // Description
                 Text(badge.description(lang.language, unit: distanceUnit))
-                    .font(.system(size: 16))
+                    .font(.inter(16))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
@@ -80,7 +80,7 @@ struct BadgeCelebrationView: View {
                 // Earn count for repeatable badges
                 if badge.isRepeatable && count > 0 {
                     Text(AppStrings.earnedTimes(lang.language, count: count))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(badge.color)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
@@ -95,7 +95,7 @@ struct BadgeCelebrationView: View {
                     advanceOrDismiss()
                 } label: {
                     Text(AppStrings.continueButton(lang.language))
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.inter(18, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)

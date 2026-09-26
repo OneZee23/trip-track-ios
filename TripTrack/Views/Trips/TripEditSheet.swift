@@ -60,7 +60,7 @@ struct TripEditSheet: View {
                 VStack(alignment: .leading, spacing: 20) {
                     field(label: AppStrings.tripTitleLabel(lang.language), c: c) {
                         TextField(AppStrings.tripTitlePlaceholder(lang.language), text: $title)
-                            .font(.system(size: 16))
+                            .font(.inter(16))
                             .foregroundStyle(c.text)
                             .submitLabel(.done)
                             .accessibilityIdentifier("edit_title_field")
@@ -73,13 +73,13 @@ struct TripEditSheet: View {
                             // broken rather than as empty.
                             if notes.isEmpty {
                                 Text(AppStrings.describeTripPlaceholder(lang.language))
-                                    .font(.system(size: 16))
+                                    .font(.inter(16))
                                     .foregroundStyle(c.textTertiary)
                                     .padding(.top, 8)
                                     .allowsHitTesting(false)
                             }
                             TextEditor(text: $notes)
-                                .font(.system(size: 16))
+                                .font(.inter(16))
                                 .foregroundStyle(c.text)
                                 .scrollContentBackground(.hidden)
                                 .frame(height: Self.notesHeight)
@@ -118,7 +118,7 @@ struct TripEditSheet: View {
                                 Text(isTransfer
                                      ? AppStrings.tripTransferTitle(lang.language)
                                      : (selectedVehicle?.name ?? AppStrings.noVehicle(lang.language)))
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .font(.inter(16, weight: .semibold))
                                     .foregroundStyle(c.text)
                                 Spacer(minLength: 0)
                                 Image(systemName: "chevron.right")
@@ -145,12 +145,12 @@ struct TripEditSheet: View {
                                     Text(isPrivate
                                          ? AppStrings.privacyOnlyMe(lang.language)
                                          : AppStrings.privacyPublic(lang.language))
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .font(.inter(16, weight: .semibold))
                                         .foregroundStyle(c.text)
                                     Text(isPrivate
                                          ? AppStrings.privacyOnlyMeHint(lang.language)
                                          : AppStrings.privacyPublicHint(lang.language))
-                                        .font(.system(size: 12.5))
+                                        .font(.inter(12.5))
                                         .foregroundStyle(c.textTertiary)
                                 }
                                 Spacer(minLength: 0)
@@ -245,7 +245,7 @@ struct TripEditSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.editTripTitle(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -258,7 +258,7 @@ struct TripEditSheet: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.inter(16, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
                 .accessibilityIdentifier("edit_cancel")
@@ -277,7 +277,7 @@ struct TripEditSheet: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.done(lang.language))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.inter(16, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                 }
                 .accessibilityIdentifier("edit_done")
@@ -325,7 +325,7 @@ struct TripEditSheet: View {
                         .scaledToFit()
                         .frame(width: 22, height: 22)
                 } else {
-                    Text(v.avatarEmoji).font(.system(size: 17))
+                    Text(v.avatarEmoji).font(.inter(17))
                 }
             } else {
                 Image(systemName: "car.fill")
@@ -342,7 +342,7 @@ struct TripEditSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label).textCase(.uppercase)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .kerning(0.6)
                 .foregroundStyle(c.textTertiary)
             content()
@@ -367,7 +367,7 @@ struct TripAccessPickerSheet: View {
         let c = AppTheme.colors(for: scheme)
         VStack(alignment: .leading, spacing: 0) {
             Text(AppStrings.accessSectionLabel(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -392,7 +392,7 @@ struct TripAccessPickerSheet: View {
             .padding(.horizontal, 16)
 
             Text(AppStrings.tripEditAPublicTrip(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
@@ -433,10 +433,10 @@ struct TripAccessPickerSheet: View {
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.inter(16, weight: .semibold))
                         .foregroundStyle(c.text)
                     Text(hint)
-                        .font(.system(size: 12.5))
+                        .font(.inter(12.5))
                         .foregroundStyle(c.textTertiary)
                         .multilineTextAlignment(.leading)
                 }

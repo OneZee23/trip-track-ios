@@ -143,7 +143,7 @@ struct NotificationsInboxView: View {
         // becomes title-left, controls-right.
         HStack(spacing: 8) {
             Text(AppStrings.activityTitle(lang.language))
-                .font(.system(size: 22, weight: .heavy))
+                .font(.inter(22, weight: .bold))
                 .tracking(-0.22)
                 .foregroundStyle(c.text)
                 .lineLimit(1)
@@ -282,7 +282,7 @@ struct NotificationsInboxView: View {
                         // Chip active, zero loaded matches — without this
                         // the area under the chips is just blank.
                         Text(AppStrings.noFilteredNotifications(lang.language))
-                            .font(.system(size: 14))
+                            .font(.inter(14))
                             .foregroundStyle(c.textSecondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 60)
@@ -360,7 +360,7 @@ struct NotificationsInboxView: View {
 
     private func dateHeader(_ title: String, c: AppTheme.Colors) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.inter(11, weight: .semibold))
             .tracking(0.44)
             .textCase(.uppercase)
             .foregroundStyle(c.textTertiary)
@@ -495,7 +495,7 @@ struct NotificationsInboxView: View {
                     respond(item, accept: false)
                 } label: {
                     Text(AppStrings.companionDecline(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -509,7 +509,7 @@ struct NotificationsInboxView: View {
                     respond(item, accept: true)
                 } label: {
                     Text(AppStrings.companionAccept(lang.language))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -550,7 +550,7 @@ struct NotificationsInboxView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(AppTheme.red)
                 Text(AppStrings.companionInvitePreviewFailed(lang.language))
-                    .font(.system(size: 12.5))
+                    .font(.inter(12.5))
                     .foregroundStyle(c.textSecondary)
                 Spacer(minLength: 4)
                 Button {
@@ -559,7 +559,7 @@ struct NotificationsInboxView: View {
                     Task { await ensurePreviewIfNeeded(item) }
                 } label: {
                     Text(AppStrings.retry(lang.language))
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.inter(12.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
                 .buttonStyle(.plain)
@@ -568,7 +568,7 @@ struct NotificationsInboxView: View {
             let line = NotificationInviteRowModel.decisionLine(
                 item: item, preview: loadedPreview, lang: lang.language)
             Text(decisionLineText(line))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textSecondary)
         }
     }
@@ -760,7 +760,7 @@ struct NotificationsInboxView: View {
                 Text(isSystemRow
                      ? (item.emoji ?? fallbackGlyph(item))
                      : (item.actor?.avatarEmoji ?? item.emoji ?? fallbackGlyph(item)))
-                    .font(.system(size: 20))
+                    .font(.inter(20))
             }
             .overlay(alignment: .bottomTrailing) {
                 kindBadge(item, c: c)
@@ -949,10 +949,10 @@ struct NotificationsInboxView: View {
         VStack(spacing: 14) {
             EmptyStateIllustration(name: "empty_notifications")
             Text(AppStrings.notificationsInboxNothingYet(lng))
-                .font(.system(size: 16, weight: .semibold))
+                .font(.inter(16, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(AppStrings.notificationsInboxWhenSomeoneReacts(lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

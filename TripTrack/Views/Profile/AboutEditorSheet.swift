@@ -71,7 +71,7 @@ struct AboutEditorSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.aboutTitle(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
 
             HStack {
@@ -80,7 +80,7 @@ struct AboutEditorSheet: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -92,7 +92,7 @@ struct AboutEditorSheet: View {
                     commit()
                 } label: {
                     Text(AppStrings.done(lang.language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                         
                 }
@@ -109,7 +109,7 @@ struct AboutEditorSheet: View {
     private func field(_ c: AppTheme.Colors) -> some View {
         HStack(alignment: .top, spacing: 8) {
             TextEditor(text: $text)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.inter(17, weight: .semibold))
                 .foregroundStyle(c.text)
                 .scrollContentBackground(.hidden)
                 .frame(height: Self.boxHeight)
@@ -166,12 +166,12 @@ struct AboutEditorSheet: View {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 11))
                     Text(err)
-                        .font(.system(size: 11.5))
+                        .font(.inter(11.5))
                 }
                 .foregroundStyle(AppTheme.red)
             } else {
                 Text(AppStrings.aboutHint(lang.language))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

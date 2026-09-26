@@ -56,7 +56,7 @@ struct AppleSignInButton: View {
                 Image(systemName: "applelogo")
                     .font(.system(size: 18, weight: .medium))
                 Text(AppStrings.signInWithApple(lang.language))
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.inter(17, weight: .semibold))
             }
             // Matches the previous `.signInWithAppleButtonStyle(.white)`
             // rendering: white fill + black content in BOTH schemes, with
@@ -131,7 +131,7 @@ struct AppleSignInButton: View {
                 .controlSize(.small)
                 .tint(fg)
             Text(AppStrings.signInLoading(lang.language))
-                .font(.system(size: 16, weight: .semibold))
+                .font(.inter(16, weight: .semibold))
         }
         .foregroundStyle(fg)
         .frame(maxWidth: .infinity)

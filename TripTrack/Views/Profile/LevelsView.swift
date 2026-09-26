@@ -89,7 +89,7 @@ struct LevelsView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(rank.title(l))
-                        .font(.system(size: 21, weight: .heavy))
+                        .font(.inter(21, weight: .bold))
                         .foregroundStyle(ink)
                         .lineLimit(1)
                         // «Покоритель дорог» at 21 heavy overruns the 360pt
@@ -102,7 +102,7 @@ struct LevelsView: View {
                         total: DriverRank.allCases.count,
                         level: level
                     ))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -176,7 +176,7 @@ struct LevelsView: View {
                 Text(isMaxLevel
                      ? AppStrings.levelsMaxLevel(l)
                      : AppStrings.levelsToNextLevel(l, level: level + 1))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textSecondary)
             }
             .lineLimit(1)
@@ -198,7 +198,7 @@ struct LevelsView: View {
                 .frame(width: 9, height: 9)
 
             Text(text)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.inter(12.5, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -237,7 +237,7 @@ struct LevelsView: View {
             ForEach(rules(l)) { rule in
                 HStack(spacing: 12) {
                     Text(rule.badge)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                         .lineLimit(1)
                         .padding(.vertical, 5)
@@ -247,7 +247,7 @@ struct LevelsView: View {
                         .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                     Text(rule.text)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.inter(14, weight: .medium))
                         .foregroundStyle(c.text)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -310,7 +310,7 @@ struct LevelsView: View {
                     // Caps by the canon's hand, not the translator's: a 10pt
                     // tracked label reads as a marker only in caps.
                     Text(AppStrings.levelsCurrentMarker(l))
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.inter(10, weight: .bold))
                         .textCase(.uppercase)
                         .tracking(0.4)
                         .foregroundStyle(ink)

@@ -110,7 +110,7 @@ struct CheckpointEditorSheet: View {
                 }
                 .buttonStyle(.plain)
                 Text(AppStrings.segmentPickTitle(language))
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.inter(19, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -138,7 +138,7 @@ struct CheckpointEditorSheet: View {
         } label: {
             HStack(spacing: 10) {
                 Text("\(number)")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.inter(13, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
@@ -147,13 +147,13 @@ struct CheckpointEditorSheet: View {
                     Text(item.name?.isEmpty == false
                          ? item.name!
                          : AppStrings.checkpointDefaultName(language, number: number))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(CheckpointReading.text(
                         elapsed: item.elapsedFromStart, metres: item.distanceFromStart,
                         unit: distanceUnit, lang: language))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.inter(12, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(1)
@@ -176,12 +176,12 @@ struct CheckpointEditorSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Text("\(number)")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.inter(13, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
                     .background(AppTheme.accent, in: Circle())
                 Text(AppStrings.checkpointWord(language))
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.inter(19, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer()
                 Button {
@@ -199,7 +199,7 @@ struct CheckpointEditorSheet: View {
             // Счётчик появляется только у предела — чтобы не шуметь у «Море».
             VStack(alignment: .trailing, spacing: 4) {
                 TextField(AppStrings.checkpointNamePlaceholder(language), text: $name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.inter(16, weight: .semibold))
                     .foregroundStyle(c.text)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -240,7 +240,7 @@ struct CheckpointEditorSheet: View {
                         Image(systemName: "arrow.triangle.swap")
                             .font(.system(size: 13, weight: .bold))
                         Text(AppStrings.segmentTo(language))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                     }
                     .foregroundStyle(AppTheme.accent)
                     .frame(maxWidth: .infinity)
@@ -256,7 +256,7 @@ struct CheckpointEditorSheet: View {
                 confirmingDelete = true
             } label: {
                 Text(AppStrings.checkpointDelete(language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(AppTheme.red)
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
@@ -292,7 +292,7 @@ struct CheckpointEditorSheet: View {
     private func photoRow(title: String, photos: [TripPhoto], linked: Bool, c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 12, weight: .heavy))
+                .font(.inter(12, weight: .bold))
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -331,7 +331,7 @@ struct CheckpointEditorSheet: View {
                 .overlay(alignment: .bottom) {
                     if isCover {
                         Text(AppStrings.checkpointCover(language))
-                            .font(.system(size: 9, weight: .heavy))
+                            .font(.inter(9, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)

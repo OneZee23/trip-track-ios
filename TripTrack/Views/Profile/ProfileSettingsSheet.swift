@@ -199,7 +199,7 @@ struct ProfileSettingsSheet: View {
         // with no shadow, the same `SheetCloseCircle` the garage sheets use.
         HStack(alignment: .center) {
             Text(AppStrings.settingsTitle(l))
-                .font(.system(size: 22, weight: .heavy))
+                .font(.inter(22, weight: .bold))
                 .foregroundStyle(AppTheme.colors(for: scheme).text)
                 .lineLimit(1)
 
@@ -490,7 +490,7 @@ struct ProfileSettingsSheet: View {
                     .font(.custom("PressStart2P-Regular", size: 8))
                     .foregroundStyle(AppTheme.accent)
                 Text("· v\(version) · OneZee")
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
             }
 
@@ -500,7 +500,7 @@ struct ProfileSettingsSheet: View {
                     UIApplication.shared.open(AppConfig.privacyPolicyURL(l))
                 } label: {
                     Text(AppStrings.privacyPolicy(l))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .underline()
                 }
@@ -511,7 +511,7 @@ struct ProfileSettingsSheet: View {
                     UIApplication.shared.open(AppConfig.termsURL(l))
                 } label: {
                     Text(AppStrings.termsOfService(l))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .underline()
                 }
@@ -528,7 +528,7 @@ struct ProfileSettingsSheet: View {
                 UIApplication.shared.open(AppConfig.osmCopyrightURL)
             } label: {
                 Text(AppStrings.osmAttribution(l))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .underline()
                     .multilineTextAlignment(.center)
@@ -542,7 +542,7 @@ struct ProfileSettingsSheet: View {
             // не кнопка, а строка. Стоит рядом с OSM потому, что вопрос у
             // человека один («откуда это»), а источника два.
             Text(AppStrings.naturalEarthAttribution(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("settings_ne_attribution")
@@ -682,7 +682,7 @@ private struct SettingsToggleRow: View {
             .frame(width: 30, height: 30)
 
             Text(title)
-                .font(.system(size: 14.5, weight: .semibold))
+                .font(.inter(14.5, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -763,12 +763,12 @@ private struct SettingsLinkRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .font(.inter(14.5, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Text(subtitle)
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }

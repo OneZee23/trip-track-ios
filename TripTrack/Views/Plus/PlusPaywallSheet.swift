@@ -131,7 +131,7 @@ struct PlusPaywallSheet: View {
             .padding(.horizontal, 16)
 
             Text(AppStrings.plusTitle(l))
-                .font(.system(size: 26, weight: .heavy))
+                .font(.inter(26, weight: .bold))
                 .kerning(-0.3)
                 .foregroundStyle(c.text)
 

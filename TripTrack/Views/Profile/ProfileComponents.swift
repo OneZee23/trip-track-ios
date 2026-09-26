@@ -80,7 +80,7 @@ struct ProfileStatsStrip: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.inter(10, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
         }
         .frame(maxWidth: .infinity)
@@ -127,11 +127,11 @@ struct ProfileTripRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(titleText)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(metaText)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }
@@ -185,8 +185,8 @@ struct ProfileSectionLabel: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Text(text)
-            .font(.system(size: 16, weight: .heavy))
-            .tracking(-0.16)
+            .font(AppType.section)
+            .tracking(AppType.sectionTracking)
             .foregroundStyle(c.text)
     }
 }
@@ -232,7 +232,7 @@ struct SettingsIconRow<Trailing: View>: View {
             .frame(width: 30, height: 30)
 
             Text(title)
-                .font(.system(size: 14.5, weight: .semibold))
+                .font(.inter(14.5, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -284,7 +284,7 @@ struct SettingsRowValue: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 14, weight: .medium))
+            .font(.inter(14, weight: .medium))
             .foregroundStyle(tint ?? AppTheme.colors(for: scheme).textSecondary)
             .lineLimit(1)
             .truncationMode(.tail)

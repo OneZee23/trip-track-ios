@@ -286,7 +286,7 @@ struct VehicleEditFormView: View {
         } label: {
             HStack(spacing: 10) {
                 Text(AppStrings.settingsVehicleCardStyle(l))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.inter(14, weight: .medium))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 8)
                 if locked {
@@ -295,7 +295,7 @@ struct VehicleEditFormView: View {
                         .foregroundStyle(c.textTertiary)
                 }
                 Text(shown == .none ? AppStrings.cosmeticDefaultOption(l) : shown.displayName)
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
@@ -329,7 +329,7 @@ struct VehicleEditFormView: View {
     private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         ZStack {
             Text(title(l))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
             HStack {
                 Spacer()
@@ -365,7 +365,7 @@ struct VehicleEditFormView: View {
         VStack(alignment: .leading, spacing: 10) {
             GarageSectionLabel(text: AppStrings.vehicleNameSection(l), color: c.textSecondary)
             TextField(AppStrings.vehicleNamePlaceholder(l), text: $name)
-                .font(.system(size: 15, weight: .medium))
+                .font(.inter(15, weight: .medium))
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
                 .padding(.horizontal, 12)
@@ -398,7 +398,7 @@ struct VehicleEditFormView: View {
             } label: {
                 HStack(spacing: 10) {
                     Text(vehicle.isSold ? AppStrings.vehicleUnsell(l) : AppStrings.vehicleMarkSold(l))
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.inter(15, weight: .medium))
                         .foregroundStyle(vehicle.isSold ? c.text : AppTheme.accent)
                     Spacer(minLength: 8)
                     Image(systemName: vehicle.isSold ? "arrow.uturn.backward" : "hand.wave")
@@ -413,7 +413,7 @@ struct VehicleEditFormView: View {
             .buttonStyle(.plain)
 
             Text(vehicle.isSold ? AppStrings.vehicleSoldHintOn(l) : AppStrings.vehicleSoldHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -450,10 +450,10 @@ struct VehicleEditFormView: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(AppStrings.vehicleMakeModel(l))
-                            .font(.system(size: 11))
+                            .font(.inter(11))
                             .foregroundStyle(c.textTertiary)
                         Text(passportTitle(l))
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.inter(15, weight: .medium))
                             .foregroundStyle(passportTitleIsEmpty ? c.textTertiary : c.text)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -474,11 +474,11 @@ struct VehicleEditFormView: View {
 
             HStack(spacing: 10) {
                 Text(AppStrings.vehicleYear(l))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 8)
                 TextField(AppStrings.vehicleNotSet(l), text: $yearText)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .tint(AppTheme.accent)
                     .keyboardType(.numberPad)
@@ -499,10 +499,10 @@ struct VehicleEditFormView: View {
             // которого мы сознательно не делаем.
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.vehicleAbout(l))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                 TextField(AppStrings.vehicleAboutPlaceholder(l), text: $about, axis: .vertical)
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .foregroundStyle(c.text)
                     .tint(AppTheme.accent)
                     .lineLimit(1...3)
@@ -584,7 +584,7 @@ struct VehicleEditFormView: View {
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.textSecondary)
                 Text(type.label(l))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(isSelected ? c.text : c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -613,7 +613,7 @@ struct VehicleEditFormView: View {
             GarageSectionLabel(text: AppStrings.plateSection(l), color: c.textSecondary)
 
             TextField(AppStrings.platePlaceholder(l), text: $plate)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.inter(15, weight: .semibold))
                 .tracking(0.4)
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
@@ -645,7 +645,7 @@ struct VehicleEditFormView: View {
             }
 
             Text(plateVisible ? AppStrings.plateVisibilityHintOn(l) : AppStrings.plateVisibilityHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -739,7 +739,7 @@ struct VehicleEditFormView: View {
         } else {
             // A vehicle saved before the sprites replaced the emoji set.
             Text(selectedAvatar)
-                .font(.system(size: 56))
+                .font(.inter(56))
                 .frame(height: 88)
         }
     }
@@ -757,7 +757,7 @@ struct VehicleEditFormView: View {
                     } fill: {
                         Circle()
                             .fill(c.cardAlt)
-                            .overlay(Text(legacy).font(.system(size: 17)))
+                            .overlay(Text(legacy).font(.inter(17)))
                     }
                 }
                 ForEach(VehicleAvatar.colors, id: \.self) { color in
@@ -969,7 +969,7 @@ struct VehicleEditFormView: View {
         } label: {
             HStack(spacing: 3) {
                 Text(currencySymbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .bold))
             }
@@ -982,7 +982,7 @@ struct VehicleEditFormView: View {
 
     private func unitLabel(_ text: String, c: AppTheme.Colors) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .medium))
+            .font(.inter(13, weight: .medium))
             .foregroundStyle(c.textTertiary)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -1002,7 +1002,7 @@ struct VehicleEditFormView: View {
         let lng = lang.language
         return HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 15, weight: .medium))
+                .font(.inter(15, weight: .medium))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -1025,7 +1025,7 @@ struct VehicleEditFormView: View {
                 ))
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.inter(15, weight: .semibold))
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
                 .frame(width: 64)
@@ -1055,10 +1055,10 @@ struct VehicleEditFormView: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(AppStrings.vehicleWhoSees(l))
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.inter(15, weight: .medium))
                             .foregroundStyle(c.text)
                         Text(AppStrings.vehiclePrivacyRowHint(l))
-                            .font(.system(size: 11))
+                            .font(.inter(11))
                             .foregroundStyle(c.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
@@ -1089,7 +1089,7 @@ struct VehicleEditFormView: View {
     ) -> some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
+                .font(.inter(15, weight: .medium))
                 .foregroundStyle(c.text)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -1115,11 +1115,11 @@ struct VehicleEditFormView: View {
                     .font(.system(size: 22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(c.text)
                 Text(trackedOdometer(vehicle, l).unit)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             }
             Text(AppStrings.mileageAutoHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
 
             Divider().padding(.vertical, 4)
@@ -1131,7 +1131,7 @@ struct VehicleEditFormView: View {
             // с клавиатуры.
             HStack(spacing: 10) {
                 Text(AppStrings.odometerEditTitle(l))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 4) {
@@ -1146,13 +1146,13 @@ struct VehicleEditFormView: View {
                     ))
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .tint(AppTheme.accent)
                     .frame(width: 80)
                     .accessibilityIdentifier("vehicle_manual_odometer")
                     Text(manualOdometerUnit(l))
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.inter(13, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
                 .padding(.horizontal, 10)
@@ -1161,7 +1161,7 @@ struct VehicleEditFormView: View {
             }
 
             Text(AppStrings.odometerEditHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1196,13 +1196,13 @@ struct VehicleEditFormView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.vehicleDashboardTitle(l))
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.inter(15, weight: .medium))
                         .foregroundStyle(c.text)
                     // Подзаголовок — он и есть ответ на «это что, ещё одни
                     // единицы?». Без него строка читается как дубль настройки
                     // приложения.
                     Text(AppStrings.vehicleDashboardSubtitle(l))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1210,7 +1210,7 @@ struct VehicleEditFormView: View {
                 Spacer(minLength: 8)
 
                 Text(dashboardUnits.label(l, burnsFuel: selectedType.burnsFuel))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -1253,7 +1253,7 @@ struct VehicleEditFormView: View {
              + Text(" ")
              + Text(AppStrings.dashboardUnitsChange(l))
                 .foregroundStyle(AppTheme.accent))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -1295,7 +1295,7 @@ struct VehicleEditFormView: View {
             save()
         } label: {
             Text(AppStrings.save(l))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)

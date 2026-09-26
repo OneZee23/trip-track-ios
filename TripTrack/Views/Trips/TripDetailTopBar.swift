@@ -39,7 +39,7 @@ struct TripDetailTopBar<Pill: View, Popover: View>: View {
             // The scrolled-state title. Fades in only at the end of the
             // morph, so it never competes with the map's own labels.
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.inter(15, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 120)

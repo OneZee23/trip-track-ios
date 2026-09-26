@@ -138,7 +138,7 @@ struct TripMomentsTimeline: View {
 
     private func numberBadge(_ number: Int) -> some View {
         Text("\(number)")
-            .font(.system(size: 13, weight: .heavy))
+            .font(.inter(13, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(.white)
             .frame(width: Self.nodeSize, height: Self.nodeSize)
@@ -184,7 +184,7 @@ struct TripMomentsTimeline: View {
                             Image(systemName: "mappin.and.ellipse")
                                 .font(.system(size: 11, weight: .bold))
                             Text(AppStrings.momentNamePlace(language))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.inter(13, weight: .semibold))
                         }
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 10)
@@ -292,11 +292,11 @@ struct TripMomentsTimeline: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("\(AppStrings.checkpointLeg(language).uppercased(language)) · "
                              + TripSegmentName.text(segment, in: checkpoints, lang: language))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.inter(12, weight: .semibold))
                             .foregroundStyle(AppTheme.accent)
                             .lineLimit(1)
                         Text(reading(time: resolved.elapsed, metres: resolved.metres))
-                            .font(.system(size: 17, weight: .bold))
+                            .font(.inter(17, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(c.text)
                         // Одна поездка — это сама текущая, и «1 раз» ничего
@@ -305,7 +305,7 @@ struct TripMomentsTimeline: View {
                             Text(AppStrings.segmentHistory(
                                 language, count: times.count,
                                 times: times.map(SegmentHistory.clock).joined(separator: " · ")))
-                                .font(.system(size: 13))
+                                .font(.inter(13))
                                 .foregroundStyle(c.textSecondary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
@@ -341,7 +341,7 @@ struct TripMomentsTimeline: View {
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(time.map { Self.timeFormatter.string(from: $0) } ?? "")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(c.textSecondary)
                 .frame(width: Self.timeWidth, height: Self.nodeSize, alignment: .trailing)
@@ -363,7 +363,7 @@ struct TripMomentsTimeline: View {
             // Имя ограничено сорока знаками в редакторе; две строки вмещают
             // его целиком на любом телефоне, дальше — многоточие.
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.inter(15, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -396,7 +396,7 @@ struct TripMomentsTimeline: View {
             HStack(spacing: 12) {
                 Color.clear.frame(width: Self.timeWidth + Self.timeSpacing + Self.nodeSize, height: 1)
                 Text("+" + reading(time: max(0, dt), metres: max(0, dm)))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(c.textTertiary)
                 Spacer(minLength: 0)
@@ -440,7 +440,7 @@ struct TripMomentsTimeline: View {
         .overlay(alignment: .bottomTrailing) {
             if linked.count > 2 {
                 Text("+\(linked.count - 2)")
-                    .font(.system(size: 9, weight: .heavy))
+                    .font(.inter(9, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(c.card)
                     .padding(.horizontal, 4)
@@ -456,10 +456,10 @@ struct TripMomentsTimeline: View {
     private func measure(label: String, value: String, c: AppTheme.Colors) -> some View {
         HStack(spacing: 5) {
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             Text(value)
-                .font(.system(size: 12, weight: .heavy))
+                .font(.inter(12, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(c.textSecondary)
         }

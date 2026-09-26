@@ -69,7 +69,7 @@ struct BluetoothScanSheet: View {
         // Figma 539:119/547:126: leading title, trailing close.
         HStack {
             Text(AppStrings.linkStereo(l))
-                .font(.system(size: 17, weight: .bold))
+                .font(.inter(17, weight: .bold))
                 .foregroundStyle(c.text)
             HStack {
                 Spacer()
@@ -101,10 +101,10 @@ struct BluetoothScanSheet: View {
             }
             .padding(.top, 18)
             Text(AppStrings.btOffTitle(l))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
             Text(AppStrings.btOffSheetBody(l))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -116,7 +116,7 @@ struct BluetoothScanSheet: View {
                 UIApplication.shared.open(url)
             } label: {
                 Text(AppStrings.openSettings(l))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 26)
                     .padding(.vertical, 14)
@@ -139,7 +139,7 @@ struct BluetoothScanSheet: View {
                 audioOutputSection(c: c, l: l)
                 nearbySection(c: c, l: l)
                 Text(AppStrings.scanHint(l))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
@@ -173,12 +173,12 @@ struct BluetoothScanSheet: View {
                         // Long stereo names truncate first so the trailing + never falls off
                         VStack(alignment: .leading, spacing: 2) {
                             Text(audioDevice)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.inter(14, weight: .semibold))
                                 .foregroundStyle(c.text)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                             Text(AppStrings.bluetoothAudio(l))
-                                .font(.system(size: 12))
+                                .font(.inter(12))
                                 .foregroundStyle(c.textTertiary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,7 +189,7 @@ struct BluetoothScanSheet: View {
                         // screen about picking your stereo.
                         if alreadyLinked {
                             Text(AppStrings.added(l))
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.inter(11, weight: .bold))
                                 .foregroundStyle(AppTheme.green)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
@@ -242,7 +242,7 @@ struct BluetoothScanSheet: View {
                         // road, and a scan is the longest wait in the garage.
                         CarLoadingView(size: .compact)
                         Text(AppStrings.scanningDevices(l))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.inter(13, weight: .medium))
                             .foregroundStyle(c.textSecondary)
                         Spacer()
                     }
@@ -260,7 +260,7 @@ struct BluetoothScanSheet: View {
                                 .font(.title3)
                                 .foregroundStyle(c.textTertiary)
                             Text(AppStrings.noDevicesFound(l))
-                                .font(.system(size: 13))
+                                .font(.inter(13))
                                 .foregroundStyle(c.textTertiary)
                         }
                         .frame(maxWidth: .infinity)
@@ -345,14 +345,14 @@ private struct DeviceRow: View {
                     .frame(width: 18)
                 // Long device names truncate first so the trailing badge stays visible
                 Text(name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(saved ? c.textTertiary : c.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if saved {
                     Text(AppStrings.added(l))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.inter(11, weight: .bold))
                         .foregroundStyle(AppTheme.green)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)

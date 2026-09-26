@@ -178,14 +178,14 @@ struct CountryPickerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(AppStrings.countryHint(l))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 specialCard(c, l)
 
                 Text(AppStrings.countrySectionAll(l))
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.inter(11, weight: .bold))
                     .foregroundStyle(c.textTertiary)
 
                 LazyVGrid(columns: Self.columns, spacing: 10) {
@@ -234,10 +234,10 @@ struct CountryPickerView: View {
                     .foregroundStyle(c.textSecondary)
             }
             specialRow(value: CountryChoice.world, title: AppStrings.countryWorld(l), c: c) {
-                Text("🌍").font(.system(size: 18))
+                Text("🌍").font(.inter(18))
             }
             specialRow(value: CountryChoice.neutral, title: AppStrings.countryNeutral(l), c: c) {
-                Text("🏳️").font(.system(size: 18))
+                Text("🏳️").font(.inter(18))
             }
         }
         // Clip before the card fill, not after: the selected row paints a tinted
@@ -263,7 +263,7 @@ struct CountryPickerView: View {
                 glyph()
                     .frame(width: 20)
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -300,7 +300,7 @@ struct CountryPickerView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(isSelected ? AppTheme.orangeDim : c.card)
                 Text(entry.flag)
-                    .font(.system(size: 22))
+                    .font(.inter(22))
             }
             .aspectRatio(1, contentMode: .fit)
             .overlay {

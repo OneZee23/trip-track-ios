@@ -58,7 +58,7 @@ struct BlockedListView: View {
         VStack(spacing: 10) {
             EmptyStateIllustration(name: "empty_followers", size: 148)
             Text(AppStrings.blockedListYouHavenT(lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textTertiary)
         }
         .frame(maxWidth: .infinity)
@@ -69,14 +69,14 @@ struct BlockedListView: View {
         VStack(spacing: 12) {
             EmptyStateIllustration(name: "empty_offline", size: 148)
             Text(AppStrings.blockedListLoadFailed(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textTertiary)
             Button {
                 Haptics.tap()
                 Task { await load() }
             } label: {
                 Text(AppStrings.retry(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(c.cardAlt, in: Capsule())
@@ -95,18 +95,18 @@ struct BlockedListView: View {
             Circle()
                 .fill(c.cardAlt)
                 .frame(width: 42, height: 42)
-                .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 22)) }
+                .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(22)) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 // «Заблокирован <date>» when the server sends `blockedAt`
                 // (absent on deployed prod → level line, as before).
                 if let since = blockedSinceText(user) {
                     Text(since)
-                        .font(.system(size: 11.5))
+                        .font(.inter(11.5))
                         .foregroundStyle(c.textTertiary)
                 } else {
                     Text("LVL \(user.profileLevel)")
@@ -127,7 +127,7 @@ struct BlockedListView: View {
                         .frame(width: 90, height: 30)
                 } else {
                     Text(AppStrings.blockProfileUnblock(lng))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.inter(12, weight: .semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))

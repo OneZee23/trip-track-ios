@@ -39,13 +39,13 @@ struct ProfileClubsRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(AppStrings.groupsComingTitle(l))
-                        .font(.system(size: 14.5, weight: .bold))
+                        .font(.inter(14.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(Self.subtitle(total: waitlist.state.total,
                                        joined: waitlist.state.joined,
                                        lang: l))
-                        .font(.system(size: 11.5))
+                        .font(.inter(11.5))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)

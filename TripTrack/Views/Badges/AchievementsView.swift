@@ -86,13 +86,13 @@ struct AchievementsView: View {
                             unlocked: catalogue.unlockedCount,
                             total: catalogue.totalCount)
                          : "")
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.inter(19, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
                     Text(AppStrings.achievementsCollectHint(lang.language))
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.inter(13, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -122,7 +122,7 @@ struct AchievementsView: View {
             Circle().strokeBorder(AppTheme.accent, lineWidth: 4)
 
             Text(hasLoaded ? "\(catalogue.percent)%" : "")
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .bold))
                 .foregroundStyle(AppTheme.accent)
         }
         .frame(width: 72, height: 72)
@@ -153,7 +153,7 @@ struct AchievementsView: View {
 
             Text(AppStrings.achievementsRarityCount(
                 lang.language, rarity: item.rarity, count: item.count))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.inter(12, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
         }
@@ -224,11 +224,11 @@ struct AchievementsView: View {
         VStack(spacing: 10) {
             EmptyStateIllustration(name: "empty_achievements", size: 148)
             Text(AppStrings.achievementsEmpty(lang.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.text)
 
             Text(AppStrings.achievementsEmptyHint(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
         }

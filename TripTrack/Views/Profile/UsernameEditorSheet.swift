@@ -95,7 +95,7 @@ struct UsernameEditorSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.usernameTitle(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
 
             HStack {
@@ -104,7 +104,7 @@ struct UsernameEditorSheet: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -116,7 +116,7 @@ struct UsernameEditorSheet: View {
                     commit()
                 } label: {
                     Text(AppStrings.done(lang.language))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(canSave ? AppTheme.accent : c.textTertiary)
                         
                 }
@@ -138,11 +138,11 @@ struct UsernameEditorSheet: View {
             // so the field reads as a handle even while it is empty, and so a
             // pasted «@vitaliy» can drop its own copy without looking eaten.
             Text("@")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.inter(17, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
 
             TextField("", text: $text)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.inter(17, weight: .semibold))
                 .foregroundStyle(c.text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -199,7 +199,7 @@ struct UsernameEditorSheet: View {
             Text(verdict == .taken
                  ? AppStrings.usernameTakenHint(lang.language)
                  : AppStrings.usernameHint(lang.language))
-                .font(.system(size: 11.5))
+                .font(.inter(11.5))
                 .foregroundStyle(c.textSecondary)
                 // Both strings run two lines; reserving them keeps the
                 // content-sized detent from twitching as they swap.
@@ -229,27 +229,27 @@ struct UsernameEditorSheet: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .bold))
                 Text(AppStrings.usernameFree(lang.language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
             case .taken:
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                 Text(AppStrings.usernameTaken(lang.language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
             case .tooShort:
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                 Text(AppStrings.usernameTooShort(lang.language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
             case .invalidChars:
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                 Text(AppStrings.usernameInvalidChars(lang.language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
             case .checkFailed:
                 // Silent when there is nobody to ask — see `canCheckAvailability`.
                 if canCheckAvailability {
                     Text(AppStrings.usernameCheckFailed(lang.language))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.inter(12, weight: .semibold))
                 }
             }
         }

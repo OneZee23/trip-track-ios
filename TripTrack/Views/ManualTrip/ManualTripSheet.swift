@@ -89,7 +89,7 @@ struct ManualTripSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.manualTripEntry(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -104,7 +104,7 @@ struct ManualTripSheet: View {
                     if searchTarget != nil { searchTarget = nil } else { dismiss() }
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.inter(16, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -263,7 +263,7 @@ struct ManualTripSheet: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Text(AppStrings.manualTripAddVia(lang.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Spacer(minLength: 0)
             }
@@ -290,10 +290,10 @@ struct ManualTripSheet: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(label)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.inter(11, weight: .semibold))
                             .foregroundStyle(c.textTertiary)
                         Text(displayName(point))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(point == nil ? c.textTertiary : c.text)
                             .lineLimit(1)
                     }
@@ -362,26 +362,26 @@ struct ManualTripSheet: View {
     private func routeStatus(_ c: AppTheme.Colors) -> some View {
         if model.isRouting {
             Text(AppStrings.manualTripRouting(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
         } else if model.isRouteTooLong {
             // Кнопка выключена, и рядом написано почему. Молча выключенная
             // кнопка — та самая мёртвая, которую запрещает CLAUDE.md.
             Text(AppStrings.manualTripErrorTooLong(lang.language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(AppTheme.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_too_long")
         } else if let error = model.routeError {
             Text(errorText(error))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(AppTheme.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_error")
         } else if let route = model.route {
             Text(Measure.distance(metres: routeDistance(route), unit: distanceUnit,
                                   lang: lang.language, style: .tenths))
-                .font(.system(size: 15, weight: .heavy))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .accessibilityIdentifier("manual_trip_distance")
         }
@@ -414,10 +414,10 @@ struct ManualTripSheet: View {
     private func titleCard(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.tripTitleLabel(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             TextField(AppStrings.tripTitlePlaceholder(lang.language), text: $model.title)
-                .font(.system(size: 16))
+                .font(.inter(16))
                 .foregroundStyle(c.text)
                 .submitLabel(.done)
                 .accessibilityIdentifier("manual_trip_title")
@@ -435,7 +435,7 @@ struct ManualTripSheet: View {
             create()
         } label: {
             Text(footerLabel)
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -528,7 +528,7 @@ struct ManualTripSheet: View {
                 AppStrings.manualTripSearchHint(lang.language),
                 text: Binding(get: { model.query }, set: { model.updateSearch($0) })
             )
-            .font(.system(size: 16))
+            .font(.inter(16))
             .foregroundStyle(c.text)
             .autocorrectionDisabled()
             .accessibilityIdentifier("manual_trip_search")
@@ -549,12 +549,12 @@ struct ManualTripSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 if !item.subtitle.isEmpty {
                     Text(item.subtitle)
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }

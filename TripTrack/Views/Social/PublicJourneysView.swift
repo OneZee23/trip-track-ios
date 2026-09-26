@@ -91,7 +91,7 @@ struct PublicJourneysView: View {
         VStack(spacing: 8) {
             Spacer(minLength: 60)
             Text(AppStrings.journeyEmptyTitle(l))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -104,14 +104,14 @@ struct PublicJourneysView: View {
         VStack(spacing: 12) {
             Spacer(minLength: 60)
             Text(AppStrings.publicDataLoadFailed(l))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
             Button {
                 Haptics.tap()
                 Task { await load() }
             } label: {
                 Text(AppStrings.retry(l))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .padding(.horizontal, 18)
                     .frame(height: 40)

@@ -59,12 +59,12 @@ struct ReportSheet: View {
                         notesField(c, lng: lng)
                         submitButton(c, lng: lng)
                         Text(AppStrings.reportAnonymousNote(lang.language))
-                            .font(.system(size: 12))
+                            .font(.inter(12))
                             .foregroundStyle(c.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                         if let errorMessage {
                             Text(errorMessage)
-                                .font(.system(size: 12))
+                                .font(.inter(12))
                                 .foregroundStyle(.red)
                                 .padding(.top, 4)
                         }
@@ -85,7 +85,7 @@ struct ReportSheet: View {
 
     private func intro(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Text(AppStrings.reportWeReviewReports(lng))
-            .font(.system(size: 13))
+            .font(.inter(13))
             .foregroundStyle(c.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -107,7 +107,7 @@ struct ReportSheet: View {
                 } label: {
                     HStack {
                         Text(reason.label(lang.language))
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.inter(14, weight: .medium))
                             .foregroundStyle(c.text)
                             .multilineTextAlignment(.leading)
                         Spacer()
@@ -127,7 +127,7 @@ struct ReportSheet: View {
     private func notesField(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(AppStrings.reportAdditionalDetailsOptional(lng))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .tracking(0.5)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
@@ -149,7 +149,7 @@ struct ReportSheet: View {
                     ProgressView().tint(.white)
                 } else {
                     Text(AppStrings.reportSubmit(lng))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                 }
             }
             .foregroundStyle(.white)
@@ -169,10 +169,10 @@ struct ReportSheet: View {
         VStack(spacing: 14) {
             EmptyStateIllustration(name: "success_sent", size: 132)
             Text(AppStrings.reportReportSent(lng))
-                .font(.system(size: 18, weight: .bold))
+                .font(.inter(18, weight: .bold))
                 .foregroundStyle(c.text)
             Text(AppStrings.reportThankYouWe(lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
@@ -180,7 +180,7 @@ struct ReportSheet: View {
                 dismiss()
             } label: {
                 Text(AppStrings.done(lng))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)

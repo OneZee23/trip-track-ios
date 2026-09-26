@@ -157,7 +157,7 @@ struct TripCommentsSection: View {
                     Text(store.loadFailed
                          ? AppStrings.discussionUnavailable(lang.language)
                          : AppStrings.noCommentsYet(lang.language))
-                        .font(.system(size: 14))
+                        .font(.inter(14))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 16)
@@ -192,7 +192,7 @@ struct TripCommentsSection: View {
                     // to is no longer on the server, and the thread survives
                     // only because the device kept a copy of it.
                     Text(AppStrings.discussionArchived(lang.language))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
@@ -216,11 +216,11 @@ struct TripCommentsSection: View {
                             Circle()
                                 .fill(AppTheme.accent.opacity(0.12))
                                 .frame(width: 30, height: 30)
-                                .overlay { Text(settings.avatarEmoji).font(.system(size: 15)) }
+                                .overlay { Text(settings.avatarEmoji).font(.inter(15)) }
                             Text(store.comments.isEmpty
                                  ? AppStrings.writeFirstMessage(lang.language)
                                  : AppStrings.commentPlaceholder(lang.language))
-                                .font(.system(size: 14))
+                                .font(.inter(14))
                                 .foregroundStyle(c.textTertiary)
                                 .lineLimit(1)
                             Spacer(minLength: 8)
@@ -269,7 +269,7 @@ struct TripCommentsSection: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(AppStrings.discussionSeeAllPill(lang.language, displayCount))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.inter(13, weight: .semibold))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .bold))
                     }
@@ -382,7 +382,7 @@ struct TripCommentsSection: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 34, height: 34)
-                    .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+                    .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.inter(17)) }
                     .avatarFrame(AvatarFrame.from(comment.user.avatarFrame), lineWidth: 2)
             }
 
@@ -391,7 +391,7 @@ struct TripCommentsSection: View {
                     profileTapTarget(comment.user) {
                         Text(comment.user.displayName
                              ?? (AppStrings.companionsNoName(lang.language)))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.inter(13, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                     }
@@ -403,7 +403,7 @@ struct TripCommentsSection: View {
                         PlusBadge(size: 12)
                     }
                     Text("· \(Self.relativeAge(of: comment.createdAt, lang: lang.language))")
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                 }
                 if isReply, let name = comment.replyToName {
@@ -411,12 +411,12 @@ struct TripCommentsSection: View {
                     // without its parent, and indentation alone then says
                     // nothing about WHO it answers.
                     Text(AppStrings.commentReplyingTo(lang.language, name))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                         .lineLimit(1)
                 }
                 Text(comment.text)
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .lineSpacing(4.5)
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.leading)
@@ -432,7 +432,7 @@ struct TripCommentsSection: View {
                         composerFocused = true
                     } label: {
                         Text(AppStrings.commentReply(lang.language))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.inter(12, weight: .semibold))
                             .foregroundStyle(c.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -486,7 +486,7 @@ struct TripCommentsSection: View {
                     ProgressView().controlSize(.mini)
                 }
                 Text(AppStrings.showMoreComments(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
             }
             .foregroundStyle(AppTheme.accent)
             .frame(maxWidth: .infinity)
@@ -510,10 +510,10 @@ struct TripCommentsSection: View {
             Circle()
                 .fill(AppTheme.accent.opacity(0.12))
                 .frame(width: 30, height: 30)
-                .overlay { Text(settings.avatarEmoji).font(.system(size: 15)) }
+                .overlay { Text(settings.avatarEmoji).font(.inter(15)) }
 
             TextField(AppStrings.commentPlaceholder(lang.language), text: $draft, axis: .vertical)
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
                 .lineLimit(1...4)
@@ -596,7 +596,7 @@ struct TripCommentsSection: View {
                 lang.language,
                 target.user.displayName ?? (AppStrings.blockedListUser(lang.language))
             ))
-            .font(.system(size: 12, weight: .semibold))
+            .font(.inter(12, weight: .semibold))
             .foregroundStyle(c.textSecondary)
             .lineLimit(1)
             Spacer(minLength: 0)

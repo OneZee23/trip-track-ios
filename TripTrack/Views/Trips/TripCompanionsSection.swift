@@ -207,11 +207,11 @@ struct TripCompanionsSection: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(summary.names)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(summary.subtitle)
-                        .font(.system(size: 13))
+                        .font(.inter(13))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }
@@ -236,14 +236,14 @@ struct TripCompanionsSection: View {
         HStack(spacing: -10) {
             ForEach(Array(summary.avatars.enumerated()), id: \.offset) { index, emoji in
                 avatarCircle(c) {
-                    Text(emoji).font(.system(size: 17))
+                    Text(emoji).font(.inter(17))
                 }
                 .zIndex(Double(summary.avatars.count - index))
             }
             if summary.overflow > 0 {
                 avatarCircle(c) {
                     Text("+\(summary.overflow)")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
                 .zIndex(0)
@@ -278,10 +278,10 @@ struct TripCompanionsSection: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.companionsAddPrompt(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                     Text(AppStrings.companionsEmptyHint(lang.language))
-                        .font(.system(size: 12.5))
+                        .font(.inter(12.5))
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer(minLength: 0)
@@ -316,10 +316,10 @@ struct TripCompanionsSection: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.companionsAddPrompt(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                     Text(AppStrings.companionsSignInHint(lang.language))
-                        .font(.system(size: 12.5))
+                        .font(.inter(12.5))
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer(minLength: 0)
@@ -351,10 +351,10 @@ struct TripCompanionsSection: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.companionsAddPrompt(lang.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                 Text(AppStrings.companionsPublishFirstHint(lang.language))
-                    .font(.system(size: 12.5))
+                    .font(.inter(12.5))
                     .foregroundStyle(c.textTertiary)
             }
             Spacer(minLength: 0)
@@ -379,14 +379,14 @@ struct TripCompanionsSection: View {
                 .font(.system(size: 15))
                 .foregroundStyle(AppTheme.red)
             Text(AppStrings.companionsLoadFailed(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
                 Haptics.tap()
                 Task { await load() }
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 14)
@@ -408,7 +408,7 @@ struct TripCompanionsSection: View {
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.companionsSavedCopy(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
             Spacer(minLength: 8)
         }
@@ -423,14 +423,14 @@ struct TripCompanionsSection: View {
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.companionsCachedNotice(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
                 Haptics.tap()
                 Task { await load() }
             }
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.inter(12.5, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 14)

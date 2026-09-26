@@ -976,7 +976,7 @@ struct ProfileView: View {
                         // transport (its own cap reads «5 единиц транспорта»),
                         // and pluralising it would lie about a moped.
                         Text(AppStrings.garageAllVehicles(l))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.inter(13, weight: .semibold))
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
@@ -1121,7 +1121,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
-                            .font(.system(size: 14.5, weight: .bold))
+                            .font(.inter(14.5, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -1149,7 +1149,7 @@ struct ProfileView: View {
                     Text(Measure.odometer(km: vehicle.displayOdometerKm,
                                           unit: vehicle.dashboardUnit(app: distanceUnit),
                                           lang: l))
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(.inter(11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }
@@ -1184,11 +1184,11 @@ struct ProfileView: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(AppStrings.garageEmptyTitle(l))
-                        .font(.system(size: 14.5, weight: .bold))
+                        .font(.inter(14.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(AppStrings.garageEmptyBody(l))
-                        .font(.system(size: 11.5))
+                        .font(.inter(11.5))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
@@ -1730,10 +1730,10 @@ struct ProfileView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.visibilityNoticeTitle(l))
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(AppStrings.visibilityNoticeBody(l))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1750,7 +1750,7 @@ struct ProfileView: View {
                     Task { @MainActor in showSettings = true }
                 } label: {
                     Text(AppStrings.visibilityNoticeConfigure(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(c.card)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
@@ -1762,7 +1762,7 @@ struct ProfileView: View {
                     dismissVisibilityNotice()
                 } label: {
                     Text(AppStrings.visibilityNoticeDismiss(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(c.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
@@ -1818,18 +1818,18 @@ struct ProfileView: View {
                 .frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.syncCardKicker(lang.language))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.inter(11, weight: .bold))
                         .kerning(0.22)
                         .foregroundStyle(c.textTertiary)
                     Text(expired
                          ? AppStrings.sessionExpiredTitle(lang.language)
                          : AppStrings.syncCardTitle(lang.language))
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(expired
                          ? AppStrings.sessionExpiredBody(lang.language)
                          : AppStrings.syncCardBody(lang.language))
-                        .font(.system(size: 12.5))
+                        .font(.inter(12.5))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
@@ -1854,7 +1854,7 @@ struct ProfileView: View {
             // expiry it reads as permission to ignore a broken sync.
             if !expired {
                 Text(AppStrings.syncCardLater(lang.language))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -1899,10 +1899,10 @@ struct ProfileView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.profileRecordYourFirst(lng))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.text)
                     Text(AppStrings.profileYourKilometersStreaks(lng))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
@@ -1930,7 +1930,7 @@ struct ProfileView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
                 Text(AppStrings.manualTripEntry(lang.language))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 0)
             }

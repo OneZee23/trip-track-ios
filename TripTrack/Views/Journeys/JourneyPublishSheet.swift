@@ -29,7 +29,7 @@ struct JourneyPublishSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             header(c, l)
             Text(AppStrings.journeyPublishIntro(l, title: title))
-                .font(.system(size: 14, weight: .medium))
+                .font(.inter(14, weight: .medium))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !privateLegs.isEmpty {
@@ -37,7 +37,7 @@ struct JourneyPublishSheet: View {
             }
             if alreadyPublic > 0 {
                 Text(AppStrings.journeyPublishAlreadyPublic(l, count: alreadyPublic))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -47,7 +47,7 @@ struct JourneyPublishSheet: View {
                 dismiss()
             } label: {
                 Text(AppStrings.cancel(l))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .frame(maxWidth: .infinity)
             }
@@ -69,7 +69,7 @@ struct JourneyPublishSheet: View {
     private func header(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         HStack(spacing: 10) {
             Text(AppStrings.journeyPublishTitle(l))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -135,7 +135,7 @@ struct JourneyPublishSheet: View {
             dismiss()
         } label: {
             Text(text)
-                .font(.system(size: 15, weight: .bold))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)

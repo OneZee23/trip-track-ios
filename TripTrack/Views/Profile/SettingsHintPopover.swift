@@ -64,7 +64,7 @@ struct SettingsHintButton: View {
             // same in both languages and must never be routed through
             // AppStrings as a translatable string.
             Text(verbatim: "?")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(isShowing ? Color.white : c.textTertiary)
                 .frame(width: Self.diameter, height: Self.diameter)
                 .background(Circle().fill(isShowing ? AppTheme.accent : c.cardAlt))
@@ -171,7 +171,7 @@ private struct SettingsHintBubble: View {
                     arrowShape(c: c, cardX: x)
 
                     Text(payload.text)
-                        .font(.system(size: 13))
+                        .font(.inter(13))
                         // Hint bodies run two to four lines; default leading
                         // packs them into a block the eye slides off.
                         .lineSpacing(3)

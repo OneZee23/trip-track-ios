@@ -46,7 +46,7 @@ struct TipJarSheet: View {
             .padding(.horizontal, 16)
 
             Text(AppStrings.tipTitle(l))
-                .font(.system(size: 21, weight: .heavy))
+                .font(.inter(21, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.top, 2)
 

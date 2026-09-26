@@ -40,7 +40,7 @@ struct VehicleTripsView: View {
                     segments(c: c, l: l)
                     list(c: c, l: l)
                     Text(AppStrings.vehicleTripsPrivateNote(l))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -67,10 +67,10 @@ struct VehicleTripsView: View {
         ZStack {
             VStack(spacing: 1) {
                 Text(AppStrings.vehicleTripsShort(l))
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.inter(17, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(vehicleName)
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             }
             HStack {
@@ -132,7 +132,7 @@ struct VehicleTripsView: View {
         let rows = sorted()
         if rows.isEmpty {
             Text(loaded ? AppStrings.vehicleBiographyEmpty(l) : "")
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 24)
@@ -170,23 +170,23 @@ struct VehicleTripsView: View {
                                 .foregroundStyle(c.textTertiary)
                         }
                         Text(TripRowText.title(trip, l))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.inter(13, weight: .medium))
                             .foregroundStyle(trip.isPrivate ? c.textSecondary : c.text)
                             .lineLimit(1)
                     }
                     Text(TripRowText.when(trip, l))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(TripRowText.distance(trip, l, unit: distanceUnit))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(trip.isPrivate ? c.textSecondary : c.text)
                     if trip.elevation > 0 {
                         Text(TripRowText.elevation(trip, l, unit: distanceUnit))
-                            .font(.system(size: 11))
+                            .font(.inter(11))
                             .foregroundStyle(c.textTertiary)
                     }
                 }

@@ -190,7 +190,7 @@ struct GarageView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             vehicleCard(active, c: c, l: l)
             Text(AppStrings.garageActiveHint(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -209,7 +209,7 @@ struct GarageView: View {
             Text(active == nil
                  ? AppStrings.garageNoActiveHint(l)
                  : AppStrings.garageArchiveHint(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -222,14 +222,14 @@ struct GarageView: View {
                 vehicleCard(vehicle, c: c, l: l)
             }
             Text(AppStrings.garageSoldHint(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         if settings.recordableVehicles.count >= 5 {
             Text(AppStrings.maxVehiclesHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 4)
@@ -397,7 +397,7 @@ struct GarageView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             Text(text)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .monospacedDigit()
         }
@@ -411,7 +411,7 @@ struct GarageView: View {
     ) -> some View {
         HStack(spacing: 6) {
             Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
-                .font(.system(size: 16, weight: .heavy))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -430,7 +430,7 @@ struct GarageView: View {
             // нельзя вернуть тем же жестом, что другую, было неоткуда.
             if vehicle.isSold {
                 Text(AppStrings.vehicleSoldBadge(l))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.inter(10, weight: .bold))
                     .foregroundStyle(c.textTertiary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
@@ -480,10 +480,10 @@ struct GarageView: View {
 
             VStack(spacing: 8) {
                 Text(AppStrings.garageEmptyTitle(l))
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.inter(18, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(AppStrings.garageEmptyBody(l))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -494,7 +494,7 @@ struct GarageView: View {
                 showAddVehicle = true
             } label: {
                 Text(AppStrings.addVehicleTitle(l))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)

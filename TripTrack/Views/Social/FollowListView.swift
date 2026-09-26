@@ -77,7 +77,7 @@ struct FollowListView: View {
                     // context where `cappedAppend` actually enforces it.
                     if pushPath != nil {
                         Text(AppStrings.followDepthNote(lang.language))
-                            .font(.system(size: 11))
+                            .font(.inter(11))
                             .foregroundStyle(c.textTertiary)
                             .multilineTextAlignment(.center)
                             .padding(.top, 6)
@@ -196,7 +196,7 @@ struct FollowListView: View {
         VStack(spacing: 10) {
             EmptyStateIllustration(name: "empty_followers", size: 148)
             Text(emptyMessage(lng: lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
         }
@@ -215,17 +215,17 @@ struct FollowListView: View {
         VStack(spacing: 10) {
             EmptyStateIllustration(name: "error_generic", size: 140)
             Text(AppStrings.followListCouldnTLoad(lng))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(msg)
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
             Button(AppStrings.retry(lng)) {
                 Haptics.tap()
                 Task { await load() }
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
             .padding(.top, 4)
         }
@@ -251,11 +251,11 @@ struct FollowListView: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 19)) }
+                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(19)) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.system(size: 13.5, weight: .bold))
+                        .font(.inter(13.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)

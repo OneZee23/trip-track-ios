@@ -61,7 +61,7 @@ struct ProfileAchievementsSection: View {
                             unlocked: content.unlockedCount,
                             total: content.totalCount)
                          : "")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -109,12 +109,12 @@ struct ProfileAchievementsSection: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
 
                     Text(featuredSubtitle(badge))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                         .foregroundStyle(rarity.chipText)
                         .lineLimit(1)
                 }
@@ -152,7 +152,7 @@ struct ProfileAchievementsSection: View {
                     onTapAll()
                 } label: {
                     Text("+\(content.overflow)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.inter(12, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                         .frame(width: 34, height: 30)
                         .background(c.cardAlt, in: Capsule())
@@ -167,11 +167,11 @@ struct ProfileAchievementsSection: View {
     private func emptyState(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 4) {
             Text(AppStrings.achievementsEmpty(lang.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.text)
 
             Text(AppStrings.achievementsEmptyHint(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
         }

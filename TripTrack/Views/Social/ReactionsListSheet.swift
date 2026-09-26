@@ -209,7 +209,7 @@ struct ReactionsListSheet: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 18)) }
+                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.inter(18)) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))

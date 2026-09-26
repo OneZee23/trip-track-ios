@@ -340,16 +340,16 @@ struct JourneyDetailView: View {
             } label: {
                 HStack(spacing: 10) {
                     Text(author.avatarEmoji ?? "🚗")
-                        .font(.system(size: 18))
+                        .font(.inter(18))
                         .frame(width: 34, height: 34)
                         .background(colors.cardAlt, in: Circle())
                     VStack(alignment: .leading, spacing: 1) {
                         Text(author.displayName ?? AppStrings.blockedListUser(lang.language))
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.inter(14, weight: .bold))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
                         Text("\(dateRangeText) · \(aggregate.calendarDays) \(AppStrings.nounDays(lang.language, aggregate.calendarDays))")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.inter(12, weight: .medium))
                             .foregroundStyle(colors.textSecondary)
                             .lineLimit(1)
                     }
@@ -408,13 +408,13 @@ struct JourneyDetailView: View {
         return VStack(alignment: .leading, spacing: 6) {
             if !caption.isEmpty {
                 Text(caption)
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(.inter(10, weight: .bold))
                     .tracking(0.4)
                     .foregroundStyle(.white.opacity(0.78))
                     .lineLimit(2)
             }
             Text(titleText)
-                .font(.system(size: 26, weight: .heavy))
+                .font(.inter(26, weight: .bold))
                 .tracking(-0.5)
                 .foregroundStyle(.white)
                 .lineLimit(2)
@@ -671,13 +671,13 @@ struct JourneyDetailView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.journeyEmptyTitle(lang.language))
-                    .font(.system(size: 17, weight: .heavy))
+                    .font(.inter(17, weight: .bold))
                     .foregroundStyle(c.text)
                 HStack(spacing: 6) {
                     // Ведём туда, где правят окно, и называем это тем же
                     // словом, что стоит на самом листе.
                     Text(AppStrings.journeyEdit(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .heavy))

@@ -174,6 +174,7 @@ struct ContentView: View {
         }
         .ignoresSafeArea(.keyboard)
         .ignoresSafeArea(edges: .bottom)
+        .background(WindowLayoutReader().allowsHitTesting(false))
         .environmentObject(mapVM)
         // Force-quit recovery prompt — presented from the root so it fires on
         // launch regardless of the active tab (Figma 505:119).

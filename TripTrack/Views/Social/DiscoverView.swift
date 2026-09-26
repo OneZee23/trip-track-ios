@@ -123,7 +123,7 @@ struct DiscoverView: View {
             ) {
                 Text(AppStrings.findPeople(lang.language))
             }
-            .font(.system(size: 15))
+            .font(.inter(15))
             .foregroundStyle(c.text)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
@@ -219,7 +219,7 @@ struct DiscoverView: View {
 
     private func sectionHeader(title: String, c: AppTheme.Colors) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.inter(11, weight: .semibold))
             .tracking(0.44)
             .foregroundStyle(c.textTertiary)
             .textCase(.uppercase)
@@ -243,10 +243,10 @@ struct DiscoverView: View {
                     .foregroundStyle(c.textTertiary)
             }
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(subtitle)
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -271,11 +271,11 @@ struct DiscoverView: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 19)) }
+                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(19)) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.system(size: 13.5, weight: .bold))
+                        .font(.inter(13.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -285,7 +285,7 @@ struct DiscoverView: View {
                     // line rather than printing `sharedRegion` at the user.
                     if let reason {
                         Text(reason.label(lang.language))
-                            .font(.system(size: 11.5))
+                            .font(.inter(11.5))
                             .foregroundStyle(c.textSecondary)
                             .lineLimit(1)
                             .truncationMode(.tail)

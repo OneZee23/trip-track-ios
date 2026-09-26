@@ -57,7 +57,7 @@ struct PublicJourneyView: View {
             .padding(.horizontal, 4)
             Spacer()
             Text(AppStrings.journeyUnavailable(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 30)

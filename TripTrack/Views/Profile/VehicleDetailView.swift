@@ -326,7 +326,7 @@ struct VehicleDetailView: View {
             .padding(.top, 4)
 
             Text(displayName(vehicle, l))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -339,7 +339,7 @@ struct VehicleDetailView: View {
             // именем читается как поломка, а не как приглашение.
             if let sub = modelLine(vehicle, l) {
                 Text(sub)
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
@@ -350,7 +350,7 @@ struct VehicleDetailView: View {
             // как обычная, иначе человек попробует записать на неё поездку.
             if vehicle.isSold {
                 Text(AppStrings.vehicleSoldState(l, when: soldWhen(vehicle, l)))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .padding(.top, 6)
             }
@@ -393,7 +393,7 @@ struct VehicleDetailView: View {
             Divider().overlay(c.border).padding(.top, 14)
             Text(AppStrings.inGarageSince(
                 l, when: StatsPeriodFormat.monthYearGenitive(vehicle.createdAt, l)))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
@@ -473,12 +473,12 @@ struct VehicleDetailView: View {
                 Text(AppStrings.odometerTrackedLine(
                     l, km: Measure.odometer(km: vehicle.odometerKm,
                                             unit: dashUnit(vehicle), lang: l)))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(c.textTertiary)
                 if let gap = vehicle.untrackedKm {
                     Text(AppStrings.odometerUntrackedLine(
                         l, km: Measure.odometer(km: gap, unit: dashUnit(vehicle), lang: l)))
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.inter(11.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
             }
@@ -503,10 +503,10 @@ struct VehicleDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(odometerParts(vehicle, l).value)
-                    .font(.system(size: 26, weight: .heavy))
+                    .font(.inter(26, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(odometerParts(vehicle, l).unit)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                 Spacer(minLength: 8)
                 // Карточка открывает ввод реального пробега. Без этой стрелки
@@ -591,7 +591,7 @@ struct VehicleDetailView: View {
             }
             if ready, p.tripCount == 0 {
                 Text(AppStrings.vehicleBiographyEmpty(l))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 14)
@@ -616,10 +616,10 @@ struct VehicleDetailView: View {
     private func circle(_ value: String, _ label: String, c: AppTheme.Colors) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 20, weight: .heavy))
+                .font(.inter(20, weight: .bold))
                 .foregroundStyle(c.text)
             Text(label)
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -636,12 +636,12 @@ struct VehicleDetailView: View {
         if !vehicle.about.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(vehicle.about)
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     Text(AppStrings.vehicleAboutFooter(l))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                     Spacer(minLength: 8)
                     Button {
@@ -649,7 +649,7 @@ struct VehicleDetailView: View {
                         showEditForm = true
                     } label: {
                         Text(AppStrings.edit(l))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.inter(11, weight: .semibold))
                             .foregroundStyle(AppTheme.accent)
                     }
                     .buttonStyle(.plain)
@@ -670,10 +670,10 @@ struct VehicleDetailView: View {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(AppStrings.vehicleWhereWas(l))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.inter(15, weight: .bold))
                             .foregroundStyle(c.text)
                         Text(placesLine(p, l))
-                            .font(.system(size: 12))
+                            .font(.inter(12))
                             .foregroundStyle(c.textTertiary)
                     }
                     Spacer(minLength: 8)
@@ -717,11 +717,11 @@ struct VehicleDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(AppStrings.vehicleTripsTitle(l))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                     Spacer()
                     Text(String(p.tripCount))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -747,17 +747,17 @@ struct VehicleDetailView: View {
                                         .foregroundStyle(c.textTertiary)
                                 }
                                 Text(TripRowText.title(trip, l))
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.inter(13, weight: .medium))
                                     .foregroundStyle(c.text)
                                     .lineLimit(1)
                             }
                             Text(TripRowText.when(trip, l))
-                                .font(.system(size: 11))
+                                .font(.inter(11))
                                 .foregroundStyle(c.textTertiary)
                         }
                         Spacer(minLength: 8)
                         Text(TripRowText.distance(trip, l, unit: distanceUnit))
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.inter(13, weight: .bold))
                             .foregroundStyle(c.text)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
@@ -850,17 +850,17 @@ struct VehicleDetailView: View {
         let row = HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                 Text(subtitle)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             if !value.isEmpty {
                 Text(value)
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(c.text)
             }
             // Шеврон ТОЛЬКО у строки, которая правда открывается. Из четырёх
@@ -948,7 +948,7 @@ struct VehicleDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(unit)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -993,7 +993,7 @@ struct VehicleDetailView: View {
                     }
                 } label: {
                     Text(AppStrings.settingsButton(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
@@ -1031,7 +1031,7 @@ struct VehicleDetailView: View {
                     showAutoRecordSettings = true
                 } label: {
                     Text(AppStrings.linkStereo(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
@@ -1077,10 +1077,10 @@ struct VehicleDetailView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1103,11 +1103,11 @@ struct VehicleDetailView: View {
             // other read as two different subjects.
             HStack(spacing: 10) {
                 Text(AppStrings.autoRecord(l))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                 Spacer()
                 Text(autoRecordStateLabel(l))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
@@ -1178,11 +1178,11 @@ struct VehicleDetailView: View {
         } label: {
             HStack(spacing: 8) {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(value)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))

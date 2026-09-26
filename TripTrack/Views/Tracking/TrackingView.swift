@@ -418,7 +418,7 @@ struct TrackingView: View {
                 Group {
                     if viewModel.tripManager.checkpointCount > 0 {
                         Text("\(viewModel.tripManager.checkpointCount)")
-                            .font(.system(size: 19, weight: .heavy))
+                            .font(.inter(19, weight: .bold))
                             .monospacedDigit()
                     } else {
                         Image(systemName: "flag.fill")
@@ -636,7 +636,7 @@ struct TrackingView: View {
                 Image(systemName: refusal == .noFix
                       ? "antenna.radiowaves.left.and.right"
                       : "exclamationmark.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(amber)
                 Text(text)
                     .font(.inter(13, weight: .semibold))

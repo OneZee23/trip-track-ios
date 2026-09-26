@@ -81,13 +81,13 @@ struct PublicVehicleView: View {
                         if let agg, agg.tripCount > 0 {
                             records(agg, c: c, l: l)
                             Text(AppStrings.publicRecordsNote(l))
-                                .font(.system(size: 11))
+                                .font(.inter(11))
                                 .foregroundStyle(c.textTertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         if failed {
                             Text(AppStrings.garageLoadFailed(l))
-                                .font(.system(size: 12))
+                                .font(.inter(12))
                                 .foregroundStyle(c.textTertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -157,11 +157,11 @@ struct PublicVehicleView: View {
         ZStack {
             VStack(spacing: 1) {
                 Text(vehicle?.name ?? "")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.inter(17, weight: .bold))
                     .foregroundStyle(c.text)
                 if let ownerName {
                     Text(ownerName)
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                 }
             }
@@ -239,20 +239,20 @@ struct PublicVehicleView: View {
             }
 
             Text(v.name)
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.top, 12)
 
             if let sub = v.modelLine(l) {
                 Text(sub)
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
             }
             if v.isSold {
                 Text(AppStrings.publicVehicleSold(l))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .padding(.top, 6)
             }
@@ -280,7 +280,7 @@ struct PublicVehicleView: View {
                 Divider().overlay(c.border).padding(.top, 14)
                 Text(AppStrings.inGarageSince(
                     l, when: StatsPeriodFormat.monthYearGenitive(created, l)))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 12)
@@ -304,8 +304,8 @@ struct PublicVehicleView: View {
 
     private func circle(_ value: String, _ label: String, c: AppTheme.Colors) -> some View {
         VStack(spacing: 3) {
-            Text(value).font(.system(size: 20, weight: .heavy)).foregroundStyle(c.text)
-            Text(label).font(.system(size: 11)).foregroundStyle(c.textTertiary)
+            Text(value).font(.inter(20, weight: .bold)).foregroundStyle(c.text)
+            Text(label).font(.inter(11)).foregroundStyle(c.textTertiary)
                 .lineLimit(2).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -379,10 +379,10 @@ struct PublicVehicleView: View {
     private func aboutCard(_ about: String, c: AppTheme.Colors,
                            l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(about).font(.system(size: 13)).foregroundStyle(c.text)
+            Text(about).font(.inter(13)).foregroundStyle(c.text)
             if let ownerName {
                 Text(AppStrings.publicAboutBy(l, name: ownerName))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -396,10 +396,10 @@ struct PublicVehicleView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.vehicleWhereWas(l))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(placesLine(l))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer(minLength: 8)
@@ -453,12 +453,12 @@ struct PublicVehicleView: View {
         HStack(spacing: 10) {
             Circle().fill(dot).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 11)).foregroundStyle(c.textTertiary)
-                Text(subtitle).font(.system(size: 14, weight: .semibold))
+                Text(label).font(.inter(11)).foregroundStyle(c.textTertiary)
+                Text(subtitle).font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text).lineLimit(1)
             }
             Spacer(minLength: 8)
-            Text(value).font(.system(size: 15, weight: .heavy)).foregroundStyle(c.text)
+            Text(value).font(.inter(15, weight: .bold)).foregroundStyle(c.text)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -470,7 +470,7 @@ struct PublicVehicleView: View {
     private func unavailable(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 8) {
             Text(AppStrings.publicVehicleUnavailable(l))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 30)

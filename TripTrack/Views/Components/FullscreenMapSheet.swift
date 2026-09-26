@@ -215,6 +215,7 @@ struct FullscreenMapSheet: View {
                 playbackFollow: followsCar,
                 fitInsets: (canReplay || canCrawl) ? replayFitInsets : plainFitInsets,
                 host: host,
+                hostPresentation: .fullscreen,
                 fitTick: fitTick
             )
             .ignoresSafeArea()
@@ -505,7 +506,7 @@ struct FullscreenMapSheet: View {
                     .font(.system(size: 15, weight: .heavy).monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
                 Text(speed.unit)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.inter(10, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             }
             .padding(.horizontal, 12)
@@ -842,7 +843,7 @@ struct FullscreenMapSheet: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Text(AppStrings.checkpointEmptyHint(language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -871,10 +872,10 @@ struct FullscreenMapSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 if tappedPasses.count > 1 {
                     Text(AppStrings.checkpointChoosePass(language))
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(AppStrings.checkpointChoosePassHint(language))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.inter(12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                 }
                 ForEach(Array(tappedPasses.enumerated()), id: \.offset) { pair in
@@ -887,7 +888,7 @@ struct FullscreenMapSheet: View {
                             if tappedPasses.count > 1 {
                                 // Тот же номер, что на кандидате на карте.
                                 Text("\(pair.offset + 1)")
-                                    .font(.system(size: 12, weight: .heavy))
+                                    .font(.inter(12, weight: .bold))
                                     .foregroundStyle(AppTheme.accent)
                                     .frame(width: 22, height: 22)
                                     .background(.white, in: Circle())
@@ -896,11 +897,11 @@ struct FullscreenMapSheet: View {
                                     .font(.system(size: 13, weight: .bold))
                             }
                             Text(passReading(pair.element))
-                                .font(.system(size: 15, weight: .heavy))
+                                .font(.inter(15, weight: .bold))
                                 .monospacedDigit()
                             Spacer(minLength: 8)
                             Text(AppStrings.checkpointAdd(language))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.inter(13, weight: .semibold))
                                 .opacity(0.85)
                         }
                         .foregroundStyle(.white)
@@ -917,7 +918,7 @@ struct FullscreenMapSheet: View {
                     tappedPasses = []
                 } label: {
                     Text(AppStrings.cancel(language))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
@@ -1014,19 +1015,19 @@ struct FullscreenMapSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let counter = preview.counterText(language) {
                     Text(counter)
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.inter(13, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(c.textSecondary)
                 }
                 if let reading = preview.reading {
                     Text(reading)
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.inter(15, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                 }
                 Text(AppStrings.openPhotoAction(language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .lineLimit(1)
             }
@@ -1099,7 +1100,7 @@ struct FullscreenMapSheet: View {
                 .overlay(alignment: .bottomTrailing) {
                     if marker.photoCount > 1 {
                         Text("+\(marker.photoCount - 1)")
-                            .font(.system(size: 10, weight: .heavy))
+                            .font(.inter(10, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(c.card)
                             .padding(.horizontal, 5)
@@ -1115,11 +1116,11 @@ struct FullscreenMapSheet: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(marker.name ?? "")
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Text(marker.reading)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(c.textSecondary)
             }

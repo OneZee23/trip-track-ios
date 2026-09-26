@@ -80,10 +80,10 @@ struct VehicleMapView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(AppStrings.vehicleWhereWas(l))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(vehicleName)
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             }
             .padding(.horizontal, 12)
@@ -100,7 +100,7 @@ struct VehicleMapView: View {
         let regions = vm.exploration.regions.count
         let cities = vm.exploration.regions.reduce(0) { $0 + $1.visitedCityCount }
         return Text(placesLine(regions: regions, cities: cities, l))
-            .font(.system(size: 12, weight: .medium))
+            .font(.inter(12, weight: .medium))
             .foregroundStyle(c.text)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)

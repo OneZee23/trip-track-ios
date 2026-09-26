@@ -87,7 +87,7 @@ struct AutoRecordSettingsView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(isEnabled ? AppTheme.accent : c.textTertiary)
                 Text(AppStrings.autoRecord(l))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                 Spacer()
                 Toggle(AppStrings.autoRecord(l), isOn: Binding(
@@ -109,7 +109,7 @@ struct AutoRecordSettingsView: View {
             Rectangle().fill(c.border).frame(height: 1)
 
             Text(AppStrings.autoRecordDescription(l))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
         }
         .padding(14)
@@ -132,7 +132,7 @@ struct AutoRecordSettingsView: View {
         Text(settings.autoRecordMode == .auto
              ? AppStrings.autoModeDescription(l)
              : AppStrings.remindModeDescription(l))
-            .font(.system(size: 12))
+            .font(.inter(12))
             .foregroundStyle(c.textTertiary)
             .padding(.horizontal, 2)
 
@@ -141,7 +141,7 @@ struct AutoRecordSettingsView: View {
             .padding(.horizontal, 2)
         timeoutCard(c: c, l: l)
         Text(AppStrings.autoStopDescription(l))
-            .font(.system(size: 12))
+            .font(.inter(12))
             .foregroundStyle(c.textTertiary)
             .padding(.horizontal, 2)
     }
@@ -158,13 +158,13 @@ struct AutoRecordSettingsView: View {
                         .font(.system(size: 17))
                         .foregroundStyle(AppTheme.accent)
                     Text(device.name)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.inter(14, weight: .medium))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 8)
                     Text(AppStrings.linked(l))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.inter(11, weight: .bold))
                         .foregroundStyle(AppTheme.green)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -194,7 +194,7 @@ struct AutoRecordSettingsView: View {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
                     Text(AppStrings.linkStereo(l))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                     Spacer()
                 }
                 .foregroundStyle(AppTheme.accent)
@@ -252,7 +252,7 @@ struct AutoRecordSettingsView: View {
     private func timeoutCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.autoStopRowLabel(l))
-                .font(.system(size: 14, weight: .medium))
+                .font(.inter(14, weight: .medium))
                 .foregroundStyle(c.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
             stepperButton(

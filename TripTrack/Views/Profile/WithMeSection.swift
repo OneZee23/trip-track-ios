@@ -112,7 +112,7 @@ struct WithMeSection: View {
                 .font(.system(size: 14))
                 .foregroundStyle(AppTheme.red)
             Text(AppStrings.withMeLoadFailed(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
@@ -122,7 +122,7 @@ struct WithMeSection: View {
                 // cached yet → the failure was the first page, start over.
                 Task { await store.loadMyTrips(reset: !hasRows) }
             }
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.inter(12.5, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 12)

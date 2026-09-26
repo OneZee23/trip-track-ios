@@ -35,7 +35,7 @@ private struct SocialActionButtonModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 14, weight: .bold))
+            .font(.inter(14, weight: .bold))
             .lineLimit(1)
             // Only bites where a pinned width leaves a long RU label short of
             // room; a button left to hug its label never scales.

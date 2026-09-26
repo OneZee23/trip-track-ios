@@ -24,6 +24,34 @@ import MapKit
 /// снимается здесь и только здесь.
 @MainActor
 final class TripMapHost: ObservableObject {
+    enum Presentation { case hero, fullscreen }
+
+    /// Меняется действием экрана ДО SwiftUI-фазы, поэтому старое значение
+    /// representable не может забрать карту после смены презентации.
+    var activePresentation: Presentation = .hero
+    private weak var heroSlot: TripMapSlotView?
+    private weak var fullscreenSlot: TripMapSlotView?
+
+    func register(_ slot: TripMapSlotView, for presentation: Presentation) {
+        switch presentation {
+        case .hero: heroSlot = slot
+        case .fullscreen: fullscreenSlot = slot
+        }
+    }
+
+    func canClaim(_ slot: TripMapSlotView, for presentation: Presentation) -> Bool {
+        guard presentation == activePresentation else { return false }
+        switch presentation {
+        case .hero: return heroSlot === slot
+        case .fullscreen: return fullscreenSlot === slot
+        }
+    }
+
+    func unregister(_ slot: TripMapSlotView) {
+        if heroSlot === slot { heroSlot = nil }
+        if fullscreenSlot === slot { fullscreenSlot = nil }
+    }
+
     /// Сама карта. `nil` — ещё не создавалась.
     private(set) var mapView: MKMapView?
     /// Делегат и вся память карты (оверлеи, отметки, посадка вуали).
@@ -56,12 +84,6 @@ final class TripMapHost: ObservableObject {
     /// прямоугольник на месте карты — это моргание, которое видно.
     @Published private(set) var snapshot: UIImage?
 
-    /// Отдать готовую карту или создать первую.
-    ///
-    /// `removeFromSuperview` перед возвратом — не осторожность, а порядок:
-    /// SwiftUI кладёт результат `makeUIView` в СВОЙ контейнер, и карта,
-    /// оставшаяся подпиской в прежнем, приехала бы туда вместе со старым
-    /// расположением.
     /// Представление смонтировано. Зовёт `RouteMapView.makeUIView`.
     func retain() {
         mounted += 1
@@ -85,9 +107,13 @@ final class TripMapHost: ObservableObject {
         }
     }
 
+    /// Отдать готовую карту или создать первую. Передачу между видами
+    /// выполняет слот, когда у него есть и карта, и прежний владелец.
     func map(orMake make: () -> MKMapView) -> MKMapView {
         if let mapView {
-            mapView.removeFromSuperview()
+            // Переносом владеет TripMapSlotView.adopt: ему нужен прежний
+            // слот, чтобы отозвать его право на карту до нового layout.
+            // SwiftUI владеет слотом, а не этой MKMapView.
             return mapView
         }
         let created = make()
@@ -146,6 +172,8 @@ final class TripMapHost: ObservableObject {
         mounted = 0
         coordinator?.isHosted = false
         coordinator?.veilSeat?.detach()
+        heroSlot = nil
+        fullscreenSlot = nil
         mapView?.removeFromSuperview()
         mapView = nil
         coordinator = nil

@@ -103,12 +103,12 @@ struct JourneyComposerSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             header(c)
             Text(AppStrings.journeyComposeHint(lang.language))
-                .font(.system(size: 12, weight: .medium))
+                .font(.inter(12, weight: .medium))
                 .foregroundStyle(c.textTertiary)
             candidateList(c)
             summary(c)
             TextField(AppStrings.journeyTitlePlaceholder(lang.language), text: $title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.inter(16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -127,7 +127,7 @@ struct JourneyComposerSheet: View {
                 }
             if let error {
                 Text(error)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(AppTheme.red)
             }
             createButton(c)
@@ -222,7 +222,7 @@ struct JourneyComposerSheet: View {
         ForEach(all) { group in
             Text(JourneyFormat.dayDate(group.id, language: lang.language))
                 .textCase(.uppercase)
-                .font(.system(size: 11, weight: .bold))
+                .font(.inter(11, weight: .bold))
                 .tracking(0.4)
                 .foregroundStyle(c.textTertiary)
                 .padding(.top, group.id == all.first?.id ? 0 : 6)
@@ -238,7 +238,7 @@ struct JourneyComposerSheet: View {
                 .frame(width: 28, height: 28)
                 .background(AppTheme.accent, in: Circle())
             Text(AppStrings.journeyComposeTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -265,7 +265,7 @@ struct JourneyComposerSheet: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(selected.isEmpty ? c.textTertiary : AppTheme.accent)
             Text(summaryText())
-                .font(.system(size: 13.5, weight: .bold))
+                .font(.inter(13.5, weight: .bold))
                 .foregroundStyle(selected.isEmpty ? c.textTertiary : c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -318,7 +318,7 @@ struct JourneyComposerSheet: View {
             create()
         } label: {
             Text(AppStrings.journeyCreate(lang.language))
-                .font(.system(size: 15, weight: .heavy))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)

@@ -141,10 +141,10 @@ struct VehiclePhotosView: View {
         ZStack {
             VStack(spacing: 1) {
                 Text(AppStrings.vehiclePhotos(l))
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.inter(17, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(vehicleName)
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             }
             HStack {
@@ -184,7 +184,7 @@ struct VehiclePhotosView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
 
             Text(AppStrings.vehiclePhotoMain(l))
-                .font(.system(size: 10, weight: .bold))
+                .font(.inter(10, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)
@@ -237,14 +237,14 @@ struct VehiclePhotosView: View {
             VStack(spacing: 14) {
                 EmptyStateIllustration(name: "empty_garage", size: 120)
                 Text(AppStrings.vehiclePhotosEmpty(l))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 PhotosPicker(selection: $picking, maxSelectionCount: 10,
                              matching: .images, photoLibrary: .shared()) {
                     Text(AppStrings.addPhotos(l))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.inter(16, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -257,7 +257,7 @@ struct VehiclePhotosView: View {
             .padding(.top, 40)
         } else {
             Text(AppStrings.vehiclePhotosHint(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 2)

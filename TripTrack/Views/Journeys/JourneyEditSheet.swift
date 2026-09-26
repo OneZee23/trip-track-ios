@@ -195,7 +195,7 @@ struct JourneyEditSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 10) {
             Text(AppStrings.journeyEdit(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -213,7 +213,7 @@ struct JourneyEditSheet: View {
 
     private func nameField(_ c: AppTheme.Colors) -> some View {
         TextField(AppStrings.journeyTitlePlaceholder(lang.language), text: $title)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.inter(16, weight: .semibold))
             .foregroundStyle(c.text)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -229,7 +229,7 @@ struct JourneyEditSheet: View {
     private func datesBlock(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.journeyDates(lang.language))
-                .font(.system(size: 12, weight: .heavy))
+                .font(.inter(12, weight: .bold))
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
             // Даты — только прошедшие и в порядке: путешествие это то, что
@@ -240,7 +240,7 @@ struct JourneyEditSheet: View {
             HStack(spacing: 10) {
                 datePicker($startDate, in: startRange, id: "journey_edit_start")
                 Text("\u{2013}")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.textTertiary)
                 datePicker($endDate, in: endRange, id: "journey_edit_end")
                 Spacer(minLength: 0)
@@ -250,12 +250,12 @@ struct JourneyEditSheet: View {
             Text(windowTripCount == 0
                  ? AppStrings.journeyDatesEmpty(lang.language)
                  : "\(windowTripCount) \(AppStrings.nounTrips(lang.language, windowTripCount)) \(AppStrings.journeyInDates(lang.language))")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.inter(12, weight: .semibold))
                 .foregroundStyle(windowTripCount == 0 ? AppTheme.red : c.textSecondary)
                 .accessibilityIdentifier("journey_edit_window_count")
             if let error {
                 Text(error)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(AppTheme.red)
                     .accessibilityIdentifier("journey_edit_error")
             }
@@ -297,7 +297,7 @@ struct JourneyEditSheet: View {
         if !photos.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppStrings.journeyCover(lang.language))
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(c.textTertiary)
                     .textCase(.uppercase)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -328,7 +328,7 @@ struct JourneyEditSheet: View {
                 .overlay(alignment: .bottom) {
                     if isCover {
                         Text(AppStrings.journeyCover(lang.language))
-                            .font(.system(size: 9, weight: .heavy))
+                            .font(.inter(9, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -374,7 +374,7 @@ struct JourneyEditSheet: View {
         if !removedLegs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppStrings.journeyRemovedLegs(lang.language))
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(c.textTertiary)
                     .textCase(.uppercase)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -406,12 +406,12 @@ struct JourneyEditSheet: View {
                 legThumbnail(trip, c)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(JourneyFormat.dayDate(trip.startDate, language: l))
-                        .font(.system(size: 12.5, weight: .bold))
+                        .font(.inter(12.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(Measure.distance(
                         metres: trip.distance, unit: distanceUnit, lang: l, style: .grouped))
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(.inter(11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                 }
@@ -438,7 +438,7 @@ struct JourneyEditSheet: View {
             Image(systemName: on ? "checkmark" : "arrow.uturn.backward")
                 .font(.system(size: 9, weight: .heavy))
             Text(AppStrings.journeyReturnLeg(l))
-                .font(.system(size: 10.5, weight: .heavy))
+                .font(.inter(10.5, weight: .bold))
                 .lineLimit(1)
         }
         .foregroundStyle(on ? Color.white : AppTheme.accent)
@@ -499,7 +499,7 @@ struct JourneyEditSheet: View {
             save()
         } label: {
             Text(AppStrings.save(lang.language))
-                .font(.system(size: 15, weight: .heavy))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -523,7 +523,7 @@ struct JourneyEditSheet: View {
             confirmDelete = true
         } label: {
             Text(AppStrings.journeyDelete(lang.language))
-                .font(.system(size: 15, weight: .semibold))
+                .font(.inter(15, weight: .semibold))
                 .foregroundStyle(AppTheme.red)
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)

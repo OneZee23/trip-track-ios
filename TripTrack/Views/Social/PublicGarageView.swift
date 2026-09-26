@@ -58,14 +58,14 @@ struct PublicGarageView: View {
             VStack(spacing: 12) {
                 Spacer()
                 Text(AppStrings.garageLoadFailed(l))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                 Button {
                     Haptics.tap()
                     Task { await load() }
                 } label: {
                     Text(AppStrings.retry(l))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 18)
                         .frame(height: 40)
@@ -80,7 +80,7 @@ struct PublicGarageView: View {
             VStack(spacing: 8) {
                 Spacer()
                 Text(AppStrings.publicGarageEmpty(l))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
@@ -129,12 +129,12 @@ struct PublicGarageView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Text(v.name)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                         if v.isSold {
                             Text(AppStrings.vehicleSoldBadge(l))
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.inter(10, weight: .bold))
                                 .foregroundStyle(c.textTertiary)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
@@ -147,7 +147,7 @@ struct PublicGarageView: View {
                     }
                     if let line = v.modelLine(l) {
                         Text(line)
-                            .font(.system(size: 12))
+                            .font(.inter(12))
                             .foregroundStyle(c.textTertiary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -162,7 +162,7 @@ struct PublicGarageView: View {
                     }
                     .padding(.top, 2)
                     Text(Measure.odometer(km: v.odometerKm, unit: distanceUnit, lang: l))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,11 +194,11 @@ struct PublicGarageView: View {
         ZStack {
             VStack(spacing: 1) {
                 Text(AppStrings.garage(l))
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.inter(17, weight: .bold))
                     .foregroundStyle(c.text)
                 if let ownerName {
                     Text(ownerName)
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
                 }
             }

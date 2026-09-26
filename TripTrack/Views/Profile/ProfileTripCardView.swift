@@ -227,16 +227,16 @@ struct ProfileTripCardView: View {
     /// Inter ExtraBold, not SF Heavy: nominally the same 800 weight, visibly
     /// thinner against the Figma render (the feed metrics bit us on exactly
     /// this). Static so a long history doesn't rebuild a Font per row.
-    private static let metricValueFont = Font.inter(19, weight: .heavy).monospacedDigit()
+    private static let metricValueFont = AppType.statValue.monospacedDigit()
 
     private func metricBlock(value: String, unit: String, label: String, c: AppTheme.Colors) -> some View {
         metricBlock(
             valueText: Text(value)
                 .font(Self.metricValueFont)
-                .tracking(-0.19)
+                .tracking(AppType.statValueTracking)
                 .foregroundColor(c.text)
                 + Text(unit.isEmpty ? "" : " \(unit)")
-                .font(.inter(11, weight: .semibold))
+                .font(AppType.statUnit)
                 .foregroundColor(c.textSecondary),
             label: label,
             c: c
@@ -250,8 +250,8 @@ struct ProfileTripCardView: View {
                 .lineLimit(1)
 
             Text(label)
-                .font(.inter(11, weight: .bold))
-                .tracking(0.55)
+                .font(AppType.statCaption)
+                .tracking(AppType.statCaptionTracking)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
                 .lineLimit(1)
@@ -265,7 +265,7 @@ struct ProfileTripCardView: View {
     /// sub-hour trip must read «42 мин», never «05 мин».
     private func durationRuns(_ c: AppTheme.Colors) -> Text {
         let big = Self.metricValueFont
-        let small = Font.inter(11, weight: .semibold)
+        let small = AppType.statUnit
         let total = Int(trip.duration)
         let h = total / 3600
         let m = (total % 3600) / 60

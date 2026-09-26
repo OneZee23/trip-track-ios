@@ -26,7 +26,7 @@ struct FuelCurrencyPickerSheet: View {
             navRow(c: c, l: l)
             currencyList(c: c, l: l)
             Text(AppStrings.currencyPickerHint(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -43,7 +43,7 @@ struct FuelCurrencyPickerSheet: View {
     private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         ZStack {
             Text(AppStrings.currencyPickerTitle(l))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
             HStack {
                 Spacer()
@@ -95,13 +95,13 @@ struct FuelCurrencyPickerSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Text(currency.symbol)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.text)
                     .frame(width: 32, height: 32)
                     .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 9))
 
                 Text(currency.name(l))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -109,7 +109,7 @@ struct FuelCurrencyPickerSheet: View {
                 Spacer(minLength: 8)
 
                 Text(currency.code)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
 
                 // Reserved rather than conditional: a checkmark that exists only

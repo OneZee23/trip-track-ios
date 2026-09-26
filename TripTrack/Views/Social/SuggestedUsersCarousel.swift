@@ -26,7 +26,7 @@ struct SuggestedUsersCarousel: View {
             if !users.isEmpty {
                 HStack {
                     Text(AppStrings.suggestedUsersCarouselSuggested(lng))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.inter(11, weight: .bold))
                         .tracking(0.5)
                         .foregroundStyle(c.textTertiary)
                         .textCase(.uppercase)
@@ -54,11 +54,11 @@ struct SuggestedUsersCarousel: View {
             Circle()
                 .fill(AppTheme.accentBg)
                 .frame(width: 62, height: 62)
-                .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 32)) }
+                .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(32)) }
 
             VStack(spacing: 2) {
                 Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Text("LVL \(user.profileLevel)")
@@ -98,7 +98,7 @@ struct SuggestedUsersCarousel: View {
                     Text(isFollowed
                          ? (AppStrings.notificationsInboxFollowing(lng))
                          : (AppStrings.discoverFollow(lng)))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                 }
             }
             .foregroundStyle(isFollowed ? c.text : .white)

@@ -61,7 +61,7 @@ struct ToastView: View {
                 .foregroundStyle(item.type.iconColor)
 
             Text(item.message)
-                .font(.system(size: 14, weight: .medium))
+                .font(.inter(14, weight: .medium))
                 .foregroundStyle(c.text)
                 // Two lines rather than an ellipsis: «Не удалось загрузить
                 // фото попутчика» is longer than one line of a pill, and a
@@ -77,7 +77,7 @@ struct ToastView: View {
                     onDismiss()
                 } label: {
                     Text(item.undoLabel)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                 }
             }

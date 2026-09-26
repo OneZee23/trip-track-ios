@@ -105,7 +105,7 @@ struct ProfileBackgroundPickerSheet: View {
             // Аватар наполовину свисает с баннера — так же, как на «Моём
             // профиле»: рамку надо видеть ровно там, где она будет стоять.
             Text(settings.avatarEmoji)
-                .font(.system(size: 34))
+                .font(.inter(34))
                 .frame(width: 66, height: 66)
                 .background(Circle().fill(c.card))
                 .avatarFrame(currentFrame, lineWidth: 3)
@@ -123,7 +123,7 @@ struct ProfileBackgroundPickerSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.inter(11, weight: .bold))
                 .kerning(0.22)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
@@ -199,7 +199,7 @@ struct ProfileBackgroundPickerSheet: View {
                         }
                     }
                 Text(caption)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.inter(11, weight: .medium))
                     .foregroundStyle(isSelected && !locked ? AppTheme.accent : c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

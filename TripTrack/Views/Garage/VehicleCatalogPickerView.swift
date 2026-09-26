@@ -61,13 +61,13 @@ struct VehicleCatalogPickerView: View {
     private func header(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         ZStack {
             Text(AppStrings.vehicleMakeModel(l))
-                .font(.system(size: 17, weight: .bold))
+                .font(.inter(17, weight: .bold))
                 .foregroundStyle(c.text)
             HStack {
                 Spacer()
                 Button { dismiss() } label: {
                     Text(AppStrings.done(l))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
             }
@@ -84,7 +84,7 @@ struct VehicleCatalogPickerView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(c.textTertiary)
             TextField(AppStrings.catalogSearchPlaceholder(l), text: $query)
-                .font(.system(size: 15))
+                .font(.inter(15))
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
                 .autocorrectionDisabled()
@@ -124,13 +124,13 @@ struct VehicleCatalogPickerView: View {
                         } label: {
                             HStack(spacing: 10) {
                                 Text(model.name)
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(.inter(15, weight: .medium))
                                     .foregroundStyle(c.text)
                                 Spacer(minLength: 8)
                                 Text(AppStrings.avatarStyleName(
                                     lang.language,
                                     style: VehicleCatalog.defaultBody(for: model, type: type)))
-                                    .font(.system(size: 12))
+                                    .font(.inter(12))
                                     .foregroundStyle(c.textTertiary)
                             }
                             .padding(.horizontal, 16)
@@ -150,7 +150,7 @@ struct VehicleCatalogPickerView: View {
     private func emptyState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
             Text(AppStrings.catalogNothingFound(l))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -164,7 +164,7 @@ struct VehicleCatalogPickerView: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.catalogUseTyped(l))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 18)
                         .frame(height: 44)

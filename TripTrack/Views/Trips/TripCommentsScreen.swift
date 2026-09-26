@@ -78,7 +78,7 @@ struct TripCommentsScreen: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(AppStrings.commentsTitleN(lang.language, count))
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.inter(19, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Spacer(minLength: 8)

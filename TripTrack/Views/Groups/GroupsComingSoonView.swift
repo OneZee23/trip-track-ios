@@ -125,7 +125,7 @@ struct GroupsComingSoonView: View {
                     .scaledToFit()
                     .frame(width: 18, height: 18)
             } else {
-                Text(club.emoji).font(.system(size: 13))
+                Text(club.emoji).font(.inter(13))
             }
             Text(club.name(lang.language))
                 .font(.inter(13, weight: .semibold))

@@ -78,7 +78,7 @@ struct AchievementCell: View {
             }
 
             Text(badge.title(lang.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -89,7 +89,7 @@ struct AchievementCell: View {
                     .frame(width: 7, height: 7)
 
                 Text(shareLine(rarity))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(rarity.chipText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -109,7 +109,7 @@ struct AchievementCell: View {
             }
 
             Text(badge.title(lang.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -120,7 +120,7 @@ struct AchievementCell: View {
                 progressBar(c, progress: progress)
 
                 Text(caption)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.inter(10.5, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -132,16 +132,16 @@ struct AchievementCell: View {
         VStack(spacing: 8) {
             disc(fill: c.border) {
                 Text(verbatim: "?")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.inter(28, weight: .bold))
                     .foregroundStyle(c.textTertiary)
             }
 
             Text(AppStrings.achievementsSecretTitle(lang.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.textSecondary)
 
             Text(AppStrings.achievementsSecretCaption(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
         }
     }

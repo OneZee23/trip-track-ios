@@ -52,7 +52,7 @@ struct PixelCarLoader: View {
 
             if let label {
                 Text(label)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             }
         }

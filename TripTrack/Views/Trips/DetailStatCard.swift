@@ -46,7 +46,7 @@ struct DetailStatCard: View {
                 .minimumScaleFactor(0.6)
 
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.inter(10, weight: .bold))
                 .tracking(0.2)
                 .textCase(.uppercase)
                 .foregroundStyle(c.textTertiary)

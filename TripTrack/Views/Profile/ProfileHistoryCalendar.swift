@@ -88,7 +88,7 @@ struct ProfileHistoryCalendar: View {
     private func collapsedHeader(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.thisWeek(lang.language))
-                .font(.system(size: 15, weight: .bold))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(c.text)
 
             Spacer(minLength: 0)
@@ -104,7 +104,7 @@ struct ProfileHistoryCalendar: View {
                     // Today's month, not `displayedMonth`: collapsed always
                     // shows the current week, so any other name would lie.
                     Text(ProfileDateFormat.monthName(Date(), lang: lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                     Image(systemName: "chevron.down")
                         .font(.system(size: 16, weight: .semibold))
                 }
@@ -127,7 +127,7 @@ struct ProfileHistoryCalendar: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(expandedTitle)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                     Image(systemName: "chevron.up")
                         .font(.system(size: 16, weight: .semibold))
@@ -174,7 +174,7 @@ struct ProfileHistoryCalendar: View {
         HStack(spacing: Self.cellGap) {
             ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.inter(11, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
                     .frame(maxWidth: .infinity)
             }
@@ -256,7 +256,7 @@ struct ProfileHistoryCalendar: View {
                 }
                 .overlay {
                     Text("\(calendar.component(.day, from: date))")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(dayNumberColor(km: km, scale: scale, isFuture: isFuture, inRange: inRange, isEndpoint: isEndpoint, c: c))
                 }
                 // Square, but sized by the row rather than pinned to canon's
@@ -368,7 +368,7 @@ struct ProfileHistoryCalendar: View {
     private func filterRow(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.calendarFilterActive(lang.language, count: filteredCount))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.inter(12, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -381,7 +381,7 @@ struct ProfileHistoryCalendar: View {
                 dateTo = nil
             } label: {
                 Text(AppStrings.calendarClearFilter(lang.language))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(AppTheme.accent)
                     .contentShape(Rectangle())
             }

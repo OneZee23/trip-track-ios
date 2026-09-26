@@ -639,20 +639,20 @@ struct PublicProfileView: View {
             switch state {
             case .closed(let name, let avatar):
                 Text(avatar ?? "🙂")
-                    .font(.system(size: 44))
+                    .font(.inter(44))
                     .frame(width: 84, height: 84)
                     .background(c.cardAlt, in: Circle())
                 Text(name)
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.inter(20, weight: .bold))
                     .foregroundStyle(c.text)
                 Image(systemName: "lock")
                     .font(.system(size: 18))
                     .foregroundStyle(c.textTertiary)
                 Text(AppStrings.closedProfileTitle(l))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(AppStrings.closedProfileBody(l))
-                    .font(.system(size: 12.5))
+                    .font(.inter(12.5))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(c.textTertiary)
 
@@ -664,10 +664,10 @@ struct PublicProfileView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(c.textTertiary)
                 Text(AppStrings.profileUnavailableTitle(l))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Text(AppStrings.profileUnavailableBody(l))
-                    .font(.system(size: 12.5))
+                    .font(.inter(12.5))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(c.textTertiary)
 
@@ -678,11 +678,11 @@ struct PublicProfileView: View {
                     .font(.system(size: 26, weight: .light))
                     .foregroundStyle(c.textTertiary)
                 Text(AppStrings.publicDataLoadFailed(l))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Button { Task { await loadProfile() } } label: {
                     Text(AppStrings.retry(l))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                 }
                 .buttonStyle(.plain)
@@ -718,10 +718,10 @@ struct PublicProfileView: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(AppStrings.myProfileRowPreview(lang.language))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(AppStrings.previewBannerSubtitle(lang.language))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textSecondary)
                 }
                 .multilineTextAlignment(.leading)
@@ -743,7 +743,7 @@ struct PublicProfileView: View {
             // conditional one.
             if hasDeviceOnlyIdentity {
                 Text(AppStrings.previewBannerBody(lang.language))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
@@ -801,7 +801,7 @@ struct PublicProfileView: View {
             // device-local (no profile field behind it).
             HStack(spacing: 6) {
                 Text(resolvedDisplayName)
-                    .font(.system(size: 21, weight: .heavy))
+                    .font(.inter(21, weight: .bold))
                     .tracking(-0.21)
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
@@ -844,7 +844,7 @@ struct PublicProfileView: View {
                 // `countryGlyph`. «Не указывать» has no glyph and draws no pill.
                 if let glyph = countryGlyph {
                     Text(countryPillText(glyph))
-                        .font(.system(size: 13))
+                        .font(.inter(13))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .padding(.horizontal, 10)
@@ -859,7 +859,7 @@ struct PublicProfileView: View {
             // of running the full screen width.
             if let bio = resolvedBio {
                 Text(bio)
-                    .font(.system(size: 13.5))
+                    .font(.inter(13.5))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -1038,7 +1038,7 @@ struct PublicProfileView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(c.textTertiary)
                     Text(AppStrings.publicProfileHiddenRoadsThis(lng))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .multilineTextAlignment(.leading)
                 }
@@ -1071,7 +1071,7 @@ struct PublicProfileView: View {
             // different widths in list and grid mode — so «подписчиков» visibly
             // changed size when the user flipped the layout toggle.
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(1)
         }
@@ -1143,10 +1143,10 @@ struct PublicProfileView: View {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(.system(size: 15, weight: .heavy))
+                            .font(.inter(15, weight: .bold))
                             .foregroundStyle(c.text)
                         Text(subtitle)
-                            .font(.system(size: 11.5))
+                            .font(.inter(11.5))
                             .foregroundStyle(c.textTertiary)
                     }
                     Spacer(minLength: 0)
@@ -1206,12 +1206,12 @@ struct PublicProfileView: View {
                         ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                             VStack(spacing: 2) {
                                 Text(fact.value)
-                                    .font(.system(size: 15, weight: .heavy))
+                                    .font(.inter(15, weight: .bold))
                                     .foregroundStyle(c.text)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
                                 Text(fact.label)
-                                    .font(.system(size: 10.5, weight: .medium))
+                                    .font(.inter(10.5, weight: .medium))
                                     .foregroundStyle(c.textTertiary)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
@@ -1266,7 +1266,7 @@ struct PublicProfileView: View {
                     // «47 поездок» и карта с двенадцатью маршрутами оказываются
                     // на расстоянии одного тапа.
                     Text(AppStrings.publicRoutesCaption(lng))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                 }
             },
@@ -1316,7 +1316,7 @@ struct PublicProfileView: View {
                 }
                 Spacer(minLength: 8)
                 Text("\(garagePreviewVehicles.count) " + AppStrings.nounVehicles(lng, garagePreviewVehicles.count))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
             }
             .padding(.top, 10)
@@ -1357,7 +1357,7 @@ struct PublicProfileView: View {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(AppStrings.journeysTitle(lng))
-                                .font(.system(size: 15, weight: .heavy))
+                                .font(.inter(15, weight: .bold))
                                 .foregroundStyle(c.text)
                             // «3 путешествия» — число ВСЕХ загруженных
                             // (`loadJourneysPreview` берёт страницу лимитом
@@ -1366,7 +1366,7 @@ struct PublicProfileView: View {
                             // тремя карточками звучало бы как «это все», хотя
                             // их может быть больше.
                             Text("\(publicJourneys.count) \(AppStrings.nounJourneys(lng, publicJourneys.count))")
-                                .font(.system(size: 11.5))
+                                .font(.inter(11.5))
                                 .foregroundStyle(c.textTertiary)
                         }
                         Spacer(minLength: 0)
@@ -1462,7 +1462,7 @@ struct PublicProfileView: View {
 
                         if overflow > 0 {
                             Text("+\(overflow)")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.inter(12, weight: .semibold))
                                 .foregroundStyle(c.textSecondary)
                                 .frame(width: 34, height: 30)
                                 .background(c.cardAlt, in: Capsule())
@@ -1495,7 +1495,7 @@ struct PublicProfileView: View {
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(AppStrings.achievementsEmpty(lang.language))
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.inter(13, weight: .bold))
                             .foregroundStyle(c.textSecondary)
                         // Second person for your own preview, third for
                         // somebody else's page — «пока вы ездите» under a
@@ -1503,7 +1503,7 @@ struct PublicProfileView: View {
                         Text(isOwnProfile
                              ? AppStrings.achievementsEmptyHint(lang.language)
                              : AppStrings.achievementsEmptyOtherHint(lang.language))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.inter(11, weight: .semibold))
                             .foregroundStyle(c.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1551,12 +1551,12 @@ struct PublicProfileView: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
 
                     Text(featuredBadgeSubtitle(badge))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                         .foregroundStyle(rarity.chipText)
                         .lineLimit(1)
                 }
@@ -1661,7 +1661,7 @@ struct PublicProfileView: View {
 
             if let rarity = find.rarityLabel(lang.language) {
                 Text(rarity)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.inter(10, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
             }
@@ -1690,7 +1690,7 @@ struct PublicProfileView: View {
     /// itself differently, in 16 heavy inside its own surface (1667:208).
     private func sectionHeader(_ title: String, c: AppTheme.Colors) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.inter(11, weight: .semibold))
             .tracking(0.44)
             .textCase(.uppercase)
             .foregroundStyle(c.textTertiary)
@@ -1955,7 +1955,7 @@ struct PublicProfileView: View {
             Text(TripAutoTitle.localized(
                 trip.title, startDate: trip.startDate, language: lang.language
             ) ?? shortDate(trip.startDate, lng: lng))
-                .font(.system(size: 12, weight: .bold))
+                .font(.inter(12, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -2026,7 +2026,7 @@ struct PublicProfileView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.publicProfileNoPublicTrips(lng))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textTertiary)
         }
         .frame(maxWidth: .infinity)
@@ -2045,10 +2045,10 @@ struct PublicProfileView: View {
                 .font(.system(size: 22))
                 .foregroundStyle(.red)
             Text(AppStrings.publicProfileCouldnTLoad(lng))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(msg)
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
         }

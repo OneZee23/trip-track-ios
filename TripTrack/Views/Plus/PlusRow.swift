@@ -48,7 +48,7 @@ struct PlusRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(AppStrings.plusTitle(l))
-                        .font(.system(size: 14.5, weight: .bold))
+                        .font(.inter(14.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(Self.status(
@@ -57,7 +57,7 @@ struct PlusRow: View {
                         trialDays: trialDays,
                         lang: l
                     ))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
@@ -66,7 +66,7 @@ struct PlusRow: View {
                 Spacer(minLength: 8)
 
                 Text(plus ? AppStrings.plusManage(l) : AppStrings.plusSubscribe(l))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                     .lineLimit(1)
 

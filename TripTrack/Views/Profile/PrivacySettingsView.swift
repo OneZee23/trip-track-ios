@@ -79,7 +79,7 @@ struct PrivacySettingsView: View {
     private func navRow(_ l: LanguageManager.Language) -> some View {
         HStack(alignment: .center) {
             Text(AppStrings.privacyTitle(l))
-                .font(.system(size: 22, weight: .heavy))
+                .font(.inter(22, weight: .bold))
                 .foregroundStyle(AppTheme.colors(for: scheme).text)
                 .lineLimit(1)
 
@@ -173,7 +173,7 @@ struct PrivacySettingsView: View {
                 // видно внутри открытого профиля».
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.visibilityTitle(l))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.inter(11, weight: .bold))
                         .kerning(0.22)
                         .foregroundStyle(c.textTertiary)
                         .textCase(.uppercase)
@@ -233,10 +233,10 @@ struct PrivacySettingsView: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(AppStrings.visibilityPreviewLink(l))
-                                .font(.system(size: 13.5, weight: .semibold))
+                                .font(.inter(13.5, weight: .semibold))
                                 .foregroundStyle(AppTheme.accent)
                             Text(AppStrings.visibilityPreviewSub(l))
-                                .font(.system(size: 11.5))
+                                .font(.inter(11.5))
                                 .foregroundStyle(c.textTertiary)
                         }
                         Spacer(minLength: 0)
@@ -305,7 +305,7 @@ struct PrivacySettingsView: View {
 
     private func footnote(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         Text(AppStrings.privacyFootnote(l))
-            .font(.system(size: 11.5))
+            .font(.inter(11.5))
             .foregroundStyle(c.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -441,13 +441,13 @@ private struct PrivacyToggleRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.inter(14.5, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
 
                 Text(subtitle)
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)

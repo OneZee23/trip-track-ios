@@ -77,7 +77,7 @@ struct VehiclePickerSheet: View {
             grabber
 
             Text(AppStrings.vehiclePickerTitle(lang.language))
-                .font(.system(size: 18, weight: .heavy))
+                .font(.inter(18, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.bottom, 16)
 
@@ -198,11 +198,11 @@ struct VehiclePickerSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.tripTransferTitle(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(AppStrings.tripTransferHint(lang.language))
-                        .font(.system(size: 11.5))
+                        .font(.inter(11.5))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -243,7 +243,7 @@ struct VehiclePickerSheet: View {
                         .foregroundStyle(c.textTertiary)
                 }
                 Text(AppStrings.noVehicleOption(lang.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Spacer()
@@ -292,13 +292,13 @@ struct VehiclePickerSheet: View {
                             .scaledToFit()
                             .frame(width: 26, height: 26)
                     } else {
-                        Text(vehicle.avatarEmoji).font(.system(size: 20))
+                        Text(vehicle.avatarEmoji).font(.inter(20))
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(vehicle.name)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                         // Two identical grey hatchbacks are told apart by the
@@ -313,7 +313,7 @@ struct VehiclePickerSheet: View {
                     Text(Measure.odometer(km: vehicle.displayOdometerKm,
                                           unit: vehicle.dashboardUnit(app: distanceUnit),
                                           lang: lang.language))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer()
@@ -339,7 +339,7 @@ struct VehiclePickerSheet: View {
     /// leaving a lone row over a void.
     private func emptyHint(c: AppTheme.Colors) -> some View {
         Text(AppStrings.garageEmptyPickerHint(lang.language))
-            .font(.system(size: 12))
+            .font(.inter(12))
             .foregroundStyle(c.textTertiary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
@@ -370,7 +370,7 @@ struct VehiclePickerSheet: View {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .bold))
                 Text(label)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
             }
             .foregroundStyle(AppTheme.accent)
         }

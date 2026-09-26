@@ -87,7 +87,7 @@ struct ProfileHeroCard: View {
                 onTapProfile()
             } label: {
                 Text(avatarEmoji)
-                    .font(.system(size: 33))
+                    .font(.inter(33))
                     .frame(width: Self.avatarSize, height: Self.avatarSize)
                     .background(Circle().fill(.white.opacity(0.18)))
                     .overlay(Circle().strokeBorder(.white.opacity(0.28), lineWidth: 1))
@@ -105,7 +105,7 @@ struct ProfileHeroCard: View {
                 } label: {
                     HStack(spacing: 5) {
                         Text(name)
-                            .font(.system(size: 20, weight: .heavy))
+                            .font(.inter(20, weight: .bold))
                             .tracking(-0.2)
                             .foregroundStyle(.white.opacity(isNamePlaceholder ? 0.7 : 1))
                             .lineLimit(1)
@@ -212,7 +212,7 @@ struct ProfileHeroCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.inter(10, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.72))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

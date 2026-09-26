@@ -62,7 +62,7 @@ struct CarLoadingView: View {
 
             if size == .standard, let text {
                 Text(text)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.inter(13, weight: .medium))
                     .foregroundStyle(AppTheme.textTertiary)
             }
         }

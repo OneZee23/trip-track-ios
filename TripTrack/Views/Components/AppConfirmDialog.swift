@@ -88,14 +88,14 @@ struct AppConfirmDialog: View {
             VStack(spacing: 18) {
                 VStack(spacing: 8) {
                     Text(title)
-                        .font(.system(size: 19, weight: .heavy))
+                        .font(.inter(19, weight: .bold))
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let message, !message.isEmpty {
                         Text(message)
-                            .font(.system(size: 13.5))
+                            .font(.inter(13.5))
                             .lineSpacing(3)
                             .foregroundStyle(c.textSecondary)
                             .multilineTextAlignment(.center)
@@ -178,7 +178,7 @@ struct AppConfirmDialog: View {
 
     private func label(_ text: String, ink: Color, fill: Color) -> some View {
         Text(text)
-            .font(.system(size: 15, weight: .bold))
+            .font(.inter(15, weight: .bold))
             .foregroundStyle(ink)
             .lineLimit(2)
             .multilineTextAlignment(.center)

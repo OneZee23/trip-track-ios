@@ -102,7 +102,7 @@ struct VehicleLevelInfoView: View {
                     level: level + 1
                 )
             )
-            .font(.system(size: 12, weight: .medium))
+            .font(.inter(12, weight: .medium))
             .foregroundStyle(c.textTertiary)
             .multilineTextAlignment(.center)
         }
@@ -118,7 +118,7 @@ struct VehicleLevelInfoView: View {
         VStack(alignment: .leading, spacing: 8) {
             GarageSectionLabel(text: title, size: 11, tracking: 0.36)
             Text(text)
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

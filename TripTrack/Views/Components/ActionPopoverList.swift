@@ -46,7 +46,7 @@ struct ActionPopoverList: View {
                             .font(.system(size: 15, weight: .semibold))
                             .frame(width: 20)
                         Text(item.title)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.inter(15, weight: .medium))
                         Spacer(minLength: 0)
                     }
                     .foregroundStyle(item.isDestructive ? AppTheme.red : c.text)

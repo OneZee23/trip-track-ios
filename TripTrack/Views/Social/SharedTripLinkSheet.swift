@@ -28,7 +28,7 @@ struct SharedTripLinkSheet: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(AppStrings.share(lang.language))
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.inter(19, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 8)
                 Button {
@@ -56,7 +56,7 @@ struct SharedTripLinkSheet: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15, weight: .semibold))
                         Text(AppStrings.share(lang.language))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.inter(15, weight: .bold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -76,7 +76,7 @@ struct SharedTripLinkSheet: View {
                         Text(linkCopied
                              ? (AppStrings.sharedTripLinkCopied(lng))
                              : (AppStrings.sharedTripLinkCopy(lng)))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.inter(15, weight: .bold))
                             .foregroundStyle(c.text)
                     }
                     .frame(maxWidth: .infinity)

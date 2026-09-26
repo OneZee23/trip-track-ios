@@ -29,7 +29,7 @@ struct RecordingBanner: View {
                     .onAppear { pulse = true }
 
                 Text("REC")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(AppTheme.red)
 
                 Text(Measure.distance(

@@ -40,14 +40,14 @@ struct HomeQuestionCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.homeQuestionTitle(l))
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(place)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(1)
                     Text(AppStrings.homeQuestionHint(l))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -93,10 +93,10 @@ struct JourneySuggestionBanner: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.journeySuggestTitle(l))
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -130,7 +130,7 @@ private struct CardChoiceButton: View {
             action()
         } label: {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 // Белый, а не `c.card`: на оранжевой заливке светлая карточка
                 // даёт 3.3:1 — ниже минимума, и в тёмной теме подпись главной
                 // кнопки читается хуже, чем второстепенной. Все остальные

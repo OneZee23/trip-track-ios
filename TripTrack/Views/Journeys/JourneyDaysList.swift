@@ -94,7 +94,7 @@ struct JourneyDaysList: View {
             // как фон, цвет фона как чернила — иначе в тёмной теме белый номер
             // ложился на почти белую плашку.
             Text(AppStrings.journeyDay(language, day.number))
-                .font(.system(size: 10, weight: .heavy))
+                .font(.inter(10, weight: .bold))
                 .tracking(0.3)
                 .textCase(.uppercase)
                 .foregroundStyle(c.bg)
@@ -102,7 +102,7 @@ struct JourneyDaysList: View {
                 .padding(.vertical, 4)
                 .background(c.text, in: Capsule())
             Text(JourneyFormat.dayDate(day.date, language: language))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.inter(12, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 0)
         }
@@ -144,7 +144,7 @@ struct JourneyDaysList: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Text(JourneyFormat.tripTitle(trip, language: language))
-                        .font(.system(size: 16, weight: .heavy))
+                        .font(.inter(16, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -152,7 +152,7 @@ struct JourneyDaysList: View {
                     chevron(c)
                 }
                 Text(legMeta(trip))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                 momentsRow(trip, c: c)
             }
@@ -273,7 +273,7 @@ struct JourneyDaysList: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 Text(text)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
             }
@@ -350,7 +350,7 @@ struct JourneyDaysList: View {
                     // заголовке и в строке под ним стояло бы одно и то же
                     // «по городу» дважды подряд.
                     Text(localNames[key] ?? AppStrings.journeyStayFallback(language))
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     // Диапазон — только когда стоянка и правда тянется дальше
@@ -358,7 +358,7 @@ struct JourneyDaysList: View {
                     // слово, а повтор читается как ошибка вёрстки.
                     if lastDayNumber > day.number {
                         Text(AppStrings.journeyDays(language, from: day.number, to: lastDayNumber))
-                            .font(.system(size: 10, weight: .heavy))
+                            .font(.inter(10, weight: .bold))
                             .tracking(0.3)
                             .textCase(.uppercase)
                             .foregroundStyle(c.textSecondary)
@@ -372,7 +372,7 @@ struct JourneyDaysList: View {
                         .foregroundStyle(c.textTertiary)
                 }
                 Text(localMeta(trips))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.inter(12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -385,16 +385,16 @@ struct JourneyDaysList: View {
         tripButton(trip, accessibilityId: "journey_local_trip_row") {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(JourneyFormat.time(trip.startDate, language: language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.inter(12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(JourneyFormat.tripTitle(trip, language: language))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Text(legMeta(trip))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.inter(12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                     // Моменты и у поездок по городу: снимок у моря сделан как
                     // раз на такой, и прятать его под стоянкой значило бы

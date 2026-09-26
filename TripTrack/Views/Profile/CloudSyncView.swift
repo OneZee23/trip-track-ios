@@ -208,7 +208,7 @@ struct CloudSyncView: View {
             Circle()
                 .fill(c.cardAlt)
                 .frame(width: 48, height: 48)
-                .overlay { Text(settings.avatarEmoji).font(.system(size: 24)) }
+                .overlay { Text(settings.avatarEmoji).font(.inter(24)) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(auth.userName ?? AppStrings.profile(l))

@@ -295,6 +295,7 @@ struct RouteMapView: UIViewRepresentable {
     /// Карта, пережившая своё представление. Непустой хост означает: не
     /// создавать `MKMapView` заново, а забрать готовую — см. `TripMapHost`.
     var host: TripMapHost? = nil
+    var hostPresentation: TripMapHost.Presentation = .hero
     /// Меняется — карта заново вписывает весь маршрут в свои НЫНЕШНИЕ
     /// границы. Важен только факт изменения: раскрытие на полный экран
     /// бумает его один раз, когда кадр уже приехал.
@@ -346,9 +347,6 @@ struct RouteMapView: UIViewRepresentable {
         if let host, host.mapView != nil {
             let existing = host.map(orMake: { MKMapView() })
             host.retain()
-            context.coordinator.adoptMap(existing)
-            applyInteractivity(to: existing)
-            applyLayoutMargins(to: existing, coordinator: context.coordinator)
             return slot(for: existing, coordinator: context.coordinator)
         }
         // Своя карта только под туманом: ей нужен сигнал об уходе экрана, а у
@@ -410,20 +408,29 @@ struct RouteMapView: UIViewRepresentable {
                     // мгновение становится пустым. Снимать вуаль сразу
                     // значило бы пересаживать её на каждое раскрытие —
                     // ровно то, чего переезд и должен избежать.
-                    //
-                    // Но и просто выйти нельзя: `dismantleUIView` SwiftUI
-                    // вправе придержать, и тогда у вуали не осталось бы ни
-                    // одной двери. Переспрашиваем на следующем витке: карта,
-                    // которая к нему так и не вернулась в окно, ушла
-                    // по-настоящему.
-                    guard !coordinator.isHosted else {
-                        Task { @MainActor [weak coordinator, weak host] in
-                            guard let coordinator, let host, host.window == nil else { return }
-                            coordinator.host?.release()
-                        }
+                    // Переспрашиваем на следующем витке.
+                    guard coordinator.isHosted else {
+                        coordinator.veilSeat?.detach()
                         return
                     }
-                    coordinator.veilSeat?.detach()
+                    Task { @MainActor [weak coordinator, weak host] in
+                        guard let coordinator, let host, host.window == nil else { return }
+                        // Снимается ВУАЛЬ, а не карта. Пустое окно на
+                        // следующем витке — это НЕ обязательно уход экрана:
+                        // пуш чужого экрана поверх (путешествие, место,
+                        // паспорт машины) держит карту вне окна ровно
+                        // столько, сколько тот наверху. Стоявший здесь
+                        // `release()` доводил счётчик до нуля и звал
+                        // `tearDown`, то есть уносил карту насовсем: гнездо
+                        // возвращалось в окно пустым, `makeUIView` для уже
+                        // созданного гнезда SwiftUI второй раз не зовёт, и на
+                        // месте героя оставался чёрный прямоугольник
+                        // (`TripJourneyNavigationTests`). Карту отпускает
+                        // `dismantleUIView` и смерть самого хоста вместе с
+                        // экраном; здесь же гасятся два растра и
+                        // `CADisplayLink`, которым за кадром делать нечего.
+                        coordinator.veilSeat?.detach()
+                    }
                 } else {
                     coordinator.adoptMap(host)
                 }
@@ -531,8 +538,8 @@ struct RouteMapView: UIViewRepresentable {
         return slot(for: mapView, coordinator: context.coordinator)
     }
 
-    /// Положить карту в новое гнездо. Место в дереве карта занимает сама, в
-    /// `layoutSubviews` гнезда: до первой разметки его границы ещё нулевые.
+    /// Передать карту новому гнезду сразу. Его первый `layoutSubviews`
+    /// уточнит размер, когда нулевые границы сменятся настоящими.
     private func slot(for mapView: MKMapView,
                       coordinator: Coordinator) -> TripMapSlotView {
         let slot = TripMapSlotView()
@@ -552,14 +559,31 @@ struct RouteMapView: UIViewRepresentable {
             guard let coordinator, let mapView else { return }
             coordinator.mapResized(mapView, refits: refits, insets: insets)
         }
-        slot.adopt(mapView)
+        if let host {
+            host.register(slot, for: hostPresentation)
+            if host.canClaim(slot, for: hostPresentation) { slot.adopt(mapView) }
+        } else {
+            slot.adopt(mapView)
+        }
         return slot
     }
 
     func updateUIView(_ slot: TripMapSlotView, context: Context) {
         // Гнездо могло только что смениться (возврат с полного экрана), и
         // тогда разметка ещё не прошла — карту забираем здесь же.
-        guard let mapView = slot.map else { return }
+        let mapView: MKMapView
+        if let host {
+            // SwiftUI может повторно использовать освобождённый слот героя.
+            // Берём карту у хоста, но лишь для его текущего владельца: старый
+            // fullscreen/старая ветка героя не обновляют ни карту, ни камеру.
+            guard host.canClaim(slot, for: hostPresentation), let hostedMap = host.mapView else {
+                return
+            }
+            mapView = hostedMap
+        } else {
+            guard let localMap = slot.map else { return }
+            mapView = localMap
+        }
         // Обратный порядок: гнездо создали раньше, чем карту у него забрали.
         if mapView.superview !== slot { slot.adopt(mapView) }
         context.coordinator.adoptMap(mapView)
@@ -709,6 +733,7 @@ struct RouteMapView: UIViewRepresentable {
             // Одно представление ушло — это либо переезд между слотом героя и
             // полноэкранным слоем, либо уход самого экрана. Различает их
             // СЧЁТЧИК в хосте, а не догадка здесь.
+            coordinator.host?.unregister(slot)
             coordinator.host?.release()
             return
         }

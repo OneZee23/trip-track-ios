@@ -92,7 +92,7 @@ struct AppPreferencesView: View {
     private func navRow(_ l: LanguageManager.Language) -> some View {
         HStack(alignment: .center) {
             Text(AppStrings.settingsAppPrefs(l))
-                .font(.system(size: 22, weight: .heavy))
+                .font(.inter(22, weight: .bold))
                 .foregroundStyle(AppTheme.colors(for: scheme).text)
                 .lineLimit(1)
 
@@ -192,7 +192,7 @@ struct AppPreferencesView: View {
     /// speak in one voice.
     private func footnote(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         Text(AppStrings.appPrefsFootnote(l))
-            .font(.system(size: 11.5))
+            .font(.inter(11.5))
             .foregroundStyle(c.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -48,7 +48,7 @@ struct IdleHUDView: View {
                 Image(systemName: "person.fill")
                     .font(.system(size: 12, weight: .semibold))
                 Text(AppStrings.passengerToggle(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()
             }

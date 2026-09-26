@@ -58,7 +58,7 @@ struct GPSIndicatorView: View {
                 .frame(width: 8, height: 8)
 
             Text(signal.label(lang.language))
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.inter(12.5, weight: .semibold))
                 .foregroundStyle(.white)
         }
         .padding(.horizontal, 12)
@@ -95,7 +95,7 @@ struct GPSIndicatorView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(signal.color)
                 Text(AppStrings.gpsAccuracyTitle(lang.language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer()
                 Button {
@@ -136,11 +136,11 @@ struct GPSIndicatorView: View {
         return HStack(spacing: 8) {
             Circle().fill(signal.color).frame(width: 8, height: 8)
             Text(signal.label(lang.language))
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.inter(12.5, weight: .semibold))
                 .foregroundStyle(c.text)
             Spacer(minLength: 6)
             Text(detail)
-                .font(.system(size: 12, weight: .medium))
+                .font(.inter(12, weight: .medium))
                 .foregroundStyle(c.textSecondary)
         }
     }

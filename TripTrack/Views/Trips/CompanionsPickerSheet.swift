@@ -119,7 +119,7 @@ struct CompanionsPickerSheet: View {
         VStack(spacing: 12) {
             ZStack {
                 Text(AppStrings.companionsPickerTitle(lang.language))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -150,7 +150,7 @@ struct CompanionsPickerSheet: View {
             ) {
                 Text(AppStrings.companionsSearchPlaceholder(lang.language))
             }
-            .font(.system(size: 15))
+            .font(.inter(15))
             .foregroundStyle(c.text)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
@@ -238,14 +238,14 @@ struct CompanionsPickerSheet: View {
             Spacer()
             EmptyStateIllustration(name: "error_generic", size: 140)
             Text(AppStrings.companionsCandidatesLoadFailed(lang.language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Button {
                 Haptics.tap()
                 Task { await load(reset: true) }
             } label: {
                 Text(AppStrings.retry(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(c.cardAlt, in: Capsule())
@@ -264,10 +264,10 @@ struct CompanionsPickerSheet: View {
             Spacer()
             EmptyStateIllustration(name: "empty_companions", size: 148)
             Text(AppStrings.companionsCandidatesEmptyTitle(lang.language))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(AppStrings.companionsCandidatesEmptyHint(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -284,14 +284,14 @@ struct CompanionsPickerSheet: View {
                 .font(.system(size: 14))
                 .foregroundStyle(AppTheme.red)
             Text(AppStrings.companionsCandidatesLoadFailed(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
                 Haptics.tap()
                 Task { await load(reset: false) }
             }
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.inter(12.5, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 12)
@@ -309,11 +309,11 @@ struct CompanionsPickerSheet: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(row.candidate.avatarEmoji ?? "🙂").font(.system(size: 18)) }
+                    .overlay { Text(row.candidate.avatarEmoji ?? "🙂").font(.inter(18)) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.candidate.displayName ?? (AppStrings.companionsNoName(lang.language)))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(row.candidate.profileLevel)")
@@ -327,12 +327,12 @@ struct CompanionsPickerSheet: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 13))
                         Text(AppStrings.companionsInvited(lang.language))
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.inter(12.5, weight: .semibold))
                     }
                     .foregroundStyle(c.textTertiary)
                 } else {
                     Text(AppStrings.companionsInvite(lang.language))
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.inter(12.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
             }

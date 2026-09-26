@@ -21,7 +21,7 @@ struct NotesEditorView: View {
             // Header row (below the sheet grabber).
             ZStack {
                 Text(AppStrings.descriptionSection(lang.language))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                 HStack {
                     Button {
@@ -29,7 +29,7 @@ struct NotesEditorView: View {
                         dismiss()
                     } label: {
                         Text(AppStrings.cancel(lang.language))
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.inter(16, weight: .medium))
                             .foregroundStyle(c.textSecondary)
                     }
                     Spacer()
@@ -38,7 +38,7 @@ struct NotesEditorView: View {
                         onSave()
                     } label: {
                         Text(AppStrings.save(lang.language))
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.inter(16, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                     }
                 }
@@ -47,7 +47,7 @@ struct NotesEditorView: View {
             .padding(.top, 18)
 
             TextEditor(text: $text)
-                .font(.system(size: 16))
+                .font(.inter(16))
                 .lineSpacing(4)
                 .foregroundStyle(c.text)
                 .tint(AppTheme.accent)

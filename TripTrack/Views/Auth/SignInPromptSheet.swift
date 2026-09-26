@@ -87,14 +87,14 @@ struct SignInPromptSheet: View {
                     .padding(.top, 40)
 
                 Text(action.headline(lang.language))
-                    .font(.system(size: 21, weight: .heavy))
+                    .font(.inter(21, weight: .bold))
                     .kerning(-0.21)
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
                     .padding(.top, 18)
 
                 Text(AppStrings.signInPromptSubtitle(lang.language))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .lineSpacing(3)
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
@@ -149,7 +149,7 @@ struct SignInPromptSheet: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 13, weight: .semibold))
                 Text(AppStrings.signInErrorRetry(lang.language))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.inter(13, weight: .bold))
             }
             .foregroundStyle(AppTheme.red)
             .multilineTextAlignment(.center)
@@ -158,7 +158,7 @@ struct SignInPromptSheet: View {
                 lang.language,
                 termsURL: AppConfig.termsURL(lang.language).absoluteString
             )))
-            .font(.system(size: 11))
+            .font(.inter(11))
             .foregroundStyle(c.textTertiary)
             .tint(auth.isAuthenticating ? c.textTertiary : AppTheme.accent)
             .multilineTextAlignment(.center)

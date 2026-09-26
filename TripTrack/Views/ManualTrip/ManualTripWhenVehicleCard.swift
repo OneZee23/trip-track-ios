@@ -35,7 +35,7 @@ struct ManualTripWhenVehicleCard: View {
     private func whenRow(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.manualTripStart(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             HStack(spacing: 8) {
                 dayChip(title: AppStrings.today(lang.language), day: Date(), c: c)
@@ -61,7 +61,7 @@ struct ManualTripWhenVehicleCard: View {
             model.setStartDay(day)
         } label: {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(selected ? .white : c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
@@ -77,14 +77,14 @@ struct ManualTripWhenVehicleCard: View {
     private func durationRow(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 10) {
             Text(AppStrings.manualTripDuration(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             Spacer(minLength: 8)
             durationButton("minus", c: c) {
                 model.adjustDuration(by: -ManualTripModel.durationStep)
             }
             Text(ManualTripDurationText.string(model.duration, lang: lang.language))
-                .font(.system(size: 15, weight: .heavy))
+                .font(.inter(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .frame(minWidth: 72)
                 .multilineTextAlignment(.center)
@@ -119,7 +119,7 @@ struct ManualTripWhenVehicleCard: View {
         } label: {
             Text(AppStrings.manualTripSuggestedTime(
                 lang.language, time: ManualTripDurationText.string(suggested, lang: lang.language)))
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.inter(12.5, weight: .semibold))
                 .foregroundStyle(AppTheme.accent)
                 .contentShape(Rectangle())
         }
@@ -132,7 +132,7 @@ struct ManualTripWhenVehicleCard: View {
     private func vehicleRow(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(AppStrings.vehiclePickerTitle(lang.language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -152,7 +152,7 @@ struct ManualTripWhenVehicleCard: View {
             model.vehicleId = id
         } label: {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(selected ? .white : c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 14)

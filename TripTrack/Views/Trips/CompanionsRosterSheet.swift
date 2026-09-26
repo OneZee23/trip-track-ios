@@ -202,7 +202,7 @@ struct CompanionsRosterSheet: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.companionsSection(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 50)
@@ -297,16 +297,16 @@ struct CompanionsRosterSheet: View {
             Circle()
                 .fill(c.cardAlt)
                 .frame(width: 38, height: 38)
-                .overlay { Text(row.companion.avatarEmoji ?? "🙂").font(.system(size: 18)) }
+                .overlay { Text(row.companion.avatarEmoji ?? "🙂").font(.inter(18)) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.companion.displayName ?? AppStrings.companionsNoName(lang.language))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 if let note = statusNote(row.status) {
                     Text(note)
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                 }
             }
@@ -347,7 +347,7 @@ struct CompanionsRosterSheet: View {
                         .foregroundStyle(AppTheme.accent)
                 }
                 Text(AppStrings.companionsInvite(lang.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -368,14 +368,14 @@ struct CompanionsRosterSheet: View {
                 .font(.system(size: 15))
                 .foregroundStyle(AppTheme.red)
             Text(AppStrings.companionsLoadFailed(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
                 Haptics.tap()
                 Task { await load() }
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 14)
@@ -390,7 +390,7 @@ struct CompanionsRosterSheet: View {
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.companionsSavedCopy(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
             Spacer(minLength: 8)
         }
@@ -405,14 +405,14 @@ struct CompanionsRosterSheet: View {
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.companionsCachedNotice(lang.language))
-                .font(.system(size: 12.5))
+                .font(.inter(12.5))
                 .foregroundStyle(c.textTertiary)
             Spacer(minLength: 8)
             Button(AppStrings.retry(lang.language)) {
                 Haptics.tap()
                 Task { await load() }
             }
-            .font(.system(size: 12.5, weight: .semibold))
+            .font(.inter(12.5, weight: .semibold))
             .foregroundStyle(AppTheme.accent)
         }
         .padding(.horizontal, 14)

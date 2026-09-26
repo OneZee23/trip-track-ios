@@ -58,7 +58,7 @@ struct TripPhotoPicker: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.choosePhotosTitle(lang.language))
-                .font(.system(size: 17, weight: .heavy))
+                .font(.inter(17, weight: .bold))
                 .foregroundStyle(c.text)
 
             HStack {
@@ -71,7 +71,7 @@ struct TripPhotoPicker: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.inter(15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
                 .accessibilityIdentifier("photo_picker_cancel")
@@ -85,7 +85,7 @@ struct TripPhotoPicker: View {
                     Text(picked.isEmpty
                          ? AppStrings.done(lang.language)
                          : "\(AppStrings.done(lang.language)) · \(picked.count)")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                         .foregroundStyle(picked.isEmpty ? c.textTertiary : AppTheme.accent)
                 }
                 .disabled(picked.isEmpty || isFetchingFullSize)
@@ -137,7 +137,7 @@ struct TripPhotoPicker: View {
                 CarLoadingView(size: .compact)
             } else if assets.isEmpty {
                 Text(AppStrings.noPhotosInLibrary(lang.language))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -167,7 +167,7 @@ struct TripPhotoPicker: View {
             ZStack {
                 Circle().fill(AppTheme.accent)
                 Text("\(order)")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.inter(11, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: 20, height: 20)
@@ -184,7 +184,7 @@ struct TripPhotoPicker: View {
             Spacer()
             EmptyStateIllustration(name: "empty_photos", size: 148)
             Text(AppStrings.photoAccessDenied(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
@@ -192,7 +192,7 @@ struct TripPhotoPicker: View {
                 UIApplication.shared.open(url)
             } label: {
                 Text(AppStrings.openSettings(lang.language))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(AppTheme.accent)
             }
             Spacer()

@@ -183,7 +183,7 @@ struct MyProfileView: View {
 
                 HStack(spacing: 3) {
                     Text(label)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.inter(11, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
                     // The one thing that says these two halves are doors and
@@ -299,7 +299,7 @@ struct MyProfileView: View {
                                 // grid and from the server's copy of it, both of
                                 // which are single emoji.
                                 Text(settings.avatarEmoji)
-                                    .font(.system(size: 48))
+                                    .font(.inter(48))
                             }
                             // A ring in the PAGE colour, so the disc reads as
                             // punched out of the banner rather than dropped on
@@ -336,7 +336,7 @@ struct MyProfileView: View {
                     }
                 } label: {
                     Text(AppStrings.myProfileChangeAvatar(l))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textSecondary)
                         .contentShape(Rectangle())
                 }
@@ -393,7 +393,7 @@ struct MyProfileView: View {
             // There is no Done button — the hint is the only thing telling the
             // user the tap already stuck.
             Text(AppStrings.myProfileAvatarHint(l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
 
@@ -409,7 +409,7 @@ struct MyProfileView: View {
             // that something rare was lost arrives after it is gone.
             if !Self.avatars.contains(settings.avatarEmoji) {
                 Text(AppStrings.myProfileAvatarRetired(l, emoji: settings.avatarEmoji))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.inter(11, weight: .medium))
                     .foregroundStyle(AppTheme.accent)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -429,7 +429,7 @@ struct MyProfileView: View {
             select(emoji)
         } label: {
             Text(emoji)
-                .font(.system(size: 30))
+                .font(.inter(30))
                 .frame(maxWidth: Self.tileMaxWidth, minHeight: Self.tileHeight)
                 .background(
                     RoundedRectangle(cornerRadius: 14)

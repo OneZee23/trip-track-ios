@@ -418,7 +418,7 @@ struct PhotoFullScreenView: View {
             }
             if let caption = captionLine {
                 Text(caption)
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(.white.opacity(0.8))
                     .multilineTextAlignment(.center)
             }
@@ -520,7 +520,7 @@ private struct PhotoPage: View {
                     Image(systemName: "photo.badge.exclamationmark")
                         .font(.system(size: 28))
                     Text(verbatim: "—")
-                        .font(.system(size: 13))
+                        .font(.inter(13))
                 }
                 .foregroundStyle(.white.opacity(0.5))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

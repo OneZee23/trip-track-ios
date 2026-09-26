@@ -49,7 +49,7 @@ struct AchievementDetailView: View {
                 // to do is exactly what it withholds.
                 if !isSecret {
                     Text(badge.description(l, unit: distanceUnit))
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.inter(15, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.center)
                         // Canon's 280pt is a 360pt artboard measuring itself;
@@ -151,7 +151,7 @@ struct AchievementDetailView: View {
         // Two lines and a floor on the scale — «Воскресный водитель» at 24pt
         // heavy already runs the full 360pt width.
         Text(isSecret ? AppStrings.achievementsSecretTitle(l) : badge.title(l))
-            .font(.system(size: 24, weight: .heavy))
+            .font(.inter(24, weight: .bold))
             .foregroundStyle(isSecret ? c.textSecondary : c.text)
             .multilineTextAlignment(.center)
             .lineLimit(2)
@@ -197,14 +197,14 @@ struct AchievementDetailView: View {
         if isSecret {
             card {
                 Text(AppStrings.achievementsEmptyHint(l))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
             }
         } else if let percent = badge.globalUnlockPercent {
             card {
                 Text(AppStrings.achievementsEarnedBy(l, percent: Badge.unlockShareText(percent, l)))
-                    .font(.system(size: 26, weight: .heavy))
+                    .font(.inter(26, weight: .bold))
                     .foregroundStyle(badge.displayRarity.chipText)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.7)
@@ -274,7 +274,7 @@ struct AchievementDetailView: View {
                 .foregroundStyle(iconInk ?? ink)
 
             Text(text)
-                .font(.system(size: 12.5, weight: .bold))
+                .font(.inter(12.5, weight: .bold))
                 .kerning(kerning)
                 .foregroundStyle(ink)
         }

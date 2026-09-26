@@ -163,13 +163,13 @@ struct StatsScreenView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(AppTheme.accent)
             Text(AppStrings.publicDataPartial(l))
-                .font(.system(size: 11.5))
+                .font(.inter(11.5))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button { Task { await load() } } label: {
                 Text(AppStrings.retry(l))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
                     .foregroundStyle(AppTheme.accent)
             }
             .buttonStyle(.plain)
@@ -190,11 +190,11 @@ struct StatsScreenView: View {
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.publicDataLoadFailed(l))
-                .font(.system(size: 14, weight: .heavy))
+                .font(.inter(14, weight: .bold))
                 .foregroundStyle(c.text)
             Button { Task { await load() } } label: {
                 Text(AppStrings.retry(l))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.inter(13, weight: .bold))
                     .foregroundStyle(AppTheme.accent)
             }
             .buttonStyle(.plain)
@@ -215,10 +215,10 @@ struct StatsScreenView: View {
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(c.textTertiary)
             Text(AppStrings.publicMapEmptyTitle(l))
-                .font(.system(size: 14, weight: .heavy))
+                .font(.inter(14, weight: .bold))
                 .foregroundStyle(c.text)
             Text(AppStrings.publicMapEmptyBody(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -263,7 +263,7 @@ struct StatsScreenView: View {
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 Text(AppStrings.statsYearAgoToday(l))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.inter(10, weight: .semibold))
                     .tracking(0.6)
                     .foregroundStyle(AppTheme.accent)
 
@@ -294,11 +294,11 @@ struct StatsScreenView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tripName(trip, l))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.inter(15, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                         Text(memoryMeta(trip, l))
-                            .font(.system(size: 12))
+                            .font(.inter(12))
                             .foregroundStyle(c.textSecondary)
                             .lineLimit(1)
                     }
@@ -480,7 +480,7 @@ struct StatsScreenView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.inter(10, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -512,7 +512,7 @@ struct StatsScreenView: View {
                 current: Measure.distance(km: current.km, unit: distanceUnit, lang: l),
                 previous: Measure.distanceValue(km: previous.km, unit: distanceUnit, lang: l)
             ))
-            .font(.system(size: 12))
+            .font(.inter(12))
             .foregroundStyle(c.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -550,7 +550,7 @@ struct StatsScreenView: View {
         return VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(AppStrings.statsKmByMonth(l, unit: distanceUnit))
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 Spacer()
                 Text(model.badge)
@@ -618,7 +618,7 @@ struct StatsScreenView: View {
         return VStack(alignment: .trailing, spacing: 2) {
             if let label {
                 Text(label)
-                    .font(.system(size: 9))
+                    .font(.inter(9))
                     .foregroundStyle(c.textTertiary)
             }
             Rectangle()
@@ -643,10 +643,10 @@ struct StatsScreenView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(StatsPeriodFormat.monthName(index, l))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.text)
             Text(popoverMeta(index: index, model: model, l: l))
-                .font(.system(size: 11))
+                .font(.inter(11))
                 .foregroundStyle(c.textSecondary)
         }
         .padding(.horizontal, 12)
@@ -690,7 +690,7 @@ struct StatsScreenView: View {
                             l, period: newPlacesPeriod(l, calendar: cal),
                             roads: roads, firstPlace: firstPlace(agg, l, calendar: cal)
                         ))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.text)
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -701,7 +701,7 @@ struct StatsScreenView: View {
                     Text(AppStrings.statsTotalsLine(
                         l, cities: totals.cities, regions: totals.regions
                     ))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textSecondary)
                 }
             }
@@ -826,10 +826,10 @@ struct StatsScreenView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.label)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.inter(10.5, weight: .semibold))
                                                             .foregroundStyle(c.textTertiary)
                 Text(row.subject)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.inter(13, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -877,7 +877,7 @@ struct StatsScreenView: View {
                 Text(AppStrings.statsWithTripTrackSince(
                     l, date: StatsPeriodFormat.monthYearInline(first, l)
                 ))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(c.text)
                 Text(AppStrings.statsMemoriesLine(
                     l,
@@ -887,7 +887,7 @@ struct StatsScreenView: View {
                     // count answers a different question.
                     trips: agg.tripsWithMemories
                 ))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -901,7 +901,7 @@ struct StatsScreenView: View {
 
     private func sectionLabel(_ text: String, _ c: AppTheme.Colors) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .bold))
+            .font(.inter(13, weight: .bold))
             .tracking(0.26)
             .foregroundStyle(c.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -916,11 +916,11 @@ struct StatsScreenView: View {
             IdleRing()
             Spacer().frame(height: 22)
             Text(AppStrings.statsEmptyTitle(l))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
             Spacer().frame(height: 8)
             Text(AppStrings.statsEmptyBody(l))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -935,7 +935,7 @@ struct StatsScreenView: View {
                     Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
                         .font(.system(size: 17, weight: .semibold))
                     Text(AppStrings.recordTripCta(l))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.inter(15, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20)
