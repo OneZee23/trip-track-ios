@@ -929,10 +929,17 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// первом же переиспользовании вида.
         func paint(_ view: PlacePinView, with annotation: AtlasPlaceAnnotation, selectedId: UUID?) {
             view.setKind(annotation.pin.inPeriod ? .place : .outOfPeriod)
+            // Подпись — ТОЛЬКО у выбранной булавки (владелец, 26 сен).
+            // Доска S8 рисовала её всегда, и на живой карте это дало два
+            // изъяна сразу: «Геленджик» нашей подписью лёг поверх
+            // «Gelendzhik» самой карты — одно и то же слово дважды, — а
+            // остальные чипы заняли карту прежде, чем человек о них
+            // попросил. Точка отвечает на «где», имя — на «что», и второй
+            // вопрос задают нажатием.
             view.setSelectedAppearance(annotation.pin.id == selectedId,
                                        name: annotation.pin.name ?? annotation.unnamed,
                                        detail: annotation.dateText,
-                                       alwaysLabelled: true)
+                                       alwaysLabelled: false)
         }
 
         func syncSeals(_ map: MKMapView, seals: [Discovery], language: LanguageManager.Language) {
@@ -1549,6 +1556,26 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             handleTap(at: recognizer.location(in: map), on: map)
         }
 
+        /// Минимальная цель нажатия — 44 pt, как требует HIG, и у булавки
+        /// МЕСТА она обязательна.
+        ///
+        /// Диск места — 28 pt, с прежним запасом в 6 выходило 40, и попасть
+        /// по нему можно было только сильно приблизившись («надо очень
+        /// хорошо приблизить, чтобы по ним попасть» — владелец 26 сен).
+        /// Цель строится вокруг ЦЕНТРА вида, а не растягиванием рамки:
+        /// подпись выбранной булавки рисуется ВЫШЕ диска и перекосила бы
+        /// прямоугольник вверх, уведя цель с самой точки.
+        static func touchTarget(of view: MKAnnotationView, annotation: MKAnnotation) -> CGRect {
+            let padded = view.frame.insetBy(dx: -6, dy: -6)
+            guard annotation is AtlasPlaceAnnotation else { return padded }
+            let side = max(padded.width, padded.height, placeTouchSide)
+            return CGRect(x: view.center.x - side / 2, y: view.center.y - side / 2,
+                          width: side, height: side)
+        }
+
+        /// 44 pt — минимальная цель нажатия из HIG.
+        static let placeTouchSide: CGFloat = 44
+
         /// Тот же тап, но ТОЧКОЙ: распознаватель остаётся снаружи, и разбор
         /// «что под пальцем» проверяется тестом, а не открытым экраном
         /// (тот же приём, что у `AutoTripPolicy` и `JourneyEditSheet`).
@@ -1570,7 +1597,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // кольцо остались бы не нажать.
                 guard !(annotation is RiddleHintAnnotation) else { continue }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
-                let target = view.frame.insetBy(dx: -6, dy: -6)
+                let target = Self.touchTarget(of: view, annotation: annotation)
                 guard target.contains(point) else { continue }
                 let distance = hypot(view.center.x - point.x, view.center.y - point.y)
                 if nearest == nil || distance < nearest!.distance {

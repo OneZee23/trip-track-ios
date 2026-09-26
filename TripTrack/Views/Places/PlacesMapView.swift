@@ -252,6 +252,11 @@ final class PlacePinView: MKAnnotationView {
         setSelectedAppearance(selected, name: name, detail: nil, alwaysLabelled: false)
     }
 
+    /// Стоит ли сейчас подпись. Шов для теста: на «Атласе» она обязана
+    /// появляться только у выбранной булавки, а увидеть это снаружи иначе
+    /// нечем — `labelBox` приватен, и правильно, что приватен.
+    var isLabelled: Bool { !labelBox.isHidden }
+
     /// `alwaysLabelled` — подпись стоит и у невыбранной булавки: так рисует
     /// «Атлас» (S8), где имя места это половина смысла карты. На вкладке
     /// «Места» подпись только у выбранной: десяток имён на карте города
