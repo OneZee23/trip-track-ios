@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} z {total} w okresie",
         "placesBetaTitle": "Miejsca w wersji beta",
         "placesBetaBody": "Ta zakładka wciąż się zmienia: jak miejsca są rozpoznawane przy przejeździe, co pokazuje ich ekran i które aplikacja proponuje sama. Napisz, jeśli coś tu działa inaczej, niż się spodziewasz.",
+        "atlasCellsStyle": "Kratka",
     ]
 
 }

@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{total} yerin {places}ı dönem içinde",
         "placesBetaTitle": "Yerler beta aşamasında",
         "placesBetaBody": "Bu sekme hâlâ değişiyor: yerlerin geçerken nasıl tanındığı, ekranlarının ne gösterdiği ve uygulamanın kendiliğinden hangilerini önerdiği. Burada beklediğin gibi çalışmayan bir şey olursa yaz.",
+        "atlasCellsStyle": "Kareler",
     ]
 
 }

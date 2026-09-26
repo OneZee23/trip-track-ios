@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} su {total} nel periodo",
         "placesBetaTitle": "Luoghi è in beta",
         "placesBetaBody": "Questa scheda sta ancora cambiando: come i luoghi vengono riconosciuti a ogni passaggio, cosa mostra la loro schermata e quali l'app suggerisce da sola. Scrivici se qualcosa qui non funziona come ti aspetti.",
+        "atlasCellsStyle": "Caselle",
     ]
 
 }

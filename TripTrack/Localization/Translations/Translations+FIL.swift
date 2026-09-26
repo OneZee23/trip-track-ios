@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} sa {total} sa panahong ito",
         "placesBetaTitle": "Beta pa ang Mga Lugar",
         "placesBetaBody": "Nagbabago pa ang tab na ito: kung paano nakikilala ang mga lugar sa bawat daan, kung ano ang ipinapakita ng screen nila, at kung alin ang imumungkahi ng app mismo. Sumulat kung may hindi gumagana ayon sa inaasahan mo.",
+        "atlasCellsStyle": "Mga Parisukat",
     ]
 
 }

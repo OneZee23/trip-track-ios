@@ -202,9 +202,15 @@ struct AtlasAppearanceSheet: View {
             AtlasControlsHeader(title: AppStrings.atlasMapStyle(lang.language))
             ScrollView {
                 VStack(spacing: 16) {
-                    HStack(spacing: 10) {
+                    // Три в ряд — как рисует макет A7. Сетка, а не `HStack`:
+                    // у трёх плиток подписи разной длины, и колонки обязаны
+                    // быть равными, а не по содержимому.
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8),
+                                             count: 3),
+                              spacing: 8) {
                         styleCard(.fog, title: AppStrings.atlasFogStyle(lang.language))
                         styleCard(.night, title: AppStrings.atlasNightStyle(lang.language))
+                        styleCard(.cells, title: AppStrings.atlasCellsStyle(lang.language))
                     }
                     layerToggles
                 }
@@ -395,10 +401,18 @@ private struct AtlasStylePreview: View {
                 ? Color(red: 0.11, green: 0.14, blue: 0.19)
                 : Color(red: 0.90, green: 0.90, blue: 0.88)))
             let route = routePath(size)
-            context.stroke(route, with: .color(night
-                ? Color(red: 0.20, green: 0.25, blue: 0.30)
-                : Color(red: 0.85, green: 0.82, blue: 0.69)),
-                style: StrokeStyle(lineWidth: 28, lineCap: .round, lineJoin: .round))
+            let openedColour = Color(red: 0.85, green: 0.82, blue: 0.69)
+            if style == .cells {
+                // У «Клеток» открытое — КЛЕТКИ, и превью обязано показывать
+                // именно их: тайл, подписанный «Клетки», но нарисованный
+                // мягким коридором, обещал бы не то, что человек увидит.
+                context.fill(openedCells(route, size: size), with: .color(openedColour))
+            } else {
+                context.stroke(route, with: .color(night
+                    ? Color(red: 0.20, green: 0.25, blue: 0.30)
+                    : openedColour),
+                    style: StrokeStyle(lineWidth: 28, lineCap: .round, lineJoin: .round))
+            }
             var streets = Path()
             for x in stride(from: CGFloat(-20), through: size.width + 40, by: 26) {
                 streets.move(to: CGPoint(x: x, y: 0))
@@ -419,6 +433,31 @@ private struct AtlasStylePreview: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// Клетки, которых коридор касается. Сторона взята «на глаз кадра», а не
+    /// из `FogCellGrid`: превью это рисунок в восемьдесят точек, и настоящая
+    /// сторона в точках карты здесь ничего не значит — значит только то, что
+    /// открытое выглядит квадратами такого же порядка, как на карте.
+    private func openedCells(_ route: Path, size: CGSize) -> Path {
+        let side: CGFloat = 13
+        let halo: CGFloat = 14
+        let wide = route.strokedPath(StrokeStyle(lineWidth: halo * 2,
+                                                 lineCap: .round, lineJoin: .round))
+        var cells = Path()
+        var y: CGFloat = 0
+        while y < size.height {
+            var x: CGFloat = 0
+            while x < size.width {
+                let cell = CGRect(x: x, y: y, width: side, height: side)
+                if wide.contains(CGPoint(x: cell.midX, y: cell.midY)) {
+                    cells.addRect(cell)
+                }
+                x += side
+            }
+            y += side
+        }
+        return cells
     }
 
     private func routePath(_ size: CGSize) -> Path {

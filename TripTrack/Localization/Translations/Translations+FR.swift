@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} sur {total} dans la période",
         "placesBetaTitle": "Lieux est en bêta",
         "placesBetaBody": "Cet onglet évolue encore : comment les lieux sont reconnus à chaque passage, ce que montre leur écran et lesquels l'app propose d'elle-même. Écris-nous si quelque chose ne marche pas comme tu l'attends.",
+        "atlasCellsStyle": "Cases",
     ]
 
 }

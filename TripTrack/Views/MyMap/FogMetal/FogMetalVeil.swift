@@ -114,6 +114,10 @@ final class FogMetalVeil: MTKView {
     /// атрибуции не нашлось. Ставит его ХОСТ, ровно там же, где отдаёт окно
     /// растровой вуали.
     private var carve: FogCarveWindow?
+    /// Стиль «Клетки». Смена перерисовывает кадр даже на стоящей карте — на
+    /// ней тика нет, и без этого зова стиль доехал бы только с первым
+    /// движением пальца (та же причина, что у смены темы).
+    private var usesCells = false
     /// Окно, с которым взялись рисовать последний кадр, — вторая половина
     /// ключа «кадр покоя уже нарисован». Окно ездит вместе с разметкой и
     /// высотой листа, и сдвинувшееся на СТОЯЩЕЙ карте оно обязано доехать до
@@ -270,6 +274,12 @@ final class FogMetalVeil: MTKView {
 
     /// Открытый мир. Буферы собираются вне главного потока и подменяются
     /// целиком — дозаписи в живой буфер нет: кадр может идти прямо сейчас.
+    func setUsesCells(_ enabled: Bool) {
+        guard enabled != usesCells else { return }
+        usesCells = enabled
+        invalidate()
+    }
+
     func setLayer(_ revealed: RevealedLayer) {
         let signature = FogMesh.signature(of: revealed)
         guard signature != installedSignature, let device else { return }
@@ -539,7 +549,10 @@ final class FogMetalVeil: MTKView {
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
             palette: FogVeilPainter.palette,
             carve: carve,
-            reveal: revealCircle(map: map))
+            reveal: revealCircle(map: map),
+            grid: usesCells
+                ? FogCellGrid.make(visible: visible, viewportPoints: bounds.size)
+                : nil)
 
         // Текстура покрытия пережила прошлый кадр — её не стало только если
         // сменился размер или память отобрали. Не создалась вовсе — кадр

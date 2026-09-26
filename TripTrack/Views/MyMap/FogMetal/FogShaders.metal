@@ -41,12 +41,29 @@ struct FogReveal {
     float solid;
 };
 
+// Сетка «Клеток» — третьего стиля карты. `side` нулём значит «сетки нет»:
+// композит тогда берёт покрытие как есть, и кадр выходит байт в байт таким
+// же, как у эталонного «Тумана». `m` — прямая матрица «смещение в точках
+// карты → точки экрана», `inv` — обратная ей, `origin` — экранный угол
+// прямоугольника кадра.
+struct FogGrid {
+    float4 m;
+    float4 inv;
+    float2 origin;
+    // Начало мировой сетки — смещение ближайшей её границы от угла кадра, в
+    // точках карты. Считает его CPU в double: без этого клетки считались бы
+    // от угла кадра и ехали бы вместе с картой.
+    float2 cellOrigin;
+    float side;
+};
+
 struct FogComposite {
     float4 colour;
     float alpha;
     float2 viewport;
     FogCarve carve;
     FogReveal reveal;
+    FogGrid grid;
 };
 
 struct CoverageVertex {
@@ -141,14 +158,51 @@ static float fog_sd_rounded_rect(float2 p, float2 centre, float2 halfExtent, flo
 // машины на живой записи: у растра она маска на слое, потому что перерисовать
 // его шестьдесят раз в секунду нельзя, — здесь же кадр и так рисуется заново,
 // и дыра стоит двух умножений.
+// Покрытие клетками: клетка открыта ЦЕЛИКОМ или закрыта целиком.
+//
+// Снимается покрытие в ПЯТИ точках клетки — в середине и по четырём
+// направлениям от неё, — и берётся большее. Одной середины мало: коридор
+// шириной в клетку легко проходит мимо её центра, и клетка, по которой
+// человек проехал, осталась бы закрытой. Порог низкий по той же причине —
+// «задело» важнее, чем «накрыло»: слой открытого (`RevealGrid`) отмечает
+// ячейку, через которую трек ПРОШЁЛ, и клетки обязаны показывать то же.
+static half fog_cell_coverage(texture2d<half> coverage, sampler s,
+                              constant FogComposite &c, float2 p)
+{
+    float2x2 fwd = float2x2(float2(c.grid.m.x, c.grid.m.y), float2(c.grid.m.z, c.grid.m.w));
+    float2x2 inv = float2x2(float2(c.grid.inv.x, c.grid.inv.y), float2(c.grid.inv.z, c.grid.inv.w));
+
+    // Смещение от угла кадра в точках карты — в Float32 оно небольшое, а вот
+    // абсолютная координата у Краснодара это ~1.6e8, и считать индекс клетки
+    // по ней значило бы вернуть дрожь, от которой куски меша и придуманы.
+    float2 mp = inv * (p - c.grid.origin);
+    float2 fromGrid = mp - c.grid.cellOrigin;
+    float2 centreMp = (floor(fromGrid / c.grid.side) + 0.5) * c.grid.side + c.grid.cellOrigin;
+    float2 centre = c.grid.origin + fwd * centreMp;
+    // Клетка на экране это параллелограмм, а не квадрат: карту можно
+    // повернуть. Шаги берутся из ТОЙ ЖЕ матрицы, поэтому пробы остаются
+    // внутри клетки при любом повороте.
+    float2 ex = (fwd * float2(c.grid.side, 0.0)) * 0.3;
+    float2 ey = (fwd * float2(0.0, c.grid.side)) * 0.3;
+
+    half hit = coverage.sample(s, centre / c.viewport).r;
+    hit = max(hit, coverage.sample(s, (centre + ex) / c.viewport).r);
+    hit = max(hit, coverage.sample(s, (centre - ex) / c.viewport).r);
+    hit = max(hit, coverage.sample(s, (centre + ey) / c.viewport).r);
+    hit = max(hit, coverage.sample(s, (centre - ey) / c.viewport).r);
+    return hit > 0.35h ? 1.0h : 0.0h;
+}
+
 fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
                                       texture2d<half> coverage [[texture(0)]],
                                       constant FogComposite &c [[buffer(0)]])
 {
     constexpr sampler nearest(filter::nearest, address::clamp_to_edge);
-    half cov = coverage.sample(nearest, in.uv).r;
-    half a = half(c.alpha) * (1.0h - cov);
     float2 p = in.uv * c.viewport;
+    half cov = c.grid.side > 0.0
+        ? fog_cell_coverage(coverage, nearest, c, p)
+        : coverage.sample(nearest, in.uv).r;
+    half a = half(c.alpha) * (1.0h - cov);
     if (c.carve.enabled > 0.5) {
         float2 halfExtent = c.carve.rect.zw * 0.5;
         float d = fog_sd_rounded_rect(p, c.carve.rect.xy + halfExtent, halfExtent,

@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} з {total} у періоді",
         "placesBetaTitle": "Місця в беті",
         "placesBetaBody": "Ця вкладка ще змінюється: як місця впізнаються на проїзді, що показує їхній екран і які з них застосунок пропонує сам. Напиши, якщо щось тут працює не так, як ти чекаєш.",
+        "atlasCellsStyle": "Клітинки",
     ]
 
 }

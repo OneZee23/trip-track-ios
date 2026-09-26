@@ -35,7 +35,18 @@ enum AtlasPeriod: Equatable {
 }
 
 struct AtlasMapAppearance: Equatable, Codable {
-    enum Style: String, CaseIterable, Codable { case fog, night }
+    /// `cells` — третий стиль (0.8.2): тот же светлый туман, но открытое в
+    /// нём квантовано клетками (`FogCellGrid`). Палитру он делит с `fog` —
+    /// от `night` отличается только мгла, а от `fog` только сетка.
+    /// `rawValue` менять нельзя: это `UserDefaults` на телефоне.
+    enum Style: String, CaseIterable, Codable { case fog, night, cells }
+
+    /// Мгла тёмная только у «Ночи». Отдельным свойством, а не сравнением по
+    /// месту: третий стиль уже показал, что таких сравнений набирается
+    /// несколько и они разъезжаются.
+    var usesDarkFog: Bool { style == .night }
+    /// Открытое рисуется клетками.
+    var usesCells: Bool { style == .cells }
 
     var style: Style = .fog
     var showsPhotos = true

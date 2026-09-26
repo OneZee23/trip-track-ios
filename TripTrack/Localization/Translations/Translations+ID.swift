@@ -1496,6 +1496,7 @@ extension Translations {
         "atlasPlacesInPeriod": "{places} dari {total} pada periode ini",
         "placesBetaTitle": "Tempat masih beta",
         "placesBetaBody": "Tab ini masih berubah: bagaimana tempat dikenali saat kamu lewat, apa yang ditampilkan layarnya, dan mana yang disarankan aplikasi sendiri. Tulis kalau ada yang tidak berjalan seperti harapanmu.",
+        "atlasCellsStyle": "Kotak",
     ]
 
 }

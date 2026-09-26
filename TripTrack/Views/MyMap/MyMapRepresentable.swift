@@ -32,8 +32,13 @@ final class MapHostController: UIViewController {
     private var usesDarkFog = true
 
     func setAppearance(_ appearance: AtlasMapAppearance) {
-        usesDarkFog = appearance.style == .night
+        usesDarkFog = appearance.usesDarkFog
         applyPalette()
+        // Клетки — дело одного Metal-слоя: у растрового отката их нет, и это
+        // осознанно. Откат случается там, где Metal недоступен вовсе, и
+        // показать на нём третий стиль нечем; мгла при этом остаётся той же,
+        // что у «Тумана», — человек видит знакомую карту, а не пустоту.
+        fogMetal.veil?.setUsesCells(appearance.usesCells)
         updateAttributionCarve()
     }
 

@@ -158,6 +158,10 @@ extension AppStrings {
     static func atlasNightStyle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasNightStyle", ru: "Ночь", en: "Night")
     }
+    /// Третий стиль карты (0.8.2): открытое квантовано клетками.
+    static func atlasCellsStyle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasCellsStyle", ru: "Клетки", en: "Cells")
+    }
 
     static func atlasShowCityLabels(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasShowCityLabels", ru: "Подписи городов", en: "City labels")
