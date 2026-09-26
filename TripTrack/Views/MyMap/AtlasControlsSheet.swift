@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Высота внутренней колонки листа — чтобы скролл её обнял, а не растянулся.
+private struct AtlasSheetContentHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// The period is a draft until Apply. Closing this sheet keeps the current map.
 struct AtlasPeriodSheet: View {
     let onSelect: (AtlasPeriod) -> Void
@@ -9,9 +17,8 @@ struct AtlasPeriodSheet: View {
     @State private var draft: AtlasPeriod
     @State private var start: Date
     @State private var end: Date
-    @State private var editingStart = true
+    @State private var inner: CGFloat = 0
     @State private var previousPreset: AtlasPeriod = .allTime
-    @State private var detent: PresentationDetent = .medium
 
     init(period: AtlasPeriod, onSelect: @escaping (AtlasPeriod) -> Void) {
         self.onSelect = onSelect
@@ -20,7 +27,6 @@ struct AtlasPeriodSheet: View {
             let window = AtlasPeriodBounds.clamp(start: start, end: end)
             _start = State(initialValue: window.start)
             _end = State(initialValue: window.end)
-            _detent = State(initialValue: .large)
         } else {
             let now = Date()
             _start = State(initialValue: Calendar.current.date(byAdding: .day, value: -29, to: now) ?? now)
@@ -39,9 +45,21 @@ struct AtlasPeriodSheet: View {
             AtlasControlsHeader(
                 title: isCustom ? AppStrings.atlasCustomPeriod(lang.language) : AppStrings.atlasPeriod(lang.language),
                 onBack: isCustom ? {
-                    withAnimation { draft = previousPreset; detent = .medium }
+                    withAnimation { draft = previousPreset }
                 } : nil
             )
+            // Скролл ОБНИМАЕТ содержимое, а не забирает всю предложенную
+            // высоту.
+            //
+            // `contentSizedSheet` меряет то, что ему дали, а `ScrollView` по
+            // умолчанию отвечает «возьму сколько предложите» — и лист от
+            // такой мерки становится полноэкранным, то есть ровно с той же
+            // пустотой, из-за которой всё и затевалось. Поймано КАДРОМ
+            // (`AtlasSheetHeightShotTests`), а не рассуждением: состоянием
+            // высоту листа не спросить. Поэтому меряется внутренняя колонка,
+            // и её высота становится потолком скролла: содержимое короче
+            // экрана — лист по нему, длиннее — система зажмёт по экрану, а
+            // скролл останется скроллом.
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if isCustom { customDates } else { presets }
@@ -51,13 +69,29 @@ struct AtlasPeriodSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(16)
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(key: AtlasSheetContentHeight.self,
+                                               value: geo.size.height)
+                    }
+                }
             }
+            .onPreferenceChange(AtlasSheetContentHeight.self) { inner = $0 }
+            .frame(maxHeight: inner > 0 ? inner : nil)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { applyButton }
         .background(AtlasTheme.background)
-        .presentationBackground(AtlasTheme.background)
         .presentationCornerRadius(AtlasTheme.sheetRadius)
-        .presentationDetents(isCustom ? [.large] : [.medium, .large], selection: $detent)
+        // Высота ПО СОДЕРЖИМОМУ. Стояло `.medium` — ровно полэкрана, сколько
+        // бы строк внутри ни было, — а «Показать» приколота к низу листа:
+        // между подсказкой и кнопкой зияло поле в треть телефона. Владелец
+        // 26 сен: «зачем-то куча пустого места, это может так и надо?» — нет,
+        // не надо, это не приём, а лист выше своего содержимого.
+        //
+        // Заодно ушла вся машинерия с `detent`: пресеты и свой период просто
+        // разной высоты, и лист следует за ними сам. Высокое содержимое
+        // система зажмёт по экрану, а внутри стоит `ScrollView`.
+        .contentSizedSheet(background: AtlasTheme.background)
         .presentationDragIndicator(.hidden)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("atlas_period_sheet")
@@ -88,7 +122,6 @@ struct AtlasPeriodSheet: View {
             withAnimation {
                 if id == "custom" {
                     previousPreset = draft
-                    detent = .large
                 }
                 draft = period
             }
@@ -119,58 +152,77 @@ struct AtlasPeriodSheet: View {
         .accessibilityIdentifier("atlas_period_\(id)")
     }
 
+    /// Свой период — ТЕМ ЖЕ календарём, что фильтр истории на «Я».
+    ///
+    /// Просьба владельца 26 сен: «переиспользуй то, как мы сделали календарь
+    /// в „Я“ и в ленте — там очень удобно». Удобство там в механике: один тап
+    /// ставит начало, второй конец, тот же день дважды снимает выбор, день
+    /// раньше начала меняет концы местами, а тап по готовому отрезку начинает
+    /// заново. Прежний `DatePicker(.graphical)` требовал сперва выбрать, КАКУЮ
+    /// из двух дат ты сейчас правишь, — два лишних решения на каждый период.
+    ///
+    /// Берётся сам компонент, а не копия его логики: две копии однажды
+    /// разойдутся, и «удобно как в Я» перестанет быть правдой. Флагами гасится
+    /// то, что здесь лишнее, — строка «сбросить» (над календарём и так стоит
+    /// «Всё время») и свёрнутая неделя.
     private var customDates: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             HStack(spacing: 8) {
-                dateButton(start, title: AppStrings.atlasFrom(lang.language), isStart: true)
-                dateButton(end, title: AppStrings.atlasTo(lang.language), isStart: false)
+                dateChip(AppStrings.atlasFrom(lang.language), date: start)
+                dateChip(AppStrings.atlasTo(lang.language), date: end)
             }
-            DatePicker(
-                editingStart ? AppStrings.atlasFrom(lang.language) : AppStrings.atlasTo(lang.language),
-                selection: editingStart ? $start : $end,
-                // Верх обеих границ — сегодня: поездок из будущего не
-                // бывает (`AtlasPeriodBounds`). Собирается чистой функцией —
-                // перевёрнутый `ClosedRange` роняет процесс, и проверять это
-                // обязан тест, а не открытый на телефоне экран.
-                in: editingStart
-                    ? AtlasPeriodBounds.start(start: start, end: end)
-                    : AtlasPeriodBounds.end(start: start, end: end),
-                displayedComponents: .date
+            ProfileHistoryCalendar(
+                dateFrom: calendarFrom,
+                dateTo: calendarTo,
+                // Километров по дням у «Атласа» нет: тепловая заливка — это
+                // про историю поездок на «Я», а здесь календарь выбирает
+                // окно, а не показывает, сколько в нём наезжено.
+                kmByDay: [:],
+                maxKmDay: 0,
+                filteredCount: 0,
+                showsFilterRow: false,
+                startsExpanded: true
             )
-            .datePickerStyle(.graphical)
-            .tint(AtlasTheme.accent)
-            .environment(\.locale, lang.language.locale)
             .accessibilityIdentifier("atlas_period_calendar")
         }
-        .padding(8)
-        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
     }
 
-    private func dateButton(_ date: Date, title: String, isStart: Bool) -> some View {
-        let selected = editingStart == isStart
-        return Button {
-            Haptics.tap()
-            editingStart = isStart
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.inter(12, weight: .semibold))
-                Text(date, format: .dateTime.day().month(.abbreviated).year().locale(lang.language.locale))
-                    .font(.inter(14, weight: .bold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .foregroundStyle(selected ? AtlasTheme.accentInk : AtlasTheme.secondary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(selected ? AtlasTheme.accentSoft : AtlasTheme.background,
-                        in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier(isStart ? "atlas_period_from" : "atlas_period_to")
+    /// Обе даты у «Атласа» неопциональны, а календарь говорит на `Date?`.
+    ///
+    /// Пустой конец — это «выбрано только начало», и до второго тапа окно
+    /// считается одним днём: иначе «Показать» на полпути показал бы период,
+    /// которого человек не задавал.
+    private var calendarFrom: Binding<Date?> {
+        Binding(get: { start }, set: { picked in
+            guard let picked else { return }
+            start = picked
+            if end < picked { end = picked }
+        })
     }
+
+    private var calendarTo: Binding<Date?> {
+        Binding(get: { end }, set: { picked in
+            guard let picked else { end = start; return }
+            end = picked
+        })
+    }
+
+    /// Итог выбора словами — «С 28 авг.» / «По 26 сент.». Нажимать их больше
+    /// не нужно: какую дату ставит тап, решает сам календарь.
+    private func dateChip(_ title: String, date: Date) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.inter(12, weight: .semibold))
+                .foregroundStyle(AtlasTheme.secondary)
+            Text(date, format: .dateTime.day().month(.abbreviated).year().locale(lang.language.locale))
+                .font(.inter(14, weight: .bold))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
+                .foregroundStyle(AtlasTheme.ink)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: 12))
+    }
+
 
     private var applyButton: some View {
         Button {

@@ -174,8 +174,13 @@ struct MyMapView: View {
             }
         }
         .sheet(isPresented: $showAppearance) {
+            // Высота ПО СОДЕРЖИМОМУ, а не половина экрана: в листе три
+            // плитки и один тумблер, а `.medium` оставлял под ними пустое
+            // поле в треть высоты телефона — владелец 26 сен: «зачем столько
+            // пустого места под „Фото из поездок“». Тот же домашний
+            // модификатор, что у обзорного листа и у пикеров.
             AtlasAppearanceSheet(appearance: $appearance)
-                .presentationDetents([.medium, .large])
+                .contentSizedSheet(background: AtlasTheme.background)
         }
         .sheet(isPresented: $showExplanation) {
             AtlasExplanationSheet()
@@ -223,19 +228,30 @@ struct MyMapView: View {
 
                         AtlasBetaChip { showBetaSheet = true }
                         Spacer(minLength: 4)
+                        // Круглая кнопка того же размера и стиля, что слои и
+                        // «я здесь» справа внизу (`control(_:label:id:)`).
+                        // Пилюля со словами «Всё время» и шевроном была вдвое
+                        // шире и забирала внимание у самой карты — владелец на
+                        // устройстве 26 сен. Календарь и так говорит, что за
+                        // ним время, а КАКОЕ именно — вопрос второй и живёт в
+                        // листе.
+                        //
+                        // Выбранный период при этом виден: кнопка горит
+                        // терракотой. Иначе фильтр, из-за которого на карте
+                        // половина дорог, ничем бы себя не выдавал. Слово для
+                        // озвучки остаётся полным — значок VoiceOver не
+                        // прочитает.
                         Button { showPeriod = true; Haptics.tap() } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar").font(.system(size: 14, weight: .medium))
-                                Text(periodTitle).font(.system(size: 14, weight: .medium))
-                                Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
-                            }
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                            .foregroundStyle(vm.period == .allTime ? AtlasTheme.ink : AtlasTheme.accentInk)
-                            .padding(.horizontal, 14).frame(height: 40)
-                            .background(vm.period == .allTime ? AtlasTheme.control : AtlasTheme.accentSoft, in: Capsule())
-                            .shadow(color: .black.opacity(0.1), radius: 7, y: 2)
+                            Image(systemName: "calendar")
+                                .font(.system(size: 19, weight: .medium))
+                                .foregroundStyle(vm.period == .allTime ? AtlasTheme.ink : AtlasTheme.accentInk)
+                                .frame(width: 44, height: 44)
+                                .background(vm.period == .allTime ? AtlasTheme.control : AtlasTheme.accentSoft,
+                                            in: Circle())
+                                .shadow(color: .black.opacity(0.12), radius: 7, y: 2)
                         }
                         .buttonStyle(PressableCardStyle())
+                        .accessibilityLabel(periodTitle)
                         .accessibilityIdentifier("atlas_period")
                     }
                 }

@@ -25,6 +25,20 @@ struct ProfileHistoryCalendar: View {
     /// with that date preset instead of starting a range. `nil` keeps the
     /// calendar exactly as it shipped before manual trips existed.
     var onEmptyDayTap: ((Date) -> Void)?
+    /// Показывать ли строку «N поездок · сбросить».
+    ///
+    /// На «Я» она обязательна: без неё тап может оставить историю почти
+    /// пустой, и на экране не будет ничего, что это объясняет. На «Атласе»
+    /// сбрасывать нечего — там над календарём стоит свой список пресетов с
+    /// «Всё время», а ниже кнопка «Показать».
+    var showsFilterRow = true
+
+    /// Открыт ли календарь месяцем сразу.
+    ///
+    /// «Я» начинает с недели — там календарь фильтр над историей, и место
+    /// дороже. «Атлас» открывает его КАК ЭКРАН выбора периода: неделя там
+    /// заставляла бы первым делом разворачивать то, ради чего лист и открыли.
+    var startsExpanded = false
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -70,7 +84,7 @@ struct ProfileHistoryCalendar: View {
                 weekRow(c, scale: scale)
             }
 
-            if dateFrom != nil {
+            if showsFilterRow, dateFrom != nil {
                 filterRow(c)
             }
         }
@@ -81,6 +95,10 @@ struct ProfileHistoryCalendar: View {
         .animation(.easeInOut(duration: 0.18), value: dateFrom)
         .animation(.easeInOut(duration: 0.18), value: dateTo)
         .accessibilityIdentifier("profile_calendar")
+        // Через `onAppear`, а не своим `init`: memberwise-инициализатор с
+        // `@Binding` и `@State` пришлось бы писать руками, а это восемь
+        // аргументов, которые разъедутся с полями при первой же правке.
+        .onAppear { if startsExpanded { isExpanded = true } }
     }
 
     // MARK: - Headers
