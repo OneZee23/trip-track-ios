@@ -4,7 +4,89 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.8.0 — the Atlas on Metal, place suggestions, export (current submission)
+## v0.8.1 — a track without gaps, drafts, a new look (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.8.1 is a quality release about recording honestly: a weak GPS
+signal no longer drops part of a route, and automatic tracking no longer
+decides on the user's behalf.
+
+NO IN-APP PURCHASES IN THIS BUILD. There is no subscription, no tip jar and
+no paywall anywhere in the app, and nothing is submitted under In-App
+Purchase for this version. The app is free and complete as shipped.
+
+A TRACK WITHOUT GAPS. An evening city, a tunnel or an underground car park
+used to produce no fixes at all, and the route broke into separate pieces.
+The recording gate now accepts a rougher fix (200 m instead of 65 m) so the
+shape of the road is still drawn, while distance keeps its old 65 m gate and
+does not change by a metre. A gap that still remains is closed on the phone:
+first with a straight line, then, when the app is in the foreground and
+online, replaced by a real road route from MapKit and drawn as a grey dashed
+line — explicitly a best guess, not a driven path.
+
+DRAFTS IN "REMINDERS" MODE. Automatic tracking in this mode now saves the
+trip as a DRAFT and asks "Is this yours?" — on the trip, in the summary, in
+the "Me" tab, and in a local notification if the question went unanswered. An
+unconfirmed draft is excluded from the Atlas, from statistics and from sync:
+it never leaves the phone until the user says it is theirs.
+
+A NEW LOOK, MARKED BETA. The Atlas and Places tabs are redrawn (light paper
+map, period filters, places as pins, search and sorting). Both carry a visible
+"Beta" chip that opens a short card explaining that these screens are still
+being reworked. This is deliberate and not a placeholder left in by mistake.
+
+FIXED. Opening another user's trip from the feed could freeze the app in an
+infinite layout loop; profile level could reset to 1 during sync.
+
+HOW TO TEST
+1. Record a trip. In the Simulator use Features > Location > Freeway Drive
+   (not City Run: anything that never exceeds 15 km/h is discarded as a
+   walking misfire).
+2. Open the "Feed" tab and tap any trip by another user, go back, and open it
+   again — the app stays responsive.
+3. Open your own trip, open the journey or place linked from it, then come
+   back — the map is still there.
+4. Open the fourth tab, "Atlas", tap the "Beta" chip — a card explains that
+   the screen is still being reworked. The same chip is on "Places".
+5. On the Atlas, tap a region in the sheet — the camera moves to that region.
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. Everything above works fully
+signed out and with Cloud Sync off, which is the default.
+
+No new permissions are requested. Location usage is unchanged from 0.7.0.
+```
+
+### Если спросят про «Beta» на двух экранах
+
+```
+The Atlas and Places tabs were redesigned in this release and will be
+redesigned once more. Rather than hold the release — which also carries a
+freeze fix and a data-loss fix — we ship the current design and label it. The
+chip is a normal control: tapping it opens a short card saying the screen is
+still being worked on and offering a way to write to us. Nothing behind the
+chip is unfinished or non-functional; both tabs work fully.
+```
+
+### Если спросят про достроенный участок трека
+
+```
+When GPS produces no usable fix for a stretch (a tunnel, an underground car
+park), the recorded track has a gap. The app closes it on the device: first
+with a straight line, then, if the app is in the foreground and online, it
+asks MapKit for a driving route between the two known points and uses that
+instead. The filled stretch is drawn as a grey dashed line and carries no
+speed, so it is visibly distinct from a recorded one. It never counts towards
+distance: only fixes accurate to 65 m or better do. No external service other
+than Apple's own MapKit directions is contacted, and nothing about the user
+is sent — only the two coordinates bounding the gap.
+```
+
+---
+
+## v0.8.0 — the Atlas on Metal, place suggestions, export (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 
