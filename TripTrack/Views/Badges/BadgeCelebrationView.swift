@@ -42,14 +42,9 @@ struct BadgeCelebrationView: View {
                         .frame(width: 220, height: 220)
                         .scaleEffect(glowPulse ? 1.15 : 0.85)
 
-                    // Main circle
-                    Circle()
-                        .fill(badge.color.opacity(0.2))
-                        .frame(width: 130, height: 130)
-
-                    Image(systemName: badge.icon)
-                        .font(.system(size: 56))
-                        .foregroundStyle(badge.color)
+                    // Свечение вокруг осталось, а плашка под значком ушла:
+                    // диск у него свой.
+                    BadgeArt(badge: badge, side: 130)
                 }
                 .scaleEffect(appear ? 1 : 0.3)
                 .opacity(appear ? 1 : 0)

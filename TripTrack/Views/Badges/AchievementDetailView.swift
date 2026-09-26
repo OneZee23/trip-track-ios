@@ -119,28 +119,27 @@ struct AchievementDetailView: View {
     private func medallion(_ c: AppTheme.Colors) -> some View {
         let rarity = badge.displayRarity
         return ZStack {
-            Circle()
-                .fill(isUnlocked ? rarity.chipTint : c.cardAlt)
-                // Canon's 22pt blur is a CSS radius; SwiftUI's is half of it.
-                .shadow(color: isUnlocked ? rarity.chipRing.opacity(0.45) : .clear, radius: 11)
-
-            if isUnlocked {
-                Circle().strokeBorder(rarity.chipRing, lineWidth: 4)
-            } else if isSecret {
-                // Dashed, not solid: the outline of something not yet filled in.
+            // СЕКРЕТ — единственное, что рисует этот экран сам: показать его
+            // рисунок значит выдать ответ. Пунктир, а не сплошная, — контур
+            // того, что ещё не заполнено.
+            if isSecret {
+                Circle().fill(c.cardAlt)
                 Circle().strokeBorder(
                     c.textTertiary,
                     style: StrokeStyle(lineWidth: 2.5, dash: [7, 5])
                 )
+                Text(verbatim: "?")
+                    .font(.inter(46, weight: .heavy))
+                    .foregroundStyle(c.textTertiary)
             } else {
-                Circle().strokeBorder(c.textTertiary, lineWidth: 3)
+                // Ни заливки, ни кольца: диск и ободок редкости нарисованы в
+                // самом значке. Свечение по редкости осталось — оно ЗА ним, и
+                // это то, что делает легендарный золотым через всю комнату.
+                BadgeArt(badge: badge, side: 112, state: isUnlocked ? .unlocked : .locked)
+                    .shadow(
+                        color: isUnlocked ? rarity.chipRing.opacity(0.45) : .clear,
+                        radius: 11)
             }
-
-            // Canon draws emoji; the app has an SF Symbol per badge and keeps
-            // it, so the grid and this screen show the same mark.
-            Image(systemName: isSecret ? "questionmark" : badge.icon)
-                .font(.system(size: isSecret ? 46 : 44, weight: isSecret ? .heavy : .regular))
-                .foregroundStyle(isUnlocked ? rarity.chipText : c.textTertiary)
         }
         .frame(width: 112, height: 112)
     }

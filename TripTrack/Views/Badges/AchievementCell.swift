@@ -68,14 +68,10 @@ struct AchievementCell: View {
     private func unlockedContent(_ c: AppTheme.Colors) -> some View {
         let rarity = badge.displayRarity
         return VStack(spacing: 8) {
-            disc(fill: rarity.chipTint) {
-                // The glyph takes the darkened ring, not `badge.color`: a
-                // per-badge hue inside a per-rarity disc puts two unrelated
-                // colour systems in one 56pt circle (see `BadgeRarityChip`).
-                Image(systemName: badge.icon)
-                    .font(.system(size: 27))
-                    .foregroundStyle(rarity.chipText)
-            }
+            // Плашки своего цвета под значком больше нет: диск и ободок
+            // редкости нарисованы в самом значке (`BadgeArt`), и наш круг под
+            // ним дал бы значок внутри значка.
+            BadgeArt(badge: badge, side: 56)
 
             Text(badge.title(lang.language))
                 .font(.inter(13, weight: .bold))
@@ -102,11 +98,7 @@ struct AchievementCell: View {
             // `border` is the faintest ink token, which over `cardAlt` lands on
             // canon's #EBE8E5 — a disc a shade darker than the tile, not a grey
             // of its own.
-            disc(fill: c.border) {
-                Image(systemName: badge.icon)
-                    .font(.system(size: 27))
-                    .foregroundStyle(c.text.opacity(0.4))
-            }
+            BadgeArt(badge: badge, side: 56, state: .locked)
 
             Text(badge.title(lang.language))
                 .font(.inter(13, weight: .bold))

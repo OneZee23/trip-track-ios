@@ -33,23 +33,18 @@ struct BadgeDetailOverlay: View {
                 // a 40pt glyph the medallion read as a list cell blown up
                 // rather than as the card's subject.
                 ZStack {
-                    Circle()
-                        .fill(isUnlocked ? badge.color.opacity(0.15) : c.cardAlt)
-                        .frame(width: 96, height: 96)
-
                     if isUnlocked {
-                        Image(systemName: badge.icon)
-                            .font(.system(size: 48))
-                            .foregroundStyle(badge.color)
+                        BadgeArt(badge: badge, side: 96)
                     } else if badge.isHidden {
+                        Circle()
+                            .fill(c.cardAlt)
+                            .frame(width: 96, height: 96)
                         // A padlock on a folded map, not a bare question
                         // mark: a hidden achievement is something waiting to be
                         // opened, and the glyph read as a missing asset.
                         EmptyStateIllustration(name: "badge_locked", size: 132)
                     } else {
-                        Image(systemName: badge.icon)
-                            .font(.system(size: 48))
-                            .foregroundStyle(c.textTertiary.opacity(0.5))
+                        BadgeArt(badge: badge, side: 96, state: .locked)
                         Image(systemName: "lock.fill")
                             .font(.system(size: 16))
                             .foregroundStyle(c.textTertiary)

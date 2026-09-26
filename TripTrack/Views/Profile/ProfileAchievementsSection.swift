@@ -105,7 +105,7 @@ struct ProfileAchievementsSection: View {
             onTapBadge(badge)
         } label: {
             HStack(spacing: 10) {
-                BadgeRarityChip(badge: badge, iconSize: 16)
+                BadgeRarityChip(badge: badge)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
@@ -140,7 +140,7 @@ struct ProfileAchievementsSection: View {
                     Haptics.tap()
                     onTapBadge(badge)
                 } label: {
-                    BadgeRarityChip(badge: badge, iconSize: 15)
+                    BadgeRarityChip(badge: badge)
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
@@ -227,20 +227,11 @@ struct ProfileAchievementsSection: View {
 /// unrelated colour systems in one 30pt circle (green glyph, purple ring).
 private struct BadgeRarityChip: View {
     let badge: Badge
-    var iconSize: CGFloat = 15
+    var side: CGFloat = 30
 
     var body: some View {
-        let rarity = badge.displayRarity
-        ZStack {
-            Circle().fill(rarity.chipTint)
-            Circle().strokeBorder(rarity.chipRing, lineWidth: 1.5)
-            // Ink, not the ring: the glyph is a filled shape on a tint of its
-            // own hue, where the undarkened ring reads at under 2:1.
-            Image(systemName: badge.icon)
-                .font(.system(size: iconSize))
-                .foregroundStyle(rarity.chipText)
-        }
-        .frame(width: 30, height: 30)
+        // Ни заливки, ни кольца: и то и другое нарисовано в самом значке.
+        BadgeArt(badge: badge, side: side)
     }
 }
 
