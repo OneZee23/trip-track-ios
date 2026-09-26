@@ -71,7 +71,7 @@ struct AchievementCell: View {
             // Плашки своего цвета под значком больше нет: диск и ободок
             // редкости нарисованы в самом значке (`BadgeArt`), и наш круг под
             // ним дал бы значок внутри значка.
-            BadgeArt(badge: badge, side: 56)
+            BadgeArt(badge: badge, side: 60)
 
             Text(badge.title(lang.language))
                 .font(.inter(13, weight: .bold))
@@ -98,7 +98,7 @@ struct AchievementCell: View {
             // `border` is the faintest ink token, which over `cardAlt` lands on
             // canon's #EBE8E5 — a disc a shade darker than the tile, not a grey
             // of its own.
-            BadgeArt(badge: badge, side: 56, state: .locked)
+            BadgeArt(badge: badge, side: 60, state: .locked)
 
             Text(badge.title(lang.language))
                 .font(.inter(13, weight: .bold))
@@ -189,7 +189,12 @@ struct AchievementCell: View {
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(badge.displayRarity.chipRing, lineWidth: 1.5)
         case .locked:
-            EmptyView()
+            // Нейтральная, а не никакая: у символа больше нет своей оправы, и
+            // карточка без рамки вовсе теряет край на тёплом фоне полки.
+            // Цвет НЕ по редкости — незаработанное не имеет права хвастать
+            // классом, которого ещё нет.
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(c.border, lineWidth: 1.5)
         case .secret:
             // Canon's #D1CFCC is a mid grey against the tile it dashes, which
             // `borderBright` (8 % ink) is too faint to be — half of the

@@ -105,7 +105,9 @@ struct ProfileAchievementsSection: View {
             onTapBadge(badge)
         } label: {
             HStack(spacing: 10) {
-                BadgeRarityChip(badge: badge)
+                // Закреплённое — БЕЗ плитки: оно и так стоит на своей синей
+                // подложке, и вторая под ним читалась бы рамкой внутри рамки.
+                BadgeArt(badge: badge, side: 40)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
@@ -227,11 +229,14 @@ struct ProfileAchievementsSection: View {
 /// unrelated colour systems in one 30pt circle (green glyph, purple ring).
 private struct BadgeRarityChip: View {
     let badge: Badge
-    var side: CGFloat = 30
+    var side: CGFloat = 40
 
     var body: some View {
-        // Ни заливки, ни кольца: и то и другое нарисовано в самом значке.
-        BadgeArt(badge: badge, side: side)
+        // Плитка 40 pt со скруглением 11 и символом 32 внутри — числа из
+        // `badges.json` набора символов. Заливка по редкости: у символов
+        // самих её больше нет, и без плитки ряд мелких иконок перестал бы
+        // отличать обычное от легендарного.
+        BadgeTile(badge: badge, side: side)
     }
 }
 
