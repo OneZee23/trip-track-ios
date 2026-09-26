@@ -17,6 +17,15 @@ struct ProfileTripCardView: View {
     /// Отклик под пальцем. `.hold` там, где на карточке ещё и долгий тап
     /// («Мои»): без тянущегося сжатия удержание неотличимо от промаха.
     var pressResponse: CardPressResponse = .tap
+    /// Пометка состояния в СТРОКЕ ЗАГОЛОВКА — «Не подтверждена» у черновика.
+    ///
+    /// Раньше её вешали накладкой (`overlay(alignment: .topTrailing)`) поверх
+    /// готовой карточки, а накладка в раскладке не участвует: чип ложился на
+    /// мета-строку и срезал машину — «VW Pol…» на репорте владельца 26 сен.
+    /// Заголовок — единственная строка карточки, у которой справа есть место:
+    /// мета-строка уже несёт уровень, дату, регион и машину, и втиснутый туда
+    /// чип отъел бы регион.
+    var statusBadge: String? = nil
     /// Нажатие ЦЕЛИКОМ, вместе с щелчком.
     ///
     /// Щелчок раньше бился здесь, а вызывающий решал уже после него, открывать
@@ -47,15 +56,21 @@ struct ProfileTripCardView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 10)
 
-                Text(titleText)
-                    .font(.inter(17, weight: .heavy))
-                    .tracking(-0.085)
-                    .foregroundStyle(c.text)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 13)
-                    .padding(.bottom, 10)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(titleText)
+                        .font(.inter(17, weight: .heavy))
+                        .tracking(-0.085)
+                        .foregroundStyle(c.text)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let statusBadge {
+                        TripStatusChip(text: statusBadge)
+                    }
+                }
+                .padding(.horizontal, 13)
+                .padding(.bottom, 10)
 
                 mapSection(c)
 
@@ -331,5 +346,28 @@ struct ProfileTripCardView: View {
             parts.append(region)
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Состояние поездки одним словом, в строке заголовка карточки.
+///
+/// Заливка терракотой, а не приглушённый чип: в секции «Ждут подтверждения» у
+/// карточки есть нерешённый вопрос к человеку, и это единственное место внутри
+/// самой карточки, где он назван. `fixedSize` держит подпись целой — сжиматься
+/// обязан заголовок, а не она; ширина у чипа одна на все карточки секции,
+/// поэтому правый край у них выстраивается в линию.
+private struct TripStatusChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppType.chip)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(AppTheme.accent, in: Capsule())
+            .accessibilityIdentifier("profile_trip_status")
     }
 }

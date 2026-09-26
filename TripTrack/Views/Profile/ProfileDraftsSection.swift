@@ -25,21 +25,12 @@ struct ProfileDraftsSection: View {
                         trip: trip,
                         level: level,
                         vehicle: vehicles.first { $0.id == trip.vehicleId },
+                        statusBadge: AppStrings.draftBadge(lang.language),
                         onTap: { onOpen(trip) }
                     )
-                    .overlay(alignment: .topTrailing) { badge.padding(10) }
                 }
             }
             .padding(.horizontal, 16)
         }
-    }
-
-    private var badge: some View {
-        Text(AppStrings.draftBadge(lang.language))
-            .font(.inter(12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(AppTheme.accent, in: Capsule())
     }
 }
