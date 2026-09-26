@@ -157,10 +157,18 @@ final class PlaceAnnotation: NSObject, MKAnnotation {
 final class PlacePinView: MKAnnotationView {
     static let reuseID = "PlacePin"
 
-    /// Диаметры из макета. Подсказка меньше места нарочно: разница видна и
-    /// там, где обе булавки рядом, а цвет уже занят другим различием.
-    private static let placeSize: CGFloat = 28
-    private static let suggestedSize: CGFloat = 24
+    /// Диаметры. Подсказка меньше места нарочно: разница видна и там, где обе
+    /// булавки рядом, а цвет уже занят другим различием.
+    ///
+    /// С 26 сентября диск МЕНЬШЕ макетного (28/24 → 20/16): булавка не
+    /// масштабируется вместе с картой, и на отдалении десяток одинаковых
+    /// кружков забирал «Атлас» себе — владелец на устройстве: «слишком
+    /// здоровые… чтобы чисто поностальгировать, а не забрать на себя всё
+    /// внимание». Нажатие от уменьшения не пострадало: цель считается
+    /// радиусом от КООРДИНАТЫ (`Coordinator.placeTouchRadius`), а не рамкой
+    /// вида, то есть вид и палец с 0.8.2 разведены.
+    private static let placeSize: CGFloat = 20
+    private static let suggestedSize: CGFloat = 16
 
     private let disc = UIView()
     private let dot = UIView()
@@ -181,7 +189,7 @@ final class PlacePinView: MKAnnotationView {
         clipsToBounds = false
 
         disc.layer.borderColor = UIColor.white.cgColor
-        disc.layer.borderWidth = 2.6
+        disc.layer.borderWidth = 2
         disc.layer.shadowColor = UIColor.black.cgColor
         disc.layer.shadowOpacity = 0.18
         disc.layer.shadowRadius = 3
@@ -252,6 +260,14 @@ final class PlacePinView: MKAnnotationView {
         setSelectedAppearance(selected, name: name, detail: nil, alwaysLabelled: false)
     }
 
+    /// Видна ли булавка на нынешнем масштабе — решает карта
+    /// (`Coordinator.placesVisible`) и ставит сюда на каждом кадре жеста, как
+    /// `visible` у `RegionLabelView`. Применяется БЕЗУСЛОВНО: MapKit вправе
+    /// сам показать скрытую аннотацию заново при пересчёте столкновений.
+    var visible: Bool = true {
+        didSet { isHidden = !visible }
+    }
+
     /// Стоит ли сейчас подпись. Шов для теста: на «Атласе» она обязана
     /// появляться только у выбранной булавки, а увидеть это снаружи иначе
     /// нечем — `labelBox` приватен, и правильно, что приватен.
@@ -295,7 +311,7 @@ final class PlacePinView: MKAnnotationView {
         case .outOfPeriod: disc.backgroundColor = UIColor(AtlasTheme.mutedPin)
         case .suggestion: disc.backgroundColor = UIColor(AtlasTheme.control)
         }
-        disc.layer.borderWidth = suggested ? 0 : 2.6
+        disc.layer.borderWidth = suggested ? 0 : 2
 
         ring.isHidden = !suggested
         if suggested {
@@ -305,7 +321,7 @@ final class PlacePinView: MKAnnotationView {
             ring.frame = bounds
         }
 
-        let dotSide: CGFloat = suggested ? 5.2 : 9
+        let dotSide: CGFloat = suggested ? 3.6 : 6.4
         dot.frame = CGRect(x: (side - dotSide) / 2, y: (side - dotSide) / 2, width: dotSide, height: dotSide)
         dot.layer.cornerRadius = dotSide / 2
         dot.backgroundColor = suggested ? UIColor(AtlasTheme.secondary) : .white

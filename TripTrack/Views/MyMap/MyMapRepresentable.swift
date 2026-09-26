@@ -1070,6 +1070,13 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard zoomScale > 0, zoomScale.isFinite else { return }
             let dot = userDotCentre(map)
 
+            // Булавки мест — тем же проходом и по тому же правилу, что
+            // подписи: видимость решает масштаб, а ставится она каждый кадр.
+            let placesOn = Self.placesVisible(span: map.region.span.latitudeDelta)
+            for annotation in map.annotations where annotation is AtlasPlaceAnnotation {
+                (map.view(for: annotation) as? PlacePinView)?.visible = placesOn
+            }
+
             for label in regionLabels {
                 guard let view = map.view(for: label) as? RegionLabelView else { continue }
                 let side = label.bounds.minSidePt(zoomScale: zoomScale)
@@ -1509,6 +1516,19 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             handleTap(at: recognizer.location(in: map), on: map)
         }
 
+        /// Видны ли булавки МЕСТ на этом масштабе.
+        ///
+        /// С отдаления их нет вовсе (владелец 26 сен): булавка не
+        /// масштабируется вместе с картой, и на карте края десяток
+        /// одинаковых кружков спорил с самим открытым миром за внимание.
+        /// Место — это «поностальгировать», а не система координат экрана,
+        /// и появляться оно должно по мере приближения, вместе с дорогами,
+        /// которые к нему ведут. Порог — тот же `.region`, на котором
+        /// «Атлас» показывает остальную мелочь.
+        static func placesVisible(span: CLLocationDegrees) -> Bool {
+            MapZoomLevel.of(span) >= .region
+        }
+
         /// Радиус цели у булавки места — половина минимальной цели HIG (44 pt).
         ///
         /// Круг, а не прямоугольник: булавка круглая, и палец, промахнувшийся
@@ -1546,6 +1566,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // Координата же есть всегда и переводится в точку экрана той
                 // же проекцией, которой нарисована сама булавка.
                 if let place = annotation as? AtlasPlaceAnnotation {
+                    // Невидимую булавку нельзя нажать: цель считается по
+                    // координате и рамки не спрашивает, поэтому без этого
+                    // гейта место открывалось бы с карты края, где самой
+                    // булавки на экране нет.
+                    guard Self.placesVisible(span: map.region.span.latitudeDelta)
+                    else { continue }
                     let centre = map.convert(place.coordinate, toPointTo: map)
                     let distance = hypot(centre.x - point.x, centre.y - point.y)
                     guard distance <= Self.placeTouchRadius else { continue }

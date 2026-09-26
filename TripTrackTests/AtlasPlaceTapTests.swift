@@ -73,4 +73,33 @@ final class AtlasPlaceTapTests: XCTestCase {
         coordinator.handleTap(at: CGPoint(x: origin.x + 90, y: origin.y), on: map)
         XCTAssertTrue(asked.isEmpty)
     }
+
+    /// С отдаления булавок нет — и нажать их нельзя.
+    ///
+    /// Цель считается радиусом от координаты и рамки вида не спрашивает,
+    /// поэтому без своего гейта место открывалось бы с карты края, где самой
+    /// булавки на экране не нарисовано.
+    func testFarZoomHasNoPlacesToTap() {
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+        map.region = MKCoordinateRegion(
+            center: centre, span: MKCoordinateSpan(latitudeDelta: 8, longitudeDelta: 8))
+        XCTAssertGreaterThan(map.region.span.latitudeDelta, 3.0, "карта не отдалилась — тест ни о чём")
+
+        let coordinator = MyMapRepresentable.Coordinator()
+        coordinator.syncPlaces(map, pins: [pin()], selectedId: nil, language: .ru)
+        var asked: [UUID] = []
+        coordinator.onSelectPlace = { asked.append($0) }
+
+        coordinator.handleTap(at: map.convert(centre, toPointTo: map), on: map)
+        XCTAssertTrue(asked.isEmpty, "место открылось с масштаба, где булавки не видно")
+    }
+
+    /// Порог видимости — словами: край карты молчит, регион и двор говорят.
+    func testPlacesAppearFromRegionZoomIn() {
+        XCTAssertFalse(MyMapRepresentable.Coordinator.placesVisible(span: 8.0))
+        XCTAssertFalse(MyMapRepresentable.Coordinator.placesVisible(span: 3.01))
+        XCTAssertTrue(MyMapRepresentable.Coordinator.placesVisible(span: 3.0))
+        XCTAssertTrue(MyMapRepresentable.Coordinator.placesVisible(span: 0.4))
+        XCTAssertTrue(MyMapRepresentable.Coordinator.placesVisible(span: 0.02))
+    }
 }
