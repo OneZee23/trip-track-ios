@@ -69,6 +69,15 @@ struct AtlasPeriodSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(16)
+                // СОБСТВЕННАЯ высота, а не предложенная, — и это не украшение,
+                // а то, что размыкает петлю. Без `fixedSize` колонка сжимается
+                // под маленькое предложение, измерение от этого становится
+                // ещё меньше, следующий проход предлагает ещё меньше — и лист
+                // схлопывается до шапки с кнопкой (репорт владельца 26 сен:
+                // «тут просто кнопка показать и период»). На симуляторе первый
+                // проход случайно ложился верно, на телефоне — нет; поэтому
+                // высоту здесь держит не удачный порядок, а тип.
+                .fixedSize(horizontal: false, vertical: true)
                 .background {
                     GeometryReader { geo in
                         Color.clear.preference(key: AtlasSheetContentHeight.self,
@@ -76,6 +85,9 @@ struct AtlasPeriodSheet: View {
                     }
                 }
             }
+            // Просто присваивание, без `max`: от схлопывания держит `fixedSize`
+            // выше, а «только расти» сломало бы возврат со «своего периода» на
+            // пресеты — лист остался бы высотой с календарь.
             .onPreferenceChange(AtlasSheetContentHeight.self) { inner = $0 }
             .frame(maxHeight: inner > 0 ? inner : nil)
         }
