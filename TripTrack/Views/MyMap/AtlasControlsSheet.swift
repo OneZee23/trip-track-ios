@@ -227,10 +227,11 @@ struct AtlasAppearanceSheet: View {
 
     private var layerToggles: some View {
         VStack(spacing: 0) {
-            Toggle(AppStrings.atlasShowCityLabels(lang.language), isOn: $appearance.showsCityLabels)
-                .frame(minHeight: 56)
-                .accessibilityIdentifier("atlas_city_labels_toggle")
-            Rectangle().fill(AtlasTheme.separator).frame(height: 0.5)
+            // Подписи городов убраны вовсе (владелец, 26 сен): наш «Геленджик»
+            // ложился поверх «Gelendzhik», который рисует сама Apple. Имена
+            // городов знает карта, и знает лучше — на тринадцати языках и без
+            // нашего слоя. Вместе с подписями ушёл и тумблер: выключателя у
+            // того, чего нет, быть не может.
             Toggle(AppStrings.atlasShowPhotos(lang.language), isOn: $appearance.showsPhotos)
                 .frame(minHeight: 56)
                 .accessibilityIdentifier("atlas_photos_toggle")

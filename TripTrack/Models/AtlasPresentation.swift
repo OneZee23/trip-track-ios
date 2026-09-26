@@ -50,7 +50,6 @@ struct AtlasMapAppearance: Equatable, Codable {
 
     var style: Style = .fog
     var showsPhotos = true
-    var showsCityLabels = true
 
     private static let defaultsKey = "atlas.mapAppearance"
     static var saved: AtlasMapAppearance { load() }

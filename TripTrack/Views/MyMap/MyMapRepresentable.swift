@@ -236,7 +236,6 @@ final class MapHostController: UIViewController {
             }
         }
         for annotation in map.annotations {
-            (map.view(for: annotation) as? CityDotView)?.refreshPalette()
             (map.view(for: annotation) as? RegionLabelView)?.refreshPalette()
         }
     }
@@ -513,7 +512,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         map.register(TripPinView.self, forAnnotationViewWithReuseIdentifier: TripPinView.reuseID)
         map.register(TripClusterView.self, forAnnotationViewWithReuseIdentifier: TripClusterView.reuseID)
-        map.register(CityDotView.self, forAnnotationViewWithReuseIdentifier: CityDotView.reuseID)
         map.register(RegionLabelView.self, forAnnotationViewWithReuseIdentifier: RegionLabelView.reuseID)
         map.register(RouteEndpointView.self, forAnnotationViewWithReuseIdentifier: RouteEndpointView.reuseID)
         map.register(SealView.self, forAnnotationViewWithReuseIdentifier: SealView.reuseID)
@@ -680,7 +678,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Which trip the current pin set was built for.
         private var pinsSelection: UUID?
         private var selectedTripId: UUID?
-        private var cityAnnotations: [CityDotAnnotation] = []
         private var regionLabels: [RegionLabelAnnotation] = []
         private var exploration = MapExploration()
         private var installedLanguage: LanguageManager.Language?
@@ -813,19 +810,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 installedLanguage = language
                 installedUnit = unit
                 installedVisitedRegionIds = visitedRegionIds
-                // Только внутри коридоров: город, до которого ты не доезжал,
-                // на карте тумана не существует. `MapExploration` уже отдаёт
-                // лишь города с покрытием, но правило записано и здесь —
-                // источник у него может смениться, а правило нет.
-                cityAnnotations = exploration.regions.flatMap { region in
-                    region.cities.filter { $0.coverage > 0 }.map {
-                        CityDotAnnotation(
-                            coordinate: $0.coordinate,
-                            cityName: $0.localizedName(language),
-                            coverage: $0.coverage
-                        )
-                    }
-                }
                 // Только посещённые регионы. Подписи стоят на карте ВСЕГДА с
                 // этого момента: масштаб решает не добавление/удаление, а
                 // видимость каждой (`updateLabelVisibility`), как у
@@ -837,9 +821,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 )
                 // The annotations on screen are stale copies of what just
                 // changed underneath them.
-                map.removeAnnotations(map.annotations.filter {
-                    $0 is CityDotAnnotation || $0 is RegionLabelAnnotation
-                })
+                map.removeAnnotations(
+                    map.annotations.filter { $0 is RegionLabelAnnotation })
                 map.addAnnotations(regionLabels)
                 updateLabelVisibility(map)
             }
@@ -1095,16 +1078,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     && !RegionLabelLOD.yieldsToUserDot(labelFrame: frame, userDotCentre: dot)
             }
 
-            // Города — то же правило и по той же причине: подпись висит справа
-            // от кружка, ЗА рамкой вью, и ни столкновения MapKit, ни тем более
-            // синяя точка про неё не знают. Прячется вся аннотация: под синим
-            // кружком её оранжевую серединку всё равно не видно.
-            for annotation in map.annotations where annotation is CityDotAnnotation {
-                guard let view = map.view(for: annotation) as? CityDotView else { continue }
-                let frame = contentFrame(of: view, at: annotation.coordinate, on: map)
-                view.visible = !RegionLabelLOD.yieldsToUserDot(
-                    labelFrame: frame, userDotCentre: dot)
-            }
         }
 
         /// Синяя точка «я здесь» в точках экрана — или `nil`, если её нет на
@@ -1117,25 +1090,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             return map.convert(location.coordinate, toPointTo: map)
         }
 
-        /// Рамка подписи в той же системе координат, что и точка выше.
-        ///
-        /// Считается от КООРДИНАТЫ аннотации, а не берётся из `view.frame`:
-        /// та лежит в контейнере аннотаций MapKit, и складывать её с
-        /// `map.convert(_:toPointTo: map)` значило бы сравнивать два разных
-        /// пространства — сегодня они совпадают, а обещания на это нет.
-        /// Рамка ВСЕГО, что рисует точка города, в координатах карты: сам
-        /// кружок плюс подпись справа от него.
-        private func contentFrame(
-            of view: CityDotView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
-        ) -> CGRect {
-            let content = view.contentBounds
-            guard content.width > 0, content.height > 0 else { return .zero }
-            let centre = map.convert(coordinate, toPointTo: map)
-            let origin = CGPoint(
-                x: centre.x - view.bounds.width / 2 + view.centerOffset.x,
-                y: centre.y - view.bounds.height / 2 + view.centerOffset.y)
-            return content.offsetBy(dx: origin.x, dy: origin.y)
-        }
 
         private func labelFrame(
             of view: RegionLabelView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
@@ -1216,22 +1170,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         // MARK: Zoom level
 
         private func applyLevel(_ map: MKMapView, animated: Bool) {
-            // Cities: only from region zoom in — at far zoom they are noise.
-            let wantCities = appearance.showsCityLabels && level >= .region
-            let hasCities = map.annotations.contains { $0 is CityDotAnnotation }
-            if wantCities && !hasCities {
-                map.addAnnotations(cityAnnotations)
-                // Только что приехавшие города ещё не знают, стоит ли на них
-                // синяя точка: свою видимость каждая аннотация получает не при
-                // рождении, а этим проходом.
-                updateLabelVisibility(map)
-            } else if !wantCities && hasCities {
-                map.removeAnnotations(map.annotations.filter { $0 is CityDotAnnotation })
-            }
-
-            // Имена регионов и стран стоят на карте всегда с первой сборки;
-            // масштаб решает `updateLabelVisibility` — каждая подпись сама, по
-            // своему bbox, а не общий переключатель уровня, как у городов.
+            // Подписей ГОРОДОВ у нас больше нет вовсе (владелец, 26 сен):
+            // «Геленджик» нашим слоем ложился поверх «Gelendzhik», который
+            // рисует сама Apple. Имена городов знает карта — на всех языках и
+            // без нашей помощи. Подписи РЕГИОНОВ остались: они говорят «я тут
+            // был» и несут километры, чего у карты нет; масштаб решает
+            // `updateLabelVisibility` — каждая подпись сама, по своему bbox.
 
             syncTripPins(map)
         }
@@ -1396,9 +1340,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: TripClusterView.reuseID, for: cluster)
                 return view
-            case let city as CityDotAnnotation:
-                return mapView.dequeueReusableAnnotationView(
-                    withIdentifier: CityDotView.reuseID, for: city)
             case let label as RegionLabelAnnotation:
                 return mapView.dequeueReusableAnnotationView(
                     withIdentifier: RegionLabelView.reuseID, for: label)
