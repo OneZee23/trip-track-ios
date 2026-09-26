@@ -45,6 +45,28 @@ final class FogVeilViewTests: XCTestCase {
 
     // MARK: Устаревание
 
+    @MainActor
+    func testPaletteInvalidationRejectsCachedPixelsAtTheSameCamera() throws {
+        let rect = MKMapRect(x: 100, y: 200, width: 300, height: 400)
+        let size = CGSize(width: 30, height: 40)
+        let raster = FogVeilView.Raster(rect: rect, sizePoints: size, scale: 1, expected: 1)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.darkGray.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        raster.bands = [(rect: rect, drawn: rect, image: try XCTUnwrap(image.cgImage))]
+        XCTAssertNotNil(raster.band(for: rect, scale: 1, sizePoints: size))
+
+        raster.invalidateBands()
+
+        XCTAssertNil(raster.band(for: rect, scale: 1, sizePoints: size),
+                     "same camera must not reuse pixels with the old palette")
+        XCTAssertTrue(raster.isComplete, "keep the displayed raster until fresh pixels arrive")
+        XCTAssertEqual(raster.bands.count, 1, "palette invalidation must not flash an empty map")
+    }
+
     func testRasterIsStaleOnlyWhenItRunsOutOrGoesSoft() {
         let raster = MKMapRect(x: 0, y: 0, width: 1_500, height: 1_500)
         let inside = MKMapRect(x: 400, y: 400, width: 1_000, height: 1_000)

@@ -116,12 +116,33 @@ final class CloudTextureTests: XCTestCase {
     /// арифметика композиции, а не картинка: ошибка здесь — это мгла, сквозь
     /// которую не видно карту, то есть ровно то, что владелец назвал игровой
     /// доской.
+    ///
+    /// Палитра ПРИШПИЛИВАЕТСЯ, а не читается как есть: `FogVeilPainter
+    /// .palette` — глобалка, и её ставит экран «Атласа» на первом же показе.
+    /// Пока тест читал её ambient-значение, он проверял ночное правило на той
+    /// палитре, какая случайно стояла, и с приходом бумажной (0.85…0.89 —
+    /// решение владельца 0.8.1) начал падать то в наборе, то в одиночку.
     func testCloudTopUpLandsOnTheUpperBound() {
-        let low = CloudTexture.opacityRange.lowerBound
-        let composed = low + (1 - low) * CloudTexture.cloudTopUp
-        XCTAssertEqual(composed, CloudTexture.opacityRange.upperBound, accuracy: 1e-9)
+        let saved = FogVeilPainter.palette
+        defer { FogVeilPainter.palette = saved }
+
+        for palette in [FogVeilPainter.Palette.night, .mist] {
+            FogVeilPainter.palette = palette
+            let low = CloudTexture.opacityRange.lowerBound
+            let composed = low + (1 - low) * CloudTexture.cloudTopUp
+            XCTAssertEqual(composed, CloudTexture.opacityRange.upperBound, accuracy: 1e-9,
+                           "композиция облака обязана попасть ровно в верхнюю границу")
+        }
+
+        // Верхний потолок — правило ТЁМНОЙ мглы: сквозь неё обязана быть видна
+        // настоящая карта (0.7.0, «не игровая доска»). У бумажной мглы он
+        // другой и выше — она СВЕТЛАЯ, и карта читается сквозь неё и на 0.89.
+        FogVeilPainter.palette = .night
         XCTAssertLessThan(CloudTexture.opacityRange.upperBound, 0.85,
-                          "сквозь туман обязана быть видна настоящая карта")
+                          "сквозь ночной туман обязана быть видна настоящая карта")
+        FogVeilPainter.palette = .mist
+        XCTAssertLessThan(CloudTexture.opacityRange.upperBound, 0.92,
+                          "бумажная мгла плотнее, но не сплошная")
     }
 
     /// `prepare` идемпотентна и отдаёт те же картинки — её зовут из трёх

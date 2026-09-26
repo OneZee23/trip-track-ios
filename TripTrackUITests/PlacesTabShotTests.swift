@@ -95,3 +95,34 @@ final class PlacesTabRichShotTests: XCTestCase {
         snapshot(self, app, "w080_places_rich_suggestions")
     }
 }
+
+/// Пустая вкладка (S2): ни мест, ни подсказок, ни поездок.
+///
+/// Кадр получается таким только на ЧИСТОМ контейнере и без единого сида —
+/// `simctl uninstall <udid> com.onezee.TripTrack.dev` перед прогоном, иначе
+/// база соседнего класса покажет список вместо пустоты.
+final class PlacesEmptyShotTests: XCTestCase {
+    private var app: XCUIApplication!
+
+    override func setUpWithError() throws {
+        continueAfterFailure = true
+        app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>"]
+        app.launch()
+    }
+
+    func test_places_tab_empty() {
+        let tab = app.buttons.matching(identifier: "tab_places").firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 20), "нет вкладки «Места»")
+        tab.tap()
+        let empty = app.otherElements["places_empty"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 20), "пустая вкладка не показалась\n\(app.debugDescription)")
+        sleep(2)
+        snapshot(self, app, "w081_places_empty")
+        // Карточка-образец и три шага обязаны быть в кадре: ради них экран и
+        // перестал быть одной надписью «Мест пока нет».
+        XCTAssertTrue(app.otherElements["places_how_card"].exists
+                      || app.staticTexts["places_how_card"].exists,
+                      "нет карточки «как появляются места»")
+    }
+}

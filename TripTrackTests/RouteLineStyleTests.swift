@@ -1,5 +1,6 @@
 import XCTest
 import CoreLocation
+import UIKit
 @testable import TripTrack
 
 /// Цвет линии маршрута (0.8.0, спека §2, пункт 4) — единственная косметика,
@@ -8,6 +9,7 @@ final class RouteLineStyleTests: XCTestCase {
 
     private var savedStyle: String?
     private var savedMirror: Bool!
+    private var savedPalette: FogVeilPainter.Palette!
 
     override func setUp() {
         super.setUp()
@@ -17,6 +19,7 @@ final class RouteLineStyleTests: XCTestCase {
         // алфавита (ловушка из CLAUDE.md).
         savedStyle = UserDefaults.standard.string(forKey: RouteLineStyle.storageKey)
         savedMirror = UserDefaults.standard.bool(forKey: RouteLineStyle.plusMirrorKey)
+        savedPalette = FogVeilPainter.palette
     }
 
     override func tearDown() {
@@ -26,8 +29,10 @@ final class RouteLineStyleTests: XCTestCase {
             UserDefaults.standard.removeObject(forKey: RouteLineStyle.storageKey)
         }
         UserDefaults.standard.set(savedMirror, forKey: RouteLineStyle.plusMirrorKey)
+        FogVeilPainter.palette = savedPalette
         savedStyle = nil
         savedMirror = nil
+        savedPalette = nil
         super.tearDown()
     }
 
@@ -117,6 +122,30 @@ final class RouteLineStyleTests: XCTestCase {
         // Новый оверлей — новый снимок: именно так новый цвет и доезжает до
         // карты (`.routeLineStyleChanged` переставляет оверлей).
         XCTAssertEqual(RouteVeinRenderer(vein: try makeVein()).veinColor, RouteLineStyle.lime.uiColor)
+    }
+
+    func testPaletteChangeNeedsANewRendererSnapshot() throws {
+        RouteLineStyle.rememberPlus(false)
+        FogVeilPainter.palette = .night
+        let night = RouteVeinRenderer(vein: try makeVein())
+        let nightColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
+        XCTAssertEqual(night.veinColor, nightColor)
+
+        FogVeilPainter.palette = .mist
+        let paper = UIColor(red: 0xc8/255, green: 0x47/255, blue: 0x2d/255, alpha: 1)
+        XCTAssertEqual(RouteVeinRenderer.resolvedVeinColor(), paper)
+        XCTAssertEqual(night.veinColor, nightColor, "running tile draws must keep their immutable snapshot")
+        XCTAssertEqual(RouteVeinRenderer(vein: try makeVein()).veinColor, paper)
+    }
+
+    func testChosenColourWinsInBothPalettesAndInSelectedRoutes() {
+        RouteLineStyle.rememberPlus(true)
+        RouteLineStyle.stored = .teal
+        for palette in [FogVeilPainter.Palette.mist, .night] {
+            let colors = RouteVeinRenderer.resolvedColors(palette: palette)
+            XCTAssertEqual(colors.network, RouteLineStyle.teal.uiColor)
+            XCTAssertEqual(colors.selected, RouteLineStyle.teal.uiColor)
+        }
     }
 
     /// Сторож на следующую версию: в `draw(_:zoomScale:in:)` не должно быть ни

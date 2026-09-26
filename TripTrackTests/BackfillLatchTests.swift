@@ -75,6 +75,21 @@ final class BackfillLatchTests: XCTestCase {
         XCTAssertEqual(settings.profileXP, afterFirst)
     }
 
+    /// An older account API can restore a level without XP; the local
+    /// library may still be only partially downloaded. Counting that subset
+    /// is not evidence that the already-earned account level was lower.
+    func testPartialLibraryBackfillPreservesRestoredAccountLevel() {
+        let gm = GamificationManager(persistenceController: pc, defaults: defaults)
+        let settings = makeSettings()
+        settings.profileLevel = 21
+        settings.profileXP = 0
+
+        gm.backfillIfNeeded(trips: [trip(km: 120)], settingsEntity: settings)
+
+        XCTAssertEqual(settings.profileXP, 120, "only actual recorded travel earns XP")
+        XCTAssertEqual(settings.profileLevel, 21)
+    }
+
     // MARK: - Territory
 
     func testTerritoryBackfillDoesNotLatchWithoutTrackPoints() async {

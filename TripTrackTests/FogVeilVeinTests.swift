@@ -94,6 +94,23 @@ final class FogVeilVeinTests: XCTestCase {
         XCTAssertEqual(both.last?.width ?? 0, RouteVeinRenderer.selectedWidth, accuracy: 0.01)
     }
 
+    func testLightPaletteAddsANarrowWhiteCasingWithoutWideningTheCore() throws {
+        let revealed = diagonal()
+        let (rect, sizePoints) = frame()
+        let lod = FogVeilRenderer.lod(for: MKZoomScale(sizePoints.width / CGFloat(rect.width)))
+        let chunks = index(for: revealed).ready(for: lod)
+        let night = FogVeilVein.strokes(rect: rect, sizePoints: sizePoints,
+                                       chunks: chunks, selected: [], palette: .night)
+        let paper = FogVeilVein.strokes(rect: rect, sizePoints: sizePoints,
+                                       chunks: chunks, selected: [], palette: .mist)
+        XCTAssertEqual(paper.count, night.count + 1)
+        let core = try XCTUnwrap(paper.last)
+        XCTAssertEqual(core.width, try XCTUnwrap(night.last).width)
+        let casing = paper[paper.count - 2]
+        XCTAssertEqual(casing.width - core.width, RouteVeinRenderer.casingExtra, accuracy: 0.01)
+        XCTAssertEqual(casing.color, UIColor.white.withAlphaComponent(0.94))
+    }
+
     /// Пути приезжают в координатах РАСТРА: левый верхний угол — ноль, единица
     /// измерения — точка экрана.
     func testPathsArriveInRasterPointSpace() {

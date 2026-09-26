@@ -1,49 +1,44 @@
 import XCTest
 @testable import TripTrack
 
-/// Подъём пилюли таб-бара над индикатором «домой» (0.6.8): зазор до
-/// индикатора равен боковому полю; на телефонах с кнопкой — канонные 14 pt.
+/// Геометрия бара 0.8.1 — одна на все вкладки (до 0.8.1 «Атлас» нёс свою,
+/// а четыре остальные вкладки стеклянную пилюлю 0.6.0 в 74 pt).
 final class CustomTabBarLiftTests: XCTestCase {
 
-    func testHomeIndicatorPhoneGetsSideMarginGap() {
-        let lift = CustomTabBar.bottomLift(bottomInset: 34)
-        XCTAssertEqual(lift, 24)
-        XCTAssertEqual(lift - CustomTabBar.homeIndicatorTop, CustomTabBar.sideMargin)
+    /// Зазор до физического низа задан макетом и НЕ зависит от индикатора
+    /// «домой»: 22 + 68 капсулы + 12 подъёма диска записи + 8 воздуха.
+    /// Прежняя формула считала подъём от инсета и давала 106/96 — под
+    /// приподнятый диск этого не хватало.
+    func testClearanceIsTheDesignGeometry() {
+        XCTAssertEqual(CustomTabBar.clearance, 110)
+        XCTAssertEqual(
+            CustomTabBar.clearance,
+            CustomTabBar.bottomGap + CustomTabBar.pillHeight + CustomTabBar.recordRise + 8)
     }
 
-    func testHomeButtonPhoneKeepsCanon() {
-        XCTAssertEqual(CustomTabBar.bottomLift(bottomInset: 0), 14)
-    }
-
-    /// Клиренс считается от ФАКТИЧЕСКОГО инсета, а не от пола: с индикатором
-    /// 74 + 24 + 8, без него 74 + 14 + 8.
-    func testClearanceFollowsInset() {
-        XCTAssertEqual(CustomTabBar.clearance(bottomInset: 34), 106)
-        XCTAssertEqual(CustomTabBar.clearance(bottomInset: 0), 96)
-    }
-
-    /// Внутри стека отсчёт от границы безопасной зоны: 106 − 34 = 72 с
-    /// индикатором, 96 − 0 = 96 без него.
+    /// Внутри стека отсчёт от границы безопасной зоны: 110 − 34 с
+    /// индикатором, все 110 без него.
     func testClearanceAboveSafeAreaSubtractsTheInset() {
-        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 34), 72)
-        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 0), 96)
+        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 34), 76)
+        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 0), 110)
     }
 
-    /// Свёрнутый лист «Атласа» (0.7.0): карточка, клиренс под баром и зазор.
+    /// Инсет больше клиренса не должен давать отрицательный отступ.
+    func testClearanceAboveSafeAreaNeverGoesNegative() {
+        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 200), 0)
+    }
+
+    /// Свёрнутый лист «Атласа»: карточка, клиренс под баром и зазор.
     /// Это же число уезжает в `additionalSafeAreaInsets.bottom` карты — под
     /// непрозрачным туманом логотип Apple и ссылка «Legal» иначе остаются под
     /// листом навсегда, а прятать «Legal» нельзя.
     func testAtlasCollapsedSheetLeavesRoomForTheLegalLink() {
-        // Высота карточки — из её же константы, а не числом: она выросла с 64
-        // до 86, когда число стало героем («дизайн этой плашки не нравится» —
-        // владелец, 23 сен), и ЛЮБАЯ её правка обязана доехать до инсета
-        // карты. Переписанное здесь число это правило и проверяет.
-        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 34),
-                       MyMapSheet.collapsedCardHeight + 106 + 6)
-        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 0),
-                       MyMapSheet.collapsedCardHeight + 96 + 6)
+        XCTAssertGreaterThanOrEqual(
+            MyMapSheet.collapsedHeight - MyMapSheet.collapsedCardHeight,
+            CustomTabBar.clearance,
+            "под содержимым должен помещаться приподнятый центр таб-бара")
         XCTAssertGreaterThan(
-            MyMapSheet.collapsedHeight(bottomInset: 34), 34,
+            MyMapSheet.collapsedHeight, 34,
             "инсет обязан быть больше безопасной зоны, иначе поднимать нечего")
     }
 
@@ -73,7 +68,7 @@ final class CustomTabBarLiftTests: XCTestCase {
 
         // Лист «Атласа» стоит от физического низа — контракт тот же, а число
         // уже верное и без правки.
-        let atlas = MyMapSheet.collapsedHeight(bottomInset: safeArea)
+        let atlas = MyMapSheet.collapsedHeight
         XCTAssertEqual(
             MapBottomInset.overlayHeight(panelTop: window - atlas, windowHeight: window), atlas)
 

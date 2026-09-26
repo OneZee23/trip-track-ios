@@ -70,6 +70,33 @@ final class AtlasSharePosterMetalTests: XCTestCase {
             "растровый откат не прожёг коридор: \(corridor) против мглы \(fog)")
     }
 
+    /// The GPU image contains fog only. The shared poster must composite the
+    /// same terracotta vein that lives in a separate layer on the live Atlas.
+    func testLightPosterKeepsTerracottaVeinOnMetalAndRaster() throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal недоступен") }
+        let savedPlus = UserDefaults.standard.bool(forKey: RouteLineStyle.plusMirrorKey)
+        defer { UserDefaults.standard.set(savedPlus, forKey: RouteLineStyle.plusMirrorKey) }
+        UserDefaults.standard.set(false, forKey: RouteLineStyle.plusMirrorKey)
+        FogVeilPainter.palette = .mist
+        let layer = straightLayer()
+        let rect = try XCTUnwrap(AtlasSharePoster.frame(for: layer))
+        let centre = AtlasSharePoster.project(middle, rect: rect, size: AtlasSharePoster.renderPointSize)
+
+        for metal in [true, false] {
+            FogMetalAvailability.isEnabledOverride = metal
+            let poster = AtlasSharePoster.render(
+                snapshot: whiteSnapshot(), region: AtlasSharePoster.region(for: rect),
+                layer: layer, seals: [], caption: "", scale: 1)
+            let pixels = try XCTUnwrap(raster(of: poster))
+            let hasTerracotta = (-4...4).contains { dy in
+                let i = ((Int(centre.y) + dy) * pixels.width + Int(centre.x)) * 4
+                let red = pixels.data[i + 2], green = pixels.data[i + 1], blue = pixels.data[i]
+                return red >= 190 && red <= 220 && green < 110 && blue < 90
+            }
+            XCTAssertTrue(hasTerracotta, "\(metal ? "Metal" : "Raster") poster lost the terracotta route")
+        }
+    }
+
     /// Кадр Metal ложится в постер ТОЙ ЖЕ стороной вверх, что растр.
     ///
     /// Дорога через середину не поймала бы переворот: она симметрична. Поэтому

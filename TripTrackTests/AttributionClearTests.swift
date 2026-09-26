@@ -295,11 +295,11 @@ final class AttributionClearTests: XCTestCase {
         let card = MyMapSheet.summaryMaxWidth
         let padding: CGFloat = 10
 
-        // Широкий экран: карточка упёрлась в потолок ширины.
+        // The 0.8.1 sheet spans the display, with a 16 pt content inset.
         let wide: CGFloat = 440
         let inset = MapBottomInset.leftInset(
             width: wide, cardMaxWidth: card, mapPadding: padding)
-        XCTAssertEqual(inset + padding, (wide - card) / 2, accuracy: 0.5)
+        XCTAssertEqual(inset + padding, 16, accuracy: 0.5)
 
         // Узкий экран: карточка живёт на своих шестнадцати точках поля.
         let narrow: CGFloat = 375
@@ -315,7 +315,7 @@ final class AttributionClearTests: XCTestCase {
     /// Подпись встаёт на двенадцать точек ВЫШЕ листа, а не на его край.
     func testBottomInsetLeavesTheGapAboveTheSheet() {
         let safeArea: CGFloat = 34
-        let sheet = MyMapSheet.collapsedHeight(bottomInset: safeArea)
+        let sheet = MyMapSheet.collapsedHeight
         let extra = MapBottomInset.additional(
             overlayHeight: sheet, safeAreaBottom: safeArea,
             gap: MapBottomInset.attributionGap)

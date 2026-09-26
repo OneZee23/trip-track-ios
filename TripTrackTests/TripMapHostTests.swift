@@ -83,6 +83,99 @@ final class TripMapHostTests: XCTestCase {
 
     // MARK: - Кто держит карту
 
+    /// На push чужой поездки прежняя и новая ветки SwiftUI могут жить
+    /// одновременно. Раньше каждый layout забирал карту назад, вызывая
+    /// бесконечный UIKit layout при первом открытии поездки из ленты.
+    func testPreviousSlotCannotReclaimMapDuringOverlappingLayouts() {
+        let map = host.map(orMake: { MKMapView() })
+        let previous = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+        let current = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 320, height: 500))
+        previous.adopt(map)
+
+        // Запрос хоста сохраняет прежнее гнездо до явной передачи.
+        let handedOver = host.map(orMake: { XCTFail("created a second map"); return MKMapView() })
+        XCTAssertTrue(map.superview === previous)
+        current.adopt(handedOver)
+        XCTAssertNil(previous.map, "старый адаптер больше не вправе обновлять эту карту")
+
+        for _ in 0..<4 {
+            previous.layoutSubviews()
+            XCTAssertTrue(map.superview === current, "layout прежнего слота не переносит карту")
+            current.layoutSubviews()
+            XCTAssertTrue(map.superview === current)
+            XCTAssertEqual(map.frame, current.bounds)
+        }
+        XCTAssertEqual(host.creationCount, 1)
+    }
+
+    /// Возврат с полного экрана — новая явная передача той же карты.
+    func testExplicitTransferBackToHeroRevokesFullscreenSlot() {
+        let map = host.map(orMake: { MKMapView() })
+        let hero = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+        let fullscreen = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 320, height: 700))
+        var heroFits = 0
+        hero.onResize = { heroFits += 1 }
+        hero.adopt(map)
+        fullscreen.adopt(map)
+        hero.adopt(map)
+
+        fullscreen.layoutSubviews()
+        hero.layoutSubviews()
+        XCTAssertNil(fullscreen.map)
+        XCTAssertTrue(map.superview === hero)
+        XCTAssertEqual(map.frame, hero.bounds)
+        XCTAssertEqual(heroFits, 2, "возврат требует fit даже в прежний размер героя")
+        XCTAssertEqual(host.creationCount, 1)
+    }
+
+    func testReusedHeroCanClaimMapButStaleFullscreenCannot() {
+        let map = host.map(orMake: { MKMapView() })
+        let hero = TripMapSlotView()
+        let fullscreen = TripMapSlotView()
+        host.register(hero, for: .hero)
+        host.register(fullscreen, for: .fullscreen)
+        hero.adopt(map)
+        host.activePresentation = .fullscreen
+        XCTAssertFalse(host.canClaim(hero, for: .hero))
+        XCTAssertTrue(host.canClaim(fullscreen, for: .fullscreen))
+        fullscreen.adopt(map)
+        XCTAssertNil(hero.map)
+
+        host.activePresentation = .hero
+        XCTAssertTrue(host.canClaim(hero, for: .hero))
+        XCTAssertFalse(host.canClaim(fullscreen, for: .fullscreen))
+        hero.adopt(map)
+        XCTAssertTrue(map.superview === hero)
+    }
+
+    func testReplacementHeroInvalidatesOldSameRoleSlotAndItsLateDismantle() {
+        let old = TripMapSlotView()
+        let replacement = TripMapSlotView()
+        host.register(old, for: .hero)
+        host.register(replacement, for: .hero)
+        XCTAssertFalse(host.canClaim(old, for: .hero))
+        XCTAssertTrue(host.canClaim(replacement, for: .hero))
+        host.unregister(old)
+        XCTAssertTrue(host.canClaim(replacement, for: .hero))
+    }
+
+    /// UIKit уже применил flexibleWidth/Height до layoutSubviews: сравнить
+    /// frame с bounds недостаточно — камера всё ещё ждёт ненулевую рамку.
+    func testSlotReportsResizeEvenWhenAutoresizingAlreadyMatchedFrame() {
+        let map = host.map(orMake: { MKMapView() })
+        let slot = TripMapSlotView()
+        var sizes: [CGSize] = []
+        slot.onResize = { sizes.append(slot.bounds.size) }
+        defer { slot.onResize = nil }
+        slot.adopt(map)
+        slot.bounds.size = CGSize(width: 320, height: 200)
+        map.frame = slot.bounds
+        slot.layoutSubviews()
+        slot.layoutSubviews()
+        XCTAssertEqual(sizes, [.zero, CGSize(width: 320, height: 200)],
+                       "один fit на новый размер, даже когда frame уже совпал")
+    }
+
     /// Пуш чужого экрана поверх поездки НЕ разбирает карту.
     ///
     /// `.onDisappear` в `NavigationStack` приходит и на накрытый экран —

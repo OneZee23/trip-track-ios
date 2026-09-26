@@ -98,61 +98,83 @@ final class FogVeilPainterTests: XCTestCase {
     /// прямоугольники соседей сходятся пиксель в пиксель. Проверяется ровно
     /// это — РАЗБРОС альфы, а не её величина.
     func testRasterHasNoSeamsBetweenTiles() {
-        // Растр ЗАВЕДОМО мимо сети: коридоров в нём нет вовсе, поэтому любая
-        // неоднородность — это шов, а не перьевой край дыры.
-        let revealed = layer()
-        let far = MKMapRect(
-            origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
-            size: MKMapSize(width: 40_000, height: 90_000))
-        let sizePoints = CGSize(width: 660, height: 1_434)
-        guard let band = FogVeilBitmap.render(
-            rect: far, sizePoints: sizePoints, scale: 1,
-            index: index(for: revealed), selected: []
-        ) else { return XCTFail("растр обязан собраться") }
-        let grid = FogVeilBitmap.grid(sizePoints: sizePoints)
-        XCTAssertGreaterThan(grid.cols * grid.rows, 4, "мерить нечего: тайлов должно быть много")
-
-        let width = band.image.width, height = band.image.height
-        guard let data = pixels(of: band.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-
-        // Шов — это СКАЧОК на известной границе, а не разброс по кадру:
-        // рампа глубины и облака живут теперь в прозрачности, и мгла честно
-        // гуляет (замер: 154…197). Поэтому меряется то же, чем меряется шов
-        // текстуры облаков: перепад через границу тайла против перепада между
-        // любыми соседними столбцами внутри него.
-        func alpha(_ x: Int, _ y: Int) -> Double {
-            Double(data[(y * width + x) * 4 + 3])
+        let originalPalette = FogVeilPainter.palette
+        let hadCloudTexture = CloudTexture.shared.ready != nil
+        defer {
+            FogVeilPainter.palette = originalPalette
+            CloudTexture.shared.forget()
+            if hadCloudTexture { CloudTexture.shared.prepare() }
         }
-        func meanJump(at columns: [Int]) -> Double {
-            var sum = 0.0
-            var count = 0
-            for x in columns where x > 0 && x < width - 1 {
-                for y in stride(from: 4, to: height - 6, by: 3) {
-                    sum += abs(alpha(x, y) - alpha(x - 1, y))
-                    count += 1
+        for (name, palette) in [("night", FogVeilPainter.Palette.night), ("mist", .mist)] {
+            FogVeilPainter.palette = palette
+            CloudTexture.shared.forget()
+            CloudTexture.shared.prepare()
+            // Растр ЗАВЕДОМО мимо сети: коридоров в нём нет вовсе, поэтому любая
+            // неоднородность — это шов, а не перьевой край дыры.
+            let revealed = layer()
+            let far = MKMapRect(
+                origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
+                size: MKMapSize(width: 40_000, height: 90_000))
+            let sizePoints = CGSize(width: 660, height: 1_434)
+            guard let band = FogVeilBitmap.render(
+                rect: far, sizePoints: sizePoints, scale: 1,
+                index: index(for: revealed), selected: []
+            ) else { return XCTFail("растр обязан собраться") }
+            let grid = FogVeilBitmap.grid(sizePoints: sizePoints)
+            XCTAssertGreaterThan(grid.cols * grid.rows, 4, "мерить нечего: тайлов должно быть много")
+
+            let width = band.image.width, height = band.image.height
+            guard let data = pixels(of: band.image, width: width, height: height)
+            else { return XCTFail("пиксели обязаны прочитаться") }
+
+            // Шов — это СКАЧОК на известной границе, а не разброс по кадру:
+            // рампа глубины и облака живут теперь в прозрачности, и мгла честно
+            // гуляет (замер: 154…197). Поэтому меряется то же, чем меряется шов
+            // текстуры облаков: перепад через границу тайла против перепада между
+            // любыми соседними столбцами внутри него.
+            func alpha(_ x: Int, _ y: Int) -> Double {
+                Double(data[(y * width + x) * 4 + 3])
+            }
+            func meanJump(at columns: [Int]) -> Double {
+                var sum = 0.0
+                var count = 0
+                for x in columns where x > 0 && x < width - 1 {
+                    for y in stride(from: 4, to: height - 6, by: 3) {
+                        sum += abs(alpha(x, y) - alpha(x - 1, y))
+                        count += 1
+                    }
+                }
+                return count > 0 ? sum / Double(count) : 0
+            }
+            let borders = (1..<grid.cols).map { $0 * width / grid.cols }
+            let inside = borders.map { $0 + max(3, width / grid.cols / 3) }
+            let onSeam = meanJump(at: borders)
+            let ordinary = meanJump(at: inside)
+            print(String(format: "[veil] перепад на границе тайла %.3f, внутри %.3f", onSeam, ordinary))
+            XCTAssertLessThan(onSeam, max(ordinary * 3, 1.5),
+                              "на стыке тайлов мгла рвётся — это шов")
+
+            var low = 255, high = 0
+            for y in 0..<(height - 1) {
+                for x in 0..<width {
+                    let a = Int(data[(y * width + x) * 4 + 3])
+                    low = min(low, a); high = max(high, a)
                 }
             }
-            return count > 0 ? sum / Double(count) : 0
+            print("[veil] альфа мглы \(low)…\(high)")
+            // The ramp varies the base alpha by ±0.04. Clouds then compose
+            // over it as a + (1 - a) × cloudAlpha. Both palettes must stay
+            // inside their own opacity bounds; using the old night-only 215
+            // ceiling would reject the authored 87% light mist.
+            let spread = Double(FogVeilPainter.veilAlphaSpread)
+            let baseMin = palette.opacityRange.lowerBound - spread
+            let baseMax = palette.opacityRange.lowerBound + spread
+            let composedMax = baseMax + (1 - baseMax) * CloudTexture.cloudTopUp
+            XCTAssertGreaterThanOrEqual(Double(low), baseMin * 255 - 2,
+                                        "\(name): an alpha gap makes the map too visible")
+            XCTAssertLessThanOrEqual(Double(high), composedMax * 255 + 2,
+                                     "\(name): overlapping tiles make the fog too opaque")
         }
-        let borders = (1..<grid.cols).map { $0 * width / grid.cols }
-        let inside = borders.map { $0 + max(3, width / grid.cols / 3) }
-        let onSeam = meanJump(at: borders)
-        let ordinary = meanJump(at: inside)
-        print(String(format: "[veil] перепад на границе тайла %.3f, внутри %.3f", onSeam, ordinary))
-        XCTAssertLessThan(onSeam, max(ordinary * 3, 1.5),
-                          "на стыке тайлов мгла рвётся — это шов")
-
-        var low = 255, high = 0
-        for y in 0..<(height - 1) {
-            for x in 0..<width {
-                let a = Int(data[(y * width + x) * 4 + 3])
-                low = min(low, a); high = max(high, a)
-            }
-        }
-        print("[veil] альфа мглы \(low)…\(high)")
-        XCTAssertGreaterThan(low, 130, "мгла слишком прозрачна")
-        XCTAssertLessThan(high, 215, "сквозь мглу обязана быть видна карта")
     }
 
     // MARK: Равенство с откатом
@@ -167,6 +189,9 @@ final class FogVeilPainterTests: XCTestCase {
     /// 2. плиточный путь клипует каждый тайл, и на границах клипа остаётся
     ///    пиксель сглаживания — та самая сетка, из-за которой растр и делался.
     func testWholeRasterMatchesTheTiledFallback() {
+        // Both paths need the same prepared texture. The tiled renderer
+        // prepares it at init; the bitmap's caller owns that preparation.
+        CloudTexture.shared.prepare()
         let revealed = layer()
         let (rect, sizePoints) = frame()
         let prepared = index(for: revealed)
@@ -662,11 +687,16 @@ final class FogVeilPainterTests: XCTestCase {
         // и то и другое обязано читаться на своём фоне.
         XCTAssertGreaterThan(luminance(mist.bottom), luminance(night.bottom) + 0.4)
         XCTAssertLessThan(luminance(mist.border), luminance(night.border) - 0.4)
-        // Сквозь обе видна карта: непрозрачность в одном и том же коридоре.
+        // The paper atlas intentionally mutes unexplored roads more than
+        // the night palette (HTML 0.8.1: #EEEEEC at 87%). Both still reveal
+        // the underlying map; the density range brackets the nominal alpha.
+        XCTAssertEqual(mist.alpha, 0.87, accuracy: 0.001)
+        XCTAssertLessThan(night.alpha, 0.85)
         for palette in [night, mist] {
             XCTAssertGreaterThan(palette.alpha, 0.55)
-            XCTAssertLessThan(palette.alpha, 0.85)
-            XCTAssertLessThan(palette.opacityRange.upperBound, 0.85)
+            XCTAssertLessThan(palette.alpha, 0.95)
+            XCTAssertLessThan(palette.opacityRange.upperBound, 0.95)
+            XCTAssertTrue(palette.opacityRange.contains(Double(palette.alpha)))
             XCTAssertGreaterThan(palette.opacityRange.lowerBound, 0.55)
             XCTAssertEqual(palette.opacityRange.lowerBound
                 + (1 - palette.opacityRange.lowerBound)
