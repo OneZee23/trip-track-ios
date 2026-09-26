@@ -504,6 +504,25 @@ extension AppStrings {
         case .pt: return plural(lang, n, one: "passagem", many: "passagens")
         }
     }
+
+    /// «место» — счётное, для шапки «24 места» (0.8.1).
+    static func nounPlaces(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "место", few: "места", many: "мест")
+        case .en: return plural(lang, n, one: "place", many: "places")
+        case .de: return plural(lang, n, one: "Ort", many: "Orte")
+        case .es: return plural(lang, n, one: "lugar", many: "lugares")
+        case .fr: return plural(lang, n, one: "lieu", many: "lieux")
+        case .it: return plural(lang, n, one: "luogo", many: "luoghi")
+        case .pl: return plural(lang, n, one: "miejsce", few: "miejsca", many: "miejsc")
+        case .id: return "tempat"
+        case .tr: return "yer"
+        case .fil: return "lugar"
+        case .uk: return plural(lang, n, one: "місце", few: "місця", many: "місць")
+        case .kk: return "орын"
+        case .pt: return plural(lang, n, one: "lugar", many: "lugares")
+        }
+    }
 }
 
 /// Date formatters that exist once per language.

@@ -102,6 +102,45 @@ enum AppStrings {
     static func placePassesSection(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placePassesSection", ru: "Проезды", en: "Passes")
     }
+    /// Заголовок над плитками дней: не весь список, а пять последних.
+    static func placeRecentPasses(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeRecentPasses", ru: "Последние проезды", en: "Recent passes")
+    }
+    /// «Все 23 проезда» — счётное существительное приходит уже напечатанным.
+    static func placeShowAllPasses(_ lang: LanguageManager.Language, passes: String) -> String {
+        tr(lang, "placeShowAllPasses", ru: "Все {passes}", en: "All {passes}")
+            .replacingOccurrences(of: "{passes}", with: passes)
+    }
+    /// Заголовок листа переименования. Не «Переименовать» (это ДЕЙСТВИЕ, и
+    /// оно уже произошло — лист открыт), а то, что в поле.
+    static func placeRenameTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeRenameTitle", ru: "Название места", en: "Place name")
+    }
+    /// Почему имя можно писать любое: оно личное и адреса не меняет.
+    static func placeRenameHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeRenameHint",
+           ru: "Название видишь только ты — адрес места от него не меняется.",
+           en: "Only you see this name — the address of the place stays as it is.")
+    }
+    /// То же с известным адресом: «…останется прежним: Горячий Ключ».
+    static func placeRenameHintAddress(_ lang: LanguageManager.Language, address: String) -> String {
+        tr(lang, "placeRenameHintAddress",
+           ru: "Название видишь только ты. Адрес останется прежним: {address}.",
+           en: "Only you see this name. The address stays as it is: {address}.")
+            .replacingOccurrences(of: "{address}", with: address)
+    }
+    /// Вернуть в поле имя, которое дал геокодер.
+    static func placeRenameUseAddress(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeRenameUseAddress",
+           ru: "Вернуть название по адресу", en: "Use the address as the name")
+    }
+    /// Подпись под кнопкой удаления: короткая половина `placeDeleteMessage`.
+    /// Полный текст остаётся в самом диалоге — здесь он длиннее кнопки.
+    static func placeDeleteHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeDeleteHint",
+           ru: "Поездки останутся — забудется только история места.",
+           en: "Your trips stay — only the place history is forgotten.")
+    }
     static func placeRename(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placeRename", ru: "Переименовать", en: "Rename")
     }
@@ -158,6 +197,48 @@ enum AppStrings {
     }
     /// Заголовок карточки «как это работает» — показывается, пока мест почти
     /// нет и подсказать нечего.
+    /// «3 места из 5 в периоде» — сколько своих мест попало в выбранное окно
+    /// «Атласа». Счётное существительное приходит уже напечатанным.
+    static func atlasPlacesInPeriod(_ lang: LanguageManager.Language,
+                                    places: String, total: Int) -> String {
+        tr(lang, "atlasPlacesInPeriod",
+           ru: "{places} из {total} в периоде", en: "{places} of {total} in the period")
+            .replacingOccurrences(of: "{places}", with: places)
+            .replacingOccurrences(of: "{total}", with: formattedCount(total, lang: lang))
+    }
+    /// «Места в бете» — тот же значок, что у «Атласа», и тот же повод:
+    /// вкладку переделали в 0.8.1 и продолжают дорабатывать.
+    static func placesBetaTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesBetaTitle", ru: "Места в бете", en: "Places is in beta")
+    }
+    static func placesBetaBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesBetaBody",
+           ru: "Вкладка ещё меняется: как места узнаются на проезде, что показывает их экран и какие из них приложение предлагает само. Напиши, если что-то здесь работает не так, как ждёшь.",
+           en: "This tab is still changing: how places are recognised on a pass, what their screen shows, and which ones the app suggests on its own. Write if something here does not work the way you expect.")
+    }
+    /// Одна фраза под заголовком пустой вкладки: чем место отличается от
+    /// точки на карте. Без неё экран объяснял, ЧТО нажать, но не зачем.
+    static func placesEmptyIntro(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesEmptyIntro",
+           ru: "Приложение узнаёт место на каждом проезде и считает, сколько раз ты здесь был.",
+           en: "The app recognises a place on every pass and counts how many times you have been there.")
+    }
+    /// Имя места в карточке-образце. Своих мест ещё нет, и показать нечего —
+    /// значит показываем, КАК это выглядит, а не пустоту.
+    static func placesExampleName(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesExampleName", ru: "Родители", en: "Parents")
+    }
+    /// Заголовки трёх шагов. Описания у них прежние — `placesHowMark`,
+    /// `placesHowTap`, `placesHowSuggest`.
+    static func placesHowMarkTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowMarkTitle", ru: "Отметь на ходу", en: "Mark it as you drive")
+    }
+    static func placesHowTapTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowTapTitle", ru: "Отметь точку на маршруте", en: "Tap a point on the route")
+    }
+    static func placesHowSuggestTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowSuggestTitle", ru: "Или дождись подсказки", en: "Or wait for a suggestion")
+    }
     static func placesHowTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesHowTitle", ru: "Как появляются места", en: "Where places come from")
     }
@@ -178,6 +259,71 @@ enum AppStrings {
     }
     static func placesOpenLastTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesOpenLastTrip", ru: "Открыть последнюю поездку", en: "Open the last trip")
+    }
+
+    // MARK: - Места 0.8.1 (макет «TripTrack · Места»)
+
+    /// Заголовок секции своих мест. Стоит над списком, а число — справа от
+    /// него: «сколько их» отвечают один раз, а не в каждой строке.
+    static func placesMineSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesMineSection", ru: "Мои места", en: "My places")
+    }
+    /// «24 места» в шапке — появляется, когда список перестал читаться
+    /// целиком с одного экрана.
+    static func placesCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        "\(formattedCount(count, lang: lang)) \(nounPlaces(lang, count))"
+    }
+    static func placesViewList(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesViewList", ru: "Список", en: "List")
+    }
+    static func placesViewMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesViewMap", ru: "Карта", en: "Map")
+    }
+    static func placesSearchPlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSearchPlaceholder", ru: "Поиск места", en: "Search places")
+    }
+    /// Заголовок листа сортировки.
+    static func placesSortTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSortTitle", ru: "Порядок", en: "Order")
+    }
+    static func placesSortRecent(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSortRecent", ru: "Недавно", en: "Recent")
+    }
+    static func placesSortFrequent(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSortFrequent", ru: "Часто", en: "Most visited")
+    }
+    static func placesSortName(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSortName", ru: "По имени", en: "By name")
+    }
+    /// Группа списка. Тем же словом, что и чип у строки, — иначе человек
+    /// решит, что это два разных признака.
+    static func placesGroupFrequent(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesGroupFrequent", ru: "Частые гости", en: "Frequent stops")
+    }
+    static func placesGroupOthers(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesGroupOthers", ru: "Остальные", en: "The rest")
+    }
+    /// Пустой поиск внутри вкладки.
+    static func placesSearchEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSearchEmpty", ru: "Ничего не нашлось", en: "Nothing found")
+    }
+    /// Новичок: места ещё не заведены, но подсказка уже есть.
+    static func placesNoneYet(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesNoneYet", ru: "Мест пока нет", en: "No places yet")
+    }
+    static func placesNoneYetBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesNoneYetBody",
+           ru: "Сохрани подсказку ниже или отметь точку в поездке.",
+           en: "Save a suggestion below, or drop a checkpoint on a trip.")
+    }
+    /// Заголовок над списком поездок в состоянии новичка.
+    static func placesMarkInTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesMarkInTrip", ru: "Отметить в поездке", en: "Mark it on a trip")
+    }
+    /// Подпись у примера на пустом экране — чтобы карточку не приняли за
+    /// настоящее место.
+    static func placesExample(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesExample", ru: "Пример", en: "Example")
     }
 
     // MARK: - Groups (coming soon, Figma 117:2265)
