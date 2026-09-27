@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Місця в беті",
         "placesBetaBody": "Ця вкладка ще змінюється: як місця впізнаються на проїзді, що показує їхній екран і які з них застосунок пропонує сам. Напиши, якщо щось тут працює не так, як ти чекаєш.",
         "atlasCellsStyle": "Клітинки",
+        "atlasRegions": "Регіони",
+        "atlasTotalShort": "усього",
+        "atlasTripsHere": "Поїздки тут",
+        "atlasTripsInAtlas": "Поїздки в атласі",
+        "atlasOpenPlace": "Відкрити місце",
+        "atlasCitiesOutOf": "{visited} з {total} {cities}",
+        "atlasMoreInFog": "ще {count} у тумані",
+        "placesMineSection": "Мої місця",
+        "placesSearchPlaceholder": "Пошук місця",
+        "placesSortTitle": "Порядок",
+        "placesSortRecent": "Нещодавні",
+        "placesSortFrequent": "Часто",
+        "placesSortName": "За назвою",
+        "placesViewList": "Список",
+        "placesViewMap": "Карта",
     ]
 
 }

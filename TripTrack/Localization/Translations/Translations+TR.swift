@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Yerler beta aşamasında",
         "placesBetaBody": "Bu sekme hâlâ değişiyor: yerlerin geçerken nasıl tanındığı, ekranlarının ne gösterdiği ve uygulamanın kendiliğinden hangilerini önerdiği. Burada beklediğin gibi çalışmayan bir şey olursa yaz.",
         "atlasCellsStyle": "Kareler",
+        "atlasRegions": "Bölgeler",
+        "atlasTotalShort": "toplam",
+        "atlasTripsHere": "Buradaki yolculuklar",
+        "atlasTripsInAtlas": "Atlastaki yolculuklar",
+        "atlasOpenPlace": "Yeri aç",
+        "atlasCitiesOutOf": "{total} {cities} içinden {visited}",
+        "atlasMoreInFog": "siste {count} tane daha",
+        "placesMineSection": "Yerlerim",
+        "placesSearchPlaceholder": "Yer ara",
+        "placesSortTitle": "Sıralama",
+        "placesSortRecent": "Son",
+        "placesSortFrequent": "Sık",
+        "placesSortName": "Ada göre",
+        "placesViewList": "Liste",
+        "placesViewMap": "Harita",
     ]
 
 }

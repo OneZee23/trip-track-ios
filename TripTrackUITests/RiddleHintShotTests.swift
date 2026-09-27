@@ -32,7 +32,7 @@ final class RiddleHintShotTests: XCTestCase {
     }
 
     func test_riddle_hint_circle() {
-        XCTAssertTrue(app.otherElements["mymap_summary"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["atlas_explored_title"].waitForExistence(timeout: 12))
         usleep(2_500_000)
 
         // Приближаем ДВОЙНЫМИ ТАПАМИ ПО САМОЙ ПОДСКАЗКЕ: карта зумит к точке

@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Beta pa ang Mga Lugar",
         "placesBetaBody": "Nagbabago pa ang tab na ito: kung paano nakikilala ang mga lugar sa bawat daan, kung ano ang ipinapakita ng screen nila, at kung alin ang imumungkahi ng app mismo. Sumulat kung may hindi gumagana ayon sa inaasahan mo.",
         "atlasCellsStyle": "Mga Parisukat",
+        "atlasRegions": "Mga rehiyon",
+        "atlasTotalShort": "kabuuan",
+        "atlasTripsHere": "Mga biyahe rito",
+        "atlasTripsInAtlas": "Mga biyahe sa atlas",
+        "atlasOpenPlace": "Buksan ang lugar",
+        "atlasCitiesOutOf": "{visited} sa {total} {cities}",
+        "atlasMoreInFog": "{count} pa sa ulap",
+        "placesMineSection": "Mga lugar ko",
+        "placesSearchPlaceholder": "Maghanap ng lugar",
+        "placesSortTitle": "Pagkakasunod",
+        "placesSortRecent": "Kamakailan",
+        "placesSortFrequent": "Madalas",
+        "placesSortName": "Ayon sa pangalan",
+        "placesViewList": "Listahan",
+        "placesViewMap": "Mapa",
     ]
 
 }

@@ -56,7 +56,7 @@ final class DiscoveryCardShotTests: XCTestCase {
         // Туман выгорает 0.7 с, карта успевает встать за пару секунд.
         usleep(3_500_000)
 
-        let summary = app.otherElements["mymap_summary"]
+        let summary = app.buttons["atlas_explored_title"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10), "свёрнутый лист поднят")
         summary.tap()
         usleep(2_000_000)

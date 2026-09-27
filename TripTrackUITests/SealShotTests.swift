@@ -44,7 +44,7 @@ final class SealShotTests: XCTestCase {
     }
 
     func test_seals_on_the_atlas() {
-        XCTAssertTrue(app.otherElements["mymap_summary"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["atlas_explored_title"].waitForExistence(timeout: 12))
         usleep(2_500_000)
         snap("w070_w2_seals_country")
 

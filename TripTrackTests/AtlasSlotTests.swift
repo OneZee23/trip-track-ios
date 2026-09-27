@@ -112,6 +112,58 @@ final class AtlasSlotTests: XCTestCase {
         XCTAssertEqual(fifteen.attributionInset(.collapsed, variant: .withNoticeRow), 844 - 532 + 8)
     }
 
+    /// Подсостояние региона выше сводки, и подпись поднимается за ним — но
+    /// карте обязан остаться живой кадр НА ВСЕХ ЧЕТЫРЁХ телефонах.
+    ///
+    /// Считается по тому же, по чему считает MapKit: высота минус зона
+    /// сверху минус наш инсет. Ниже `minimumViewport` просить бессмысленно —
+    /// на отрицательном остатке MapKit отвечает кадром во весь мир
+    /// (CLAUDE.md, 0.8.1).
+    func testRegionSubstateStillLeavesTheMapALiveViewport() {
+        let minimumViewport: CGFloat = 120
+        for (name, slot) in [("SE", se), ("13 mini", mini),
+                             ("iPhone 15", fifteen), ("15 Pro Max", proMax)] {
+            let inset = slot.attributionInset(.collapsed, variant: .region)
+            XCTAssertEqual(inset, slot.height - slot.collapsedTop(.region) + 8, "\(name)")
+            XCTAssertGreaterThan(slot.height - slot.safeTop - inset, minimumViewport,
+                                 "у карты не осталось кадра: \(name)")
+        }
+        XCTAssertEqual(fifteen.collapsedTop(.region), 456, "верх региона из таблицы спеки")
+    }
+
+    // MARK: Жест подсостояния
+
+    /// Вверх подсостояние идёт к списку — там его поездки; за списком
+    /// резинка, как у сводки.
+    func testSubstateDragGoesUpToTheListAndOneToOneDown() {
+        XCTAssertEqual(fifteen.substateTop(dragged: 300, variant: .region), 300,
+                       accuracy: 0.001, "между списком и своей высотой — один к одному")
+        XCTAssertEqual(fifteen.substateTop(dragged: 104 - 100, variant: .region), 104 - 30,
+                       accuracy: 0.001, "выше списка — резинка 0.3")
+        XCTAssertEqual(fifteen.substateTop(dragged: 700, variant: .region), 700,
+                       accuracy: 0.001, "ниже своей высоты палец ведёт один к одному: это закрытие")
+    }
+
+    /// Бросок вниз ИЗ СПИСКА сворачивает регион, а не закрывает его: закрытие
+    /// начинается только ниже его собственной высоты.
+    func testSubstateClosesOnlyWhenDraggedBelowItself() {
+        let rest = fifteen.collapsedTop(.region)
+        XCTAssertFalse(AtlasSlot.substateDismisses(top: 200, velocity: 800,
+                                                   slot: fifteen, variant: .region),
+                       "бросок вниз из списка — это «сверни», а не «закрой»")
+        XCTAssertFalse(AtlasSlot.substateDismisses(top: rest + 40, velocity: 0,
+                                                   slot: fifteen, variant: .region),
+                       "сорок точек — ещё не закрытие")
+        XCTAssertTrue(AtlasSlot.substateDismisses(top: rest + 80, velocity: 0,
+                                                  slot: fifteen, variant: .region))
+        XCTAssertTrue(AtlasSlot.substateDismisses(top: rest + 10, velocity: 400,
+                                                  slot: fifteen, variant: .region),
+                      "брошенное вниз закрывается и с малого смещения")
+        XCTAssertFalse(AtlasSlot.substateDismisses(top: rest + 80, velocity: -400,
+                                                   slot: fifteen, variant: .region),
+                       "бросок ВВЕРХ не закрывает ничего")
+    }
+
     // MARK: Затухание
 
     func testHeaderAndControlsFadeOnTheirOwnRamps() {

@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Orte ist in der Beta",
         "placesBetaBody": "Der Tab verändert sich noch: wie Orte bei einer Durchfahrt erkannt werden, was ihr Bildschirm zeigt und welche die App von sich aus vorschlägt. Schreib uns, wenn hier etwas nicht so läuft, wie du es erwartest.",
         "atlasCellsStyle": "Raster",
+        "atlasRegions": "Regionen",
+        "atlasTotalShort": "gesamt",
+        "atlasTripsHere": "Fahrten hier",
+        "atlasTripsInAtlas": "Fahrten im Atlas",
+        "atlasOpenPlace": "Ort öffnen",
+        "atlasCitiesOutOf": "{visited} von {total} {cities}",
+        "atlasMoreInFog": "{count} weitere im Nebel",
+        "placesMineSection": "Meine Orte",
+        "placesSearchPlaceholder": "Orte suchen",
+        "placesSortTitle": "Reihenfolge",
+        "placesSortRecent": "Zuletzt",
+        "placesSortFrequent": "Häufig",
+        "placesSortName": "Nach Name",
+        "placesViewList": "Liste",
+        "placesViewMap": "Karte",
     ]
 
 }

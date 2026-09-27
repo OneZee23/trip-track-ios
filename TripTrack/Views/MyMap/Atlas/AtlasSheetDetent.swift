@@ -32,6 +32,16 @@ enum AtlasSummaryVariant: Equatable {
     case emptyAtlas
     /// Строка записи или строка офлайна над сводкой (12, 24).
     case withNoticeRow
+    /// Подсостояние региона (16). Шапка с «назад», тройка чисел, города и
+    /// поездки; лишнее скроллится внутри.
+    case region
+
+    /// Подсостояние (регион, город) — не «ещё одна сводка».
+    ///
+    /// Оно не тянется в список: спека держит его верх не выше 420, чтобы
+    /// заголовок вкладки и кнопки карты оставались на месте, — а раз тянуть
+    /// вверх некуда, вниз жест означает «закрыть».
+    var isSubstate: Bool { self == .region }
 
     /// Высота содержимого свёрнутой шторки в точках.
     var contentHeight: CGFloat {
@@ -40,6 +50,8 @@ enum AtlasSummaryVariant: Equatable {
         case .shortCard: return 158
         case .emptyAtlas: return 176
         case .withNoticeRow: return 222
+        // 754 − 298 = 456 — верх подсостояния из таблицы спеки §10.
+        case .region: return 298
         }
     }
 }

@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Орындар бета нұсқасында",
         "placesBetaBody": "Бұл қойынды әлі өзгеріп жатыр: орындар өткен кезде қалай танылады, олардың экраны нені көрсетеді және қолданба өзі қайсысын ұсынады. Мұнда бірдеңе күткеніңдей жұмыс істемесе, жаз.",
         "atlasCellsStyle": "Торкөздер",
+        "atlasRegions": "Аймақтар",
+        "atlasTotalShort": "барлығы",
+        "atlasTripsHere": "Осындағы сапарлар",
+        "atlasTripsInAtlas": "Атластағы сапарлар",
+        "atlasOpenPlace": "Орынды ашу",
+        "atlasCitiesOutOf": "{total} {cities} ішінен {visited}",
+        "atlasMoreInFog": "тағы {count} тұманда",
+        "placesMineSection": "Менің орындарым",
+        "placesSearchPlaceholder": "Орын іздеу",
+        "placesSortTitle": "Реті",
+        "placesSortRecent": "Жуықта",
+        "placesSortFrequent": "Жиі",
+        "placesSortName": "Аты бойынша",
+        "placesViewList": "Тізім",
+        "placesViewMap": "Карта",
     ]
 
 }

@@ -212,6 +212,19 @@ extension AppStrings {
             .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
     }
 
+    /// Заголовок секции поездок в подсостоянии региона (состояние 16).
+    ///
+    /// Своя, а не `AppStrings.mapTripsSection`: та с 0.7.0 напечатана
+    /// ПРОПИСНЫМИ прямо в таблицах — наследство HTML-макета, от которого
+    /// «Атлас» и «Места» отучили 26 сентября («мелкие серые прописные и были
+    /// тем, чем эти вкладки отличались от соседних»). Чинить регистр в
+    /// тринадцати таблицах ради одного места показа значит трогать строку,
+    /// которую читает ещё и прежняя панель; проще завести свою в нужном
+    /// регистре, чем разойтись с соседней «Города» на одном экране.
+    static func atlasTripsHere(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTripsHere", ru: "Поездки здесь", en: "Trips here")
+    }
+
     /// Строка внизу списка: сколько поездок участвует в атласе.
     static func atlasTripsInAtlas(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasTripsInAtlas", ru: "Поездки в атласе", en: "Trips in the atlas")

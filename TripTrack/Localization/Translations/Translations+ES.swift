@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Lugares está en beta",
         "placesBetaBody": "Esta pestaña aún está cambiando: cómo se reconocen los lugares al pasar, qué muestra su pantalla y cuáles sugiere la app por su cuenta. Escríbenos si algo aquí no funciona como esperas.",
         "atlasCellsStyle": "Casillas",
+        "atlasRegions": "Regiones",
+        "atlasTotalShort": "en total",
+        "atlasTripsHere": "Viajes aquí",
+        "atlasTripsInAtlas": "Viajes en el atlas",
+        "atlasOpenPlace": "Abrir lugar",
+        "atlasCitiesOutOf": "{visited} de {total} {cities}",
+        "atlasMoreInFog": "{count} más en la niebla",
+        "placesMineSection": "Mis lugares",
+        "placesSearchPlaceholder": "Buscar lugares",
+        "placesSortTitle": "Orden",
+        "placesSortRecent": "Recientes",
+        "placesSortFrequent": "Frecuentes",
+        "placesSortName": "Por nombre",
+        "placesViewList": "Lista",
+        "placesViewMap": "Mapa",
     ]
 
 }

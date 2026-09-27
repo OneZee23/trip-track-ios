@@ -12,9 +12,6 @@ struct AtlasSummaryContent: View {
     var onShare: () -> Void
     var onExplain: () -> Void
     var onOpenRegion: (String) -> Void
-    var onOpenTrips: () -> Void
-    var onOpenCities: () -> Void
-    var onSearch: () -> Void
     /// Тап по строке подсказки: снимает выбор места и раскрывает список.
     var onTapPeek: () -> Void
 
@@ -139,29 +136,6 @@ struct AtlasSummaryContent: View {
         ]
     }
 
-    // MARK: Поиск
-
-    private var searchField: some View {
-        Button(action: onSearch) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(AtlasTheme.secondary)
-                Text(AppStrings.atlasCityOrRegion(lang.language))
-                    .font(AppType.body)
-                    .foregroundStyle(AtlasTheme.secondary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 44)
-            .frame(maxWidth: .infinity)
-            .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("atlas_search")
-    }
-
     // MARK: Регионы
 
     private var regionsSection: some View {
@@ -209,6 +183,7 @@ struct AtlasSummaryContent: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("atlas_region_\(region.id)")
     }
 
     private func regionSubtitle(_ region: MapRegionStat) -> String {
@@ -259,51 +234,22 @@ struct AtlasSummaryContent: View {
 
     private var foggedCities: Int { Swift.max(0, totalCities - vm.overview.cityCount) }
 
-    // MARK: Поездки в атласе
-
-    private var tripsRow: some View {
-        Button(action: onOpenTrips) {
-            HStack(spacing: 12) {
-                Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(AtlasTheme.ink)
-                    .frame(width: 44, height: 44)
-                    .background(AtlasTheme.chip, in: RoundedRectangle(cornerRadius: 14))
-                Text(AppStrings.atlasTripsInAtlas(lang.language))
-                    .font(AppType.itemTitle)
-                    .foregroundStyle(AtlasTheme.ink)
-                Spacer(minLength: 0)
-                Text("\(vm.exploration.tripCount)")
-                    .font(AppType.meta)
-                    .monospacedDigit()
-                    .foregroundStyle(AtlasTheme.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 56)
-            .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityIdentifier("atlas_trips_row")
-    }
-
     // MARK: Общее
 
+    /// Заголовок секции и счёт справа — БЕЗ шеврона.
+    ///
+    /// Шеврон обещает переход, а экранов «все регионы» и «все города» ещё
+    /// нет: «если нажатие что-то открывает — это видно», и обратное тоже
+    /// верно — не открывает, значит и знака перехода быть не должно
+    /// (CLAUDE.md). Вернётся вместе со своим экраном.
     private func sectionHeader(_ title: String, link: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title).atlasSectionStyle()
             Spacer(minLength: 8)
-            HStack(spacing: 3) {
-                Text(link)
-                    .font(AppType.meta)
-                    .monospacedDigit()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .foregroundStyle(AtlasTheme.secondary)
+            Text(link)
+                .font(AppType.meta)
+                .monospacedDigit()
+                .foregroundStyle(AtlasTheme.secondary)
         }
     }
 }

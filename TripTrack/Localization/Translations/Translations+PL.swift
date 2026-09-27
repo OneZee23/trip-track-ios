@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Miejsca w wersji beta",
         "placesBetaBody": "Ta zakładka wciąż się zmienia: jak miejsca są rozpoznawane przy przejeździe, co pokazuje ich ekran i które aplikacja proponuje sama. Napisz, jeśli coś tu działa inaczej, niż się spodziewasz.",
         "atlasCellsStyle": "Kratka",
+        "atlasRegions": "Regiony",
+        "atlasTotalShort": "łącznie",
+        "atlasTripsHere": "Przejazdy tutaj",
+        "atlasTripsInAtlas": "Przejazdy w atlasie",
+        "atlasOpenPlace": "Otwórz miejsce",
+        "atlasCitiesOutOf": "{visited} z {total} {cities}",
+        "atlasMoreInFog": "jeszcze {count} we mgle",
+        "placesMineSection": "Moje miejsca",
+        "placesSearchPlaceholder": "Szukaj miejsca",
+        "placesSortTitle": "Kolejność",
+        "placesSortRecent": "Ostatnie",
+        "placesSortFrequent": "Częste",
+        "placesSortName": "Według nazwy",
+        "placesViewList": "Lista",
+        "placesViewMap": "Mapa",
     ]
 
 }

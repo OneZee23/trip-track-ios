@@ -1497,6 +1497,21 @@ extension Translations {
         "placesBetaTitle": "Tempat masih beta",
         "placesBetaBody": "Tab ini masih berubah: bagaimana tempat dikenali saat kamu lewat, apa yang ditampilkan layarnya, dan mana yang disarankan aplikasi sendiri. Tulis kalau ada yang tidak berjalan seperti harapanmu.",
         "atlasCellsStyle": "Kotak",
+        "atlasRegions": "Wilayah",
+        "atlasTotalShort": "total",
+        "atlasTripsHere": "Perjalanan di sini",
+        "atlasTripsInAtlas": "Perjalanan di atlas",
+        "atlasOpenPlace": "Buka tempat",
+        "atlasCitiesOutOf": "{visited} dari {total} {cities}",
+        "atlasMoreInFog": "{count} lagi dalam kabut",
+        "placesMineSection": "Tempat saya",
+        "placesSearchPlaceholder": "Cari tempat",
+        "placesSortTitle": "Urutan",
+        "placesSortRecent": "Terbaru",
+        "placesSortFrequent": "Sering",
+        "placesSortName": "Menurut nama",
+        "placesViewList": "Daftar",
+        "placesViewMap": "Peta",
     ]
 
 }

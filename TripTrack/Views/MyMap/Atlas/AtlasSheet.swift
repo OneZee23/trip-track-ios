@@ -21,6 +21,11 @@ struct AtlasSheet<Content: View>: View {
     /// Тап по свёрнутой шторке раскрывает список; по строке подсказки —
     /// снимает выбор места и тоже раскрывает.
     var onTapCollapsed: () -> Void = {}
+    /// Закрыть подсостояние. Непустое значение и ПЕРЕВОДИТ шторку в режим
+    /// подсостояния: тянуть вверх там некуда (верх держится не выше 420,
+    /// чтобы заголовок вкладки и кнопки карты остались), и жест вниз
+    /// означает «закрыть», а не «свернуть».
+    var onDismissSubstate: (() -> Void)?
     /// «Итоги атласа, свёрнуто / раскрыто» — собирает зовущий, у него язык.
     var accessibilityTitle: String = ""
     @ViewBuilder var content: () -> Content
@@ -36,6 +41,25 @@ struct AtlasSheet<Content: View>: View {
     }
 
     private var top: CGFloat { liveTop ?? slot.top(of: detent, variant: variant) }
+
+    /// Верх шторки В КООРДИНАТАХ КОНТЕЙНЕРА, а не экрана.
+    ///
+    /// `AtlasSlot` считает от края ЭКРАНА, а слой шторки живёт внутри
+    /// безопасной зоны — и обязан там остаться. Прежняя редакция выносила его
+    /// наружу `.ignoresSafeArea()`, и это стоило экрана: в РАСКРЫТОМ
+    /// положении внутри шторки стоит `ScrollView`, а он считает свои вставки
+    /// от безопасной зоны; вынесенный за неё, он менял её У ВСЕГО ОКНА.
+    /// Замер 27 сентября: заголовок вкладки уезжал с 59 pt на 19.7 (то есть
+    /// под часы), а таб-бар — с 768 на 773.7. Видно это становилось на
+    /// экране региона, потому что его и открывают из раскрытого списка, —
+    /// и выглядело как «шапка налезает на статус-бар» (владелец на
+    /// устройстве). Держит `AtlasChromeGeometryTests`.
+    ///
+    /// Низ при этом достаёт до физического края и без вылета за безопасную
+    /// зону: `ContentView` отдаёт вкладкам низ целиком
+    /// (`.ignoresSafeArea(edges: .bottom)`), а сумма `offset + height` по
+    /// построению равна высоте экрана при любом верхе, включая резинку.
+    private var containerTop: CGFloat { top - slot.safeTop }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,11 +81,12 @@ struct AtlasSheet<Content: View>: View {
             .shadow(color: .black.opacity(scheme == .dark ? 0.32 : 0.16), radius: 14, y: -8)
             .ignoresSafeArea(edges: .bottom)
         )
-        .offset(y: top)
+        .offset(y: containerTop)
         .gesture(drag)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityTitle)
     }
+
+    private var isSubstate: Bool { onDismissSubstate != nil }
 
     private var handle: some View {
         Capsule()
@@ -74,9 +99,49 @@ struct AtlasSheet<Content: View>: View {
             // это то же действие, что тап по блоку.
             .contentShape(Rectangle())
             .onTapGesture(perform: onTapCollapsed)
+            // Ручка — настоящий элемент: её нажимают, чтобы раскрыть список,
+            // и по ней же сторож меряет, где стоит верх шторки.
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityIdentifier("atlas_sheet_handle")
     }
 
     private var drag: some Gesture {
+        isSubstate ? AnyGesture(substateDrag.map { _ in () })
+                   : AnyGesture(detentDrag.map { _ in () })
+    }
+
+    /// Жест подсостояния: вверх — к списку, вниз ниже своей высоты — закрыть.
+    private var substateDrag: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                let start = dragStart ?? slot.top(of: detent, variant: variant)
+                dragStart = start
+                liveTop = slot.substateTop(dragged: start + value.translation.height,
+                                           variant: variant)
+            }
+            .onEnded { value in
+                let start = dragStart ?? slot.top(of: detent, variant: variant)
+                let landed = slot.substateTop(dragged: start + value.translation.height,
+                                              variant: variant)
+                dragStart = nil
+                if AtlasSlot.substateDismisses(top: landed, velocity: value.velocity.height,
+                                               slot: slot, variant: variant) {
+                    withAnimation(settleAnimation) { liveTop = nil }
+                    onDismissSubstate?()
+                    return
+                }
+                let settled = AtlasSlot.settle(top: landed, velocity: value.velocity.height,
+                                               slot: slot, variant: variant)
+                withAnimation(settleAnimation) {
+                    detent = settled
+                    liveTop = nil
+                }
+            }
+    }
+
+    private var detentDrag: some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { value in
                 let start = dragStart ?? slot.top(of: detent, variant: variant)
