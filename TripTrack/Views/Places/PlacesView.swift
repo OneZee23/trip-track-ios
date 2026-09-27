@@ -25,7 +25,6 @@ struct PlacesView: View {
     @State private var path: [PlacesDest] = []
     @State private var query = ""
     @State private var sort = PlacesSort.load()
-    @State private var showsSort = false
     /// Положение панели. Источник правды один — выбор булавки и пустая
     /// вкладка тоже пишут сюда, а не заводят своё состояние: панель на
     /// вкладке ОДНА (принцип 1 спеки).
@@ -69,7 +68,6 @@ struct PlacesView: View {
                     }
                 }
         }
-        .sheet(isPresented: $showsSort) { sortSheet }
         .sheet(isPresented: $showsBeta) {
             AtlasBetaSheet(model: .make(.places), onDismiss: { showsBeta = false })
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).card)
@@ -195,6 +193,7 @@ struct PlacesView: View {
     @ViewBuilder
     private var halfContent: some View {
         VStack(spacing: 12) {
+            lastPassSection
             placesSection
             suggestionsSection
         }
@@ -207,7 +206,9 @@ struct PlacesView: View {
             VStack(spacing: 12) {
                 if showsControls {
                     searchRow
+                    sortChips
                 }
+                lastPassSection
                 placesSection
                 suggestionsSection
             }
@@ -216,6 +217,71 @@ struct PlacesView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
+    }
+
+    /// «Последний проезд» — ответ вкладки на «зачем сюда возвращаться».
+    ///
+    /// Показывается редко и по границам `PlaceLastPass`: не меньше пяти минут
+    /// и не меньше десятой доли медианы, внутри одного направления, с медианой
+    /// от трёх проездов. Находка обязана остаться находкой — «быстрее на
+    /// минуту» после каждой поездки обесценило бы её за неделю.
+    @ViewBuilder
+    private var lastPassSection: some View {
+        if let reading = model.lastPass,
+           let item = model.items.first(where: { $0.id == reading.placeId }) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(AppStrings.placeLastPassSection(lang.language))
+                    .atlasSectionStyle()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("places_last_pass")
+                Button {
+                    Haptics.tap()
+                    model.markLastPassSeen()
+                    push(.place(reading.placeId))
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AtlasTheme.accentInk)
+                            .frame(width: 40, height: 40)
+                            .background(AtlasTheme.accentSoft, in: RoundedRectangle(cornerRadius: 16))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.place.name ?? AppStrings.placeUnnamed(lang.language))
+                                .font(AppType.itemTitle)
+                                .foregroundStyle(AtlasTheme.ink)
+                                .lineLimit(1)
+                            Text(lastPassLine(reading))
+                                .font(AppType.meta)
+                                .foregroundStyle(AtlasTheme.secondary)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 64)
+                    .background(AtlasTheme.card,
+                                in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("places_last_pass_row")
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    /// «Вчера · на 7 мин быстрее обычного». «Дольше» — теми же словами и тем
+    /// же цветом: это наблюдение, а не провал.
+    private func lastPassLine(_ reading: PlaceLastPass.Reading) -> String {
+        let l = lang.language
+        let when = RelativeTripDate.string(from: reading.at, language: l)
+        let delta = CheckpointReading.clock(reading.delta, lang: l)
+        return reading.isFaster
+            ? AppStrings.placeLastPassFaster(l, when: when, delta: delta)
+            : AppStrings.placeLastPassSlower(l, when: when, delta: delta)
     }
 
     @ViewBuilder
@@ -315,64 +381,54 @@ struct PlacesView: View {
             .frame(height: 44)
             .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Button {
-                Haptics.tap()
-                searchFocused = false
-                showsSort = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 14, weight: .medium))
-                    Text(sortTitle).font(AppType.chip)
-                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(AtlasTheme.ink)
-                .padding(.leading, 10).padding(.trailing, 12)
-                .frame(height: 44)
-                .background(AtlasTheme.card, in: Capsule())
-                .overlay(Capsule().stroke(AtlasTheme.separator, lineWidth: 1))
-            }
-            .buttonStyle(PressableCardStyle())
-            .accessibilityIdentifier("places_sort")
         }
         .padding(.horizontal, 16)
     }
 
-    private var sortTitle: String {
-        switch sort {
+    /// Порядок — ЧИПАМИ, а не листом (спека §3.4).
+    ///
+    /// Лист прятал три коротких слова за двумя нажатиями и модальным экраном;
+    /// здесь выбор виден целиком и меняется одним тапом, а активный чип ещё и
+    /// отвечает на «в каком порядке я сейчас смотрю».
+    private var sortChips: some View {
+        HStack(spacing: 8) {
+            ForEach(PlacesSort.allCases, id: \.self) { order in
+                sortChip(order)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func sortChip(_ order: PlacesSort) -> some View {
+        let active = sort == order
+        return Button {
+            Haptics.tap()
+            searchFocused = false
+            withAnimation(.snappy(duration: 0.22)) { sort = order }
+        } label: {
+            Text(title(for: order))
+                .font(active ? AppType.chipActive : AppType.chip)
+                .foregroundStyle(active ? AtlasTheme.background : AtlasTheme.ink)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(active ? AtlasTheme.ink : AtlasTheme.chip, in: Capsule())
+                // Нарисован 32, палец получает 44 (спека §7).
+                .frame(height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+        .accessibilityIdentifier("places_sort_\(order.rawValue)")
+    }
+
+    private func title(for order: PlacesSort) -> String {
+        switch order {
         case .recent: return AppStrings.placesSortRecent(lang.language)
         case .frequent: return AppStrings.placesSortFrequent(lang.language)
         case .name: return AppStrings.placesSortName(lang.language)
         }
-    }
-
-    private var sortSheet: some View {
-        SettingsOptionPicker(
-            title: AppStrings.placesSortTitle(lang.language),
-            options: PlacesSort.allCases,
-            selection: sort,
-            footnote: "",
-            badge: { option in
-                switch option {
-                case .recent: return "clock"
-                case .frequent: return "flame"
-                case .name: return "textformat.abc"
-                }
-            },
-            badgeIsSymbol: true,
-            label: { option in
-                switch option {
-                case .recent: return AppStrings.placesSortRecent(lang.language)
-                case .frequent: return AppStrings.placesSortFrequent(lang.language)
-                case .name: return AppStrings.placesSortName(lang.language)
-                }
-            },
-            onSelect: { option in
-                sort = option
-                showsSort = false
-            },
-            accessibilityPrefix: "places_sort_option"
-        )
-        .contentSizedSheet(background: AtlasTheme.background)
     }
 
     // MARK: - Карта
@@ -455,6 +511,11 @@ struct PlacesView: View {
     private func groupTitle(_ group: PlacesPresentation.Group) -> String {
         switch group.kind {
         case .all: return AppStrings.placesMineSection(lang.language)
+        // Относительные даты берём УЖЕ переведённые: спека прямо запрещает
+        // заводить под них новые ключи.
+        case .today: return AppStrings.today(lang.language)
+        case .thisWeek: return AppStrings.thisWeek(lang.language)
+        case .earlier: return AppStrings.earlier(lang.language)
         case .frequent: return AppStrings.placesGroupFrequent(lang.language)
         case .others: return AppStrings.placesGroupOthers(lang.language)
         }

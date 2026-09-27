@@ -58,6 +58,36 @@ enum AppStrings {
     /// Заголовок карточки. Уточнение «от старта поездки» с 0.7.0 ушло из него
     /// вниз отдельной подписью: одной строкой через точку-разделитель оно
     /// читалось как часть заголовка и заставляло перечитывать.
+    /// Заголовок секции «Последний проезд» над «Моими местами» (спека §3.6).
+    static func placeLastPassSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeLastPassSection", ru: "Последний проезд", en: "Last pass")
+    }
+
+    /// «Вчера · на 7 мин быстрее обычного».
+    ///
+    /// Подстановки токенами, а не интерполяцией: `tr` для остальных
+    /// одиннадцати языков читает ГОТОВУЮ строку из таблиц и значений в момент
+    /// вызова получить не может (CLAUDE.md).
+    static func placeLastPassFaster(_ lang: LanguageManager.Language,
+                                    when: String, delta: String) -> String {
+        tr(lang, "placeLastPassFaster",
+           ru: "{when} · на {delta} быстрее обычного",
+           en: "{when} · {delta} faster than usual")
+            .replacingOccurrences(of: "{when}", with: when)
+            .replacingOccurrences(of: "{delta}", with: delta)
+    }
+
+    /// «Вчера · на 12 мин дольше обычного». Те же слова и тот же цвет, что у
+    /// «быстрее»: это наблюдение, а не провал.
+    static func placeLastPassSlower(_ lang: LanguageManager.Language,
+                                    when: String, delta: String) -> String {
+        tr(lang, "placeLastPassSlower",
+           ru: "{when} · на {delta} дольше обычного",
+           en: "{when} · {delta} longer than usual")
+            .replacingOccurrences(of: "{when}", with: when)
+            .replacingOccurrences(of: "{delta}", with: delta)
+    }
+
     static func placeUsuallyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placeUsuallyTitle", ru: "Обычно занимает", en: "Usually takes")
     }

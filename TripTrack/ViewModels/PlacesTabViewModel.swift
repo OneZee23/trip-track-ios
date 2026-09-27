@@ -17,6 +17,10 @@ final class PlacesTabViewModel: ObservableObject {
     /// Отметку ставят В ПОЕЗДКЕ, и пока мест нет, дорога туда — единственное
     /// действие, которое вообще есть на этой вкладке кроме подсказки.
     @Published private(set) var recentTrips: [Trip] = []
+    /// «Дача · вчера · на 7 мин быстрее обычного» — одна строка над списком,
+    /// ответ вкладки на «зачем сюда возвращаться» (спека §3.6). Правило
+    /// целиком живёт в `PlaceLastPass`; здесь только выбор места и гашение.
+    @Published private(set) var lastPass: PlaceLastPass.Reading?
 
     /// Сколько поездок показывать в «Отметить в поездке». Три — это «недавно»;
     /// дальше это уже лента, а она на своей вкладке.
@@ -55,14 +59,49 @@ final class PlacesTabViewModel: ObservableObject {
         reload()
     }
 
+    /// Что уже показано и погашено: строка живёт до следующей сохранённой
+    /// поездки ИЛИ до открытия этого места, что раньше. Второе — действие
+    /// человека, и пережить переключение вкладки оно обязано: вью-модель
+    /// `ContentView` пересоздаёт на каждом переходе.
+    private static let seenKey = "places.lastPassSeen"
+
     func reload() {
-        items = PlaceListItem.sorted(manager.places.map {
-            PlaceListItem.build(place: $0, passes: manager.passes(for: $0.id))
+        let places = manager.places
+        var passesByPlace: [UUID: [PlacePass]] = [:]
+        items = PlaceListItem.sorted(places.map { place in
+            let passes = manager.passes(for: place.id)
+            passesByPlace[place.id] = passes
+            return PlaceListItem.build(place: place, passes: passes)
         })
+        lastPass = freshestReading(passesByPlace)
         // Поднимаются только когда их будут показывать: у человека с сотней
         // мест эта секция не рисуется, и выборка ему ни к чему.
         recentTrips = items.isEmpty ? repository.fetchTrips(limit: Self.recentTripsShown, offset: 0) : []
         refreshSuggestions()
+    }
+
+    /// Самый свежий проезд по всем местам — и только если он ещё не погашен.
+    ///
+    /// Место выбирается по ВРЕМЕНИ проезда, а не по числу проездов: вопрос
+    /// строки «что было в последней поездке», и ответ на него один.
+    private func freshestReading(_ passes: [UUID: [PlacePass]]) -> PlaceLastPass.Reading? {
+        let readings = passes.compactMap { PlaceLastPass.reading(placeId: $0.key, passes: $0.value) }
+        guard let best = readings.max(by: { $0.at < $1.at }) else { return nil }
+        return Self.seenKeyValue(best) == UserDefaults.standard.string(forKey: Self.seenKey)
+            ? nil : best
+    }
+
+    /// Ключ гашения — место И ВРЕМЯ проезда: следующая поездка через то же
+    /// место даёт другое время, и строка появляется снова сама.
+    private static func seenKeyValue(_ reading: PlaceLastPass.Reading) -> String {
+        "\(reading.placeId.uuidString)|\(Int(reading.at.timeIntervalSince1970))"
+    }
+
+    /// Человек открыл это место — сравнение он увидел, и строка гаснет.
+    func markLastPassSeen() {
+        guard let reading = lastPass else { return }
+        UserDefaults.standard.set(Self.seenKeyValue(reading), forKey: Self.seenKey)
+        lastPass = nil
     }
 
     /// Человек согласился: подсказка становится местом тем же путём, что

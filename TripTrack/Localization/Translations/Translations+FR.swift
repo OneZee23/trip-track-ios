@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "Par nom",
         "placesViewList": "Liste",
         "placesViewMap": "Carte",
+        "placeLastPassSection": "Dernier passage",
+        "placeLastPassFaster": "{when} · {delta} plus vite que d'habitude",
+        "placeLastPassSlower": "{when} · {delta} de plus que d'habitude",
     ]
 
 }

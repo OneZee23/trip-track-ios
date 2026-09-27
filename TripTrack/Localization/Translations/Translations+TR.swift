@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "Ada göre",
         "placesViewList": "Liste",
         "placesViewMap": "Harita",
+        "placeLastPassSection": "Son geçiş",
+        "placeLastPassFaster": "{when} · her zamankinden {delta} hızlı",
+        "placeLastPassSlower": "{when} · her zamankinden {delta} uzun",
     ]
 
 }

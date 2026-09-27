@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "Menurut nama",
         "placesViewList": "Daftar",
         "placesViewMap": "Peta",
+        "placeLastPassSection": "Lintasan terakhir",
+        "placeLastPassFaster": "{when} · {delta} lebih cepat dari biasanya",
+        "placeLastPassSlower": "{when} · {delta} lebih lama dari biasanya",
     ]
 
 }

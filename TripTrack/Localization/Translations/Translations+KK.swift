@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "Аты бойынша",
         "placesViewList": "Тізім",
         "placesViewMap": "Карта",
+        "placeLastPassSection": "Соңғы өту",
+        "placeLastPassFaster": "{when} · әдеттегіден {delta} жылдам",
+        "placeLastPassSlower": "{when} · әдеттегіден {delta} ұзақ",
     ]
 
 }

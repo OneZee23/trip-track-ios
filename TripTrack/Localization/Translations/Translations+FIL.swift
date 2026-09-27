@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "Ayon sa pangalan",
         "placesViewList": "Listahan",
         "placesViewMap": "Mapa",
+        "placeLastPassSection": "Huling pagdaan",
+        "placeLastPassFaster": "{when} · {delta} na mas mabilis kaysa dati",
+        "placeLastPassSlower": "{when} · {delta} na mas matagal kaysa dati",
     ]
 
 }

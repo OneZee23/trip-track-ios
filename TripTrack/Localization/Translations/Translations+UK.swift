@@ -1512,6 +1512,9 @@ extension Translations {
         "placesSortName": "За назвою",
         "placesViewList": "Список",
         "placesViewMap": "Карта",
+        "placeLastPassSection": "Останній проїзд",
+        "placeLastPassFaster": "{when} · на {delta} швидше, ніж зазвичай",
+        "placeLastPassSlower": "{when} · на {delta} довше, ніж зазвичай",
     ]
 
 }
