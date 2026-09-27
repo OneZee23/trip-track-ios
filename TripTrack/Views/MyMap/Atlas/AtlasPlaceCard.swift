@@ -44,7 +44,7 @@ struct AtlasPlaceCard: View {
         .padding(12)
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius, style: .continuous))
         .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 12, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("atlas_place_card")

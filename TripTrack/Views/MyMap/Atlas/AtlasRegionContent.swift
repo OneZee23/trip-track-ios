@@ -14,11 +14,6 @@ import SwiftUI
 struct AtlasRegionContent: View {
     @ObservedObject var vm: MyMapViewModel
     let region: MapRegionStat
-    /// «Назад» — туда, откуда пришли: в список, если регион открыли строкой,
-    /// в сводку, если булавкой на карте.
-    var onBack: () -> Void
-    /// × — всегда в сводку.
-    var onClose: () -> Void
     var onOpenTrip: (UUID) -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -28,37 +23,30 @@ struct AtlasRegionContent: View {
     @State private var showsAllTrips = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            AtlasSubstateHeader(
-                title: region.localizedName(lang.language),
-                subtitle: subtitle,
-                backLabel: AppStrings.back(lang.language),
-                closeLabel: AppStrings.close(lang.language),
-                onBack: onBack,
-                onClose: onClose
-            )
-            .padding(.bottom, 12)
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 10) {
-                    AtlasStatTrio(columns: columns)
-                    if !visitedCities.isEmpty || foggedCities > 0 { citiesSection }
-                    if !vm.selectedRegionTrips.isEmpty { tripsSection }
-                }
-                .padding(.horizontal, AtlasTheme.sideInset)
-                .padding(.bottom, CustomTabBar.clearance)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 10) {
+                AtlasStatTrio(columns: columns)
+                if !visitedCities.isEmpty || foggedCities > 0 { citiesSection }
+                if !vm.selectedRegionTrips.isEmpty { tripsSection }
             }
+            .padding(.horizontal, AtlasTheme.sideInset)
+            .padding(.top, 12)
+            .padding(.bottom, CustomTabBar.clearance)
         }
         .accessibilityIdentifier("atlas_region_page")
     }
 
     /// «Россия · с апреля 2026» — то же, что несла прежняя шапка. Страна
     /// отвечает «где это», дата — «с каких пор он мой».
-    private var subtitle: String? {
-        let country = RegionAtlas.shared.countryName(region.countryCode, lang.language)
-            ?? region.countryCode
+    ///
+    /// Саму шапку рисует не этот вид, а шторка: с эрраты 1 первая строка
+    /// шторки ЗАКРЕПЛЕНА и стоит над скроллом, чтобы выход оставался на
+    /// месте, сколько бы человек ни пролистал.
+    static func subtitle(for region: MapRegionStat,
+                         lang: LanguageManager.Language) -> String? {
+        let country = RegionAtlas.shared.countryName(region.countryCode, lang) ?? region.countryCode
         guard let date = region.firstVisited else { return country }
-        return country + " · " + AppStrings.mapRegionSince(lang.language, date: date)
+        return country + " · " + AppStrings.mapRegionSince(lang, date: date)
     }
 
     // MARK: Тройка чисел

@@ -12,8 +12,6 @@ struct AtlasSummaryContent: View {
     var onShare: () -> Void
     var onExplain: () -> Void
     var onOpenRegion: (String) -> Void
-    /// Тап по строке подсказки: снимает выбор места и раскрывает список.
-    var onTapPeek: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.distanceUnit) private var unit
@@ -21,7 +19,11 @@ struct AtlasSummaryContent: View {
     var body: some View {
         switch detent {
         case .peek:
-            peekRow
+            // В подсказке видна ТОЛЬКО закреплённая строка заголовка, которую
+            // рисует сама шторка. Строка «189 миль новых дорог ▴» убрана
+            // эрратой 1: сводку возвращает закрытие карточки места, и второй
+            // дороги к тому же результату быть не должно.
+            EmptyView()
         case .collapsed:
             exploredBlock
                 .padding(.horizontal, 16)
@@ -43,38 +45,6 @@ struct AtlasSummaryContent: View {
                 .padding(.bottom, CustomTabBar.clearance)
             }
         }
-    }
-
-    // MARK: Подсказка
-
-    /// Одна строка под карточкой места. Больше в этом положении нет ничего:
-    /// слот занят карточкой, а сводка сжимается до напоминания о себе.
-    private var peekRow: some View {
-        Button(action: onTapPeek) {
-            HStack(spacing: 6) {
-                Spacer(minLength: 0)
-                Text(peekText)
-                    .font(AppType.meta)
-                    .foregroundStyle(AtlasTheme.secondary)
-                    .lineLimit(1)
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AtlasTheme.secondary)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 28)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("atlas_peek_row")
-    }
-
-    private var peekText: String {
-        let roads = Measure.distance(km: vm.revealed.openedKm, unit: unit, lang: lang.language)
-        let cities = "\(vm.overview.cityCount) "
-            + AppStrings.citiesGenitive(lang.language, count: vm.overview.cityCount)
-        return roads + " " + AppStrings.atlasNewRoads(lang.language) + " · " + cities
     }
 
     // MARK: Исследовано

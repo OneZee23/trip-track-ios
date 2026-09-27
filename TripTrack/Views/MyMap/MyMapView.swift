@@ -161,10 +161,6 @@ struct MyMapView: View {
 
             topScrim
 
-            title
-                .opacity(headerOpacity(slot))
-                .allowsHitTesting(headerOpacity(slot) > 0.5)
-
             mapControls(slot)
 
             if vm.isEmpty {
@@ -298,18 +294,6 @@ struct MyMapView: View {
         liveTop ?? slot.top(of: activeDetent, variant: activeVariant)
     }
 
-    /// Прозрачность заголовка вкладки.
-    ///
-    /// Считается ОДНОЙ рампой от верха шторки, и исключений у неё больше
-    /// нет. Прежнее «у выбранного объекта не гаснет никогда» держало на
-    /// экране кнопку «назад», которая жила в этом заголовке; теперь она
-    /// живёт в шапке самой шторки (`AtlasSubstateHeader`), и подпирать
-    /// заголовок вкладки нечем и незачем — в подсостоянии он и так виден,
-    /// потому что верх шторки там 456 (спека, состояние 16).
-    private func headerOpacity(_ slot: AtlasSlot) -> CGFloat {
-        AtlasSlot.headerOpacity(sheetTop: sheetTop(slot))
-    }
-
     /// Верх СЛОТА: то, за чем следуют кнопки карты и подпись Apple.
     ///
     /// Пока выбрано место, слот занимает карточка, и следовать надо за ней, а
@@ -326,6 +310,11 @@ struct MyMapView: View {
             detent: $detent,
             liveTop: $liveTop,
             onTapCollapsed: { toggleSheet() },
+            header: {
+                AtlasSheetTitleRow(title: AppStrings.myMapTitle(lang.language)) {
+                    AtlasBetaChip { showBetaSheet = true }
+                }
+            },
             accessibilityTitle: AppStrings.atlasExplored(lang.language)
         ) {
             AtlasSummaryContent(
@@ -333,8 +322,7 @@ struct MyMapView: View {
                 detent: detent,
                 onShare: shareSummary,
                 onExplain: { showExplanation = true },
-                onOpenRegion: { enterSubstate(.region($0)) },
-                onTapPeek: { leavePeek() }
+                onOpenRegion: { enterSubstate(.region($0)) }
             )
         }
         .frame(maxHeight: .infinity, alignment: .top)
@@ -372,13 +360,21 @@ struct MyMapView: View {
             liveTop: $liveTop,
             onTapCollapsed: { toggleSubstate() },
             onDismissSubstate: { leaveSubstate(to: .collapsed) },
+            header: {
+                AtlasSubstateHeader(
+                    title: region.localizedName(lang.language),
+                    subtitle: AtlasRegionContent.subtitle(for: region, lang: lang.language),
+                    backLabel: AppStrings.back(lang.language),
+                    closeLabel: AppStrings.close(lang.language),
+                    onBack: { leaveSubstate(to: detentBeforeSubstate) },
+                    onClose: { leaveSubstate(to: .collapsed) }
+                )
+            },
             accessibilityTitle: region.localizedName(lang.language)
         ) {
             AtlasRegionContent(
                 vm: vm,
                 region: region,
-                onBack: { leaveSubstate(to: detentBeforeSubstate) },
-                onClose: { leaveSubstate(to: .collapsed) },
                 onOpenTrip: { openedTrip = OpenedTrip(id: $0) }
             )
         }
@@ -452,31 +448,6 @@ struct MyMapView: View {
             Spacer()
         }
         .allowsHitTesting(false)
-    }
-
-    /// Заголовок вкладки. У РЕГИОНА он остаётся «Атласом» и никуда не
-    /// девается: имя региона живёт в шапке его шторки (`AtlasSubstateHeader`),
-    /// а не отдельным слоем у верхнего края экрана. Слой этот и наезжал на
-    /// часы — «шапка наслаивается с остальными элементами телефона сверху»
-    /// (владелец, 27 сен). Спека это и требует: в состоянии 16 заголовок
-    /// вкладки «виден», а шапка с «назад» — внутри шторки (§3.9).
-    private var title: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text(AppStrings.myMapTitle(lang.language))
-                    .font(AppType.title)
-                    .tracking(AppType.titleTracking)
-                    .foregroundStyle(AtlasTheme.ink)
-                    .allowsHitTesting(false)
-
-                AtlasBetaChip { showBetaSheet = true }
-                Spacer(minLength: 4)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            Spacer()
-        }
     }
 
     /// Капсула кнопок карты, привязанная к верху слота (спека §3.4, S1).

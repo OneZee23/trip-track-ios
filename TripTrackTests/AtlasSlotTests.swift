@@ -17,18 +17,33 @@ final class AtlasSlotTests: XCTestCase {
 
     // MARK: Положения
 
-    func testDetentTopsMatchTheSpecTable() {
-        XCTAssertEqual(fifteen.collapsedTop(), 588, "сводка на iPhone 15")
-        XCTAssertEqual(fifteen.peekTop, 700, "подсказка на iPhone 15")
+    /// Числа эрраты 1: заголовок вкладки переехал в шторку первой строкой, и
+    /// каждое содержимое выросло на эти 54 pt. Сводка 588 → 534, подсказка
+    /// 700 → 654.
+    func testDetentTopsMatchTheErrataTable() {
+        XCTAssertEqual(fifteen.collapsedTop(), 534, "сводка на iPhone 15")
+        XCTAssertEqual(fifteen.peekTop, 654, "подсказка на iPhone 15")
         XCTAssertEqual(fifteen.expandedTop, 104, "список на iPhone 15")
+        XCTAssertEqual(fifteen.collapsedTop(.region), 456, "регион на iPhone 15")
+        XCTAssertEqual(fifteen.substateCeiling, 420, "потолок подсостояния")
 
-        XCTAssertEqual(mini.collapsedTop(), 556, "сводка на 13 mini")
-        XCTAssertEqual(mini.peekTop, 668, "подсказка на 13 mini")
+        XCTAssertEqual(mini.collapsedTop(), 502, "сводка на 13 mini")
+        XCTAssertEqual(mini.peekTop, 622, "подсказка на 13 mini")
         XCTAssertEqual(mini.expandedTop, 104, "список на 13 mini")
 
-        XCTAssertEqual(proMax.collapsedTop(), 676, "сводка на 15 Pro Max")
-        XCTAssertEqual(proMax.peekTop, 788, "подсказка на 15 Pro Max")
+        XCTAssertEqual(proMax.collapsedTop(), 622, "сводка на 15 Pro Max")
+        XCTAssertEqual(proMax.peekTop, 742, "подсказка на 15 Pro Max")
         XCTAssertEqual(proMax.expandedTop, 115, "список на 15 Pro Max")
+    }
+
+    /// Ни одно подсостояние не поднимается выше потолка эрраты: там начинают
+    /// гаснуть кнопки карты, а в подсостоянии они нужны.
+    func testEverySubstateStaysUnderItsCeiling() {
+        for (name, slot) in [("SE", se), ("13 mini", mini),
+                             ("iPhone 15", fifteen), ("15 Pro Max", proMax)] {
+            XCTAssertGreaterThanOrEqual(slot.collapsedTop(.region), slot.substateCeiling,
+                                        "регион поднялся выше потолка: \(name)")
+        }
     }
 
     /// На SE таблица спеки считает таб-бар на 10 pt от низа, а у нас
@@ -36,7 +51,7 @@ final class AtlasSlotTests: XCTestCase {
     /// версия не меняет. Слот там ниже таблицы ровно на эти 12 pt.
     func testSEFollowsOurTabBarRatherThanTheTable() {
         XCTAssertEqual(se.expandedTop, 76, "список на SE — как в таблице")
-        XCTAssertEqual(se.collapsedTop(), 423 - 12, "сводка на SE ниже таблицы на поле таб-бара")
+        XCTAssertEqual(se.collapsedTop(), 577 - 220, "сводка на SE считается от нашего таб-бара")
         XCTAssertFalse(se.showsPeekRow, "под 700 pt строки подсказки нет вовсе")
         XCTAssertTrue(fifteen.showsPeekRow)
     }
@@ -44,10 +59,10 @@ final class AtlasSlotTests: XCTestCase {
     /// Высота свёрнутой шторки — ЧИСЛОМ на каждое содержимое, как записано в
     /// `tokens.json`. Меряется она иначе, и мерить её нам уже запрещено.
     func testCollapsedTopFollowsItsContent() {
-        XCTAssertEqual(fifteen.collapsedTop(.summary), 588, "обычная сводка")
-        XCTAssertEqual(fifteen.collapsedTop(.shortCard), 596, "пустые дни и ошибка")
-        XCTAssertEqual(fifteen.collapsedTop(.emptyAtlas), 578, "пустой атлас")
-        XCTAssertEqual(fifteen.collapsedTop(.withNoticeRow), 532, "запись и офлайн")
+        XCTAssertEqual(fifteen.collapsedTop(.summary), 534, "обычная сводка")
+        XCTAssertEqual(fifteen.collapsedTop(.shortCard), 542, "пустые дни и ошибка")
+        XCTAssertEqual(fifteen.collapsedTop(.emptyAtlas), 524, "пустой атлас")
+        XCTAssertEqual(fifteen.collapsedTop(.withNoticeRow), 478, "запись и офлайн")
     }
 
     // MARK: Жест
@@ -55,7 +70,7 @@ final class AtlasSlotTests: XCTestCase {
     /// Порог 45 %, а не половина: открыть список легче, чем закрыть.
     func testSettleBoundarySitsAtFortyFivePercentOfThePath() {
         let boundary = fifteen.settleBoundary()
-        XCTAssertEqual(boundary, 588 - (588 - 104) * 0.45, accuracy: 0.001)
+        XCTAssertEqual(boundary, 534 - (534 - 104) * 0.45, accuracy: 0.001)
 
         XCTAssertEqual(AtlasSlot.settle(top: boundary - 1, velocity: 0, slot: fifteen), .expanded)
         XCTAssertEqual(AtlasSlot.settle(top: boundary + 1, velocity: 0, slot: fifteen), .collapsed)
@@ -63,11 +78,11 @@ final class AtlasSlotTests: XCTestCase {
 
     /// Бросок летит ПО НАПРАВЛЕНИЮ жеста, даже против ближайшего положения.
     func testAFlickBeatsTheNearestDetent() {
-        XCTAssertEqual(AtlasSlot.settle(top: 560, velocity: -400, slot: fifteen), .expanded,
+        XCTAssertEqual(AtlasSlot.settle(top: 520, velocity: -400, slot: fifteen), .expanded,
                        "бросок вверх у самой сводки раскрывает список")
         XCTAssertEqual(AtlasSlot.settle(top: 130, velocity: 400, slot: fifteen), .collapsed,
                        "бросок вниз у самого списка сворачивает")
-        XCTAssertEqual(AtlasSlot.settle(top: 560, velocity: -299, slot: fifteen), .collapsed,
+        XCTAssertEqual(AtlasSlot.settle(top: 520, velocity: -299, slot: fifteen), .collapsed,
                        "299 pt/с — это ещё не бросок")
     }
 
@@ -77,8 +92,8 @@ final class AtlasSlotTests: XCTestCase {
     func testRubberBandOutsideTheBounds() {
         XCTAssertEqual(fifteen.clamped(top: 300), 300, "внутри границ палец ведёт один к одному")
         XCTAssertEqual(fifteen.clamped(top: 104 - 100), 104 - 30, accuracy: 0.001)
-        XCTAssertEqual(fifteen.clamped(top: 588 + 100), 588 + 30, accuracy: 0.001)
-        XCTAssertEqual(fifteen.clamped(top: 700, lowerBound: .peek), 700,
+        XCTAssertEqual(fifteen.clamped(top: 534 + 100), 534 + 30, accuracy: 0.001)
+        XCTAssertEqual(fifteen.clamped(top: 654, lowerBound: .peek), 654,
                        "в подсказке нижняя граница — она сама")
     }
 
@@ -93,23 +108,32 @@ final class AtlasSlotTests: XCTestCase {
     /// полей разметки: на отрицательном остатке он отвечает кадром в пять раз
     /// шире запрошенного.
     func testAttributionSitsAboveTheSlotAndNeverFollowsTheList() {
-        XCTAssertEqual(fifteen.attributionInset(.collapsed), 844 - 588 + 8)
-        XCTAssertEqual(fifteen.attributionInset(.peek), 844 - 700 + 8)
+        XCTAssertEqual(fifteen.attributionInset(.collapsed), 844 - 534 + 8)
+        XCTAssertEqual(fifteen.attributionInset(.peek), 844 - 654 + 8)
         XCTAssertEqual(fifteen.attributionInset(.expanded), fifteen.attributionInset(.collapsed),
                        "по списку инсет не считается: он сломал бы кадрирование камеры")
 
-        for detent in AtlasSheetDetent.allCases {
-            let inset = fifteen.attributionInset(detent)
-            XCTAssertLessThan(inset, fifteen.height / 2,
-                              "инсет больше половины карты ломает кадрирование MapKit")
-            XCTAssertGreaterThan(inset, 0)
+        // Инвариант честный, а не «меньше половины экрана»: MapKit кадрирует
+        // по остатку, и важно ровно то, что остаток живой.
+        let minimumViewport: CGFloat = 120
+        for (name, slot) in [("SE", se), ("13 mini", mini),
+                             ("iPhone 15", fifteen), ("15 Pro Max", proMax)] {
+            for detent in AtlasSheetDetent.allCases {
+                for variant in [AtlasSummaryVariant.summary, .shortCard,
+                                .emptyAtlas, .withNoticeRow, .region] {
+                    let inset = slot.attributionInset(detent, variant: variant)
+                    XCTAssertGreaterThan(inset, 0, "\(name) \(detent) \(variant)")
+                    XCTAssertGreaterThan(slot.height - slot.safeTop - inset, minimumViewport,
+                                         "у карты не осталось кадра: \(name) \(detent) \(variant)")
+                }
+            }
         }
     }
 
     /// Строка записи поднимает шторку — и подпись обязана подняться вместе с
     /// ней, иначе шторка накроет «Legal».
     func testAttributionFollowsATallerSummary() {
-        XCTAssertEqual(fifteen.attributionInset(.collapsed, variant: .withNoticeRow), 844 - 532 + 8)
+        XCTAssertEqual(fifteen.attributionInset(.collapsed, variant: .withNoticeRow), 844 - 478 + 8)
     }
 
     /// Подсостояние региона выше сводки, и подпись поднимается за ним — но
@@ -166,22 +190,12 @@ final class AtlasSlotTests: XCTestCase {
 
     // MARK: Затухание
 
-    func testHeaderAndControlsFadeOnTheirOwnRamps() {
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 588), 1)
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 420), 1)
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 350), 0.5, accuracy: 0.001)
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 280), 0)
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 104), 0)
-
-        XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 588), 1)
+    /// Рампы заголовка больше нет: он закреплён внутри шторки и не гаснет
+    /// (эррата 1). Осталась одна — у кнопок карты и подписи Apple.
+    func testOnlyTheMapControlsStillFade() {
+        XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 534), 1)
         XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 300), 1)
         XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 270), 0.5, accuracy: 0.001)
         XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 240), 0)
-    }
-
-    /// Кадр 5 доски: шторка на 380, заголовок примерно на 0.7.
-    func testTheDeveloperFrameAtThreeEighty() {
-        XCTAssertEqual(AtlasSlot.headerOpacity(sheetTop: 380), 0.714, accuracy: 0.01)
-        XCTAssertEqual(AtlasSlot.controlsOpacity(slotTop: 380), 1, "кнопки карты там ещё целы")
     }
 }

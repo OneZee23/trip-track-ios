@@ -10,7 +10,7 @@ import SwiftUI
 ///
 /// Геометрию и правила жеста держит `AtlasSlot` — чистый и под тестами;
 /// здесь только руки.
-struct AtlasSheet<Content: View>: View {
+struct AtlasSheet<Header: View, Content: View>: View {
     let slot: AtlasSlot
     let variant: AtlasSummaryVariant
     @Binding var detent: AtlasSheetDetent
@@ -26,6 +26,10 @@ struct AtlasSheet<Content: View>: View {
     /// чтобы заголовок вкладки и кнопки карты остались), и жест вниз
     /// означает «закрыть», а не «свернуть».
     var onDismissSubstate: (() -> Void)?
+    /// ЗАКРЕПЛЁННАЯ первая строка шторки: заголовок вкладки у сводки и
+    /// списка, шапка подсостояния у региона (эррата 1). Стоит НАД
+    /// содержимым, поэтому не скроллится и видна во всех положениях.
+    @ViewBuilder var header: () -> Header
     /// «Итоги атласа, свёрнуто / раскрыто» — собирает зовущий, у него язык.
     var accessibilityTitle: String = ""
     @ViewBuilder var content: () -> Content
@@ -64,6 +68,7 @@ struct AtlasSheet<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             handle
+            header()
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: 0)

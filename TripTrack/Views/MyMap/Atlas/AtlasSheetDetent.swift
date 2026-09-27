@@ -44,13 +44,22 @@ enum AtlasSummaryVariant: Equatable {
     var isSubstate: Bool { self == .region }
 
     /// Высота содержимого свёрнутой шторки в точках.
+    ///
+    /// С эрраты 1 (27 сен 2026) в каждое содержимое входит ЗАКРЕПЛЁННАЯ
+    /// строка заголовка вкладки — она переехала с верхнего края экрана внутрь
+    /// шторки, чтобы «Атлас» и «Места» выглядели одинаково и чтобы заголовок
+    /// перестал наезжать на часы. Поэтому все высоты выросли на 54: сводка
+    /// 166 → 220, то есть верх 534 на iPhone 15 (было 588).
+    ///
+    /// Подсостояние — исключение: его первой строкой стоит СВОЯ шапка
+    /// (`AtlasSubstateHeader`), а не заголовок вкладки, и 298 её уже
+    /// включают. Потолок эрраты для подсостояний — 334.
     var contentHeight: CGFloat {
         switch self {
-        case .summary: return 166
-        case .shortCard: return 158
-        case .emptyAtlas: return 176
-        case .withNoticeRow: return 222
-        // 754 − 298 = 456 — верх подсостояния из таблицы спеки §10.
+        case .summary: return 220
+        case .shortCard: return 212
+        case .emptyAtlas: return 230
+        case .withNoticeRow: return 276
         case .region: return 298
         }
     }

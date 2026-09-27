@@ -85,7 +85,7 @@ final class AtlasRegionTests: XCTestCase {
 
         XCTAssertFalse(app.buttons["atlas_substate_back"].firstMatch.exists, "регион не закрылся")
         XCTAssertEqual(app.buttons["atlas_sheet_handle"].firstMatch.frame.minY,
-                       h - 22 - 68 - 166, accuracy: 1, "шторка не вернулась в сводку")
+                       h - 22 - 68 - 220, accuracy: 1, "шторка не вернулась в сводку")
         XCTAssertTrue(summaryTitle.exists)
     }
 

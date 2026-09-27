@@ -37,22 +37,23 @@ struct AtlasSlot: Equatable {
         height - CustomTabBar.bottomGap - CustomTabBar.pillHeight
     }
 
-    /// Сводка: `верх таб-бара − высота содержимого`. По умолчанию 166 pt,
-    /// то есть 588 на iPhone 15.
+    /// Сводка: `верх таб-бара − высота содержимого`. По умолчанию 220 pt,
+    /// то есть 534 на iPhone 15 (эррата 1: в содержимое вошла закреплённая
+    /// строка заголовка вкладки).
     func collapsedTop(_ variant: AtlasSummaryVariant = .summary) -> CGFloat {
         tabBarTop - variant.contentHeight
     }
 
-    /// Подсказка под карточкой места: `верх таб-бара − 54`.
-    var peekTop: CGFloat { tabBarTop - 54 }
+    /// Подсказка под карточкой места: `верх таб-бара − 100`.
+    ///
+    /// Ровно строка заголовка вкладки и ручка — больше в этом положении нет
+    /// ничего. Строку «189 миль новых дорог ▴» эррата 1 убрала: сводку
+    /// возвращает закрытие карточки места, а не второй путь к тому же.
+    var peekTop: CGFloat { tabBarTop - 100 }
 
     /// Список: `отступ сверху + 56`. Сверху остаётся полоска карты, и она же
     /// работает как «свернуть».
     var expandedTop: CGFloat { safeTop + 56 }
-
-    /// Подсостояния (регион, город, город в тумане) держат верх не выше 420 —
-    /// иначе гаснут заголовок и кнопки карты, а они там нужны (доска S1).
-    var substateTopLimit: CGFloat { 420 }
 
     func top(of detent: AtlasSheetDetent, variant: AtlasSummaryVariant = .summary) -> CGFloat {
         switch detent {
@@ -192,12 +193,8 @@ struct AtlasSlot: Equatable {
 
     // MARK: Затухание
 
-    /// Прозрачность заголовка вкладки и кнопки периода.
-    ///
-    /// Видны, пока верх шторки не выше 420; между 420 и 280 гаснут линейно.
-    static func headerOpacity(sheetTop: CGFloat) -> CGFloat {
-        ramp(value: sheetTop, hidden: 280, visible: 420)
-    }
+    /// Потолок подсостояния: выше него его верх не уходит (эррата 1).
+    var substateCeiling: CGFloat { tabBarTop - 334 }
 
     /// Прозрачность кнопок карты и подписи Apple. Они привязаны к ВЕРХУ
     /// СЛОТА, а не к шторке: когда слот занят карточкой места, следовать надо

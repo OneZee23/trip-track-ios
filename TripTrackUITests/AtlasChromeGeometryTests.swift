@@ -43,7 +43,15 @@ final class AtlasChromeGeometryTests: XCTestCase {
     // MARK: Опорные точки
 
     private var tabBar: CGRect { app.buttons["tab_maps"].firstMatch.frame }
-    private var header: CGRect { app.buttons["atlas_beta_chip"].firstMatch.frame }
+    /// Заголовок вкладки с эрраты 1 живёт ВНУТРИ шторки и ездит вместе с ней.
+    /// Поэтому сторож меряет у него не «стоит ли он на месте», а единственное,
+    /// что обязано быть верным всегда: он НИКОГДА не уходит под статус-бар.
+    private var header: CGRect {
+        // В подсостоянии первой строкой стоит шапка региона, и чипа там нет
+        // вовсе: пустая рамка — законный ответ, а не промах запроса.
+        let chip = app.buttons["atlas_beta_chip"].firstMatch
+        return chip.exists ? chip.frame : .zero
+    }
     /// Верх шторки меряется по ручке: она стоит ровно на верхнем краю
     /// (`AtlasSheet.handle`) и есть в любом положении и в подсостоянии.
     private var sheetTop: CGFloat { app.buttons["atlas_sheet_handle"].firstMatch.frame.minY }
@@ -73,11 +81,13 @@ final class AtlasChromeGeometryTests: XCTestCase {
         launch(theme: theme)
 
         let restTabBar = tabBar
-        let restHeader = header
         XCTAssertFalse(restTabBar.isEmpty, "таб-бара нет")
-        XCTAssertFalse(restHeader.isEmpty, "заголовка вкладки нет")
+        XCTAssertFalse(header.isEmpty, "заголовка вкладки нет")
+        // Безопасная зона сверху на канонном симуляторе (iPhone 16). Ниже неё
+        // обязана быть вся шапка шторки — в любом её положении.
+        let safeTop: CGFloat = 59
 
-        var seen: [(String, CGRect, CGRect)] = [("сводка", restTabBar, restHeader)]
+        var seen: [(String, CGRect, CGRect)] = [("сводка", restTabBar, header)]
 
         drag(fromY: 0.72, toY: 0.2)
         seen.append(("список", tabBar, header))
@@ -118,8 +128,8 @@ final class AtlasChromeGeometryTests: XCTestCase {
         let back = app.buttons["atlas_substate_back"].firstMatch
         XCTAssertTrue(back.waitForExistence(timeout: 10), "в подсостоянии нет кнопки «назад»")
         XCTAssertTrue(back.isHittable, "кнопка «назад» не нажимается")
-        XCTAssertGreaterThan(back.frame.minY, restHeader.minY - 1,
-                             "кнопка «назад» обязана быть НИЖЕ статус-бара, а не под часами")
+        XCTAssertGreaterThanOrEqual(back.frame.minY, safeTop,
+                                    "кнопка «назад» обязана быть НИЖЕ статус-бара, а не под часами")
 
         drag(fromY: 0.58, toY: 0.18)
         seen.append(("поездки региона", tabBar, header))
@@ -130,7 +140,10 @@ final class AtlasChromeGeometryTests: XCTestCase {
 
         for (name, bar, head) in seen {
             XCTAssertEqual(bar.minY, restTabBar.minY, accuracy: 0.6, "таб-бар уехал: \(name)")
-            XCTAssertEqual(head.minY, restHeader.minY, accuracy: 0.6, "заголовок уехал: \(name)")
+            if !head.isEmpty {
+                XCTAssertGreaterThanOrEqual(head.minY, safeTop,
+                                            "шапка шторки ушла под статус-бар: \(name)")
+            }
         }
     }
 
@@ -139,11 +152,10 @@ final class AtlasChromeGeometryTests: XCTestCase {
         launch(theme: "light")
         let h = app.windows.firstMatch.frame.height
         let tabBarTop = h - 22 - 68
-        let safeTop = header.minY - 4
 
-        XCTAssertEqual(sheetTop, tabBarTop - 166, accuracy: 1, "сводка")
+        XCTAssertEqual(sheetTop, tabBarTop - 220, accuracy: 1, "сводка")
         drag(fromY: 0.72, toY: 0.2)
-        XCTAssertEqual(sheetTop, safeTop + 56, accuracy: 1, "список")
+        XCTAssertEqual(sheetTop, 59 + 56, accuracy: 1, "список")
 
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'atlas_region_'"))
             .firstMatch
@@ -165,6 +177,6 @@ final class AtlasChromeGeometryTests: XCTestCase {
         tapStrip()
         XCTAssertFalse(app.buttons["atlas_substate_back"].firstMatch.exists,
                        "тап по полоске карты открыл регион вместо того, чтобы свернуть список")
-        XCTAssertEqual(sheetTop, h - 22 - 68 - 166, accuracy: 1, "список не свернулся")
+        XCTAssertEqual(sheetTop, h - 22 - 68 - 220, accuracy: 1, "список не свернулся")
     }
 }
