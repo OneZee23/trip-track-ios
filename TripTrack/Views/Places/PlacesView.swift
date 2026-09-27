@@ -26,7 +26,16 @@ struct PlacesView: View {
     @State private var query = ""
     @State private var sort = PlacesSort.load()
     @State private var showsSort = false
-    @State private var showsMap = false
+    /// Положение панели. Источник правды один — выбор булавки и пустая
+    /// вкладка тоже пишут сюда, а не заводят своё состояние: панель на
+    /// вкладке ОДНА (принцип 1 спеки).
+    @State private var stop: PlacesPanelStop = .half
+    /// Живой верх во время жеста: за ним идут поля карты.
+    @State private var liveTop: CGFloat?
+    /// Куда вернуться, сняв выбор булавки.
+    @State private var stopBeforeSelection: PlacesPanelStop = .half
+    @State private var selectedPlaceId: UUID?
+    @State private var selectedHintId: UUID?
     @State private var showsBeta = false
     @FocusState private var searchFocused: Bool
     /// Тот же ключ, что у таб-бара: с пустого экрана единственная кнопка
@@ -44,8 +53,7 @@ struct PlacesView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            content
-                .background(AtlasTheme.background.ignoresSafeArea())
+            stage(slot)
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: PlacesDest.self) { dest in
                     switch dest {
@@ -74,15 +82,196 @@ struct PlacesView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if model.items.isEmpty && model.suggestions.isEmpty {
-            emptyState
-        } else if showsMap {
-            mapMode
-        } else {
-            list
+    /// Геометрия панели — из `WindowLayoutMetrics`, снимка окна ПОСЛЕ
+    /// разметки UIKit. Не из `GeometryReader`: внутри безопасной зоны тот
+    /// отдаёт её отступы нулями, и панель встаёт на сотню точек выше. И не из
+    /// живого `UIWindow` в `body` — он однажды зациклил разметку «Атласа».
+    private var slot: PlacesSlot {
+        let metrics = WindowLayoutMetrics.shared
+        let size = metrics.size ?? CGSize(width: 390, height: 844)
+        let insets = metrics.safeAreaInsets ?? UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0)
+        return PlacesSlot(height: size.height, safeTop: insets.top, safeBottom: insets.bottom)
+    }
+
+    /// Карта во всю высоту, панель поверх неё. Больше на вкладке ничего нет:
+    /// заголовок, переключатель, поиск и порядок живут ВНУТРИ панели.
+    private func stage(_ slot: PlacesSlot) -> some View {
+        ZStack {
+            map(interactive: true)
+                .ignoresSafeArea()
+            panel(slot)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: isEmptyTab) { _, empty in
+            withAnimation(SlotGesture.spring) { stop = empty ? .empty : slot.defaultStop }
+        }
+        .onAppear {
+            if isEmptyTab { stop = .empty }
+            else if !stop.isDraggable { stop = slot.defaultStop }
+        }
+    }
+
+    /// Пустая вкладка: ни мест, ни подсказок. Держит одно положение и не
+    /// тянется (спека §4) — тянуть там не к чему.
+    private var isEmptyTab: Bool { model.items.isEmpty && model.suggestions.isEmpty }
+
+    private func panel(_ slot: PlacesSlot) -> some View {
+        PlacesPanel(
+            slot: slot,
+            stop: $stop,
+            liveTop: $liveTop,
+            isPinned: isEmptyTab,
+            accessibilityTitle: AppStrings.tabPlaces(lang.language),
+            header: {
+                PlacesPanelHeader(
+                    title: AppStrings.tabPlaces(lang.language),
+                    listTitle: AppStrings.placesViewList(lang.language),
+                    mapTitle: AppStrings.placesViewMap(lang.language),
+                    stop: stop,
+                    onBeta: { showsBeta = true },
+                    onList: { move(to: .list) },
+                    onMap: { move(to: .map) }
+                )
+            },
+            content: { panelContent }
+        )
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Переключатель не меняет экраны — он двигает панель (спека §3.2).
+    private func move(to target: PlacesPanelStop) {
+        clearSelection()
+        withAnimation(SlotGesture.spring) {
+            stop = target
+            liveTop = nil
+        }
+    }
+
+    /// Тап по булавке МЕНЯЕТ СОДЕРЖИМОЕ ПАНЕЛИ, а не открывает экран
+    /// (состояния 5 и 6). Экран места открывает строка в панели — так у
+    /// человека остаётся шаг назад, и промах по булавке не уносит его со
+    /// вкладки.
+    ///
+    /// Для подсказки это НОВОЕ поведение: раньше тап по пунктирной булавке не
+    /// делал ничего, потому что открывать было нечего. Теперь открывать есть
+    /// что — карточку с «Сохранить как место».
+    private func select(pin id: UUID) {
+        let isPlace = model.items.contains { $0.id == id }
+        let isHint = model.suggestions.contains { $0.id == id }
+        guard isPlace || isHint else { return }
+        if stop.isDraggable { stopBeforeSelection = stop }
+        withAnimation(SlotGesture.spring) {
+            selectedPlaceId = isPlace ? id : nil
+            selectedHintId = isPlace ? nil : id
+            stop = isPlace ? .selectedPlace : .selectedHint
+            liveTop = nil
+        }
+    }
+
+    private func clearSelection() {
+        selectedPlaceId = nil
+        selectedHintId = nil
+    }
+
+    @ViewBuilder
+    private var panelContent: some View {
+        switch stop {
+        case .map:
+            // Только заголовок: карта во всю высоту.
+            EmptyView()
+        case .selectedPlace, .selectedHint:
+            selectionContent
+        case .empty:
+            emptyContent
+        case .half:
+            halfContent
+        case .list:
+            listContent
+        }
+    }
+
+    /// Половина: список без скролла. Скролл начинается в полном списке —
+    /// иначе жест по содержимому спорил бы с жестом панели.
+    @ViewBuilder
+    private var halfContent: some View {
+        VStack(spacing: 12) {
+            placesSection
+            suggestionsSection
+        }
+        .padding(.top, 4)
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if showsControls {
+                    searchRow
+                }
+                placesSection
+                suggestionsSection
+            }
+            .padding(.top, 4)
+            .padding(.bottom, CustomTabBar.clearance)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+    }
+
+    @ViewBuilder
+    private var emptyContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                suggestionsSection
+                noPlacesNote
+                markInTripSection
+            }
+            .padding(.top, 4)
+            .padding(.bottom, CustomTabBar.clearance)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    /// Выбранная на карте булавка: одна строка или одна карточка и крестик.
+    @ViewBuilder
+    private var selectionContent: some View {
+        if let id = selectedPlaceId, let item = model.items.first(where: { $0.id == id }) {
+            HStack(spacing: 8) {
+                PlaceCardView(item: item, compact: true) { push(.place(id)) }
+                closeButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+        } else if let id = selectedHintId,
+                  let hint = model.suggestions.first(where: { $0.id == id }) {
+            HStack(alignment: .top, spacing: 8) {
+                PlaceSuggestionCardView(suggestion: hint) { model.save(hint) }
+                closeButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+        }
+    }
+
+    private var closeButton: some View {
+        Button {
+            Haptics.tap()
+            withAnimation(SlotGesture.spring) {
+                clearSelection()
+                stop = stopBeforeSelection
+            }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AtlasTheme.secondary)
+                .frame(width: 36, height: 36)
+                .background(AtlasTheme.chip, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(AppStrings.close(lang.language))
+        .accessibilityIdentifier("places_selection_close")
     }
 
     /// Идемпотентный push — быстрый двойной тап по одной и той же булавке
@@ -95,72 +284,6 @@ struct PlacesView: View {
     private func openLastTrip() {
         guard let id = model.lastTripId else { return }
         push(.trip(id, focus: .top))
-    }
-
-    // MARK: - Шапка
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Значок «Бета» — ВПЛОТНУЮ к заголовку (зазор 6), как на
-            // «Атласе»: он подпись к слову «Места», а не отдельный контрол.
-            HStack(spacing: 6) {
-                Text(AppStrings.tabPlaces(lang.language))
-                    .font(AppType.title)
-                    .tracking(AppType.titleTracking)
-                    .foregroundStyle(AtlasTheme.ink)
-                AtlasBetaChip(action: { showsBeta = true }, identifier: "places_beta_chip")
-            }
-            Spacer(minLength: 0)
-            if showsControls {
-                Text(AppStrings.placesCount(lang.language, count: model.items.count))
-                    .font(AppType.meta)
-                    .foregroundStyle(AtlasTheme.secondary)
-            }
-        }
-        .frame(minHeight: 44)
-        .padding(.horizontal, 16)
-    }
-
-    /// Список / Карта. Появляется только вместе с остальными контролами:
-    /// у пяти мест карта и так стоит первой строкой экрана.
-    private var modeSwitch: some View {
-        HStack(spacing: 2) {
-            modeButton(title: AppStrings.placesViewList(lang.language),
-                       symbol: "list.bullet", active: !showsMap) { showsMap = false }
-            modeButton(title: AppStrings.placesViewMap(lang.language),
-                       symbol: "map", active: showsMap) { showsMap = true }
-        }
-        .padding(3)
-        .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 16)
-    }
-
-    private func modeButton(title: String, symbol: String, active: Bool,
-                            action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            searchFocused = false
-            withAnimation(.snappy(duration: 0.22)) { action() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 14, weight: .medium))
-                Text(title).font(active ? AppType.chip : AppType.body)
-            }
-            .foregroundStyle(active ? AtlasTheme.ink : AtlasTheme.secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background {
-                if active {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(AtlasTheme.card)
-                        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(active ? .isSelected : [])
-        .accessibilityIdentifier("places_mode_\(symbol == "map" ? "map" : "list")")
     }
 
     private var searchRow: some View {
@@ -267,84 +390,12 @@ struct PlacesView: View {
                       // начатый на карте, панорамирует её вместо того чтобы
                       // скроллить список. Тап по булавке от этого не страдает.
                       isInteractive: interactive,
-                      onPinTap: { tapped in
-                          // Подсказка — ещё не экран: у неё нет ни истории,
-                          // ни проездов. Открываем только место.
-                          guard model.items.contains(where: { $0.id == tapped }) else { return }
-                          push(.place(tapped))
-                      })
+                      onPinTap: { tapped in select(pin: tapped) })
     }
 
     /// Превью со «стеклянной» кнопкой «Карта» в углу — она и есть вход в
     /// режим карты, когда переключателя ещё нет.
-    private var mapCard: some View {
-        map(interactive: false)
-            .frame(height: 196)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(alignment: .bottomTrailing) {
-                Button {
-                    Haptics.tap()
-                    withAnimation(.snappy(duration: 0.22)) { showsMap = true }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(AppStrings.placesViewMap(lang.language)).font(AppType.body)
-                    }
-                    .foregroundStyle(AtlasTheme.ink)
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
-                    .background(AtlasTheme.card.opacity(0.94), in: Capsule())
-                }
-                .buttonStyle(PressableCardStyle())
-                .padding(10)
-                .accessibilityIdentifier("places_open_map")
-            }
-            .padding(.horizontal, 16)
-    }
-
-    private var mapMode: some View {
-        VStack(spacing: 12) {
-            header
-            modeSwitch
-            map(interactive: true)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .padding(.horizontal, 16)
-                .padding(.bottom, CustomTabBar.clearance)
-        }
-        .padding(.top, 2)
-    }
-
     // MARK: - Список
-
-    private var list: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                header
-                if showsControls {
-                    modeSwitch
-                    searchRow
-                }
-                if !showsControls || query.isEmpty { mapCard }
-                if model.items.isEmpty { noPlacesNote }
-                placesSection
-                suggestionsSection
-                markInTripSection
-                if showsHowItWorks {
-                    PlacesHowItWorksCard(onOpenLastTrip: model.lastTripId == nil ? nil : openLastTrip,
-                                         onStartRecording: startRecording)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                }
-            }
-            .padding(.top, 2)
-            .padding(.bottom, CustomTabBar.clearance)
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.immediately)
-        // Как лента: скролл до физического низа, клиренс — от него.
-        .ignoresSafeArea(edges: .bottom)
-    }
 
     @ViewBuilder
     private var placesSection: some View {
@@ -537,42 +588,6 @@ struct PlacesView: View {
     }
 
     private static let tripDayMonth = LocalizedDateFormatter.templates("dMMM")
-
-    /// Пустая вкладка (S2): что это такое, как выглядит и что нажать.
-    ///
-    /// Иллюстрации-заглушки здесь больше нет. Она честно говорила «пусто», но
-    /// на вопрос «а что тут бывает» не отвечала ничем — а именно его и задаёт
-    /// человек, открывший вкладку в первый раз («не очень ощущение, что экран
-    /// «Места» пустой какой-то», владелец 20 сен).
-    private var emptyState: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                Text(AppStrings.placesEmptyIntro(lang.language))
-                    .font(AppType.body)
-                    .foregroundStyle(AtlasTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, -4)
-                PlacesHowItWorksCard(onOpenLastTrip: model.lastTripId == nil ? nil : openLastTrip,
-                                     onStartRecording: startRecording)
-                    .padding(.horizontal, 16)
-            }
-            .padding(.top, 2)
-            .padding(.bottom, CustomTabBar.clearance)
-            // `.contain`, не по умолчанию: без своего контейнера SwiftUI
-            // отдаёт идентификатор вниз по немаркированным обёрткам и не
-            // заводит элемент, по которому экран можно найти (та же ловушка,
-            // что у `place_detail`).
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("places_empty")
-        }
-        .scrollIndicators(.hidden)
-        .frame(maxWidth: .infinity)
-        // Тот же приём, что у `list`: без него центр сцены считается от края
-        // safe area, а не от физического низа, и стоит выше пилюли.
-        .ignoresSafeArea(edges: .bottom)
-    }
 
     private func startRecording() {
         selectedTab = .record

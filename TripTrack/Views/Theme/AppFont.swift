@@ -113,4 +113,8 @@ enum AppType {
     static let caption = Font.inter(12)
     static let button = Font.inter(16, weight: .semibold)
     static let chip = Font.inter(13, weight: .medium)
+    /// Активный сегмент переключателя и активный чип порядка: тот же размер,
+    /// на ступень тяжелее (спека «Мест» §3.1). Ступень, а не цвет: цветом
+    /// активность уже показана заливкой, и второй сигнал был бы лишним.
+    static let chipActive = Font.inter(13, weight: .semibold)
 }
