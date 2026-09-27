@@ -93,6 +93,37 @@ final class AtlasAppearanceWiringTests: XCTestCase {
                        "выбраны «Клетки», а карта осталась на прежнем стиле")
     }
 
+    /// Смена стиля проявляется плавно — но только СМЕНА СТИЛЯ.
+    ///
+    /// Владелец 27 сентября: «сейчас топорно и просто смена картинок». Мгла
+    /// собирается заново каждый кадр, поэтому растворяет её Core Animation, а
+    /// кадр остаётся один. А тумблер «Фото из поездок» мглы не трогает вовсе,
+    /// и растворять под ним карту значило бы обещать глазу перемену, которой
+    /// нет.
+    /// Спрашивается ТЕМ ЖЕ витком, без сна: у вуали в тесте нет карты, кадр
+    /// после смены не приезжает, и Core Animation снимает растворение, едва
+    /// закроется транзакция, — растворять нечего. На экране кадр приезжает
+    /// этим же витком, и растворение играет.
+    func testOnlyAStyleChangeCrossfadesTheVeil() throws {
+        let host = MapHostController()
+        host.loadViewIfNeeded()
+        let veil = try XCTUnwrap(host.fogMetal.veil, "Metal недоступен")
+
+        host.setAppearance(AtlasMapAppearance(style: .fog))
+        veil.layer.removeAllAnimations()
+
+        host.setAppearance(AtlasMapAppearance(style: .night))
+        XCTAssertNotNil(veil.layer.animation(forKey: FogMetalVeil.styleFade),
+                        "смена стиля обязана проявляться, а не подменяться")
+
+        veil.layer.removeAllAnimations()
+        var photos = AtlasMapAppearance(style: .night)
+        photos.showsPhotos = false
+        host.setAppearance(photos)
+        XCTAssertNil(veil.layer.animation(forKey: FogMetalVeil.styleFade),
+                     "тумблер фото мглы не трогает — растворять нечего")
+    }
+
     /// Тумблер «Фото из поездок» ехал тем же мёртвым каналом.
     func testTurningTripPhotosOffReachesTheMap() async {
         let (vm, host, coordinator) = await wired(from: .fog)

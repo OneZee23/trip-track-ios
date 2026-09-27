@@ -275,12 +275,29 @@ struct MyMapView: View {
                         showAppearance = true
                     }
                     control("location", label: AppStrings.atlasMyLocation(lang.language), id: "atlas_locate") {
-                        if mapVM.locationManager.currentLocation != nil {
-                            vm.locateUser()
-                        } else {
+                        // Спрашивается РАЗРЕШЕНИЕ, а не живой фикс.
+                        //
+                        // Фикс на «Атласе» есть у самой карты
+                        // (`showsUserLocation` — MapKit ведёт свою
+                        // геолокацию), а наш `LocationManager` здесь не
+                        // работает вовсе: GPS на этой вкладке никто не
+                        // заводит (`requestLocationPermission` не зовётся из
+                        // приложения ни разу), и `currentLocation` пуст
+                        // ВСЕГДА, пока не пишется поездка. Гейт по нему
+                        // поэтому не «иногда врал», а врал всегда: синяя
+                        // точка человека стоит на карте, а кнопка отвечает
+                        // «местоположение пока недоступно» — владелец на
+                        // устройстве 27 сентября, «обман или баг какой-то».
+                        //
+                        // Доступ есть, а фикса ещё нет — камера встаёт в
+                        // режим слежения и доедет сама, это уже умеет
+                        // `MapCameraCommand.userLocation`.
+                        guard !mapVM.locationDenied else {
                             vm.fitAll()
                             toast = ToastItem(type: .info, message: AppStrings.atlasLocationUnavailable(lang.language))
+                            return
                         }
+                        vm.locateUser()
                     }
                 }
             }

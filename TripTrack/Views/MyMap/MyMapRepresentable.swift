@@ -45,6 +45,7 @@ final class MapHostController: UIViewController {
     /// же камере до экрана не доезжал. Поэтому клетки ставятся ПЕРВЫМИ и
     /// молча, а кадр заказывается последней строкой — один на весь вид.
     func setAppearance(_ appearance: AtlasMapAppearance) {
+        let styleChanged = appearance.style != appliedAppearance.style
         appliedAppearance = appearance
         usesDarkFog = appearance.usesDarkFog
         // Клетки — дело одного Metal-слоя: у растрового отката их нет, и это
@@ -52,6 +53,10 @@ final class MapHostController: UIViewController {
         // показать на нём третий стиль нечем; мгла при этом остаётся той же,
         // что у «Тумана», — человек видит знакомую карту, а не пустоту.
         fogMetal.veil?.setUsesCells(appearance.usesCells)
+        // Растворение заказывается ДО кадра: Core Animation снимает нынешнее
+        // содержимое слоя в тот момент, когда его просят, а новое приедет
+        // этим же витком главного цикла.
+        if styleChanged { fogMetal.veil?.beginStyleCrossfade() }
         applyPalette()
         updateAttributionCarve()
         // Палитра могла и не смениться («Туман» ⇄ «Клетки») — тогда кадра не
