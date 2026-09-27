@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 /// Atlas 0.8.1: live roads under the paper map, with appearance
 /// controls and a permanent sheet for exploring regions, cities and trips.
@@ -33,6 +34,12 @@ struct MyMapView: View {
     @State private var toast: ToastItem?
     @State private var showAppearance = false
     @State private var showExplanation = false
+    /// Положение шторки. Геометрию и правила жеста держит `AtlasSlot` —
+    /// чистый и под тестами (`AtlasSlotTests`).
+    @State private var detent: AtlasSheetDetent = .collapsed
+    /// Живой верх шторки во время жеста: за ним в реальном времени идут
+    /// кнопки карты и подпись Apple — «одна пружина на всё нижнее».
+    @State private var liveTop: CGFloat?
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -43,7 +50,30 @@ struct MyMapView: View {
     static let showsVeil = true
     #endif
 
+    /// Тело разрезано на `body` и `stage` по той же причине, что у
+    /// `TripDetailView` и `ProfileView`: цепочка модификаторов на «Атласе»
+    /// уже длинная, а вывод типов SwiftUI падает по таймауту в случайном
+    /// месте, а не там, где добавили строку.
     var body: some View {
+        stage(slot)
+    }
+
+    /// Геометрия слота — из `WindowLayoutMetrics`, снимка окна ПОСЛЕ разметки
+    /// UIKit.
+    ///
+    /// Не из `GeometryReader`: внутри безопасной зоны он отдаёт её отступы
+    /// НУЛЯМИ (они уже съедены родителем), и слот вставал на сто точек выше —
+    /// поймано первым же кадром на симуляторе. И не из живого `UIWindow`:
+    /// запрос окна прямо в `body` уже однажды зациклил разметку «Атласа»
+    /// (CLAUDE.md, 0.8.1).
+    private var slot: AtlasSlot {
+        let metrics = WindowLayoutMetrics.shared
+        let size = metrics.size ?? CGSize(width: 390, height: 844)
+        let insets = metrics.safeAreaInsets ?? UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0)
+        return AtlasSlot(height: size.height, safeTop: insets.top, safeBottom: insets.bottom)
+    }
+
+    private func stage(_ slot: AtlasSlot) -> some View {
         ZStack {
             MyMapRepresentable(
                 exploration: vm.exploration,
@@ -60,7 +90,12 @@ struct MyMapView: View {
                 language: lang.language,
                 // Логотип Apple и «Legal» встают над свёрнутым листом: под
                 // непрозрачным туманом он накрыл бы их насовсем.
-                bottomOverlayHeight: MyMapSheet.collapsedHeight,
+                // Подпись Apple стоит на 8 pt выше ВЕРХА СЛОТА (спека §2).
+                // Значение берётся по ПОЛОЖЕНИЮ, а не по живому верху во
+                // время жеста: инсеты карты — это проход разметки MapKit, и
+                // шестьдесят таких проходов в секунду стоили бы дороже, чем
+                // стоит идеальное следование подписи за пальцем.
+                bottomOverlayHeight: slot.height - slot.top(of: detent) + AtlasSlot.attributionGap,
                 // И по ЛЕВОМУ краю той же карточки: две левые границы в одном
                 // углу экрана ничего друг про друга не объясняют.
                 bottomOverlayMaxWidth: MyMapSheet.summaryMaxWidth,
@@ -92,8 +127,10 @@ struct MyMapView: View {
             topScrim
 
             title
+                .opacity(AtlasSlot.headerOpacity(sheetTop: sheetTop(slot)))
+                .allowsHitTesting(AtlasSlot.headerOpacity(sheetTop: sheetTop(slot)) > 0.5)
 
-            mapControls
+            mapControls(slot)
 
             if vm.isEmpty {
                 emptyState
@@ -103,18 +140,27 @@ struct MyMapView: View {
                 CarLoadingView()
             }
 
-            MyMapSheet(
-                vm: vm,
-                isSummaryExpanded: $isSummaryExpanded,
-                onOpenTrip: { openedTrip = OpenedTrip(id: $0) },
-                // Камера ДВИГАЕТСЯ — в отличие от тапа по печати на карте: из
-                // списка человек не знает, в какой угол мира смотрит карта, и
-                // карточка над пустым местом не отвечает «где это было».
-                onOpenDiscovery: { vm.focusDiscovery($0) },
-                onShare: shareSummary,
-                onSettings: { showAppearance = true },
-                onExplain: { showExplanation = true }
-            )
+            // Выбранный объект (регион, дорога, поездка, находка) держит
+            // ПРЕЖНЮЮ панель: своих состояний у них в спеке v3 нет вовсе, а
+            // карта их открывать умеет и сегодня. Новая шторка живёт там, где
+            // спека её описывает, — на сводке и списке.
+            if vm.selection == nil {
+                atlasSheet(slot)
+            } else {
+                MyMapSheet(
+                    vm: vm,
+                    isSummaryExpanded: $isSummaryExpanded,
+                    onOpenTrip: { openedTrip = OpenedTrip(id: $0) },
+                    // Камера ДВИГАЕТСЯ — в отличие от тапа по печати на карте:
+                    // из списка человек не знает, в какой угол мира смотрит
+                    // карта, и карточка над пустым местом не отвечает «где это
+                    // было».
+                    onOpenDiscovery: { vm.focusDiscovery($0) },
+                    onShare: shareSummary,
+                    onSettings: { showAppearance = true },
+                    onExplain: { showExplanation = true }
+                )
+            }
 
             placeCard
 
@@ -197,6 +243,55 @@ struct MyMapView: View {
         }
     }
 
+    // MARK: - Слот
+
+    /// Верх шторки прямо сейчас: во время жеста — живой, иначе по положению.
+    private func sheetTop(_ slot: AtlasSlot) -> CGFloat {
+        liveTop ?? slot.top(of: detent)
+    }
+
+    /// Верх СЛОТА: то, за чем следуют кнопки карты и подпись Apple.
+    ///
+    /// Пока выбрано место, слот занимает карточка, и следовать надо за ней, а
+    /// не за сжавшейся шторкой (принцип 1 — слот один на двоих).
+    private func slotTop(_ slot: AtlasSlot) -> CGFloat {
+        sheetTop(slot)
+    }
+
+    private func atlasSheet(_ slot: AtlasSlot) -> some View {
+        AtlasSheet(
+            slot: slot,
+            variant: .summary,
+            detent: $detent,
+            liveTop: $liveTop,
+            onTapCollapsed: { toggleSheet() },
+            accessibilityTitle: AppStrings.atlasExplored(lang.language)
+        ) {
+            AtlasSummaryContent(
+                vm: vm,
+                detent: detent,
+                onShare: shareSummary,
+                onExplain: { showExplanation = true },
+                onOpenRegion: { vm.select(.region($0)) },
+                onOpenTrips: { isSummaryExpanded = true; detent = .expanded },
+                onOpenCities: { detent = .expanded },
+                onSearch: { detent = .expanded },
+                onTapPeek: { detent = .expanded }
+            )
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Верх шторки задан в координатах ЭКРАНА, значит и слой обязан
+        // начинаться от края экрана, а не от безопасной зоны.
+        .ignoresSafeArea()
+    }
+
+    /// Тап по свёрнутой шторке раскрывает список, по раскрытой — сворачивает.
+    private func toggleSheet() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            detent = detent == .expanded ? .collapsed : .expanded
+        }
+    }
+
     // MARK: - Chrome
 
     /// Paper fading over the map keeps the title and status bar readable.
@@ -265,45 +360,44 @@ struct MyMapView: View {
         return country + " · " + AppStrings.mapRegionSince(lang.language, date: date)
     }
 
-    private var mapControls: some View {
-        VStack {
-            Spacer()
+    /// Капсула кнопок карты, привязанная к верху слота (спека §3.4, S1).
+    ///
+    /// Отступ 12 pt над слотом и затухание между 300 и 240 — числа спеки,
+    /// считает их `AtlasSlot`.
+    private func mapControls(_ slot: AtlasSlot) -> some View {
+        let top = slotTop(slot)
+        return VStack {
+            Spacer(minLength: 0)
             HStack {
-                Spacer()
-                VStack(spacing: 10) {
-                    control("square.3.layers.3d", label: AppStrings.atlasMapStyle(lang.language), id: "atlas_appearance") {
-                        showAppearance = true
-                    }
-                    control("location", label: AppStrings.atlasMyLocation(lang.language), id: "atlas_locate") {
-                        // Спрашивается РАЗРЕШЕНИЕ, а не живой фикс.
-                        //
-                        // Фикс на «Атласе» есть у самой карты
-                        // (`showsUserLocation` — MapKit ведёт свою
-                        // геолокацию), а наш `LocationManager` здесь не
-                        // работает вовсе: GPS на этой вкладке никто не
-                        // заводит (`requestLocationPermission` не зовётся из
-                        // приложения ни разу), и `currentLocation` пуст
-                        // ВСЕГДА, пока не пишется поездка. Гейт по нему
-                        // поэтому не «иногда врал», а врал всегда: синяя
-                        // точка человека стоит на карте, а кнопка отвечает
-                        // «местоположение пока недоступно» — владелец на
-                        // устройстве 27 сентября, «обман или баг какой-то».
-                        //
-                        // Доступ есть, а фикса ещё нет — камера встаёт в
-                        // режим слежения и доедет сама, это уже умеет
-                        // `MapCameraCommand.userLocation`.
+                Spacer(minLength: 0)
+                AtlasMapControls(
+                    // В пустом атласе выбирать нечего: остаётся одно «Моё
+                    // местоположение», и капсула становится кругом сама.
+                    showsLayers: !vm.isEmpty,
+                    locationDenied: mapVM.locationDenied,
+                    layersLabel: AppStrings.atlasMapStyle(lang.language),
+                    locationLabel: AppStrings.atlasMyLocation(lang.language),
+                    onLayers: { showAppearance = true },
+                    onLocate: {
+                        // Спрашивается РАЗРЕШЕНИЕ, а не живой фикс: наш
+                        // `LocationManager` на «Атласе» не запущен вовсе, и
+                        // гейт по нему врал всегда (владелец 27 сентября).
                         guard !mapVM.locationDenied else {
                             vm.fitAll()
-                            toast = ToastItem(type: .info, message: AppStrings.atlasLocationUnavailable(lang.language))
+                            toast = ToastItem(type: .info,
+                                              message: AppStrings.atlasLocationUnavailable(lang.language))
                             return
                         }
                         vm.locateUser()
                     }
-                }
+                )
             }
-            .padding(.trailing, 16)
-            .padding(.bottom, MyMapSheet.collapsedHeight + 24)
         }
+        .padding(.trailing, 16)
+        .padding(.bottom, Swift.max(0, slot.height - top + AtlasSlot.controlsGap))
+        .opacity(AtlasSlot.controlsOpacity(slotTop: top))
+        .allowsHitTesting(AtlasSlot.controlsOpacity(slotTop: top) > 0.5)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private func control(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {

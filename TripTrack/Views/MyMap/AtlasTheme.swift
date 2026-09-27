@@ -41,6 +41,18 @@ enum AtlasTheme {
     static let control = adaptive(0xFFFFFF, 0x1E1E20)
     static let fog = adaptive(0xEEEEEC, 0x262B36)
     static let fogGrain = adaptive(0x7D8792, 0x7D8792)
+    // MARK: Стекло плавающих кнопок (спека §3.2, tokens.json → colors.glass)
+
+    /// Заливка кнопки периода и капсулы кнопок карты. Второй материал
+    /// вкладки: стекло — только у того, что лежит ПОВЕРХ карты, всё
+    /// остальное (шторка, карточки, диалоги) идёт на обычном фоне
+    /// приложения (принцип 2).
+    static let glass = adaptiveRGBA(0xFAF8F4, 0.94, 0x1E2125, 0.92)
+    /// Волосяная обводка стекла и разделитель внутри капсулы.
+    static let glassBorder = adaptiveRGBA(0x000000, 0.06, 0xFFFFFF, 0.08)
+    /// Скрим модальных шторок и диалогов.
+    static let scrim = adaptiveRGBA(0x0C0E10, 0.38, 0x000000, 0.55)
+
     static let sheetRadius: CGFloat = 28
     /// 16, как умолчание `surfaceCard()` в «Ленте» и «Я»: восемнадцать из
     /// HTML-макета делали карточки заметно круглее соседних вкладок.
@@ -48,6 +60,20 @@ enum AtlasTheme {
     static let statRadius: CGFloat = 16
     static let sideInset: CGFloat = 16
     static let controlSize: CGFloat = 44
+
+    private static func adaptiveRGBA(_ light: UInt32, _ lightAlpha: CGFloat,
+                                     _ dark: UInt32, _ darkAlpha: CGFloat) -> Color {
+        Color(UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            let hex = isDark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: isDark ? darkAlpha : lightAlpha
+            )
+        })
+    }
 
     private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(UIColor { traits in
@@ -63,6 +89,16 @@ enum AtlasTheme {
 }
 
 extension View {
+    /// Стекло плавающей кнопки над картой: заливка, волосяная обводка и
+    /// мягкая тень одними числами (спека §3.2). Второй материал вкладки, и
+    /// он положен ТОЛЬКО тому, что лежит поверх карты.
+    func atlasGlass<S: InsettableShape>(_ shape: S) -> some View {
+        self.background(shape.fill(AtlasTheme.glass))
+            .overlay(shape.strokeBorder(AtlasTheme.glassBorder, lineWidth: 1))
+            .clipShape(shape)
+            .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
+    }
+
     /// Заголовок секции целиком — ровно тот же, что `ProfileSectionLabel`
     /// на экране «Я»: чернила, полужирный, обычный регистр. Прописные и
     /// вторичный цвет ушли вместе с HTML-макетом: они и делали «Атлас» и

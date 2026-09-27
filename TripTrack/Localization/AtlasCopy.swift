@@ -173,6 +173,45 @@ extension AppStrings {
     static func atlasNotVisited(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasNotVisited", ru: "Ещё не открыто", en: "Not explored yet")
     }
+    /// Подпись второй колонки тройки: одно слово.
+    ///
+    /// Своя, а не `atlasTotalTravelled` («проехано всего»): в колонке шириной
+    /// в треть карточки та переносится на две строки и ломает ряд —
+    /// в макете там ровно «ВСЕГО».
+    static func atlasTotalShort(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTotalShort", ru: "всего", en: "total")
+    }
+
+    /// Заголовок секции регионов в списке «Атласа» (спека §3.5).
+    static func atlasRegions(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasRegions", ru: "Регионы", en: "Regions")
+    }
+
+    /// «4 из 28 городов» — сколько городов региона открыто из всех его.
+    ///
+    /// Подстановки токенами, а не интерполяцией в литерал: `tr` для
+    /// остальных одиннадцати языков читает ГОТОВУЮ строку из таблиц и числа
+    /// в момент вызова получить не может (CLAUDE.md).
+    static func atlasCitiesOutOf(_ lang: LanguageManager.Language,
+                                 visited: Int, total: Int) -> String {
+        tr(lang, "atlasCitiesOutOf",
+           ru: "{visited} из {total} {cities}", en: "{visited} of {total} {cities}")
+            .replacingOccurrences(of: "{visited}", with: formattedCount(visited, lang: lang))
+            .replacingOccurrences(of: "{total}", with: formattedCount(total, lang: lang))
+            .replacingOccurrences(of: "{cities}", with: nounCities(lang, total))
+    }
+
+    /// Пунктирный чип закрытых городов: «ещё 26 в тумане».
+    static func atlasMoreInFog(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "atlasMoreInFog", ru: "ещё {count} в тумане", en: "{count} more in the fog")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+    }
+
+    /// Строка внизу списка: сколько поездок участвует в атласе.
+    static func atlasTripsInAtlas(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTripsInAtlas", ru: "Поездки в атласе", en: "Trips in the atlas")
+    }
+
     static func atlasTotalDistanceSuffix(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasTotalDistanceSuffix", ru: "всего", en: "total")
     }
