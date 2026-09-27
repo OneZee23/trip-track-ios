@@ -82,6 +82,36 @@ final class AtlasSlotTests: XCTestCase {
                        "в подсказке нижняя граница — она сама")
     }
 
+    // MARK: Подпись Apple
+
+    /// Подпись «Maps · Legal» обязана быть видна — прятать её нельзя, API
+    /// для этого нет, а попытка рискует отказом на ревью (CLAUDE.md).
+    ///
+    /// Сторож держит ОБА края: подпись стоит ровно на 8 pt выше слота в
+    /// сводке и в подсказке — и НЕ считается по списку. Инсет по списку был
+    /// бы 748 pt на карте высотой 844, а MapKit кадрирует камеру по сумме
+    /// полей разметки: на отрицательном остатке он отвечает кадром в пять раз
+    /// шире запрошенного.
+    func testAttributionSitsAboveTheSlotAndNeverFollowsTheList() {
+        XCTAssertEqual(fifteen.attributionInset(.collapsed), 844 - 588 + 8)
+        XCTAssertEqual(fifteen.attributionInset(.peek), 844 - 700 + 8)
+        XCTAssertEqual(fifteen.attributionInset(.expanded), fifteen.attributionInset(.collapsed),
+                       "по списку инсет не считается: он сломал бы кадрирование камеры")
+
+        for detent in AtlasSheetDetent.allCases {
+            let inset = fifteen.attributionInset(detent)
+            XCTAssertLessThan(inset, fifteen.height / 2,
+                              "инсет больше половины карты ломает кадрирование MapKit")
+            XCTAssertGreaterThan(inset, 0)
+        }
+    }
+
+    /// Строка записи поднимает шторку — и подпись обязана подняться вместе с
+    /// ней, иначе шторка накроет «Legal».
+    func testAttributionFollowsATallerSummary() {
+        XCTAssertEqual(fifteen.attributionInset(.collapsed, variant: .withNoticeRow), 844 - 532 + 8)
+    }
+
     // MARK: Затухание
 
     func testHeaderAndControlsFadeOnTheirOwnRamps() {

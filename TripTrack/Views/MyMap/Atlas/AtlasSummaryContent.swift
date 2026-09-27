@@ -32,10 +32,15 @@ struct AtlasSummaryContent: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     exploredBlock
-                    searchField
+                    // Поля поиска и строки «Поездки в атласе» здесь пока НЕТ,
+                    // и это решение, а не пропуск: их экраны (состояние 14 и
+                    // список поездок) ещё не собраны, а поле, которое ничего
+                    // не ищет, и строка, которая никуда не ведёт, — это
+                    // нажатие, которое ничего не делает, то есть хуже
+                    // отсутствующего (CLAUDE.md). Вернутся вместе со своими
+                    // экранами.
                     regionsSection
                     citiesSection
-                    tripsRow
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, CustomTabBar.clearance)
@@ -127,9 +132,10 @@ struct AtlasSummaryContent: View {
                   caption: AppStrings.atlasNewRoads(lang.language), action: onExplain),
             .init(id: "total", value: total.value, unit: total.unit,
                   caption: AppStrings.atlasTotalShort(lang.language), action: onExplain),
+            // Без действия: список поездок — отдельный экран, и пока его
+            // нет, шеврон обещал бы переход, которого не будет.
             .init(id: "trips", value: "\(vm.exploration.tripCount)", unit: nil,
-                  caption: AppStrings.tripsGenitive(lang.language, count: vm.exploration.tripCount),
-                  action: onOpenTrips)
+                  caption: AppStrings.tripsGenitive(lang.language, count: vm.exploration.tripCount))
         ]
     }
 

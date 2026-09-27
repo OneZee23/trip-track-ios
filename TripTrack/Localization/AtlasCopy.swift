@@ -173,6 +173,11 @@ extension AppStrings {
     static func atlasNotVisited(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasNotVisited", ru: "Ещё не открыто", en: "Not explored yet")
     }
+    /// Единственное действие карточки места — словами, а не стрелкой.
+    static func atlasOpenPlace(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasOpenPlace", ru: "Открыть место", en: "Open place")
+    }
+
     /// Подпись второй колонки тройки: одно слово.
     ///
     /// Своя, а не `atlasTotalTravelled` («проехано всего»): в колонке шириной

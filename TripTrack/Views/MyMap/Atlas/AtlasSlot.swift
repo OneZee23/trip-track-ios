@@ -78,6 +78,31 @@ struct AtlasSlot: Equatable {
     /// Нижнее поле модальных шторок: безопасная зона, а без индикатора — 16.
     var modalBottomPadding: CGFloat { safeBottom > 0 ? safeBottom : 16 }
 
+    // MARK: Подпись Apple
+
+    /// К чему привязана подпись «Maps · Legal» (спека §2: на 8 pt выше слота).
+    ///
+    /// **По СПИСКУ она не считается никогда**, и это не мелочь разметки.
+    /// В списке верх шторки на 104, инсет вышел бы 748 pt на карте высотой
+    /// 844 — а MapKit кадрирует камеру по СУММЕ полей разметки и
+    /// `edgePadding`: на отрицательном остатке он отвечает кадром в пять раз
+    /// шире запрошенного (CLAUDE.md, 0.8.1, «нажал регион — унесло вникуда»).
+    /// Подписи в списке по спеке нет всё равно, а сломанное кадрирование
+    /// было бы.
+    ///
+    /// Прятать саму подпись нельзя: API для этого нет, а попытка рискует
+    /// отказом на ревью. Поэтому она всегда остаётся НАД слотом.
+    func attributionAnchor(_ detent: AtlasSheetDetent,
+                           variant: AtlasSummaryVariant = .summary) -> CGFloat {
+        detent == .peek ? peekTop : collapsedTop(variant)
+    }
+
+    /// Нижний инсет карты под подпись.
+    func attributionInset(_ detent: AtlasSheetDetent,
+                          variant: AtlasSummaryVariant = .summary) -> CGFloat {
+        height - attributionAnchor(detent, variant: variant) + Self.attributionGap
+    }
+
     // MARK: Жест
 
     /// Граница, за которой отпущенная шторка летит в список.
