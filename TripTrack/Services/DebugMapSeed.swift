@@ -31,6 +31,16 @@ enum DebugMapSeed {
     /// это два листа и четыре тапа до первого же кадра.
     static let segmentArgument = "-seed-segment-demo"
 
+    /// Четыре черновика автотрекинга («Напоминания», 0.8.1) — по одному в
+    /// каждую группу списка: два «Сегодня», один «Вчера», один «Раньше».
+    ///
+    /// Завести их настоящим путём нельзя: черновик рождается только из старта
+    /// автотрекинга по магнитоле, а её в симуляторе нет. Сид кладёт запись
+    /// сразу с `confirmation = .draft`, то есть ровно в том виде, в каком её
+    /// оставляет `stopTrip`, — в мир она не выходит, `TripWorldEntry` её не
+    /// видел и не увидит до «Моя».
+    static let draftsArgument = "-seed-drafts"
+
     /// Одна поездка, вписанная рукой (0.8.0), — для проверки пометки на
     /// карточке и на экране поездки БЕЗ сети.
     ///
@@ -109,6 +119,10 @@ enum DebugMapSeed {
 
     static var isHangStressRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(hangStressArgument)
+    }
+
+    static var isDraftsRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(draftsArgument)
     }
 
     /// Сеет 400×2000 точек и сбрасывает миграционные латчи — задача H.
@@ -273,6 +287,7 @@ enum DebugMapSeed {
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
             if isManualRequested { seedManualTrip(persistence: persistence) }
+            if isDraftsRequested { seedDrafts(persistence: persistence) }
             seedGeocodeCache(persistence: persistence)
             seedPhotos(persistence: persistence)
             return
@@ -332,8 +347,80 @@ enum DebugMapSeed {
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
         if isManualRequested { seedManualTrip(persistence: persistence) }
+        if isDraftsRequested { seedDrafts(persistence: persistence) }
         seedGeocodeCache(persistence: persistence)
         seedPhotos(persistence: persistence)
+    }
+
+    // MARK: - Черновики (0.8.2)
+
+    /// Четыре черновика на три группы списка.
+    ///
+    /// Идемпотентно: черновик в базе уже есть — выходим. Иначе повторный
+    /// запуск с тем же флагом досевал бы ещё четыре, и снимок «Сегодня · 2»
+    /// на втором прогоне показывал бы четыре.
+    private static func seedDrafts(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        existing.predicate = NSPredicate(format: "confirmation == %@",
+                                         TripConfirmation.draft.rawValue)
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        // Часы дня заданы явно: «18:01» в подписи карточки на «Я» обязано
+        // быть одним и тем же числом на каждом прогоне, иначе снимок нечем
+        // сравнивать с предыдущим.
+        let plan: [(String, Int, Int, Int, [(Double, Double)])] = [
+            ("Краснодар — Горячий Ключ", 0, 18, 1,
+             [(45.035, 38.975), (44.842, 39.045), (44.629, 39.131)]),
+            ("Поездка по городу", 0, 9, 24,
+             [(45.041, 38.961), (45.058, 38.988), (45.070, 39.010)]),
+            ("Краснодар — Джубга", 1, 15, 42,
+             [(45.035, 38.975), (44.700, 38.840), (44.320, 38.705)]),
+            ("Вечерняя поездка", 6, 20, 15,
+             [(45.020, 38.930), (45.055, 38.985), (45.090, 39.040)])
+        ]
+
+        for (title, daysAgo, hour, minute, waypoints) in plan {
+            let day = calendar.date(byAdding: .day, value: -daysAgo, to: now) ?? now
+            guard let start = calendar.date(bySettingHour: hour, minute: minute,
+                                            second: 0, of: day) else { continue }
+            let coordinates = densify(waypoints, stepMeters: 600)
+            let seconds = Double(coordinates.count) * 30
+
+            let trip = TripEntity(context: context)
+            trip.id = UUID()
+            trip.startDate = start
+            trip.endDate = start.addingTimeInterval(seconds)
+            trip.title = title
+            trip.region = "Краснодарский край"
+            trip.isPrivate = true
+            trip.confirmation = TripConfirmation.draft.rawValue
+            // Список черновиков поднимается БЕЗ точек трека
+            // (`fetchDraftTrips(includeTrackPoints: false)`), и миниатюру
+            // рисует превью — ровно так же, как у настоящей записи, где его
+            // кладёт `stopTrip` перед всем остальным.
+            trip.previewPolyline = Trip.encodePolyline(coordinates)
+            trip.distance = pathLength(coordinates)
+            trip.maxSpeed = 30
+            trip.averageSpeed = trip.distance / max(seconds, 1)
+
+            for (index, coordinate) in coordinates.enumerated() {
+                let point = TrackPointEntity(context: context)
+                point.id = UUID()
+                point.latitude = coordinate.latitude
+                point.longitude = coordinate.longitude
+                point.altitude = 40
+                point.speed = 16 + Double((index * 5) % 14)
+                point.course = 0
+                point.horizontalAccuracy = 5
+                point.timestamp = start.addingTimeInterval(Double(index) * 30)
+                point.trip = trip
+            }
+        }
+        persistence.save()
     }
 
     // MARK: - Кэш геокодера (0.8.0)

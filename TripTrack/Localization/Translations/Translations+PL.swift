@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Twoja?",
         "draftConfirm": "Moja",
         "draftDiscard": "Usuń",
-        "draftBadge": "Niepotwierdzona",
-        "draftSectionTitle": "Czekają na ciebie",
         "draftBannerTitle": "Czy to twoja podróż?",
         "draftBannerBody": "Nagrało ją automatyczne śledzenie. Dopóki nie potwierdzisz, nie ma jej w Atlasie ani w statystykach.",
         "draftRecordingLabel": "Szkic",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Ostatni przejazd",
         "placeLastPassFaster": "{when} · o {delta} szybciej niż zwykle",
         "placeLastPassSlower": "{when} · o {delta} dłużej niż zwykle",
+        "draftsTitle": "Szkice",
+        "draftsCardLast": "Ostatni {date}, {time}",
+        "draftsAllMine": "Wszystkie moje · {count}",
+        "draftsMineCount": "Moje · {count}",
+        "draftsSelect": "Wybierz",
+        "draftsSelectAll": "Wszystkie",
+        "draftsSelectedCount": "Wybrano {count}",
+        "draftsTabHint": "są nowe szkice",
+        "draftsEmptyTitle": "Brak szkiców",
+        "draftsEmptyBody": "Przejazdy zapisane automatycznie pojawią się tutaj",
+        "draftsDeleteOne": "Usunąć szkic?",
+        "draftsDeleteMany": "Usunąć {count} {noun}?",
+        "draftsDeleteBody": "Zapis przejazdu zniknie i nie da się go przywrócić.",
     ]
 
 }

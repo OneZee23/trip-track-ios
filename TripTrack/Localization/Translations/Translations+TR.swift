@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Senin mi?",
         "draftConfirm": "Benim",
         "draftDiscard": "Sil",
-        "draftBadge": "Onaylanmadı",
-        "draftSectionTitle": "Onayını bekliyor",
         "draftBannerTitle": "Bu senin yolculuğun mu?",
         "draftBannerBody": "Otomatik takip kaydetti. Onaylayana kadar Atlas'ta ve istatistiklerinde yer almaz.",
         "draftRecordingLabel": "Taslak",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Son geçiş",
         "placeLastPassFaster": "{when} · her zamankinden {delta} hızlı",
         "placeLastPassSlower": "{when} · her zamankinden {delta} uzun",
+        "draftsTitle": "Taslaklar",
+        "draftsCardLast": "Son {date}, {time}",
+        "draftsAllMine": "Hepsi benim · {count}",
+        "draftsMineCount": "Benim · {count}",
+        "draftsSelect": "Seç",
+        "draftsSelectAll": "Tümü",
+        "draftsSelectedCount": "{count} seçildi",
+        "draftsTabHint": "yeni taslaklar var",
+        "draftsEmptyTitle": "Taslak yok",
+        "draftsEmptyBody": "Otomatik kaydedilen yolculuklar burada görünür",
+        "draftsDeleteOne": "Taslak silinsin mi?",
+        "draftsDeleteMany": "{count} {noun} silinsin mi?",
+        "draftsDeleteBody": "Yolculuk kaydı gider, geri getirilemez.",
     ]
 
 }

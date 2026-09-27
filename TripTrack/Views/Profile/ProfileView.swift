@@ -49,6 +49,9 @@ struct ProfileView: View {
         /// Гараж — страница, а не шит. Канон 0.6.4 рисует его полноэкранным,
         /// и внутри него «машина» пушится дальше по этому же стеку.
         case garage
+        /// Список черновиков (0.8.2). Единственный новый экран переделки:
+        /// экран поездки не меняется, «Я» меняется на один раздел.
+        case drafts
         case stats
         /// Чужая статистика и чужая карта (0.6.3). Те же экраны, что и свои,
         /// с другим источником поездок; имя владельца едет с ними, чтобы
@@ -394,10 +397,23 @@ struct ProfileView: View {
                         // надо доскроллить.
                         journeyPrompts()
 
+                        // Раздел «Черновики»: ОДНА карточка вместо списка
+                        // полных карточек поездок (спека §2). Нет черновиков —
+                        // раздела нет совсем: ни пустой карточки, ни текста.
                         if !drafts.isEmpty {
-                            ProfileDraftsSection(drafts: drafts, level: settings.profileLevel,
-                                                 vehicles: settings.vehicles) { openTrip($0) }
-                                .padding(.bottom, 12)
+                            VStack(alignment: .leading, spacing: 0) {
+                                ProfileSectionLabel(text: AppStrings.draftsTitle(lang.language))
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 4)
+                                    .padding(.bottom, 8)
+                                    .accessibilityIdentifier("profile_drafts_header")
+                                ProfileDraftsRow(count: drafts.count,
+                                                 lastAt: drafts.map(\.startDate).max()) {
+                                    push(.drafts)
+                                }
+                                .padding(.horizontal, 16)
+                            }
+                            .padding(.bottom, 12)
                         }
 
                         if !allTrips.isEmpty {
@@ -448,6 +464,8 @@ struct ProfileView: View {
                 switch dest {
                 case .garage:
                     GarageView()
+                case .drafts:
+                    draftsDest
                 case .stats:
                     // Push onto THIS stack. Without the callback the screen
                     // falls back to the app-wide `.openTripDetail` channel,
@@ -777,6 +795,13 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
+    /// Вынесено из `navigationDestination` отдельным свойством: ещё один
+    /// `case` в том `switch` переполнил вывод типов SwiftUI — та же ловушка,
+    /// что у `TripDetailView.body` и у самого `ProfileView.body` (CLAUDE.md).
+    private var draftsDest: some View {
+        DraftsListView { push(.trip($0)) }
+    }
+
     private func vehicleDest(id: UUID, vehicleId: UUID, name: String?) -> some View {
         PublicVehicleView(accountId: id, vehicleId: vehicleId, ownerName: name)
             .hideAppTabBar()
@@ -792,7 +817,7 @@ struct ProfileView: View {
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)
         case .publicJourneys(let id, let name): return .publicJourneys(id, name)
-        case .garage, .stats, .myProfile, .levels, .country, .achievements,
+        case .drafts, .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .journey, .companionTrip,
              .clubs, .clubsCatalog, .club:
             return nil

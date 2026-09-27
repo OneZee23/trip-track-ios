@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. ¿Tuyo?",
         "draftConfirm": "Mío",
         "draftDiscard": "Eliminar",
-        "draftBadge": "Sin confirmar",
-        "draftSectionTitle": "Esperando confirmación",
         "draftBannerTitle": "¿Es tu viaje?",
         "draftBannerBody": "La grabó el registro automático. Hasta que confirmes, no aparece en el Atlas ni en tus estadísticas.",
         "draftRecordingLabel": "Borrador",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Último paso",
         "placeLastPassFaster": "{when} · {delta} más rápido de lo habitual",
         "placeLastPassSlower": "{when} · {delta} más lento de lo habitual",
+        "draftsTitle": "Borradores",
+        "draftsCardLast": "Último {date}, {time}",
+        "draftsAllMine": "Todos míos · {count}",
+        "draftsMineCount": "Míos · {count}",
+        "draftsSelect": "Seleccionar",
+        "draftsSelectAll": "Todos",
+        "draftsSelectedCount": "{count} seleccionados",
+        "draftsTabHint": "hay borradores nuevos",
+        "draftsEmptyTitle": "No hay borradores",
+        "draftsEmptyBody": "Los viajes grabados automáticamente aparecerán aquí",
+        "draftsDeleteOne": "¿Eliminar el borrador?",
+        "draftsDeleteMany": "¿Eliminar {count} {noun}?",
+        "draftsDeleteBody": "La grabación desaparecerá y no se podrá recuperar.",
     ]
 
 }

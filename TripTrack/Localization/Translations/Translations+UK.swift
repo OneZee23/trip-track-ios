@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Твоя?",
         "draftConfirm": "Моя",
         "draftDiscard": "Видалити",
-        "draftBadge": "Не підтверджено",
-        "draftSectionTitle": "Чекають на тебе",
         "draftBannerTitle": "Це твоя поїздка?",
         "draftBannerBody": "Її записав автотрекінг. Доки ти не підтвердиш, її немає ні в атласі, ні в статистиці.",
         "draftRecordingLabel": "Чернетка",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Останній проїзд",
         "placeLastPassFaster": "{when} · на {delta} швидше, ніж зазвичай",
         "placeLastPassSlower": "{when} · на {delta} довше, ніж зазвичай",
+        "draftsTitle": "Чернетки",
+        "draftsCardLast": "Остання {date}, {time}",
+        "draftsAllMine": "Усі мої · {count}",
+        "draftsMineCount": "Мої · {count}",
+        "draftsSelect": "Вибрати",
+        "draftsSelectAll": "Усі",
+        "draftsSelectedCount": "Вибрано {count}",
+        "draftsTabHint": "є нові чернетки",
+        "draftsEmptyTitle": "Чернеток немає",
+        "draftsEmptyBody": "Поїздки, записані автоматично, з'являться тут",
+        "draftsDeleteOne": "Видалити чернетку?",
+        "draftsDeleteMany": "Видалити {count} {noun}?",
+        "draftsDeleteBody": "Запис поїздки зникне, повернути його буде неможливо.",
     ]
 
 }

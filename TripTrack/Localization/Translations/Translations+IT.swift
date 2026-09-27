@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Tuo?",
         "draftConfirm": "Mio",
         "draftDiscard": "Elimina",
-        "draftBadge": "Non confermato",
-        "draftSectionTitle": "In attesa",
         "draftBannerTitle": "È il tuo viaggio?",
         "draftBannerBody": "L'ha registrato il tracciamento automatico. Finché non confermi, non entra nell'Atlante né nelle statistiche.",
         "draftRecordingLabel": "Bozza",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Ultimo passaggio",
         "placeLastPassFaster": "{when} · {delta} più veloce del solito",
         "placeLastPassSlower": "{when} · {delta} più lento del solito",
+        "draftsTitle": "Bozze",
+        "draftsCardLast": "Ultima {date}, {time}",
+        "draftsAllMine": "Tutte mie · {count}",
+        "draftsMineCount": "Mie · {count}",
+        "draftsSelect": "Seleziona",
+        "draftsSelectAll": "Tutte",
+        "draftsSelectedCount": "{count} selezionate",
+        "draftsTabHint": "ci sono nuove bozze",
+        "draftsEmptyTitle": "Nessuna bozza",
+        "draftsEmptyBody": "I viaggi registrati automaticamente compariranno qui",
+        "draftsDeleteOne": "Eliminare la bozza?",
+        "draftsDeleteMany": "Eliminare {count} {noun}?",
+        "draftsDeleteBody": "La registrazione sparirà e non si potrà recuperare.",
     ]
 
 }

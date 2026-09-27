@@ -112,6 +112,13 @@ enum AppType {
     static let meta = Font.inter(13)
     static let caption = Font.inter(12)
     static let button = Font.inter(16, weight: .semibold)
+    /// Заголовок экрана в ШАПКЕ push-навигации — мельче заголовка вкладки и
+    /// заголовка листа: он стоит между двумя кнопками, а не над содержимым.
+    /// Роль существовала и до 0.8.2, но набиралась руками в семи местах.
+    static let navTitle = Font.inter(17, weight: .semibold)
+    /// Текстовое действие — слово вместо кнопки: «Выбрать», «Готово»,
+    /// «Отмена» в шапке. Тоже набиралось руками, теперь у него есть имя.
+    static let action = Font.inter(15, weight: .semibold)
     static let chip = Font.inter(13, weight: .medium)
     /// Активный сегмент переключателя и активный чип порядка: тот же размер,
     /// на ступень тяжелее (спека «Мест» §3.1). Ступень, а не цвет: цветом

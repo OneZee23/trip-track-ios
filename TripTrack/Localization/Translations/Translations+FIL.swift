@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Sa iyo?",
         "draftConfirm": "Akin",
         "draftDiscard": "Burahin",
-        "draftBadge": "Hindi kumpirmado",
-        "draftSectionTitle": "Naghihintay sa iyo",
         "draftBannerTitle": "Sa iyo ba ang biyaheng ito?",
         "draftBannerBody": "Ni-record ito ng auto-tracking. Hangga't hindi mo kinukumpirma, wala ito sa Atlas at sa iyong stats.",
         "draftRecordingLabel": "Draft",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Huling pagdaan",
         "placeLastPassFaster": "{when} · {delta} na mas mabilis kaysa dati",
         "placeLastPassSlower": "{when} · {delta} na mas matagal kaysa dati",
+        "draftsTitle": "Mga draft",
+        "draftsCardLast": "Huli {date}, {time}",
+        "draftsAllMine": "Lahat akin · {count}",
+        "draftsMineCount": "Akin · {count}",
+        "draftsSelect": "Pumili",
+        "draftsSelectAll": "Lahat",
+        "draftsSelectedCount": "{count} ang napili",
+        "draftsTabHint": "may bagong draft",
+        "draftsEmptyTitle": "Walang draft",
+        "draftsEmptyBody": "Lilitaw dito ang mga biyaheng awtomatikong naitala",
+        "draftsDeleteOne": "Burahin ang draft?",
+        "draftsDeleteMany": "Burahin ang {count} {noun}?",
+        "draftsDeleteBody": "Mawawala ang rekord at hindi na ito maibabalik.",
     ]
 
 }

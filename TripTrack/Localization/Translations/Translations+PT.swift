@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Sua?",
         "draftConfirm": "Minha",
         "draftDiscard": "Excluir",
-        "draftBadge": "Não confirmada",
-        "draftSectionTitle": "Aguardando você",
         "draftBannerTitle": "Esta viagem é sua?",
         "draftBannerBody": "O rastreamento automático gravou. Até você confirmar, ela fica fora do Atlas e das suas estatísticas.",
         "draftRecordingLabel": "Rascunho",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Última passagem",
         "placeLastPassFaster": "{when} · {delta} mais rápido que o normal",
         "placeLastPassSlower": "{when} · {delta} mais lento que o normal",
+        "draftsTitle": "Rascunhos",
+        "draftsCardLast": "Último {date}, {time}",
+        "draftsAllMine": "Todos meus · {count}",
+        "draftsMineCount": "Meus · {count}",
+        "draftsSelect": "Selecionar",
+        "draftsSelectAll": "Todos",
+        "draftsSelectedCount": "{count} selecionados",
+        "draftsTabHint": "há rascunhos novos",
+        "draftsEmptyTitle": "Sem rascunhos",
+        "draftsEmptyBody": "As viagens gravadas automaticamente aparecem aqui",
+        "draftsDeleteOne": "Excluir o rascunho?",
+        "draftsDeleteMany": "Excluir {count} {noun}?",
+        "draftsDeleteBody": "O registro vai sumir e não dá para recuperar.",
     ]
 
 }

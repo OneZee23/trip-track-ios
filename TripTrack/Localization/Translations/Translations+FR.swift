@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Le tien ?",
         "draftConfirm": "Le mien",
         "draftDiscard": "Supprimer",
-        "draftBadge": "Non confirmé",
-        "draftSectionTitle": "En attente",
         "draftBannerTitle": "Est-ce ton trajet ?",
         "draftBannerBody": "Le suivi automatique l'a enregistré. Tant que tu ne confirmes pas, il n'apparaît ni dans l'Atlas ni dans tes statistiques.",
         "draftRecordingLabel": "Brouillon",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Dernier passage",
         "placeLastPassFaster": "{when} · {delta} plus vite que d'habitude",
         "placeLastPassSlower": "{when} · {delta} de plus que d'habitude",
+        "draftsTitle": "Brouillons",
+        "draftsCardLast": "Dernier {date}, {time}",
+        "draftsAllMine": "Tous les miens · {count}",
+        "draftsMineCount": "Les miens · {count}",
+        "draftsSelect": "Sélectionner",
+        "draftsSelectAll": "Tout",
+        "draftsSelectedCount": "{count} sélectionnés",
+        "draftsTabHint": "nouveaux brouillons en attente",
+        "draftsEmptyTitle": "Aucun brouillon",
+        "draftsEmptyBody": "Les trajets enregistrés automatiquement apparaîtront ici",
+        "draftsDeleteOne": "Supprimer le brouillon ?",
+        "draftsDeleteMany": "Supprimer {count} {noun} ?",
+        "draftsDeleteBody": "L'enregistrement sera perdu définitivement.",
     ]
 
 }

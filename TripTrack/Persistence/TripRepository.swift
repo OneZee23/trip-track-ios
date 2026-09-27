@@ -19,7 +19,7 @@ struct TripPreviewRef: Identifiable, Equatable {
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
-    /// Черновики — для секции «Ждут подтверждения» в «Я» (спека §3.3).
+    /// Черновики — для карточки «Черновики» в «Я» и их списка (0.8.2).
     func fetchDraftTrips() -> [Trip]
     /// Свои поездки, стартовавшие внутри окна дат. См. реализацию: окно режет
     /// база, а не фильтр в памяти.

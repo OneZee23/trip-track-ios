@@ -2361,7 +2361,9 @@ isOwn
             // черновика нет копии на сервере, и `deleteTrip` стирает строку
             // сразу, без надгробия.
             if isOwn, trip.isDraft {
-                DraftTripBanner(tripId: trip.id) { showDeleteConfirm = true }
+                DraftTripBanner(tripId: trip.id,
+                                onDelete: { showDeleteConfirm = true },
+                                onConfirmed: { dismiss() })
             }
 
             VStack(alignment: .leading, spacing: 10) {

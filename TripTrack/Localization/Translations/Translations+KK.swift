@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Сенікі ме?",
         "draftConfirm": "Менікі",
         "draftDiscard": "Жою",
-        "draftBadge": "Расталмаған",
-        "draftSectionTitle": "Сені күтуде",
         "draftBannerTitle": "Бұл сенің сапарың ба?",
         "draftBannerBody": "Оны автотрекинг жазды. Растамайынша ол атласта да, статистикада да жоқ.",
         "draftRecordingLabel": "Жоба",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Соңғы өту",
         "placeLastPassFaster": "{when} · әдеттегіден {delta} жылдам",
         "placeLastPassSlower": "{when} · әдеттегіден {delta} ұзақ",
+        "draftsTitle": "Жобалар",
+        "draftsCardLast": "Соңғысы {date}, {time}",
+        "draftsAllMine": "Барлығы менікі · {count}",
+        "draftsMineCount": "Менікі · {count}",
+        "draftsSelect": "Таңдау",
+        "draftsSelectAll": "Барлығы",
+        "draftsSelectedCount": "{count} таңдалды",
+        "draftsTabHint": "жаңа нобайлар бар",
+        "draftsEmptyTitle": "Жоба жоқ",
+        "draftsEmptyBody": "Автоматты жазылған сапарлар осында шығады",
+        "draftsDeleteOne": "Жобаны жою керек пе?",
+        "draftsDeleteMany": "{count} {noun} жою керек пе?",
+        "draftsDeleteBody": "Сапар жазбасы жоғалады, оны қайтару мүмкін болмайды.",
     ]
 
 }

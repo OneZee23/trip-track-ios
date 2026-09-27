@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Deine?",
         "draftConfirm": "Meine",
         "draftDiscard": "Löschen",
-        "draftBadge": "Nicht bestätigt",
-        "draftSectionTitle": "Warten auf dich",
         "draftBannerTitle": "Ist das deine Fahrt?",
         "draftBannerBody": "Die automatische Aufzeichnung hat sie erfasst. Bis du bestätigst, fehlt sie im Atlas und in deiner Statistik.",
         "draftRecordingLabel": "Entwurf",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Letzte Durchfahrt",
         "placeLastPassFaster": "{when} · {delta} schneller als sonst",
         "placeLastPassSlower": "{when} · {delta} länger als sonst",
+        "draftsTitle": "Entwürfe",
+        "draftsCardLast": "Zuletzt {date}, {time}",
+        "draftsAllMine": "Alle meine · {count}",
+        "draftsMineCount": "Meine · {count}",
+        "draftsSelect": "Auswählen",
+        "draftsSelectAll": "Alle",
+        "draftsSelectedCount": "{count} ausgewählt",
+        "draftsTabHint": "neue Entwürfe vorhanden",
+        "draftsEmptyTitle": "Keine Entwürfe",
+        "draftsEmptyBody": "Automatisch aufgezeichnete Fahrten erscheinen hier",
+        "draftsDeleteOne": "Entwurf löschen?",
+        "draftsDeleteMany": "{count} {noun} löschen?",
+        "draftsDeleteBody": "Die Aufzeichnung ist dann endgültig weg.",
     ]
 
 }

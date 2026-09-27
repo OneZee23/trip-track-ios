@@ -1424,8 +1424,6 @@ extension Translations {
         "notifDraftConfirmBody": "{distance}. Milikmu?",
         "draftConfirm": "Milikku",
         "draftDiscard": "Hapus",
-        "draftBadge": "Belum dikonfirmasi",
-        "draftSectionTitle": "Menunggu kamu",
         "draftBannerTitle": "Ini perjalananmu?",
         "draftBannerBody": "Pelacakan otomatis merekamnya. Sampai kamu konfirmasi, perjalanan ini tidak masuk Atlas maupun statistikmu.",
         "draftRecordingLabel": "Draf",
@@ -1515,6 +1513,19 @@ extension Translations {
         "placeLastPassSection": "Lintasan terakhir",
         "placeLastPassFaster": "{when} · {delta} lebih cepat dari biasanya",
         "placeLastPassSlower": "{when} · {delta} lebih lama dari biasanya",
+        "draftsTitle": "Draf",
+        "draftsCardLast": "Terakhir {date}, {time}",
+        "draftsAllMine": "Semua milik saya · {count}",
+        "draftsMineCount": "Milik saya · {count}",
+        "draftsSelect": "Pilih",
+        "draftsSelectAll": "Semua",
+        "draftsSelectedCount": "{count} dipilih",
+        "draftsTabHint": "ada draf baru",
+        "draftsEmptyTitle": "Belum ada draf",
+        "draftsEmptyBody": "Perjalanan yang direkam otomatis akan muncul di sini",
+        "draftsDeleteOne": "Hapus draf?",
+        "draftsDeleteMany": "Hapus {count} {noun}?",
+        "draftsDeleteBody": "Rekamannya akan hilang dan tidak bisa dikembalikan.",
     ]
 
 }

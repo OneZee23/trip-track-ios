@@ -3081,12 +3081,82 @@ enum AppStrings {
         tr(lang, "draftDiscard", ru: "Удалить", en: "Delete")
     }
     /// Пометка черновика в «Я» (спека §3.3).
-    static func draftBadge(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "draftBadge", ru: "Не подтверждена", en: "Not confirmed")
+    // MARK: - Черновики (0.8.2)
+
+    /// Заголовок раздела на «Я» и шапки списка.
+    static func draftsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsTitle", ru: "Черновики", en: "Drafts")
     }
-    static func draftSectionTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "draftSectionTitle", ru: "Ждут подтверждения", en: "Waiting for you")
+
+    /// «Последняя вчера, 18:01» — подпись карточки раздела.
+    static func draftsCardLast(_ lang: LanguageManager.Language,
+                               date: String, time: String) -> String {
+        tr(lang, "draftsCardLast", ru: "Последняя {date}, {time}", en: "Last {date}, {time}")
+            .replacingOccurrences(of: "{date}", with: date)
+            .replacingOccurrences(of: "{time}", with: time)
     }
+
+    /// «Все мои · 3» — кнопка под списком.
+    static func draftsAllMine(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "draftsAllMine", ru: "Все мои · {count}", en: "All mine · {count}")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+    }
+
+    /// «Мои · 2» — кнопка режима выбора.
+    static func draftsMineCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "draftsMineCount", ru: "Мои · {count}", en: "Mine · {count}")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+    }
+
+    static func draftsSelect(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsSelect", ru: "Выбрать", en: "Select")
+    }
+
+    static func draftsSelectAll(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsSelectAll", ru: "Все", en: "All")
+    }
+
+    /// «Выбрано 2» — по центру шапки в режиме выбора.
+    static func draftsSelectedCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "draftsSelectedCount", ru: "Выбрано {count}", en: "{count} selected")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+    }
+
+    /// Подпись вкладки «Я», когда на ней горит точка (спека §9): голосовой
+    /// доступ обязан сказать то же, что показывает глазу точка.
+    static func draftsTabHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsTabHint",
+           ru: "есть новые черновики",
+           en: "new drafts waiting")
+    }
+    static func draftsEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsEmptyTitle", ru: "Черновиков нет", en: "No drafts")
+    }
+
+    static func draftsEmptyBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsEmptyBody",
+           ru: "Поездки, записанные автоматически, появятся здесь",
+           en: "Trips recorded automatically will show up here")
+    }
+
+    /// «Удалить черновик?» и «Удалить 3 черновика?» — один заголовок на оба
+    /// случая: число и форма слова считает `nounDrafts`.
+    static func draftsDeleteTitle(_ lang: LanguageManager.Language, count: Int) -> String {
+        guard count > 1 else {
+            return tr(lang, "draftsDeleteOne", ru: "Удалить черновик?", en: "Delete draft?")
+        }
+        return tr(lang, "draftsDeleteMany", ru: "Удалить {count} {noun}?", en: "Delete {count} {noun}?")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+            .replacingOccurrences(of: "{noun}", with: nounDrafts(lang, count))
+    }
+
+    /// Отмены в приложении нет — и текст диалога говорит об этом прямо.
+    static func draftsDeleteBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftsDeleteBody",
+           ru: "Запись поездки исчезнет, вернуть её будет нельзя.",
+           en: "The recording will be gone for good.")
+    }
+
     static func draftBannerTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "draftBannerTitle", ru: "Это твоя поездка?", en: "Is this your trip?")
     }
