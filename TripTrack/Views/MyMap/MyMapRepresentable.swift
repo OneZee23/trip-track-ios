@@ -30,16 +30,33 @@ enum MapZoomLevel: Int, Comparable {
 final class MapHostController: UIViewController {
     let map = MKMapView()
     private var usesDarkFog = true
+    /// Последний применённый вид карты — то, что человек на ней видит.
+    /// Снимком, а не выводом из `usesDarkFog`: «Клетки» и «Туман» делят
+    /// палитру, и по ней их не различить.
+    private(set) var appliedAppearance = AtlasMapAppearance(style: .night)
 
+    /// Вид карты ставится ЦЕЛИКОМ и стоит ОДНОГО кадра.
+    ///
+    /// Порядок здесь — правило, а не вкус. «Ночь» и «Клетки» меняют сразу
+    /// две вещи: палитру и квантование, — и пока кадр заказывала каждая
+    /// половина отдельно, между ними существовал кадр, которого нет ни в
+    /// одном стиле. На экране устройства оставался именно он (владелец
+    /// 27 сентября): первый заказ рисовал половинчатый кадр, а второй на той
+    /// же камере до экрана не доезжал. Поэтому клетки ставятся ПЕРВЫМИ и
+    /// молча, а кадр заказывается последней строкой — один на весь вид.
     func setAppearance(_ appearance: AtlasMapAppearance) {
+        appliedAppearance = appearance
         usesDarkFog = appearance.usesDarkFog
-        applyPalette()
         // Клетки — дело одного Metal-слоя: у растрового отката их нет, и это
         // осознанно. Откат случается там, где Metal недоступен вовсе, и
         // показать на нём третий стиль нечем; мгла при этом остаётся той же,
         // что у «Тумана», — человек видит знакомую карту, а не пустоту.
         fogMetal.veil?.setUsesCells(appearance.usesCells)
+        applyPalette()
         updateAttributionCarve()
+        // Палитра могла и не смениться («Туман» ⇄ «Клетки») — тогда кадра не
+        // просил никто.
+        fogMetal.invalidate()
     }
 
     /// Посадка экранной вуали — общая на три карты (`VeilSeat`). Вуаль не
@@ -444,6 +461,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     // Public and vehicle maps retain their previous night appearance. The
     // main Atlas passes its explicit, saved selection.
     var appearance = AtlasMapAppearance(style: .night)
+    /// Вью-модель «Атласа». `nil` — карта со своим состоянием (публичная,
+    /// карта машины): подписка ей не нужна, а чужая привезла бы ей чужие
+    /// данные — `resync` кормит карту тем, на что подписан. Через подписку
+    /// доезжает всё, что SwiftUI на «Атласе» не довозит: камера, период,
+    /// туман и вид карты.
+    var model: MyMapViewModel?
 
     var onZoomLevelChange: (MapZoomLevel) -> Void
     var onSelectTrip: (UUID) -> Void
@@ -563,7 +586,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         // Пересборка по подписке ниже берёт их отсюда.
         coordinator.lastLanguage = language
         coordinator.lastSelectedHintId = selectedHintId
-        coordinator.bindViewModel(map: map)
+        // Хозяин — ПОСЛЕДНИЙ увиденный, как и карта у `bindViewModel`:
+        // `makeUIViewController` отрабатывает дважды, и первый контроллер
+        // SwiftUI выбрасывает. Через него подписка ставит вид карты.
+        coordinator.host = controller
+        if let model { coordinator.bindViewModel(map: map, viewModel: model) }
 
         coordinator.syncData(map, exploration: exploration, revealed: revealed,
                              language: language, veil: veil, vein: vein)
@@ -1248,6 +1275,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         @MainActor
         private func resync(map: MKMapView, viewModel vm: MyMapViewModel) {
+            // Вид карты — ПЕРВЫМ: палитра решает, чем рисуется всё
+            // остальное, и приехать после тумана она не имеет права.
+            host?.setAppearance(vm.appearance)
+            syncAppearance(vm.appearance, on: map)
             syncData(map, exploration: vm.exploration, revealed: vm.revealed,
                      language: lastLanguage,
                      veil: MyMapView.showsVeil ? vm.fogVeil : nil, vein: vm.routeVein)

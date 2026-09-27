@@ -91,6 +91,26 @@ final class MyMapViewModel: ObservableObject {
     /// Нажатая булавка места — под ней встаёт карточка. `nil` — карточки нет.
     @Published var selectedPlaceId: UUID?
 
+    /// «Вид карты»: стиль мглы, клетки и фото на карте.
+    ///
+    /// Живёт ЗДЕСЬ, а не в `@State` экрана, по той же причине, что камера и
+    /// период: до карты выбор везёт подписка `Coordinator.bindViewModel`, а
+    /// `updateUIViewController` SwiftUI на «Атласе» зовёт только на старте
+    /// (замер 26 сентября). Пока стиль ехал ТОЛЬКО оттуда, он не доезжал
+    /// вовсе: лист переставлял галочку, а карта оставалась в стартовом
+    /// стиле — владелец на устройстве 27 сентября, три кадра трёх стилей
+    /// совпали побайтово. Держит `AtlasAppearanceWiringTests`.
+    @Published private(set) var appearance = AtlasMapAppearance.saved
+
+    /// Выбор человека в листе «Вид карты». Сохраняется здесь же: у выбора
+    /// одна дверь, и запоминать его отдельным `.onChange` на экране значило
+    /// бы завести вторую.
+    func setAppearance(_ value: AtlasMapAppearance) {
+        guard value != appearance else { return }
+        appearance = value
+        value.save()
+    }
+
     @Published private(set) var period: AtlasPeriod = .allTime
     @Published private(set) var isFiltering = false
     @Published private(set) var overview = AtlasOverviewIndex.empty

@@ -78,6 +78,11 @@ final class FogMetalVeilTrackingTests: XCTestCase {
     /// прежним до первого движения пальцем. Владелец на устройстве 26 сен:
     /// «переключаешься после „клеток“ на „ночь“ и оно не успевает
     /// обновиться».
+    ///
+    /// Кадр с 27 сентября заказывает не сам `setUsesCells`, а тот, кто
+    /// поставил вид карты ЦЕЛИКОМ (`MapHostController.setAppearance`), —
+    /// см. тест ниже. Проверяется здесь по-прежнему латч: заказ на стоящей
+    /// карте обязан пройти, а тот же заказ второй раз — нет.
     func testSwitchingCellsDrawsAFrameOnAStandingMap() throws {
         guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
@@ -87,13 +92,50 @@ final class FogMetalVeilTrackingTests: XCTestCase {
 
         let before = veil.frames
         veil.setUsesCells(true)
+        veil.invalidate()
         XCTAssertEqual(veil.frames, before + 1, "включённые клетки обязаны доехать сами")
 
         veil.setUsesCells(true)
+        veil.invalidate()
         XCTAssertEqual(veil.frames, before + 1, "то же состояние второй раз кадра не стоит")
 
         veil.setUsesCells(false)
+        veil.invalidate()
         XCTAssertEqual(veil.frames, before + 2, "снятые клетки — тоже перемена")
+    }
+
+    /// Смена вида карты стоит РОВНО ОДНОГО кадра, и в нём обе половины новые.
+    ///
+    /// «Ночь» ⇄ «Клетки» меняет сразу две вещи: палитру и квантование. Пока
+    /// кадр заказывала каждая половина отдельно, первый заказ рисовал кадр,
+    /// которого нет ни в одном стиле — ночную мглу С клетками или светлую
+    /// БЕЗ них, — а второй на той же камере до экрана не доезжал, и
+    /// половинчатый кадр на экране и оставался. Владелец на устройстве
+    /// 27 сентября, два кадра подряд: «переключая с „клетки“ на „ночь“ карта
+    /// показывает ночную карту, но с клетками», и наоборот. «Туман» не болел
+    /// этим потому, что у него меняется только одна половина.
+    func testChangingPaletteAndCellsTogetherCostsOneFrame() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        veil.attach(map: map)
+
+        let palette = FogVeilPainter.palette
+        defer { FogVeilPainter.palette = palette }
+
+        // Стоим на «Клетках»: светлая мгла, квантование включено.
+        FogVeilPainter.palette = .mist
+        veil.setUsesCells(true)
+        veil.invalidate()
+
+        let before = veil.frames
+        // → «Ночь». Обе половины ставятся до заказа, как их и ставит хост.
+        veil.setUsesCells(false)
+        FogVeilPainter.palette = .night
+        veil.invalidate()
+
+        XCTAssertEqual(veil.frames, before + 1,
+                       "вид карты обязан меняться одним кадром, а не двумя")
     }
 
     // MARK: Фон

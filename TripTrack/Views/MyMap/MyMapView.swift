@@ -33,7 +33,6 @@ struct MyMapView: View {
     @State private var toast: ToastItem?
     @State private var showAppearance = false
     @State private var showExplanation = false
-    @State private var appearance = AtlasMapAppearance.saved
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -65,7 +64,8 @@ struct MyMapView: View {
                 // И по ЛЕВОМУ краю той же карточки: две левые границы в одном
                 // углу экрана ничего друг про друга не объясняют.
                 bottomOverlayMaxWidth: MyMapSheet.summaryMaxWidth,
-                appearance: appearance,
+                appearance: vm.appearance,
+                model: vm,
                 onZoomLevelChange: { zoomLevel = $0 },
                 onSelectTrip: { vm.select(.trip($0)) },
                 onSelectRoad: { vm.selectRoad($0) },
@@ -122,7 +122,6 @@ struct MyMapView: View {
         }
         .animation(.easeOut(duration: 0.2), value: isRenderingPoster)
         .toast(item: $toast)
-        .onChange(of: appearance) { _, value in value.save() }
         // Canon frames 2–5 have no tab bar: a selected card owns the bottom
         // of the screen, and the bar sitting on top of it clipped the
         // progress row clean off.
@@ -178,7 +177,10 @@ struct MyMapView: View {
             // поля. Меняешь содержимое листа — меняй и её; это честная цена
             // за то, что лист не может схлопнуться ни при каком порядке
             // проходов разметки.
-            AtlasAppearanceSheet(appearance: $appearance)
+            AtlasAppearanceSheet(appearance: Binding(
+                get: { vm.appearance },
+                set: { vm.setAppearance($0) }
+            ))
                 .presentationDetents([.height(340)])
         }
         .sheet(isPresented: $showExplanation) {
