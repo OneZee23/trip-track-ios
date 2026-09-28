@@ -149,6 +149,14 @@ struct ContentView: View {
             case .places:
                 PlacesView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Клавиатура поиска НЕ двигает вкладку, и снять это можно
+                    // только ЗДЕСЬ: панель «Мест» стоит смещением от края
+                    // экрана, а безопасную зону под клавиатуру SwiftUI
+                    // добавляет контейнеру вкладки — панель уезжала вверх на
+                    // сотню точек, и поле поиска ложилось на часы. Внутри
+                    // самой вкладки это снять нельзя: там уже сдвинутый
+                    // контейнер (проверено тремя попытками и кадром).
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
             case .profile:
                 ProfileView(hostedInTab: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

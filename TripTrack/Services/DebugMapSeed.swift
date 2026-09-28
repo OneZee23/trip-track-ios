@@ -41,6 +41,14 @@ enum DebugMapSeed {
     /// видел и не увидит до «Моя».
     static let draftsArgument = "-seed-drafts"
 
+    /// Десять мест — чтобы у вкладки была БОЛЬШАЯ библиотека.
+    ///
+    /// Поиск, порядок и группы появляются только с восьми мест
+    /// (`PlacesPresentation.manyPlaces`), то есть половину состояний спеки
+    /// (7–11) на обычном демо-сиде не увидеть вовсе: там мест одно-два.
+    /// Настоящим путём десять мест — это десять отметок в десяти поездках.
+    static let manyPlacesArgument = "-seed-places-many"
+
     /// Одна поездка, вписанная рукой (0.8.0), — для проверки пометки на
     /// карточке и на экране поездки БЕЗ сети.
     ///
@@ -119,6 +127,10 @@ enum DebugMapSeed {
 
     static var isHangStressRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(hangStressArgument)
+    }
+
+    static var isManyPlacesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(manyPlacesArgument)
     }
 
     static var isDraftsRequested: Bool {
@@ -288,6 +300,7 @@ enum DebugMapSeed {
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
             if isManualRequested { seedManualTrip(persistence: persistence) }
             if isDraftsRequested { seedDrafts(persistence: persistence) }
+            if isManyPlacesRequested { seedManyPlaces() }
             seedGeocodeCache(persistence: persistence)
             seedPhotos(persistence: persistence)
             return
@@ -348,8 +361,40 @@ enum DebugMapSeed {
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
         if isManualRequested { seedManualTrip(persistence: persistence) }
         if isDraftsRequested { seedDrafts(persistence: persistence) }
+        if isManyPlacesRequested { seedManyPlaces() }
         seedGeocodeCache(persistence: persistence)
         seedPhotos(persistence: persistence)
+    }
+
+    // MARK: - Большая библиотека мест (0.8.2)
+
+    /// Десять мест вокруг Краснодара, заведённых ТОЙ ЖЕ дверью, что
+    /// подсказка на вкладке (`PlaceManager.createPlace`), — своей второй
+    /// двери в места заводить нельзя.
+    ///
+    /// Идемпотентно: восемь мест уже есть — выходим. Имена настоящие, чтобы
+    /// поиск было чем искать, а группы — чем сортировать.
+    @MainActor
+    private static func seedManyPlaces() {
+        let manager = PlaceManager.shared
+        guard manager.places.count < 8 else { return }
+        let plan: [(String, Double, Double)] = [
+            ("Дом", 45.035, 38.975),
+            ("Работа", 45.052, 38.997),
+            ("Красная площадь", 45.023, 38.970),
+            ("Аэропорт", 45.035, 39.171),
+            ("Дача", 44.900, 38.800),
+            ("Море", 44.561, 38.077),
+            ("Заправка на выезде", 45.010, 39.050),
+            ("Горячий Ключ", 44.629, 39.131),
+            ("Джубга", 44.320, 38.705),
+            ("Ростов-на-Дону", 47.222, 39.719)
+        ]
+        for (name, latitude, longitude) in plan {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            _ = manager.createPlace(cell: Place.cell(latitude: latitude, longitude: longitude),
+                                    coordinate: coordinate, name: name)
+        }
     }
 
     // MARK: - Черновики (0.8.2)

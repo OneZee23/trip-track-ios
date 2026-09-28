@@ -29,6 +29,17 @@ struct PlacesPanel<Header: View, Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragStart: CGFloat?
+    /// Сколько экрана снизу занимает клавиатура.
+    ///
+    /// Нужна не ради отступов, а ради ВЫСОТЫ панели. Панель высокая
+    /// (`экран − верх`), и с поднятой клавиатурой она перестаёт помещаться в
+    /// свой контейнер — SwiftUI отвечает на это не обрезкой, а сдвигом всего
+    /// содержимого ВВЕРХ: проба показала `top=115`, а настоящий кадр панели
+    /// `y = −81`, то есть поле поиска легло на часы. Четыре попытки снять
+    /// это через `ignoresSafeArea(.keyboard)` на четырёх уровнях дерева не
+    /// дали ничего, потому что лечили не ту причину: контейнер сжимается
+    /// законно, а не помещается в него именно панель.
+    @State private var keyboardInset: CGFloat = 0
 
     private var top: CGFloat { liveTop ?? slot.top(of: stop) }
 
@@ -45,7 +56,7 @@ struct PlacesPanel<Header: View, Content: View>: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .frame(height: max(0, slot.height - top), alignment: .top)
+        .frame(height: max(0, slot.height - top - keyboardInset), alignment: .top)
         // Содержимое ОБРЕЗАЕТСЯ рамкой панели. В половине скролла нет по
         // спеке — он начинается в полном списке, — и без обрезки лишние
         // карточки просто вываливались бы поверх таб-бара: ровно тот кадр,
@@ -63,9 +74,31 @@ struct PlacesPanel<Header: View, Content: View>: View {
             .shadow(color: .black.opacity(scheme == .dark ? 0.32 : 0.16), radius: 28, y: -8)
             .ignoresSafeArea(edges: .bottom)
         )
+        // ПРИБИТА К ВЕРХУ КОНТЕЙНЕРА, и это не косметика.
+        //
+        // `ZStack` центрирует детей, а у панели высота фиксированная. Стоит
+        // контейнеру сжаться — а он сжимается, когда приезжает клавиатура, —
+        // и центрированная панель уезжает вверх на половину этой разницы:
+        // поле поиска ложилось на часы и на значок батареи. Смещение при
+        // этом обязано отсчитываться от ВЕРХА, иначе оно означает разное на
+        // разной высоте контейнера. Поймано кадром на симуляторе; три
+        // попытки снять это через `ignoresSafeArea(.keyboard)` не дали
+        // ничего, потому что лечили не ту причину.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .offset(y: containerTop)
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
+                as? CGRect else { return }
+            keyboardInset = max(0, slot.height - frame.origin.y)
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardInset = 0
+        }
         .gesture(isPinned ? nil : drag)
         .accessibilityElement(children: .contain)
+
     }
 
     private var handle: some View {
