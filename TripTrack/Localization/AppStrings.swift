@@ -312,6 +312,25 @@ enum AppStrings {
     static func placesSearchPlaceholder(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesSearchPlaceholder", ru: "Поиск места", en: "Search places")
     }
+    /// Вторая строка под «Ничего не нашлось» (состояние 11 спеки «Места v2»).
+    /// Единственный совет, который тут уместен: предложить что-то ещё нечего —
+    /// ищем по именам мест, и имена пишет сам человек.
+    static func placesSearchEmptyHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSearchEmptyHint", ru: "Проверьте написание", en: "Check the spelling")
+    }
+    /// Подпись на бумаге вместо карты, когда плиток Apple нет (состояние 24).
+    /// Про СПИСОК она не говорит ничего нарочно: места локальные, и список,
+    /// статистика и экран места от сети не зависят вовсе.
+    static func placesOfflineMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesOfflineMap",
+           ru: "Карта появится, когда будет сеть",
+           en: "The map will appear once you’re online")
+    }
+    /// Голос скелетона подсказок (состояние 23): «Мои места» уже на экране, а
+    /// «Похоже, вы здесь бываете» ещё считается вне главного потока.
+    static func placesSuggestLoading(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesSuggestLoading", ru: "Подсказки считаются", en: "Finding suggestions")
+    }
     /// Заголовок листа сортировки.
     static func placesSortTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesSortTitle", ru: "Порядок", en: "Order")

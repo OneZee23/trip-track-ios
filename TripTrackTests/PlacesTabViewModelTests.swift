@@ -63,10 +63,29 @@ final class PlacesTabViewModelTests: XCTestCase {
     private func settled(_ vm: PlacesTabViewModel) async -> [PlaceSuggestion] {
         vm.suggestionDebounce = 0
         vm.reload()
-        for _ in 0..<200 where vm.suggestions.isEmpty {
+        for _ in 0..<200 where vm.knownSuggestions.isEmpty {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
-        return vm.suggestions
+        return vm.knownSuggestions
+    }
+
+    /// `nil` — «ещё считается», пустой массив — «не нашлось» (правило дома).
+    /// Скелетон подсказок (состояние 23 спеки) читает ровно эту разницу, и
+    /// без неё блок появлялся бы рывком поверх уже прочитанного списка.
+    func testSuggestionsStartOutAsStillComputing() async {
+        trip(home, sea, daysAgo: 2)
+        let vm = PlacesTabViewModel(manager: manager, repository: repo)
+        XCTAssertNil(vm.suggestions, "до первого ответа — «считается»")
+        XCTAssertTrue(vm.isComputingSuggestions)
+        XCTAssertTrue(vm.knownSuggestions.isEmpty, "для карты и булавок это просто «пусто»")
+
+        _ = await settled(vm)
+        XCTAssertNotNil(vm.suggestions)
+        XCTAssertFalse(vm.isComputingSuggestions, "посчитали — скелетон уходит навсегда")
+
+        // Пересчёт поверх уже показанных подсказок скелетона НЕ заказывает.
+        vm.reload()
+        XCTAssertFalse(vm.isComputingSuggestions)
     }
 
     func testSuggestionsComeFromTripEnds() async {
@@ -105,7 +124,7 @@ final class PlacesTabViewModelTests: XCTestCase {
         guard let first = found.first else { return XCTFail("подсказок нет") }
         vm.save(first)
         await manager.settle()
-        XCTAssertFalse(vm.suggestions.contains { $0.id == first.id })
+        XCTAssertFalse(vm.knownSuggestions.contains { $0.id == first.id })
         XCTAssertEqual(manager.places.map(\.id), [Place.id(forCell: first.cell)])
         XCTAssertEqual(manager.places.first?.cell, first.cell)
     }

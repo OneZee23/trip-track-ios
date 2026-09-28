@@ -17,6 +17,11 @@ struct SkeletonPlaceholder: View {
         case row
         /// A feed card: header, map block, footer.
         case card
+        /// Карточка подсказки «Похоже, вы здесь бываете» (состояние 23 спеки
+        /// «Места v2»). Своя форма, а не `.card`: у той внутри блок карты на
+        /// 140 pt, а подсказка — кружок, две строки и кнопка. Скелетон
+        /// обещает форму того, что приедет, и чужая форма обещала бы не то.
+        case placeSuggestion
     }
 
     var shape: Shape = .row
@@ -34,6 +39,7 @@ struct SkeletonPlaceholder: View {
                 switch shape {
                 case .row:  rowSkeleton(c)
                 case .card: cardSkeleton(c)
+                case .placeSuggestion: suggestionSkeleton(c)
                 }
             }
         }
@@ -67,6 +73,29 @@ struct SkeletonPlaceholder: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 2)
+    }
+
+    /// Кружок 36, две строки и кнопка — ровно то, из чего сложена
+    /// `PlaceSuggestionCardView`, теми же полями и тем же радиусом.
+    private func suggestionSkeleton(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 6) {
+                    bar(c, width: 132, height: 12)
+                    bar(c, width: 84, height: 10)
+                }
+                Spacer(minLength: 0)
+            }
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(c.cardAlt)
+                .frame(width: 168, height: 44)
+                .padding(.leading, 48)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14).padding(.bottom, 12)
+        .background(AtlasTheme.card,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func cardSkeleton(_ c: AppTheme.Colors) -> some View {

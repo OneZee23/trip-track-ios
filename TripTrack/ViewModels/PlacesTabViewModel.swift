@@ -12,7 +12,16 @@ import Combine
 @MainActor
 final class PlacesTabViewModel: ObservableObject {
     @Published private(set) var items: [PlaceListItem] = []
-    @Published private(set) var suggestions: [PlaceSuggestion] = []
+    /// Подсказки, и `nil` здесь — «ЕЩЁ СЧИТАЕТСЯ», а пустой массив —
+    /// «не нашлось» (правило дома, то же, что у `TripCompletionData
+    /// .discoveries`). Разница видна глазом: пока `nil`, у секции скелетон
+    /// (состояние 23), а при пустом массиве секции нет вовсе.
+    ///
+    /// В `nil` значение возвращается ровно один раз — до ПЕРВОГО ответа.
+    /// Пересчёт поверх уже показанных подсказок скелетона не заказывает:
+    /// `.placesChanged` приходит на каждой поездке с изменениями, и мигание
+    /// секции на каждом таком уведомлении было бы хуже её отсутствия.
+    @Published private(set) var suggestions: [PlaceSuggestion]?
     /// Последние поездки — секция «Отметить в поездке» у новичка (S3).
     /// Отметку ставят В ПОЕЗДКЕ, и пока мест нет, дорога туда — единственное
     /// действие, которое вообще есть на этой вкладке кроме подсказки.
@@ -25,6 +34,13 @@ final class PlacesTabViewModel: ObservableObject {
     /// Сколько поездок показывать в «Отметить в поездке». Три — это «недавно»;
     /// дальше это уже лента, а она на своей вкладке.
     static let recentTripsShown = 3
+
+    /// Подсказки как список: `nil` и «не нашлось» для карты, булавок и
+    /// выбора — одно и то же, скелетон рисует только секция.
+    var knownSuggestions: [PlaceSuggestion] { suggestions ?? [] }
+
+    /// Идёт ли счёт прямо сейчас — единственный вход скелетона (23).
+    var isComputingSuggestions: Bool { suggestions == nil }
     private let manager: PlaceManager
     private let repository: TripRepository
     private var cancellables = Set<AnyCancellable>()
@@ -109,7 +125,7 @@ final class PlacesTabViewModel: ObservableObject {
     /// уходит сразу, не дожидаясь `.placesChanged`: кнопка обязана ответить
     /// в момент нажатия, а бэкфилл истории идёт секунды.
     func save(_ suggestion: PlaceSuggestion) {
-        suggestions.removeAll { $0.id == suggestion.id }
+        suggestions = knownSuggestions.filter { $0.id != suggestion.id }
         manager.createPlace(cell: suggestion.cell, coordinate: suggestion.coordinate, name: suggestion.name)
     }
 
