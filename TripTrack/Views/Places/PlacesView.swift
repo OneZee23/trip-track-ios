@@ -21,6 +21,7 @@ struct PlacesView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var model = PlacesTabViewModel()
     @State private var path: [PlacesDest] = []
     @State private var query = ""
@@ -36,7 +37,18 @@ struct PlacesView: View {
     @State private var selectedPlaceId: UUID?
     @State private var selectedHintId: UUID?
     @State private var showsBeta = false
+    /// Поиск — МОДАЛЬНОЕ состояние вкладки (10 и 11), а не поле внутри
+    /// списка: фокус поднимает панель в полный список, гасит заголовок
+    /// вкладки и кладёт на карту скрим. Выход один — «Отмена» (или тап по
+    /// скриму): она снимает фокус, чистит запрос и возвращает панель туда,
+    /// откуда пришли.
+    @State private var searching = false
+    @State private var stopBeforeSearch: PlacesPanelStop = .list
     @FocusState private var searchFocused: Bool
+    /// Тот же монитор, что у «Ленты» (`CacheManager.shared`), а не свой:
+    /// второй `NWPathMonitor` — это вторая подписка на путь сети ради
+    /// одного булева.
+    @ObservedObject private var network = CacheManager.shared.networkMonitor
     /// Тот же ключ, что у таб-бара: с пустого экрана единственная кнопка
     /// уводит на запись, а не открывает «как это работает» ещё раз.
     @AppStorage(AppTab.storageKey) private var selectedTab: AppTab = .home
@@ -44,10 +56,24 @@ struct PlacesView: View {
     /// Меньше трёх мест — экран ещё не умеет рассказать о себе сам, и
     /// карточка «как это работает» стоит своего места. Подсказки её
     /// отменяют: они объясняют то же самое делом.
-    private var showsHowItWorks: Bool { model.items.count < 3 && model.suggestions.isEmpty }
+    private var showsHowItWorks: Bool { model.items.count < 3 && model.knownSuggestions.isEmpty }
     private var showsControls: Bool { model.items.count >= PlacesPresentation.manyPlaces }
     private var groups: [PlacesPresentation.Group] {
         PlacesPresentation.build(model.items, query: query, sort: sort, language: lang.language)
+    }
+
+    /// Совпадения поиска — БЕЗ группировки: заголовок секции над выдачей
+    /// отвечал бы на вопрос, которого никто не задавал (спека §6, состояние
+    /// 10). Порядок при этом остаётся выбранный: чипы никуда не делись.
+    private var searchMatches: [PlaceListItem] {
+        PlacesPresentation.sort(
+            PlacesPresentation.filter(model.items, query: query, language: lang.language),
+            by: sort
+        )
+    }
+
+    private var searchOutcome: PlacesSearchOutcome {
+        PlacesSearchOutcome.resolve(query: query, matches: searchMatches.count)
     }
 
     var body: some View {
@@ -97,39 +123,95 @@ struct PlacesView: View {
         ZStack {
             map(interactive: true)
                 .ignoresSafeArea()
+            if network.isOffline { offlineCaption(slot) }
+            if searching { searchScrim }
             panel(slot)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: isEmptyTab) { _, empty in
-            withAnimation(SlotGesture.spring) { stop = empty ? .empty : slot.defaultStop }
+        .onChange(of: emptyState) { _, state in
+            // Во время поиска панель держит полный список и чужим правкам
+            // не подчиняется: место, приехавшее пулом, не имеет права
+            // уронить панель из-под пальца, который набирает запрос.
+            guard !searching else { return }
+            withAnimation(SlotGesture.spring) { stop = state.stop(in: slot) }
         }
         .onAppear {
-            if isEmptyTab { stop = .empty }
+            if emptyState.isPinned { stop = emptyState.stop(in: slot) }
             else if !stop.isDraggable { stop = slot.defaultStop }
+        }
+        // Фокус в поле И ЕСТЬ вход в поиск. Обратное неверно: потеря фокуса
+        // (скролл гасит клавиатуру) поиск не закрывает — иначе один
+        // неосторожный свайп стирал бы набранный запрос.
+        .onChange(of: searchFocused) { _, focused in
+            if focused { beginSearch() }
         }
     }
 
-    /// Пустая вкладка: ни мест, ни подсказок. Держит одно положение и не
-    /// тянется (спека §4) — тянуть там не к чему.
-    private var isEmptyTab: Bool { model.items.isEmpty && model.suggestions.isEmpty }
+    /// Пустая вкладка (13, 14, 15). Подсказки в этот вопрос НЕ входят: до
+    /// 0.8.2 входили, и вкладка без мест, но с подсказками уходила в
+    /// половину вместо пустой — подсказка отменяла пустоту, хотя мест от неё
+    /// не появлялось.
+    private var emptyState: PlacesEmptyState {
+        PlacesEmptyState.resolve(places: model.items.count, trips: model.recentTrips.count)
+    }
+
+    /// Скрим 38 % под поиском (10 и 11). Он же второй выход: палец, ушедший
+    /// мимо «Отмены», не должен упираться в экран, с которого не выйти.
+    private var searchScrim: some View {
+        AtlasTheme.scrim
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture { endSearch() }
+            .transition(.opacity)
+            // Скрим ГЛУХОЙ для VoiceOver, иначе ротор уходит на карту под
+            // ним — то же правило, что у `AppConfirmDialog`.
+            .accessibilityHidden(true)
+    }
+
+    /// «Карта появится, когда будет сеть» (24) — по СЕРЕДИНЕ видимой карты, а
+    /// не у верхнего края: видимая полоска меняется от 56 pt в списке до
+    /// целого экрана в положении «Карта», и подпись у края читалась бы
+    /// системным баннером в одном случае и потерянной строкой в другом.
+    private func offlineCaption(_ slot: PlacesSlot) -> some View {
+        let visible = max(0, (liveTop ?? slot.top(of: stop)) - slot.safeTop)
+        return VStack(spacing: 0) {
+            Text(AppStrings.placesOfflineMap(lang.language))
+                .font(AppType.caption)
+                .foregroundStyle(AtlasTheme.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity)
+                .frame(height: visible)
+            Spacer(minLength: 0)
+        }
+        // Подпись не перехватывает тапы: под ней карта с булавками, и они
+        // остаются на месте — сеть отменяет плитки, а не места.
+        .allowsHitTesting(false)
+        .accessibilityIdentifier("places_offline_note")
+    }
 
     private func panel(_ slot: PlacesSlot) -> some View {
         PlacesPanel(
             slot: slot,
             stop: $stop,
             liveTop: $liveTop,
-            isPinned: isEmptyTab,
+            isPinned: emptyState.isPinned || searching,
             accessibilityTitle: AppStrings.tabPlaces(lang.language),
             header: {
-                PlacesPanelHeader(
-                    title: AppStrings.tabPlaces(lang.language),
-                    listTitle: AppStrings.placesViewList(lang.language),
-                    mapTitle: AppStrings.placesViewMap(lang.language),
-                    stop: stop,
-                    onBeta: { showsBeta = true },
-                    onList: { move(to: .list) },
-                    onMap: { move(to: .map) }
-                )
+                // Заголовок вкладки на время поиска СКРЫТ (состояния 10 и
+                // 11): человек ищет место, а не читает, на какой он вкладке,
+                // и переключатель «Список · Карта» ему сейчас некуда вести.
+                if !searching {
+                    PlacesPanelHeader(
+                        title: AppStrings.tabPlaces(lang.language),
+                        listTitle: AppStrings.placesViewList(lang.language),
+                        mapTitle: AppStrings.placesViewMap(lang.language),
+                        stop: stop,
+                        onBeta: { showsBeta = true },
+                        onList: { move(to: .list) },
+                        onMap: { move(to: .map) }
+                    )
+                }
             },
             content: { panelContent }
         )
@@ -155,7 +237,7 @@ struct PlacesView: View {
     /// что — карточку с «Сохранить как место».
     private func select(pin id: UUID) {
         let isPlace = model.items.contains { $0.id == id }
-        let isHint = model.suggestions.contains { $0.id == id }
+        let isHint = model.knownSuggestions.contains { $0.id == id }
         guard isPlace || isHint else { return }
         if stop.isDraggable { stopBeforeSelection = stop }
         withAnimation(SlotGesture.spring) {
@@ -173,6 +255,15 @@ struct PlacesView: View {
 
     @ViewBuilder
     private var panelContent: some View {
+        if searching {
+            searchContent
+        } else {
+            stopContent
+        }
+    }
+
+    @ViewBuilder
+    private var stopContent: some View {
         switch stop {
         case .map:
             // Только заголовок: карта во всю высоту.
@@ -200,12 +291,96 @@ struct PlacesView: View {
         .padding(.top, 4)
     }
 
+    /// Поиск (10 и 11): поле с «Отменой» закреплено, результаты строками
+    /// сразу под ним. Заголовка секции нет, чипов порядка нет — экран сейчас
+    /// отвечает на один вопрос, и лишние контролы над ответом только мешают.
+    @ViewBuilder
+    private var searchContent: some View {
+        VStack(spacing: 12) {
+            searchRow(cancellable: true)
+            if searchOutcome == .nothingFound {
+                nothingFoundBlock
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(searchMatches) { item in
+                            PlaceCardView(item: item, compact: true) { push(.place(item.id)) }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    // Клавиатуру `ContentView` гасит для всего окна
+                    // (`.ignoresSafeArea(.keyboard)`), поэтому нижние строки
+                    // достаются из-под неё ЧИСЛОМ — как и высоты панели.
+                    .padding(.bottom, Self.keyboardClearance)
+                    .accessibilityIdentifier("places_search_results")
+                }
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.immediately)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    /// Клавиатура спеки §9: 291 pt на всех телефонах кроме SE (260). Берём
+    /// больший — лишний воздух под последней строкой не мешает, а нехватка
+    /// прячет строку насовсем.
+    private static let keyboardClearance: CGFloat = 291
+
+    /// Состояние 11. Кнопок нет ни одной нарочно: «Отмена» уже стоит у поля,
+    /// а вторая дорога к тому же результату — это выбор там, где его нет.
+    private var nothingFoundBlock: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle().fill(AtlasTheme.chip)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(AtlasTheme.secondary)
+            }
+            .frame(width: 56, height: 56)
+            Text(AppStrings.placesSearchEmpty(lang.language))
+                .font(AppType.itemTitle)
+                .foregroundStyle(AtlasTheme.ink)
+            Text(AppStrings.placesSearchEmptyHint(lang.language))
+                .font(AppType.body)
+                .foregroundStyle(AtlasTheme.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 28)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("places_search_empty")
+    }
+
+    /// Фокус в поле — это переход в состояние 10, а не «начал печатать».
+    private func beginSearch() {
+        guard !searching else { return }
+        stopBeforeSearch = stop.isDraggable ? stop : .list
+        withAnimation(SlotGesture.animation(reduceMotion: reduceMotion)) {
+            searching = true
+            stop = .list
+            liveTop = nil
+        }
+    }
+
+    /// «Отмена» (и тап по скриму): снимает фокус, ЧИСТИТ запрос и возвращает
+    /// панель туда, откуда пришли (спека: «Отмена» → 7).
+    private func endSearch() {
+        searchFocused = false
+        withAnimation(SlotGesture.animation(reduceMotion: reduceMotion)) {
+            searching = false
+            query = ""
+            stop = stopBeforeSearch
+            liveTop = nil
+        }
+    }
+
     @ViewBuilder
     private var listContent: some View {
         ScrollView {
             VStack(spacing: 12) {
                 if showsControls {
-                    searchRow
+                    searchRow(cancellable: false)
                     sortChips
                 }
                 lastPassSection
@@ -309,7 +484,7 @@ struct PlacesView: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
         } else if let id = selectedHintId,
-                  let hint = model.suggestions.first(where: { $0.id == id }) {
+                  let hint = model.knownSuggestions.first(where: { $0.id == id }) {
             HStack(alignment: .top, spacing: 8) {
                 PlaceSuggestionCardView(suggestion: hint) { model.save(hint) }
                 closeButton
@@ -352,8 +527,8 @@ struct PlacesView: View {
         push(.trip(id, focus: .top))
     }
 
-    private var searchRow: some View {
-        HStack(spacing: 8) {
+    private func searchRow(cancellable: Bool) -> some View {
+        HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 15, weight: .medium))
@@ -381,6 +556,22 @@ struct PlacesView: View {
             .frame(height: 44)
             .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
+            if cancellable {
+                Button {
+                    Haptics.tap()
+                    endSearch()
+                } label: {
+                    Text(AppStrings.cancel(lang.language))
+                        .font(AppType.action)
+                        .foregroundStyle(AtlasTheme.accent)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("places_search_cancel")
+            }
         }
         .padding(.horizontal, 16)
     }
@@ -437,7 +628,7 @@ struct PlacesView: View {
     /// `PlacesMapView` умеет несколько булавок и подбирает область по всем.
     private var pins: [PlacePin] {
         model.items.map { PlacePin(id: $0.id, coordinate: $0.place.coordinate) }
-            + model.suggestions.map { PlacePin(id: $0.id, coordinate: $0.coordinate, isSuggested: true) }
+            + model.knownSuggestions.map { PlacePin(id: $0.id, coordinate: $0.coordinate, isSuggested: true) }
     }
 
     private func map(interactive: Bool) -> some View {
@@ -446,6 +637,7 @@ struct PlacesView: View {
                       // начатый на карте, панорамирует её вместо того чтобы
                       // скроллить список. Тап по булавке от этого не страдает.
                       isInteractive: interactive,
+                      isOffline: network.isOffline,
                       onPinTap: { tapped in select(pin: tapped) })
     }
 
@@ -457,14 +649,12 @@ struct PlacesView: View {
     private var placesSection: some View {
         let built = groups
         if built.isEmpty {
-            if !query.isEmpty {
-                Text(AppStrings.placesSearchEmpty(lang.language))
-                    .font(AppType.body)
-                    .foregroundStyle(AtlasTheme.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 28)
-                    .accessibilityIdentifier("places_search_empty")
-            } else if model.items.isEmpty {
+            // Пустой выдачи поиска здесь больше НЕТ: поиск стал модальным
+            // состоянием панели (10 и 11) и рисует свой `nothingFoundBlock`,
+            // а «Отмена» чистит запрос на выходе — то есть в этой ветке
+            // `query` всегда пуст. Двух «Ничего не нашлось» с одним
+            // идентификатором быть не должно.
+            if model.items.isEmpty {
                 // Мест нет, но подсказки есть (S3): заголовок секции здесь
                 // был бы заголовком над пустотой.
                 VStack(spacing: 6) {
@@ -521,24 +711,44 @@ struct PlacesView: View {
         }
     }
 
+    /// «Похоже, вы здесь бываете» — и СКЕЛЕТОН, пока подсказки считаются
+    /// (состояние 23). «Мои места» читаются из базы мгновенно, а подсказки
+    /// разбирают превью всей библиотеки вне главного актёра и приезжают
+    /// позже: без скелетона блок появлялся рывком под уже прочитанным
+    /// списком. Других скелетонов на вкладке нет и быть не должно — места
+    /// локальные, «загружать» тут нечего.
     @ViewBuilder
     private var suggestionsSection: some View {
-        if !model.suggestions.isEmpty, query.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(AppStrings.placeSuggestSection(lang.language))
-                    .atlasSectionStyle()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // Идентификатор — на ЗАГОЛОВКЕ, не на колонке: на
-                    // контейнере он достаётся и строкам внутри, и каждая
-                    // подсказка теряет своё имя (`place_suggestion_<ячейка>`).
-                    .accessibilityIdentifier("places_suggestions")
-                ForEach(model.suggestions) { suggestion in
-                    PlaceSuggestionCardView(suggestion: suggestion) { model.save(suggestion) }
+        if query.isEmpty {
+            if model.isComputingSuggestions {
+                suggestionsBlock {
+                    SkeletonPlaceholder(shape: .placeSuggestion, count: 1)
+                        .accessibilityLabel(AppStrings.placesSuggestLoading(lang.language))
+                        .accessibilityIdentifier("places_suggestions_skeleton")
+                }
+            } else if !model.knownSuggestions.isEmpty {
+                suggestionsBlock {
+                    ForEach(model.knownSuggestions) { suggestion in
+                        PlaceSuggestionCardView(suggestion: suggestion) { model.save(suggestion) }
+                    }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
         }
+    }
+
+    private func suggestionsBlock<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AppStrings.placeSuggestSection(lang.language))
+                .atlasSectionStyle()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Идентификатор — на ЗАГОЛОВКЕ, не на колонке: на
+                // контейнере он достаётся и строкам внутри, и каждая
+                // подсказка теряет своё имя (`place_suggestion_<ячейка>`).
+                .accessibilityIdentifier("places_suggestions")
+            content()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
     }
 
     // MARK: - Пусто

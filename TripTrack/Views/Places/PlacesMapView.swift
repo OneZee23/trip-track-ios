@@ -28,6 +28,13 @@ struct PlacesMapView: UIViewRepresentable {
     var routes: [[CLLocationCoordinate2D]] = []
     var selectedId: UUID? = nil
     var isInteractive: Bool = true
+    /// Сети нет — плиток Apple не будет (состояние 24 спеки «Места v2»).
+    ///
+    /// Пустая серая сетка MapKit читается поломкой, а не отсутствием связи,
+    /// поэтому на её место кладётся ровная бумага. БУЛАВКИ ПРИ ЭТОМ
+    /// ОСТАЮТСЯ: они аннотации, живут выше оверлеев, и вопрос «куда я вообще
+    /// езжу» бумага не отменяет — отменяет только «что там на земле».
+    var isOffline: Bool = false
     var onPinTap: ((UUID) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
@@ -50,6 +57,7 @@ struct PlacesMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.onPinTap = onPinTap
         context.coordinator.sync(pins: pins, routes: routes, selectedId: selectedId, on: map)
+        context.coordinator.syncPaper(offline: isOffline, on: map)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -59,6 +67,9 @@ struct PlacesMapView: UIViewRepresentable {
         private var shownPins: [PlacePin] = []
         private var shownRoutes: [[CLLocationCoordinate2D]] = []
         private var fitted = false
+        /// Бумага вместо плиток. Держится отдельно от ниток: `sync()` меняет
+        /// маршруты пачкой, и снести её вместе с ними было бы легко.
+        private var paper: PaperTileOverlay?
         /// Запомненный выбор: `mapView(_:viewFor:)` красит свежесозданную
         /// булавку сразу, не дожидаясь следующего `sync()` — на момент
         /// дозапроса вида `map.view(for:)` эту аннотацию ещё не видит.
@@ -73,7 +84,10 @@ struct PlacesMapView: UIViewRepresentable {
                 fitted = false
             }
             if !Self.routesMatch(routes, shownRoutes) {
-                map.removeOverlays(map.overlays)
+                // Только НИТКИ: бумага (`PaperTileOverlay`) лежит в тех же
+                // оверлеях и снималась бы вместе с ними на каждой смене
+                // маршрутов — карта мигала бы серой сеткой Apple.
+                map.removeOverlays(map.overlays.filter { $0 is MKPolyline })
                 map.addOverlays(routes.filter { $0.count > 1 }.map { MKPolyline(coordinates: $0, count: $0.count) })
                 shownRoutes = routes
                 fitted = false
@@ -87,8 +101,10 @@ struct PlacesMapView: UIViewRepresentable {
             // Область — по всем булавкам и ниткам; одна булавка — двор в 1.5 км.
             var rect = MKMapRect.null
             for pin in pins { rect = rect.union(MKMapRect(origin: MKMapPoint(pin.coordinate), size: MKMapSize(width: 1, height: 1))) }
-            for overlay in map.overlays { rect = rect.union(overlay.boundingMapRect) }
-            if pins.count == 1 && map.overlays.isEmpty {
+            // Бумага накрывает ВЕСЬ мир, и её рамка увела бы кадр на глобус.
+            let lines = map.overlays.compactMap { $0 as? MKPolyline }
+            for line in lines { rect = rect.union(line.boundingMapRect) }
+            if pins.count == 1 && lines.isEmpty {
                 map.setRegion(MKCoordinateRegion(center: pins[0].coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
             } else {
                 map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40), animated: false)
@@ -127,7 +143,29 @@ struct PlacesMapView: UIViewRepresentable {
             onPinTap?(pin.id)
         }
 
+        /// Бумага вместо плиток и обратно.
+        ///
+        /// Оверлей с `canReplaceMapContent = true` — единственный
+        /// документированный способ сказать MapKit «свою карту не рисуй»:
+        /// прикрыть её сверху прямоугольником в SwiftUI нельзя, он накрыл бы
+        /// и булавки. Пересобирается ещё и при смене темы: плитка это
+        /// картинка, и цвет в неё уже запечён.
+        func syncPaper(offline: Bool, on map: MKMapView) {
+            let ink = AtlasTheme.fogUIColor.resolvedColor(with: map.traitCollection)
+            if let paper, !offline || paper.ink != ink {
+                map.removeOverlay(paper)
+                self.paper = nil
+            }
+            guard offline, paper == nil else { return }
+            let sheet = PaperTileOverlay(ink: ink)
+            paper = sheet
+            map.addOverlay(sheet, level: .aboveLabels)
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let sheet = overlay as? PaperTileOverlay {
+                return MKTileOverlayRenderer(tileOverlay: sheet)
+            }
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let r = MKPolylineRenderer(polyline: line)
             // Нитки проездов — приглушённый акцент: контекст, не содержание.
@@ -136,6 +174,37 @@ struct PlacesMapView: UIViewRepresentable {
             r.lineCap = .round
             return r
         }
+    }
+}
+
+/// Ровная бумага на месте карты, когда плиток нет (состояние 24).
+///
+/// `canReplaceMapContent = true` — вся суть: с ним MapKit СВОЮ карту не
+/// рисует вовсе, и пустая серая сетка, которая читается поломкой, не
+/// показывается ни на кадр. Плитка одна на весь мир: она одноцветная, и
+/// второй такой же не нужно — данные считаются один раз в `init`.
+final class PaperTileOverlay: MKTileOverlay {
+    /// Цвет, уже разрешённый под тему: в PNG он запечён, и на смену темы
+    /// оверлей пересобирается целиком (`Coordinator.syncPaper`).
+    let ink: UIColor
+    private let sheet: Data
+
+    init(ink: UIColor) {
+        self.ink = ink
+        let size = CGSize(width: 16, height: 16)
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            ink.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        sheet = image.pngData() ?? Data()
+        super.init(urlTemplate: nil)
+        tileSize = size
+        canReplaceMapContent = true
+    }
+
+    override func loadTile(at path: MKTileOverlayPath,
+                           result: @escaping (Data?, Error?) -> Void) {
+        result(sheet, nil)
     }
 }
 

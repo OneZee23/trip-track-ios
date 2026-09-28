@@ -39,7 +39,12 @@ enum AtlasTheme {
     static let mutedPin = adaptive(0xA0988B, 0x6E6961)
     static let handle = adaptive(0xD3CCC1, 0x61594F)
     static let control = adaptive(0xFFFFFF, 0x1E1E20)
-    static let fog = adaptive(0xEEEEEC, 0x262B36)
+    /// Мгла «Атласа». Она же — бумага карты «Мест», когда плиток Apple нет
+    /// (состояние 24 спеки «Места v2»), и рисует её MapKit, а не SwiftUI:
+    /// поэтому число живёт в `UIColor`, а `Color` выведен из него. Двух
+    /// записей одного цвета быть не должно — они однажды разойдутся.
+    static let fogUIColor = adaptiveUIColor(0xEEEEEC, 0x262B36)
+    static let fog = Color(fogUIColor)
     static let fogGrain = adaptive(0x7D8792, 0x7D8792)
     // MARK: Стекло плавающих кнопок (спека §3.2, tokens.json → colors.glass)
 
@@ -76,7 +81,11 @@ enum AtlasTheme {
     }
 
     private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
-        Color(UIColor { traits in
+        Color(adaptiveUIColor(light, dark))
+    }
+
+    private static func adaptiveUIColor(_ light: UInt32, _ dark: UInt32) -> UIColor {
+        UIColor { traits in
             let hex = traits.userInterfaceStyle == .dark ? dark : light
             return UIColor(
                 red: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -84,7 +93,7 @@ enum AtlasTheme {
                 blue: CGFloat(hex & 0xFF) / 255,
                 alpha: 1
             )
-        })
+        }
     }
 }
 
