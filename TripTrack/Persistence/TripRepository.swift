@@ -1389,9 +1389,23 @@ final class CoreDataTripRepository: TripRepository {
         // машины: ключ отсутствует или правка ещё не уехала — не трогаем.
         if !hasLocalEdits, let remoteSource = p.source { entity.source = remoteSource.rawValue }
         entity.fuelCurrency = p.fuelCurrency
-        entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
-        // Кэш держал старую форму до перезапуска приложения.
-        Trip.invalidatePreviewCache(for: p.id)
+        // Превью с сервера — это ЭХО нашего же превью, и при включённой
+        // приватной зоне (0.8.2) эхо приходит ОБРЕЗАННЫМ: мы сами отправили
+        // его без двора. Записать его обратно значило бы обрезать локальное —
+        // а «своя поездка на своём телефоне остаётся целой всегда» это и есть
+        // всё правило версии. Превью кормит «Атлас», карточку ленты, обложку
+        // путешествия и подсказки мест, так что человек перестал бы видеть
+        // собственный двор на собственной карте, и никакой откат этого уже не
+        // вернул бы: локального полного превью не осталось бы нигде.
+        // То же правило, что у `capturedAt`/`exifLatitude` (0.6.5) и `placeId`
+        // (0.6.8) — локальное точнее серверного. Проверка «своё превью есть»
+        // стоит ПЕРВОЙ: у поездки со второго телефона его нет, и ей серверное
+        // как раз нужно.
+        if entity.previewPolyline == nil || HomeSettings.load().activeZone == nil {
+            entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
+            // Кэш держал старую форму до перезапуска приложения.
+            Trip.invalidatePreviewCache(for: p.id)
+        }
         entity.badgesJSON = p.badgesJson
         entity.xpEarned = Int32(p.xpEarned ?? 0)
         entity.conflictVersion = Int32(p.conflictVersion)

@@ -351,6 +351,10 @@ final class MapViewModel: ObservableObject {
         // задаче миграций ниже: первый пул приходит по `didBecomeActive`, и
         // подписка обязана стоять раньше него.
         RevealedLayerSync.shared.start()
+        // Приватная зона у дома (0.8.2): переотправка уже опубликованных
+        // поездок обрезанными. Здесь же и по той же причине — тумблер в листе
+        // настройки жмут раньше, чем кто-нибудь впервые тронет синглтон.
+        HomePrivacyResync.shared.start()
         StartupTrace.mark("MapViewModel.init end")
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
