@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 struct TripPhotoMetadataPayload: Codable {
@@ -129,18 +130,24 @@ extension TripSyncPayload {
             self.drivingTime = nil
             self.stoppedTime = nil
         }
+        // Приватная зона у дома (0.8.2) — ЕДИНСТВЕННАЯ граница, где трек
+        // режется. Стоит ЗДЕСЬ, ниже чисел выше: расстояние, время в пути и
+        // высоты считаются по ПОЛНОМУ треку и не меняются от того, что
+        // человек закрыл свой двор. Числа — про саму поездку, обрезка — про
+        // то, что видно чужим.
+        let zone = HomeSettings.load().activeZone
         self.region = trip.region
         self.isPrivate = trip.isPrivate
         self.isTransfer = trip.isTransfer
         self.vehicleId = trip.vehicleId
         self.fuelCurrency = trip.fuelCurrency
-        self.previewPolyline = trip.previewPolyline?.base64EncodedString()
+        self.previewPolyline = Self.wirePreview(trip.previewPolyline, zone: zone)
         self.badgesJson = entity.badgesJSON
         self.xpEarned = Int(entity.xpEarned)
         self.conflictVersion = Int(entity.conflictVersion)
         self.lastModifiedAt = entity.lastModifiedAt ?? Date()
         self.serverCreatedAt = entity.serverCreatedAt
-        self.trackPoints = trip.trackPoints.map(TrackPointPayload.init)
+        self.trackPoints = Self.wireTrack(trip.trackPoints, zone: zone)
         self.photos = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
             return TripPhotoMetadataPayload(
@@ -163,6 +170,50 @@ extension TripSyncPayload {
                 toCheckpointId: $0.toCheckpointId, name: $0.name)
         }
         self.source = trip.source
+    }
+
+    /// Зона в удобной форме: её читают оба носителя геометрии.
+    typealias Zone = (centre: CLLocationCoordinate2D, radius: Double)
+
+    /// Трек в проводе: полный, если зоны нет, обрезанный, если есть.
+    ///
+    /// **Обрезка НЕ спрашивает `isPrivate`**, хотя тумблер и назван «обрезать
+    /// публичные». Правило версии — «режется то, что УХОДИТ С ТЕЛЕФОНА», а
+    /// приватная поездка уходит на тот же сервер теми же байтами. Зависимость
+    /// от приватности была бы вдобавок багом: `AuthService
+    /// .unpublishAllPublicTrips` ставит `isPrivate = true` ПЕРЕД сборкой
+    /// пейлоада, и на выходе из аккаунта уже обрезанный серверный трек
+    /// заменился бы полным — ровно в тот момент, когда человек просил
+    /// спрятать.
+    ///
+    /// Пустой список, а НЕ `nil`. `nil` в проводе — «ключа нет, локальное не
+    /// трогать» (дисциплина `checkpoints`/`segments` 0.6.5/0.6.8), и поездка,
+    /// уехавшая целиком ДО включения зоны, осталась бы на сервере целой
+    /// навсегда: переотправка ничего бы не стёрла.
+    static func wireTrack(_ points: [TrackPoint], zone: Zone?) -> [TrackPointPayload] {
+        guard let zone else { return points.map(TrackPointPayload.init) }
+        let left = PrivacyZone.trim(points: points, centre: zone.centre, radius: zone.radius)
+        guard PrivacyZone.isDrawable(left.count) else { return [] }
+        return left.map(TrackPointPayload.init)
+    }
+
+    /// Превью — ВТОРОЙ носитель геометрии, и режется тем же правилом.
+    ///
+    /// Его рисует карточка в чужой ленте, не поднимая трека вовсе: обрежь
+    /// один трек — и двор всё равно виден в ленте. Поездка целиком внутри
+    /// зоны уезжает без превью, а не с огрызком в одну точку.
+    ///
+    /// А локальное превью от этого НЕ страдает: пул возвращает наше же
+    /// обрезанное превью эхом, и `applyRemoteTrip` перестал записывать его
+    /// поверх своего, пока зона включена. Своя поездка на своём телефоне
+    /// остаётся целой всегда.
+    static func wirePreview(_ preview: Data?, zone: Zone?) -> String? {
+        guard let preview else { return nil }
+        guard let zone else { return preview.base64EncodedString() }
+        let left = PrivacyZone.trim(coordinates: Trip.decodePolyline(preview),
+                                    centre: zone.centre, radius: zone.radius)
+        guard PrivacyZone.isDrawable(left.count) else { return nil }
+        return Trip.encodePolyline(left).base64EncodedString()
     }
 
     /// Mirrors `Trip.movementSplit` — duplicated here (not called through the
