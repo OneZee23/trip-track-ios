@@ -315,4 +315,24 @@ final class HomePrivacyTrimTests: XCTestCase {
                       "уведомление — единственная связь листа настройки с очередью")
         withExtendedLifetime(resync) {}
     }
+
+    /// Координата КАДРА внутри зоны уезжать не должна: снимок во дворе несёт
+    /// точку дома точнее любого трека, и по ней ставится булавка прямо на
+    /// публичной карте поездки.
+    func testPhotoExifInsideTheZoneNeverLeaves() {
+        let home = CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975)
+        let zone: TripSyncPayload.Zone = (centre: home, radius: 500)
+        let inside = TripSyncPayload.wireExif(45.036, 38.975, zone: zone)
+        XCTAssertNil(inside, "кадр из двора уехал с координатой")
+
+        let outside = TripSyncPayload.wireExif(45.2, 38.975, zone: zone)
+        XCTAssertEqual(outside?.latitude, 45.2)
+        XCTAssertEqual(outside?.longitude, 38.975)
+
+        // Без зоны — как было, байт в байт.
+        XCTAssertEqual(TripSyncPayload.wireExif(45.036, 38.975, zone: nil)?.latitude, 45.036)
+        // Половина пары — это сломанная пара, а не «меньше данных».
+        XCTAssertNil(TripSyncPayload.wireExif(45.036, nil, zone: zone))
+        XCTAssertNil(TripSyncPayload.wireExif(nil, 38.975, zone: nil))
+    }
 }

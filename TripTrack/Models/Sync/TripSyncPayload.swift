@@ -154,8 +154,10 @@ extension TripSyncPayload {
                 id: pid, filename: fn, caption: pe.caption,
                 timestamp: ts, sortOrder: Int(pe.sortOrder),
                 capturedAt: pe.capturedAt,
-                exifLatitude: pe.exifLatitude?.doubleValue,
-                exifLongitude: pe.exifLongitude?.doubleValue)
+                exifLatitude: Self.wireExif(pe.exifLatitude?.doubleValue,
+                                            pe.exifLongitude?.doubleValue, zone: zone)?.latitude,
+                exifLongitude: Self.wireExif(pe.exifLatitude?.doubleValue,
+                                             pe.exifLongitude?.doubleValue, zone: zone)?.longitude)
         }
         self.checkpoints = trip.checkpoints.enumerated().map { index, c in
             TripCheckpointPayload(
@@ -170,6 +172,25 @@ extension TripSyncPayload {
                 toCheckpointId: $0.toCheckpointId, name: $0.name)
         }
         self.source = trip.source
+    }
+
+    /// Координата кадра внутри зоны с телефона НЕ уезжает.
+    ///
+    /// Снимок, сделанный во дворе, несёт точку дома точнее любого трека, а
+    /// `TripPhotoPlacement` ставит по ней булавку прямо на публичной карте
+    /// поездки. Поля опциональны в обе стороны с 0.6.5 — «нет координаты»
+    /// это законный ответ, и снимок от этого не теряется: уезжают и файл, и
+    /// подпись, и время.
+    ///
+    /// Убираются ОБЕ половины разом: одна широта без долготы это не «меньше
+    /// данных», а сломанная пара.
+    static func wireExif(_ latitude: Double?, _ longitude: Double?, zone: Zone?)
+    -> (latitude: Double, longitude: Double)? {
+        guard let latitude, let longitude else { return nil }
+        guard let zone else { return (latitude, longitude) }
+        let point = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard !PrivacyZone.hides(point, centre: zone.centre, radius: zone.radius) else { return nil }
+        return (latitude, longitude)
     }
 
     /// Зона в удобной форме: её читают оба носителя геометрии.
