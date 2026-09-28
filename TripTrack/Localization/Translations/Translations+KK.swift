@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Жобаны жою керек пе?",
         "draftsDeleteMany": "{count} {noun} жою керек пе?",
         "draftsDeleteBody": "Сапар жазбасы жоғалады, оны қайтару мүмкін болмайды.",
+        "homeRow": "Картадағы үй",
+        "homeNotSet": "Белгіленбеген",
+        "homeSheetTitle": "Үй",
+        "homePlaceHint": "Үйді белгілеу үшін картаны түртіңіз",
+        "homeShowOnMap": "Картада көрсету",
+        "homeVisibleOnlyToYou": "Оны тек сіз көресіз",
+        "homeHiddenOnMap": "Картада жасырылған",
+        "homeRadiusTitle": "Радиус",
+        "homeZoneTitle": "Жеке аймақ",
+        "homeZoneToggle": "Жария сапарларда үйді жасыру",
+        "homeZoneNote": "Шеңбер ішінде трек телефоннан шықпайды. Жарияланған сапарлар қайта жіберіледі — қиылған күйде, ал аймақты өшірсеңіз, қайтадан толық.",
+        "homeZoneShort": "аймақ {radius}",
+        "homeRemove": "Үйді алып тастау",
+        "homeRemoveTitle": "Үйді алып тастау керек пе?",
+        "homeRemoveBody": "Жеке аймақ жұмысын тоқтатады, ал жария сапарларыңыз қайтадан толық жіберіледі.",
     ]
 
 }

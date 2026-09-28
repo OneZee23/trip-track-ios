@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Usunąć szkic?",
         "draftsDeleteMany": "Usunąć {count} {noun}?",
         "draftsDeleteBody": "Zapis przejazdu zniknie i nie da się go przywrócić.",
+        "homeRow": "Dom na mapie",
+        "homeNotSet": "Nie ustawiono",
+        "homeSheetTitle": "Dom",
+        "homePlaceHint": "Dotknij mapy, aby ustawić dom",
+        "homeShowOnMap": "Pokaż na mapie",
+        "homeVisibleOnlyToYou": "Widzisz go tylko ty",
+        "homeHiddenOnMap": "Ukryty na mapie",
+        "homeRadiusTitle": "Promień",
+        "homeZoneTitle": "Strefa prywatna",
+        "homeZoneToggle": "Ukrywaj dom w publicznych przejazdach",
+        "homeZoneNote": "Wewnątrz okręgu trasa nie opuszcza telefonu. Już opublikowane przejazdy zostaną wysłane ponownie — przycięte, a znów w całości, gdy wyłączysz strefę.",
+        "homeZoneShort": "strefa {radius}",
+        "homeRemove": "Usuń dom",
+        "homeRemoveTitle": "Usunąć dom?",
+        "homeRemoveBody": "Strefa prywatna przestanie działać, a twoje publiczne przejazdy zostaną wysłane ponownie — w całości.",
     ]
 
 }

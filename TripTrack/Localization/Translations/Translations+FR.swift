@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Supprimer le brouillon ?",
         "draftsDeleteMany": "Supprimer {count} {noun} ?",
         "draftsDeleteBody": "L'enregistrement sera perdu définitivement.",
+        "homeRow": "Domicile sur la carte",
+        "homeNotSet": "Non défini",
+        "homeSheetTitle": "Domicile",
+        "homePlaceHint": "Touchez la carte pour placer votre domicile",
+        "homeShowOnMap": "Afficher sur la carte",
+        "homeVisibleOnlyToYou": "Vous seul le voyez",
+        "homeHiddenOnMap": "Masqué sur la carte",
+        "homeRadiusTitle": "Rayon",
+        "homeZoneTitle": "Zone privée",
+        "homeZoneToggle": "Masquer le domicile dans les trajets publics",
+        "homeZoneNote": "À l'intérieur du cercle, le tracé ne quitte pas votre téléphone. Les trajets déjà publiés seront renvoyés — rognés, et de nouveau entiers si vous désactivez la zone.",
+        "homeZoneShort": "zone {radius}",
+        "homeRemove": "Retirer le domicile",
+        "homeRemoveTitle": "Retirer le domicile ?",
+        "homeRemoveBody": "La zone privée cessera de fonctionner et vos trajets publics seront renvoyés — entiers.",
     ]
 
 }

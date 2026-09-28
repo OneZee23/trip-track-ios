@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Excluir o rascunho?",
         "draftsDeleteMany": "Excluir {count} {noun}?",
         "draftsDeleteBody": "O registro vai sumir e não dá para recuperar.",
+        "homeRow": "Casa no mapa",
+        "homeNotSet": "Não definida",
+        "homeSheetTitle": "Casa",
+        "homePlaceHint": "Toque no mapa para marcar sua casa",
+        "homeShowOnMap": "Mostrar no mapa",
+        "homeVisibleOnlyToYou": "Só você vê",
+        "homeHiddenOnMap": "Oculta no mapa",
+        "homeRadiusTitle": "Raio",
+        "homeZoneTitle": "Zona privada",
+        "homeZoneToggle": "Ocultar a casa nas viagens públicas",
+        "homeZoneNote": "Dentro do círculo o trajeto não sai do seu telefone. As viagens já publicadas serão enviadas de novo — recortadas, e inteiras outra vez se você desligar a zona.",
+        "homeZoneShort": "zona {radius}",
+        "homeRemove": "Remover casa",
+        "homeRemoveTitle": "Remover casa?",
+        "homeRemoveBody": "A zona privada deixa de funcionar e suas viagens públicas serão enviadas de novo — inteiras.",
     ]
 
 }

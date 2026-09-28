@@ -3,7 +3,13 @@ import SwiftUI
 /// These choices change the existing map immediately; no second map is created.
 struct AtlasAppearanceSheet: View {
     @Binding var appearance: AtlasMapAppearance
+    /// Открыть настройку дома. Лист закрывается, а дом открывается экраном
+    /// выше: лист поверх листа увёл бы нижний вниз, а вернуться из него было
+    /// бы некуда.
+    var onOpenHome: () -> Void = {}
     @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var home = HomeManager.shared
+    @Environment(\.distanceUnit) private var distanceUnit
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,12 +49,61 @@ struct AtlasAppearanceSheet: View {
             Toggle(AppStrings.atlasShowPhotos(lang.language), isOn: $appearance.showsPhotos)
                 .frame(minHeight: 56)
                 .accessibilityIdentifier("atlas_photos_toggle")
+            AtlasTheme.separator.frame(height: 1)
+            homeRow
         }
         .font(.inter(16, weight: .semibold))
         .foregroundStyle(AtlasTheme.ink)
         .tint(AtlasTheme.accent)
         .padding(.horizontal, 16)
         .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+    }
+
+    /// **Строка, а не тумблер** — отступление от доски A7 со своей причиной.
+    ///
+    /// Доска рисует здесь переключатель «Дом на карте · Видно только тебе».
+    /// Но дом в этой версии задаётся ТОЛЬКО руками, и у человека, который
+    /// его ещё не поставил, переключать нечего: тумблер у несуществующего
+    /// дома — это нажатие, которое ничего не делает, а такое хуже
+    /// отсутствующего. Поэтому здесь строка со сводкой, а сам тумблер
+    /// видимости живёт на экране дома рядом с точкой, которой командует.
+    private var homeRow: some View {
+        Button {
+            Haptics.tap()
+            onOpenHome()
+        } label: {
+            HStack(spacing: 12) {
+                Text(AppStrings.homeRow(lang.language))
+                Spacer(minLength: 8)
+                Text(homeSummary)
+                    .font(.inter(14, weight: .regular))
+                    .foregroundStyle(AtlasTheme.secondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
+            }
+            .frame(minHeight: 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("atlas_home_row")
+    }
+
+    /// «Не задан» / «Виден только тебе» / «Скрыт на карте · зона 500 м».
+    private var homeSummary: String {
+        let l = lang.language
+        let settings = home.settings
+        guard settings.isSet else { return AppStrings.homeNotSet(l) }
+        var parts = [settings.showsOnMap
+                     ? AppStrings.homeVisibleOnlyToYou(l)
+                     : AppStrings.homeHiddenOnMap(l)]
+        if settings.trimsPublicTracks {
+            parts.append(AppStrings.homeZoneShort(
+                l, radius: Measure.radius(metres: Double(settings.radius.rawValue),
+                                          unit: distanceUnit, lang: l)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func styleCard(_ style: AtlasMapAppearance.Style, title: String) -> some View {
@@ -147,7 +202,10 @@ struct AtlasExplanationSheet: View {
     }
 }
 
-private struct AtlasControlsHeader: View {
+/// Шапка листов «Атласа». Не `private`: тем же заголовком
+/// пользуется лист дома (0.8.2), а вторая копия шапки разошлась бы с
+/// первой на первой же правке.
+struct AtlasControlsHeader: View {
     let title: String
     var onBack: (() -> Void)? = nil
     @EnvironmentObject private var lang: LanguageManager

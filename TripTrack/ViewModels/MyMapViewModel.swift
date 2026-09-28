@@ -91,6 +91,15 @@ final class MyMapViewModel: ObservableObject {
     /// Нажатая булавка места — под ней встаёт карточка. `nil` — карточки нет.
     @Published var selectedPlaceId: UUID?
 
+    /// Метка дома. `nil` — дома нет ИЛИ человек снял «показывать на карте».
+    ///
+    /// Живёт ЗДЕСЬ, а не в `@State` экрана и не читается координатором из
+    /// `HomeManager` напрямую, по той же причине, что стиль карты и период:
+    /// до карты всё везёт подписка `Coordinator.bindViewModel`, а
+    /// `updateUIViewController` на «Атласе» SwiftUI зовёт только на старте.
+    /// Положи это мимо вью-модели — и метка просто не появится, молча.
+    @Published private(set) var homePin: CLLocationCoordinate2D?
+
     /// «Вид карты»: стиль мглы, клетки и фото на карте.
     ///
     /// Живёт ЗДЕСЬ, а не в `@State` экрана, по той же причине, что камера и
@@ -287,6 +296,18 @@ final class MyMapViewModel: ObservableObject {
             forName: .placesChanged, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.schedulePlacesReload() }
+        }
+        // Дом — своей подпиской и без склейки: это одна точка, а не проход по
+        // библиотеке, и меняется она ровно тогда, когда человек стоит в листе
+        // настройки и смотрит на результат.
+        homePin = HomeManager.shared.settings.mapPin
+        NotificationCenter.default.addObserver(
+            forName: .homeSettingsChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.homePin = HomeManager.shared.settings.mapPin
+            }
         }
         StartupTrace.mark("MyMapViewModel.init end")
     }

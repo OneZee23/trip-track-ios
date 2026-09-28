@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Видалити чернетку?",
         "draftsDeleteMany": "Видалити {count} {noun}?",
         "draftsDeleteBody": "Запис поїздки зникне, повернути його буде неможливо.",
+        "homeRow": "Дім на карті",
+        "homeNotSet": "Не задано",
+        "homeSheetTitle": "Дім",
+        "homePlaceHint": "Торкніться карти, щоб поставити дім",
+        "homeShowOnMap": "Показувати на карті",
+        "homeVisibleOnlyToYou": "Бачиш лише ти",
+        "homeHiddenOnMap": "Приховано на карті",
+        "homeRadiusTitle": "Радіус",
+        "homeZoneTitle": "Приватна зона",
+        "homeZoneToggle": "Ховати дім у публічних поїздках",
+        "homeZoneNote": "Усередині кола трек не залишає телефон. Уже опубліковані поїздки надішлються знову — обрізаними, а якщо вимкнути зону, то цілими.",
+        "homeZoneShort": "зона {radius}",
+        "homeRemove": "Прибрати дім",
+        "homeRemoveTitle": "Прибрати дім?",
+        "homeRemoveBody": "Приватна зона перестане працювати, і публічні поїздки надішлються знову — цілими.",
     ]
 
 }

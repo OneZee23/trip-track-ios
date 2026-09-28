@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Burahin ang draft?",
         "draftsDeleteMany": "Burahin ang {count} {noun}?",
         "draftsDeleteBody": "Mawawala ang rekord at hindi na ito maibabalik.",
+        "homeRow": "Bahay sa mapa",
+        "homeNotSet": "Hindi pa nakatakda",
+        "homeSheetTitle": "Bahay",
+        "homePlaceHint": "I-tap ang mapa para ilagay ang bahay mo",
+        "homeShowOnMap": "Ipakita sa mapa",
+        "homeVisibleOnlyToYou": "Ikaw lang ang nakakakita",
+        "homeHiddenOnMap": "Nakatago sa mapa",
+        "homeRadiusTitle": "Radius",
+        "homeZoneTitle": "Pribadong sona",
+        "homeZoneToggle": "Itago ang bahay sa mga pampublikong biyahe",
+        "homeZoneNote": "Sa loob ng bilog, hindi umaalis sa telepono mo ang ruta. Ipapadala ulit nang pinaikli ang mga naipublish nang biyahe, at buo ulit kapag pinatay mo ang sona.",
+        "homeZoneShort": "sona {radius}",
+        "homeRemove": "Alisin ang bahay",
+        "homeRemoveTitle": "Alisin ang bahay?",
+        "homeRemoveBody": "Hihinto ang pribadong sona, at ipapadala ulit nang buo ang mga pampublikong biyahe mo.",
     ]
 
 }

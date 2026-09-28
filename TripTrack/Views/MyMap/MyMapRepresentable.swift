@@ -546,6 +546,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         map.register(SealClusterView.self, forAnnotationViewWithReuseIdentifier: SealClusterView.reuseID)
         map.register(RiddleHintView.self, forAnnotationViewWithReuseIdentifier: RiddleHintView.reuseID)
         map.register(PlacePinView.self, forAnnotationViewWithReuseIdentifier: PlacePinView.reuseID)
+        map.register(HomePinView.self, forAnnotationViewWithReuseIdentifier: HomePinView.reuseID)
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -629,6 +630,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         private var installedPlaces: [AtlasPlacePin] = []
         private var installedPlaceLanguage: LanguageManager.Language?
         private var installedPlaceSelection: UUID?
+        private var installedHome: CLLocationCoordinate2D?
         var onTapMap: ((CLLocationCoordinate2D) -> Void)?
         private var appearance = AtlasMapAppearance()
 
@@ -937,6 +939,21 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 guard let view = map.view(for: annotation) as? PlacePinView else { continue }
                 paint(view, with: annotation, selectedId: selectedId)
             }
+        }
+
+        /// Метка дома (0.8.2). КРУГА ЗОНЫ здесь нет нарочно: мглу «Атласа»
+        /// рисует Metal-вуаль ПОВЕРХ карты, и оверлей круга лёг бы под неё —
+        /// человек видел бы его то ли есть, то ли нет, в зависимости от
+        /// выбранного стиля. Радиус выбирают на экране дома, и круг живёт
+        /// там же, на своей карте без тумана.
+        func syncHome(_ map: MKMapView, home: CLLocationCoordinate2D?) {
+            let same = installedHome?.latitude == home?.latitude
+                && installedHome?.longitude == home?.longitude
+            guard !same else { return }
+            installedHome = home
+            map.removeAnnotations(map.annotations.filter { $0 is HomeAnnotation })
+            guard let home else { return }
+            map.addAnnotation(HomeAnnotation(coordinate: home))
         }
 
         /// Один и тот же код красит булавку и при создании вида, и при смене
@@ -1293,6 +1310,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             syncSelectedRoute(map, route: vm.selectedRoute, language: lastLanguage)
             syncSelection(map, selection: vm.selection)
             syncPlaces(map, pins: vm.placePins, selectedId: vm.selectedPlaceId, language: lastLanguage)
+            syncHome(map, home: vm.homePin)
             applyInitialCameraIfNeeded(map, exploration: vm.exploration)
             if let command = vm.cameraCommand {
                 apply(command, to: map)
@@ -1397,6 +1415,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     fadeIn(view)
                 }
                 return view
+            case is HomeAnnotation:
+                return mapView.dequeueReusableAnnotationView(
+                    withIdentifier: HomePinView.reuseID, for: annotation)
             case let place as AtlasPlaceAnnotation:
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: PlacePinView.reuseID, for: place)

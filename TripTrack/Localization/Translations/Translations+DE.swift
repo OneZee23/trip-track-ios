@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Entwurf löschen?",
         "draftsDeleteMany": "{count} {noun} löschen?",
         "draftsDeleteBody": "Die Aufzeichnung ist dann endgültig weg.",
+        "homeRow": "Zuhause auf der Karte",
+        "homeNotSet": "Nicht festgelegt",
+        "homeSheetTitle": "Zuhause",
+        "homePlaceHint": "Tippe auf die Karte, um dein Zuhause zu setzen",
+        "homeShowOnMap": "Auf der Karte zeigen",
+        "homeVisibleOnlyToYou": "Nur du siehst es",
+        "homeHiddenOnMap": "Auf der Karte verborgen",
+        "homeRadiusTitle": "Radius",
+        "homeZoneTitle": "Private Zone",
+        "homeZoneToggle": "Zuhause in öffentlichen Fahrten verbergen",
+        "homeZoneNote": "Innerhalb des Kreises verlässt die Strecke dein Telefon nicht. Bereits veröffentlichte Fahrten werden erneut gesendet — gekürzt, und wieder vollständig, wenn du die Zone ausschaltest.",
+        "homeZoneShort": "Zone {radius}",
+        "homeRemove": "Zuhause entfernen",
+        "homeRemoveTitle": "Zuhause entfernen?",
+        "homeRemoveBody": "Die private Zone wirkt nicht mehr, und deine öffentlichen Fahrten werden erneut gesendet — vollständig.",
     ]
 
 }

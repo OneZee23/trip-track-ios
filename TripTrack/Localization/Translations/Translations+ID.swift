@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Hapus draf?",
         "draftsDeleteMany": "Hapus {count} {noun}?",
         "draftsDeleteBody": "Rekamannya akan hilang dan tidak bisa dikembalikan.",
+        "homeRow": "Rumah di peta",
+        "homeNotSet": "Belum diatur",
+        "homeSheetTitle": "Rumah",
+        "homePlaceHint": "Ketuk peta untuk menaruh rumahmu",
+        "homeShowOnMap": "Tampilkan di peta",
+        "homeVisibleOnlyToYou": "Hanya kamu yang melihatnya",
+        "homeHiddenOnMap": "Disembunyikan di peta",
+        "homeRadiusTitle": "Radius",
+        "homeZoneTitle": "Zona privat",
+        "homeZoneToggle": "Sembunyikan rumah di perjalanan publik",
+        "homeZoneNote": "Di dalam lingkaran, rute tidak keluar dari ponselmu. Perjalanan yang sudah dipublikasikan akan dikirim ulang dalam bentuk terpotong, dan utuh lagi jika zona dimatikan.",
+        "homeZoneShort": "zona {radius}",
+        "homeRemove": "Hapus rumah",
+        "homeRemoveTitle": "Hapus rumah?",
+        "homeRemoveBody": "Zona privat berhenti bekerja, dan perjalanan publikmu akan dikirim ulang secara utuh.",
     ]
 
 }

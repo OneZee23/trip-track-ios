@@ -30,6 +30,7 @@ struct MyMapView: View {
     /// постер: остальное он показывает самой картой.
     @State private var toast: ToastItem?
     @State private var showAppearance = false
+    @State private var showHome = false
     @State private var showExplanation = false
     /// Положение шторки. Геометрию и правила жеста держит `AtlasSlot` —
     /// чистый и под тестами (`AtlasSlotTests`).
@@ -253,11 +254,30 @@ struct MyMapView: View {
             // поля. Меняешь содержимое листа — меняй и её; это честная цена
             // за то, что лист не может схлопнуться ни при каком порядке
             // проходов разметки.
-            AtlasAppearanceSheet(appearance: Binding(
-                get: { vm.appearance },
-                set: { vm.setAppearance($0) }
-            ))
-                .presentationDetents([.height(340)])
+            AtlasAppearanceSheet(
+                appearance: Binding(
+                    get: { vm.appearance },
+                    set: { vm.setAppearance($0) }
+                ),
+                onOpenHome: {
+                    showAppearance = false
+                    // Лист поверх листа увёл бы нижний вниз вместе с
+                    // выбранным стилем; поэтому сначала закрываем, потом
+                    // открываем — но не в том же витке, иначе UIKit не даёт
+                    // две презентации подряд (тот же урок, что у просмотрщика
+                    // снимков в 0.7.0).
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        showHome = true
+                    }
+                }
+            )
+                // Высота ЧИСЛОМ: прежние 340 плюс строка дома (56).
+                .presentationDetents([.height(396)])
+        }
+        .sheet(isPresented: $showHome) {
+            HomeSheet()
+                .presentationDetents([.large])
         }
         .sheet(isPresented: $showExplanation) {
             AtlasExplanationSheet()

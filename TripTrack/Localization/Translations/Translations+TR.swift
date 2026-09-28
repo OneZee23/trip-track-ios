@@ -1526,6 +1526,21 @@ extension Translations {
         "draftsDeleteOne": "Taslak silinsin mi?",
         "draftsDeleteMany": "{count} {noun} silinsin mi?",
         "draftsDeleteBody": "Yolculuk kaydı gider, geri getirilemez.",
+        "homeRow": "Haritada ev",
+        "homeNotSet": "Belirlenmedi",
+        "homeSheetTitle": "Ev",
+        "homePlaceHint": "Evini işaretlemek için haritaya dokun",
+        "homeShowOnMap": "Haritada göster",
+        "homeVisibleOnlyToYou": "Sadece sen görürsün",
+        "homeHiddenOnMap": "Haritada gizli",
+        "homeRadiusTitle": "Yarıçap",
+        "homeZoneTitle": "Özel bölge",
+        "homeZoneToggle": "Herkese açık yolculuklarda evi gizle",
+        "homeZoneNote": "Dairenin içinde rota telefonundan çıkmaz. Daha önce yayımladığın yolculuklar yeniden gönderilir — kırpılmış olarak, bölgeyi kapatırsan yeniden eksiksiz.",
+        "homeZoneShort": "bölge {radius}",
+        "homeRemove": "Evi kaldır",
+        "homeRemoveTitle": "Ev kaldırılsın mı?",
+        "homeRemoveBody": "Özel bölge çalışmayı bırakır ve herkese açık yolculukların yeniden eksiksiz gönderilir.",
     ]
 
 }

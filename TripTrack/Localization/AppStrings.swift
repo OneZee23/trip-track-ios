@@ -7870,4 +7870,70 @@ enum AppStrings {
            ru: "Картинка не собралась — уходит только текст",
            en: "The picture didn't come together — sharing text only")
     }
+
+    // MARK: - Дом и приватная зона (0.8.2)
+
+    /// Строка в листе «Вид карты», ведущая в настройку дома.
+    static func homeRow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRow", ru: "Дом на карте", en: "Home on the map")
+    }
+    /// Подзаголовок той же строки, когда дома ещё нет.
+    static func homeNotSet(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeNotSet", ru: "Не задан", en: "Not set")
+    }
+    static func homeSheetTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeSheetTitle", ru: "Дом", en: "Home")
+    }
+    /// Единственная подсказка на пустой карте настройки: дом ставится
+    /// пальцем, и сказать об этом больше негде.
+    static func homePlaceHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homePlaceHint",
+           ru: "Нажмите на карту, чтобы поставить дом",
+           en: "Tap the map to place your home")
+    }
+    static func homeShowOnMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeShowOnMap", ru: "Показывать на карте", en: "Show on the map")
+    }
+    /// Обещание, которое обязано быть правдой: дом никуда не уезжает.
+    static func homeVisibleOnlyToYou(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeVisibleOnlyToYou", ru: "Виден только тебе", en: "Only you can see it")
+    }
+    static func homeHiddenOnMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeHiddenOnMap", ru: "Скрыт на карте", en: "Hidden on the map")
+    }
+    static func homeRadiusTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRadiusTitle", ru: "Радиус", en: "Radius")
+    }
+    static func homeZoneTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeZoneTitle", ru: "Приватная зона", en: "Private zone")
+    }
+    static func homeZoneToggle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeZoneToggle",
+           ru: "Скрывать дом в публичных поездках",
+           en: "Hide home in public trips")
+    }
+    /// Человек читает это ДО нажатия, а не после: включение заводит
+    /// переотправку всех уже опубликованных поездок, и умолчать об этом
+    /// значило бы сделать за него работу, о которой он не просил.
+    static func homeZoneNote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeZoneNote",
+           ru: "Внутри круга трек не уезжает с телефона. Уже опубликованные поездки будут отправлены заново — обрезанными, а если зону выключить, то целиком.",
+           en: "Inside the circle the track never leaves your phone. Trips you have already published will be sent again — trimmed, and whole again if you turn the zone off.")
+    }
+    /// Короткая подпись зоны для строки в листе вида карты: «зона 500 м».
+    static func homeZoneShort(_ lang: LanguageManager.Language, radius: String) -> String {
+        tr(lang, "homeZoneShort", ru: "зона {radius}", en: "zone {radius}")
+            .replacingOccurrences(of: "{radius}", with: radius)
+    }
+    static func homeRemove(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRemove", ru: "Убрать дом", en: "Remove home")
+    }
+    static func homeRemoveTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRemoveTitle", ru: "Убрать дом?", en: "Remove home?")
+    }
+    static func homeRemoveBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRemoveBody",
+           ru: "Приватная зона перестанет работать, и публичные поездки будут отправлены заново — целиком.",
+           en: "The private zone stops working, and your public trips will be sent again — whole.")
+    }
 }
