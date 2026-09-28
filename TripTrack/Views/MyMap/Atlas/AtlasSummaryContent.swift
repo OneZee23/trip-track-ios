@@ -12,6 +12,10 @@ struct AtlasSummaryContent: View {
     var onShare: () -> Void
     var onExplain: () -> Void
     var onOpenRegion: (String) -> Void
+    /// Нет сети — «Поделиться» недоступно: постер собирается снимком карты
+    /// (`MKMapSnapshotter`), а его без сети не получить вовсе.
+    var isOffline: Bool = false
+    var onShareUnavailable: () -> Void = {}
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.distanceUnit) private var unit
@@ -51,6 +55,10 @@ struct AtlasSummaryContent: View {
 
     private var exploredBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Строка «Нет сети» — НАД сводкой (состояние 24). Числа под ней
+            // остаются настоящими: атлас считается по своей базе, и сеть ему
+            // нужна только на плитки карты и на постер.
+            if isOffline { offlineRow }
             HStack(alignment: .center, spacing: 8) {
                 // Тап по заголовку открывает «как мы считаем»: иконки ⓘ у
                 // него нет — спека запрещает вторые подписи и пояснения.
@@ -65,8 +73,23 @@ struct AtlasSummaryContent: View {
                 Spacer(minLength: 8)
                 shareButton
             }
-            AtlasStatTrio(columns: columns)
+            // Пока атлас считается — скелетон на месте чисел (состояние 22):
+            // «сколько сейчас появится и какой формы» спиннер не отвечает, а
+            // эта тройка отвечает. Карта и кнопки при этом живые.
+            if vm.isLoading {
+                SkeletonPlaceholder(shape: .atlasStats, count: 1, period: 1.2)
+                    .accessibilityIdentifier("atlas_stats_skeleton")
+            } else {
+                AtlasStatTrio(columns: columns)
+            }
         }
+    }
+
+    private var offlineRow: some View {
+        Text(AppStrings.atlasOffline(lang.language))
+            .font(AppType.meta)
+            .foregroundStyle(AtlasTheme.secondary)
+            .accessibilityIdentifier("atlas_offline_row")
     }
 
     /// С выбранным периодом заголовок сам его и называет: «Исследовано
@@ -76,19 +99,32 @@ struct AtlasSummaryContent: View {
         AppStrings.atlasExplored(lang.language)
     }
 
+    /// Пока считается — круг на месте кнопки (состояние 22). Без сети кнопка
+    /// вторичного цвета и на нажатие отвечает той же строкой, что стоит выше:
+    /// молчащая кнопка хуже отсутствующей, а убрать её нельзя — она вернётся,
+    /// как только появится сеть.
+    @ViewBuilder
     private var shareButton: some View {
-        Button(action: onShare) {
-            Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AtlasTheme.accentInk)
+        if vm.isLoading {
+            Circle()
+                .fill(AtlasTheme.chip)
                 .frame(width: 36, height: 36)
-                .background(AtlasTheme.accentSoft, in: Circle())
                 .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+                .accessibilityHidden(true)
+        } else {
+            Button(action: isOffline ? onShareUnavailable : onShare) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isOffline ? AtlasTheme.secondary : AtlasTheme.accentInk)
+                    .frame(width: 36, height: 36)
+                    .background(isOffline ? AtlasTheme.chip : AtlasTheme.accentSoft, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.share(lang.language))
+            .accessibilityIdentifier("atlas_share")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(AppStrings.share(lang.language))
-        .accessibilityIdentifier("atlas_share")
     }
 
     private var columns: [AtlasStatTrio.Column] {

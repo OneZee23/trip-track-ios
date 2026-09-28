@@ -10,6 +10,12 @@ import SwiftUI
 /// Выносок над булавками нет вовсе (принцип 1): всё, что говорится о
 /// выбранном месте, говорится ЗДЕСЬ, в одном слоте у нижнего края.
 struct AtlasPlaceCard: View {
+    /// Что нарисовано в плитке 44 (спека §3.7): булавка у места, дом у дома.
+    /// Третий вид — пунктирная точка у несохранённой остановки — появится
+    /// вместе с подсказками на «Атласе»; их там пока нет вовсе.
+    enum Tile { case place, home }
+
+    var tile: Tile = .place
     let name: String
     /// Одна строка смысла: «Здесь 12 раз · 20 сент.».
     let line: String
@@ -26,7 +32,7 @@ struct AtlasPlaceCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            tile
+            tileView
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(AppType.itemTitle)
@@ -50,8 +56,8 @@ struct AtlasPlaceCard: View {
         .accessibilityIdentifier("atlas_place_card")
     }
 
-    private var tile: some View {
-        Image(systemName: "mappin")
+    private var tileView: some View {
+        Image(systemName: tile == .home ? "house.fill" : "mappin")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(AtlasTheme.accentInk)
             .frame(width: 44, height: 44)

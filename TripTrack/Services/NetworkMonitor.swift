@@ -11,6 +11,17 @@ class NetworkMonitor: ObservableObject {
     private let queue = DispatchQueue(label: "NetworkMonitor")
 
     init() {
+        #if DEBUG
+        // Состояние 24 спеки «Атласа» иначе непроверяемо: выключить сеть у
+        // симулятора нечем, а `simctl` этого не умеет вовсе. Флаг ЯВНЫЙ и
+        // детерминированный — в отличие от скрытой настройки приватности
+        // симулятора, на которой сторож краснел бы на исправном коде
+        // (CLAUDE.md, урок `AtlasLocationSourceTests`).
+        if ProcessInfo.processInfo.arguments.contains("-debug-offline") {
+            isOffline = true
+            return
+        }
+        #endif
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
                 self?.isOffline = path.status != .satisfied

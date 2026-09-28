@@ -135,8 +135,13 @@ struct HomePickerMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard annotation is HomeAnnotation else { return nil }
-            return mapView.dequeueReusableAnnotationView(
+            let view = mapView.dequeueReusableAnnotationView(
                 withIdentifier: HomePinView.reuseID, for: annotation)
+            // Та же метка, но ДРУГАЯ цель: здесь она показывает выбранную
+            // точку, а на «Атласе» открывает карточку. Одно имя на двоих
+            // однажды уже увело тест не туда.
+            view.accessibilityIdentifier = "home_pin_picker"
+            return view
         }
     }
 }

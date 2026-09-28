@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Evi kaldır",
         "homeRemoveTitle": "Ev kaldırılsın mı?",
         "homeRemoveBody": "Özel bölge çalışmayı bırakır ve herkese açık yolculukların yeniden eksiksiz gönderilir.",
+        "atlasHome": "Ev",
+        "atlasTripsFromHome": "{trips} buradan",
+        "atlasHomeConfigure": "Ayarla",
+        "atlasOffline": "Ağ yok",
+        "atlasLocationDeniedTitle": "Konum kullanılamıyor",
+        "atlasLocationDeniedBody": "Atlasın seni takip etmesi için Ayarlar'dan erişime izin ver",
     ]
 
 }

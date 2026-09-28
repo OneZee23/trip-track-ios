@@ -233,4 +233,44 @@ extension AppStrings {
     static func atlasTotalDistanceSuffix(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasTotalDistanceSuffix", ru: "всего", en: "total")
     }
+
+    // MARK: - Дом на карте, нет сети, геопозиция (0.8.2)
+
+    /// Имя карточки дома на «Атласе» (состояние 26).
+    static func atlasHome(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasHome", ru: "Дом", en: "Home")
+    }
+
+    /// «61 поездка отсюда» — строка смысла в карточке дома.
+    ///
+    /// Число со склонённым существительным собирается ОТДЕЛЬНО и приходит
+    /// сюда готовым: порядок слов у «отсюда» в тринадцати языках свой, а
+    /// склонение — общее (`nounTrips`).
+    static func atlasTripsFromHome(_ lang: LanguageManager.Language, trips: String) -> String {
+        tr(lang, "atlasTripsFromHome", ru: "{trips} отсюда", en: "{trips} from here")
+            .replacingOccurrences(of: "{trips}", with: trips)
+    }
+
+    /// Действие в карточке дома: ведёт в настройку дома (S16).
+    static func atlasHomeConfigure(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasHomeConfigure", ru: "Настроить", en: "Set up")
+    }
+
+    /// Строка над сводкой, когда сети нет (состояние 24).
+    static func atlasOffline(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasOffline", ru: "Нет сети", en: "No network")
+    }
+
+    /// Заголовок диалога у перечёркнутой кнопки «где я» (состояние 13).
+    static func atlasLocationDeniedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasLocationDeniedTitle",
+           ru: "Геопозиция недоступна", en: "Location unavailable")
+    }
+
+    /// Одна фраза под ним — и она про то, ЧТО изменится, а не про запрет.
+    static func atlasLocationDeniedBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasLocationDeniedBody",
+           ru: "Разрешите доступ в Настройках, чтобы атлас следовал за вами",
+           en: "Allow access in Settings so the atlas can follow you")
+    }
 }

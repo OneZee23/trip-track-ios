@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Remover casa",
         "homeRemoveTitle": "Remover casa?",
         "homeRemoveBody": "A zona privada deixa de funcionar e suas viagens públicas serão enviadas de novo — inteiras.",
+        "atlasHome": "Casa",
+        "atlasTripsFromHome": "{trips} daqui",
+        "atlasHomeConfigure": "Configurar",
+        "atlasOffline": "Sem rede",
+        "atlasLocationDeniedTitle": "Localização indisponível",
+        "atlasLocationDeniedBody": "Permita o acesso nos Ajustes para o atlas seguir você",
     ]
 
 }

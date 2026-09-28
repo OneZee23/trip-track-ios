@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Прибрати дім",
         "homeRemoveTitle": "Прибрати дім?",
         "homeRemoveBody": "Приватна зона перестане працювати, і публічні поїздки надішлються знову — цілими.",
+        "atlasHome": "Дім",
+        "atlasTripsFromHome": "{trips} звідси",
+        "atlasHomeConfigure": "Налаштувати",
+        "atlasOffline": "Немає мережі",
+        "atlasLocationDeniedTitle": "Геопозиція недоступна",
+        "atlasLocationDeniedBody": "Дозвольте доступ у Налаштуваннях, щоб атлас стежив за вами",
     ]
 
 }

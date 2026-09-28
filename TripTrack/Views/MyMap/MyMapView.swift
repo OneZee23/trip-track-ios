@@ -31,6 +31,13 @@ struct MyMapView: View {
     @State private var toast: ToastItem?
     @State private var showAppearance = false
     @State private var showHome = false
+    /// Диалог «Геопозиция недоступна» (состояние 13) и ответ «Позже».
+    @State private var showLocationDenied = false
+    /// «Позже» не спрашивает ДО СЛЕДУЮЩЕГО ЗАПУСКА — значит, живёт в
+    /// состоянии экрана, а не в `UserDefaults`: это отказ на сейчас, а не
+    /// настройка.
+    @State private var locationAskDismissed = false
+    @ObservedObject private var network = CacheManager.shared.networkMonitor
     @State private var showExplanation = false
     /// Положение шторки. Геометрию и правила жеста держит `AtlasSlot` —
     /// чистый и под тестами (`AtlasSlotTests`).
@@ -128,6 +135,7 @@ struct MyMapView: View {
                 // середина — не ответ (`RiddleHint.offsetCentre`).
                 onSelectHint: { openHint($0) },
                 onSelectPlace: { vm.selectedPlaceId = $0 },
+                onSelectHome: { vm.homeSelected = true },
                 // Auto-zoom to the region only from the country view, where
                 // that IS the gesture. Down at street level a tap that misses
                 // the road is a miss, and answering it by flinging the camera
@@ -148,6 +156,7 @@ struct MyMapView: View {
                     // Промах по карте снимает карточку места — как и любой
                     // другой выбор: двух открытых карточек на экране нет.
                     vm.selectedPlaceId = nil
+                    vm.homeSelected = false
                     // Регион, открытый ПАЛЬЦЕМ ПО КАРТЕ, возвращает в сводку:
                     // списка человек не открывал, и «назад» не имеет права
                     // показать ему то, чего он не звал. Дверь в подсостояние
@@ -195,6 +204,7 @@ struct MyMapView: View {
             }
 
             placeCard(slot)
+            homeCard(slot)
 
             posterProgress
         }
@@ -205,8 +215,22 @@ struct MyMapView: View {
         // одновременно со сводкой» (чек-лист спеки). Снятие выбора возвращает
         // сводку — но не трогает список, если человек его сам раскрыл.
         .onChange(of: vm.selectedPlaceId) { _, id in
+            if id != nil { vm.homeSelected = false }
             withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
                 if id != nil {
+                    detent = .peek
+                } else if detent == .peek {
+                    detent = .collapsed
+                }
+            }
+        }
+        // Дом — та же карточка в том же слоте и то же правило: одновременно
+        // со сводкой она не показывается никогда. Две карточки сразу тоже
+        // невозможны — выбор одного снимает другой.
+        .onChange(of: vm.homeSelected) { _, selected in
+            if selected { vm.selectedPlaceId = nil }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                if selected {
                     detent = .peek
                 } else if detent == .peek {
                     detent = .collapsed
@@ -279,6 +303,28 @@ struct MyMapView: View {
             HomeSheet()
                 .presentationDetents([.large])
         }
+        // Диалог домашний, а не системный (CLAUDE.md, «Dialogs»), и висит на
+        // КОРНЕ экрана. `hideAppTabBar` тут не взводится нарочно: спека
+        // «Атласа» прячет таб-бар только модальными шторками, а этот вопрос
+        // не разрушительный — переключить вкладку поверх него ничего не
+        // портит.
+        .appConfirm(
+            isPresented: $showLocationDenied,
+            title: AppStrings.atlasLocationDeniedTitle(lang.language),
+            message: AppStrings.atlasLocationDeniedBody(lang.language),
+            actions: [
+                AppDialogAction(AppStrings.openSettings(lang.language)) {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(url)
+                }
+            ],
+            cancelTitle: AppStrings.onboardingSkipForNow(lang.language)
+        )
+        .onChange(of: showLocationDenied) { _, shown in
+            // Диалог закрылся любым путём — вопрос задан, и до следующего
+            // запуска мы его не повторяем.
+            if !shown { locationAskDismissed = true }
+        }
         .sheet(isPresented: $showExplanation) {
             AtlasExplanationSheet()
                 .presentationDetents([.medium, .large])
@@ -342,7 +388,12 @@ struct MyMapView: View {
                 detent: detent,
                 onShare: shareSummary,
                 onExplain: { showExplanation = true },
-                onOpenRegion: { enterSubstate(.region($0)) }
+                onOpenRegion: { enterSubstate(.region($0)) },
+                isOffline: network.isOffline,
+                onShareUnavailable: {
+                    toast = ToastItem(type: .info,
+                                      message: AppStrings.atlasOffline(lang.language))
+                }
             )
         }
         .frame(maxHeight: .infinity, alignment: .top)
@@ -493,9 +544,16 @@ struct MyMapView: View {
                         // `LocationManager` на «Атласе» не запущен вовсе, и
                         // гейт по нему врал всегда (владелец 27 сентября).
                         guard !mapVM.locationDenied else {
-                            vm.fitAll()
-                            toast = ToastItem(type: .info,
-                                              message: AppStrings.atlasLocationUnavailable(lang.language))
+                            // Первый отказ объясняется диалогом с дорогой в
+                            // Настройки (состояние 13). После «Позже» кнопка
+                            // не молчит, а делает полезное — показывает весь
+                            // атлас: спека говорит «атлас работает без
+                            // геопозиции, просто не центрируется».
+                            if locationAskDismissed {
+                                vm.fitAll()
+                            } else {
+                                showLocationDenied = true
+                            }
                             return
                         }
                         vm.locateUser()
@@ -625,6 +683,37 @@ struct MyMapView: View {
     }
 
     /// Что стоит под карточкой: строка подсказки или сразу таб-бар.
+    /// Карточка дома (состояние 26): плитка с домом, «61 поездка отсюда»,
+    /// «Настроить». Стоит в том же слоте и той же геометрией, что карточка
+    /// места, — второго места для карточки на этом экране быть не должно.
+    @ViewBuilder
+    private func homeCard(_ slot: AtlasSlot) -> some View {
+        if vm.homeSelected, vm.homePin != nil {
+            VStack {
+                Spacer(minLength: 0)
+                AtlasPlaceCard(
+                    tile: .home,
+                    name: AppStrings.atlasHome(lang.language),
+                    line: AppStrings.atlasTripsFromHome(
+                        lang.language,
+                        trips: "\(AppStrings.formattedCount(vm.homeTripCount, lang: lang.language)) "
+                             + AppStrings.nounTrips(lang.language, vm.homeTripCount)),
+                    actionTitle: AppStrings.atlasHomeConfigure(lang.language),
+                    onOpen: {
+                        Haptics.tap()
+                        vm.homeSelected = false
+                        showHome = true
+                    },
+                    onClose: { vm.homeSelected = false }
+                )
+                .padding(.horizontal, AtlasTheme.sideInset)
+                .accessibilityIdentifier("atlas_home_card")
+            }
+            .offset(y: -Swift.max(0, slot.height - placeCardAnchor(slot) + 12))
+            .transition(.opacity)
+        }
+    }
+
     private func placeCardAnchor(_ slot: AtlasSlot) -> CGFloat {
         slot.showsPeekRow ? slot.peekTop : slot.tabBarTop
     }

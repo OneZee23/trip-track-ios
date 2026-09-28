@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Alisin ang bahay",
         "homeRemoveTitle": "Alisin ang bahay?",
         "homeRemoveBody": "Hihinto ang pribadong sona, at ipapadala ulit nang buo ang mga pampublikong biyahe mo.",
+        "atlasHome": "Bahay",
+        "atlasTripsFromHome": "{trips} mula rito",
+        "atlasHomeConfigure": "I-set up",
+        "atlasOffline": "Walang network",
+        "atlasLocationDeniedTitle": "Hindi available ang lokasyon",
+        "atlasLocationDeniedBody": "Payagan ang access sa Settings para masundan ka ng atlas",
     ]
 
 }

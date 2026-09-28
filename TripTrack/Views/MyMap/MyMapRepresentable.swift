@@ -483,6 +483,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var onSelectHint: (String) -> Void = { _ in }
     /// Нажали булавку своего места (S8) — под ней встаёт карточка.
     var onSelectPlace: (UUID) -> Void = { _ in }
+    var onSelectHome: () -> Void = {}
     var onTapMap: (CLLocationCoordinate2D) -> Void
     /// One-shot camera command; the binding is cleared once applied.
     @Binding var cameraCommand: MapCameraCommand?
@@ -586,6 +587,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         coordinator.onSelectDiscovery = onSelectDiscovery
         coordinator.onSelectHint = onSelectHint
         coordinator.onSelectPlace = onSelectPlace
+        coordinator.onSelectHome = onSelectHome
         coordinator.onTapMap = onTapMap
 
         // Значения, которых нет у вью-модели (они живут в `@State` экрана).
@@ -626,6 +628,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onSelectDiscovery: ((UUID) -> Void)?
         var onSelectHint: ((String) -> Void)?
         var onSelectPlace: ((UUID) -> Void)?
+        var onSelectHome: (() -> Void)?
         /// Уже поставленные булавки мест — дифф по ним, а не по числу.
         private var installedPlaces: [AtlasPlacePin] = []
         private var installedPlaceLanguage: LanguageManager.Language?
@@ -1622,6 +1625,18 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // зависело не от пальца, а от того, выдал ли MapKit вид.
                 // Координата же есть всегда и переводится в точку экрана той
                 // же проекцией, которой нарисована сама булавка.
+                // Дом меряется КООРДИНАТОЙ по той же причине, что и место:
+                // рамка вида живёт в контейнере аннотаций MapKit и исчезает
+                // вместе с видом, который MapKit решил не показывать.
+                if annotation is HomeAnnotation {
+                    let centre = map.convert(annotation.coordinate, toPointTo: map)
+                    let distance = hypot(centre.x - point.x, centre.y - point.y)
+                    guard distance <= Self.placeTouchRadius else { continue }
+                    if nearest == nil || distance < nearest!.distance {
+                        nearest = (annotation, distance)
+                    }
+                    continue
+                }
                 if let place = annotation as? AtlasPlaceAnnotation {
                     // Невидимую булавку нельзя нажать: цель считается по
                     // координате и рамки не спрашивает, поэтому без этого
@@ -1658,6 +1673,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 } else if let place = hit as? AtlasPlaceAnnotation {
                     Haptics.tap()
                     onSelectPlace?(place.pin.id)
+                } else if hit is HomeAnnotation {
+                    Haptics.tap()
+                    onSelectHome?()
                 }
                 // Точка города — подпись, а не контрол: тап по ней не делает
                 // ничего (так было и до 0.7.0).

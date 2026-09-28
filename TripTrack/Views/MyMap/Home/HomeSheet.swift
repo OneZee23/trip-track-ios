@@ -47,7 +47,18 @@ struct HomeSheet: View {
                 }
             ]
         )
-        .accessibilityIdentifier("home_sheet")
+        // Имя листа — на МАРКЕРЕ, а не на контейнере.
+        //
+        // `accessibilityIdentifier` на контейнере SwiftUI раздаёт ВСЕМ детям
+        // внутри: кнопка × получала «home_sheet» вместо своего
+        // «atlas_controls_close», и закрыть лист из теста было нечем — а
+        // соседний тест на этом молча проходил, тыкая не туда. То же
+        // правило, что у заголовка секции подсказок (CLAUDE.md, 0.8.0).
+        .overlay(alignment: .topLeading) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("home_sheet")
+        }
     }
 
     // MARK: Карта

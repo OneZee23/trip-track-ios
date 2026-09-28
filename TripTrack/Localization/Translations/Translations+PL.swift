@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Usuń dom",
         "homeRemoveTitle": "Usunąć dom?",
         "homeRemoveBody": "Strefa prywatna przestanie działać, a twoje publiczne przejazdy zostaną wysłane ponownie — w całości.",
+        "atlasHome": "Dom",
+        "atlasTripsFromHome": "{trips} stąd",
+        "atlasHomeConfigure": "Skonfiguruj",
+        "atlasOffline": "Brak sieci",
+        "atlasLocationDeniedTitle": "Lokalizacja niedostępna",
+        "atlasLocationDeniedBody": "Zezwól na dostęp w Ustawieniach, aby atlas podążał za tobą",
     ]
 
 }

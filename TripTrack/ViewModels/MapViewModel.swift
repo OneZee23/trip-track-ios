@@ -293,11 +293,27 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        #if DEBUG
+        // Диалог «Геопозиция недоступна» (состояние 13 спеки «Атласа») иначе
+        // не показать: на этой вкладке `LocationManager` не запускается
+        // вовсе, и `locationDenied` меняет только настоящий отказ на экране
+        // записи. Флаг ЯВНЫЙ — скрытая настройка приватности симулятора
+        // делала бы вердикт сторожа случайным (CLAUDE.md).
+        let forcedDenied = ProcessInfo.processInfo.arguments.contains("-debug-location-denied")
+        if forcedDenied { locationDenied = true }
+        #endif
+
         // Location permission mirror for the Record screen (Figma 475:119).
         NotificationCenter.default.publisher(for: .locationAuthDenied)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] note in
                 guard let denied = note.object as? Bool else { return }
+                #if DEBUG
+                // Настоящий `LocationManager` на старте присылает своё
+                // «разрешено» и затирал бы отладочный отказ — тогда флаг не
+                // делал бы ничего, и это было бы видно только кадром.
+                if forcedDenied { return }
+                #endif
                 self?.locationDenied = denied
             }
             .store(in: &cancellables)

@@ -22,10 +22,18 @@ struct SkeletonPlaceholder: View {
         /// 140 pt, а подсказка — кружок, две строки и кнопка. Скелетон
         /// обещает форму того, что приедет, и чужая форма обещала бы не то.
         case placeSuggestion
+        /// Тройка чисел блока «Исследовано» (состояние 22 спеки «Атласа»):
+        /// три пары полосок 64 × 20 и 48 × 10 в ряд. Своя форма, потому что
+        /// все остальные — колонки, а эта строка: скелетон обещает форму
+        /// того, что приедет, и колонка обещала бы не то.
+        case atlasStats
     }
 
     var shape: Shape = .row
     var count: Int = 4
+    /// Период мерцания. По умолчанию общий для приложения; «Атлас» просит
+    /// 1.2 с своей спекой, и это единственное место, где число другое.
+    var period: Double = 0.9
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -40,12 +48,13 @@ struct SkeletonPlaceholder: View {
                 case .row:  rowSkeleton(c)
                 case .card: cardSkeleton(c)
                 case .placeSuggestion: suggestionSkeleton(c)
+                case .atlasStats: atlasStatsSkeleton(c)
                 }
             }
         }
         .opacity(shimmering ? 1.0 : 0.55)
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+            reduceMotion ? nil : .easeInOut(duration: period).repeatForever(autoreverses: true),
             value: shimmering
         )
         .onAppear { shimmering = true }
@@ -53,6 +62,21 @@ struct SkeletonPlaceholder: View {
         // gain from a dozen unlabelled grey rectangles.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AppStrings.loadingGeneric(lang.language))
+    }
+
+    /// Три колонки: число и подпись под ним. Ровно те же места, что займут
+    /// «189 миль / НОВЫХ ДОРОГ», «360 миль / ВСЕГО», «72 / ПОЕЗДКИ».
+    private func atlasStatsSkeleton(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { index in
+                if index > 0 { Spacer(minLength: 8) }
+                VStack(alignment: .leading, spacing: 6) {
+                    bar(c, width: 64, height: 20)
+                    bar(c, width: 48, height: 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private func bar(_ c: AppTheme.Colors, width: CGFloat?, height: CGFloat) -> some View {

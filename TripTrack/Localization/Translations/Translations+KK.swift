@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Үйді алып тастау",
         "homeRemoveTitle": "Үйді алып тастау керек пе?",
         "homeRemoveBody": "Жеке аймақ жұмысын тоқтатады, ал жария сапарларыңыз қайтадан толық жіберіледі.",
+        "atlasHome": "Үй",
+        "atlasTripsFromHome": "{trips} осы жерден",
+        "atlasHomeConfigure": "Баптау",
+        "atlasOffline": "Желі жоқ",
+        "atlasLocationDeniedTitle": "Геодерек қолжетімсіз",
+        "atlasLocationDeniedBody": "Атлас сізді қадағалауы үшін Параметрлерде рұқсат беріңіз",
     ]
 
 }

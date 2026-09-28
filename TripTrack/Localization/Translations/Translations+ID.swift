@@ -1544,6 +1544,12 @@ extension Translations {
         "homeRemove": "Hapus rumah",
         "homeRemoveTitle": "Hapus rumah?",
         "homeRemoveBody": "Zona privat berhenti bekerja, dan perjalanan publikmu akan dikirim ulang secara utuh.",
+        "atlasHome": "Rumah",
+        "atlasTripsFromHome": "{trips} dari sini",
+        "atlasHomeConfigure": "Atur",
+        "atlasOffline": "Tidak ada jaringan",
+        "atlasLocationDeniedTitle": "Lokasi tidak tersedia",
+        "atlasLocationDeniedBody": "Izinkan akses di Pengaturan agar atlas mengikutimu",
     ]
 
 }
