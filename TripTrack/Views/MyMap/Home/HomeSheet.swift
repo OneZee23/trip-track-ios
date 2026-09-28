@@ -55,6 +55,7 @@ struct HomeSheet: View {
     private var mapCard: some View {
         HomePickerMapView(
             home: manager.settings.coordinate,
+            fallback: MyMapViewModel.shared.exploration.trips.first?.coordinate,
             radius: Double(manager.settings.radius.rawValue),
             onPlace: { manager.place(at: $0) }
         )

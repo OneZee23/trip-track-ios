@@ -36,6 +36,10 @@ final class HomePinView: MKAnnotationView {
         // региона или под булавкой места незачем.
         displayPriority = .required
         canShowCallout = false
+        // Метка НАЗЫВАЕТСЯ вслух и находится тестом: без имени она для
+        // VoiceOver безымянная кнопка, а для сторожа — ничто.
+        isAccessibilityElement = true
+        accessibilityIdentifier = "home_pin"
 
         disc.frame = bounds
         disc.layer.cornerRadius = Self.size / 2

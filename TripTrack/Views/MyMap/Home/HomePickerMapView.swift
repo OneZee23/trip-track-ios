@@ -16,6 +16,14 @@ import SwiftUI
 struct HomePickerMapView: UIViewRepresentable {
     /// Дом. `nil` — ещё не поставлен, карта пустая.
     let home: CLLocationCoordinate2D?
+    /// Куда смотреть, пока дома нет.
+    ///
+    /// Без этого карта открывается НА ВЕСЬ МИР, и «нажмите на карту, чтобы
+    /// поставить дом» означает поставить его с точностью до тысячи
+    /// километров — поймано первым же кадром на симуляторе. Порядок такой:
+    /// живое положение (его приносит сама карта, см. `didUpdate`), иначе эта
+    /// подсказка от экрана, иначе мир.
+    var fallback: CLLocationCoordinate2D?
     /// Радиус зоны в метрах. Круг рисуется всегда, когда есть дом: он
     /// показывает, что именно выбрал человек, ещё до включения тумблера.
     let radius: Double
@@ -37,17 +45,19 @@ struct HomePickerMapView: UIViewRepresentable {
         map.addGestureRecognizer(tap)
         context.coordinator.map = map
 
-        if let home {
-            map.setRegion(MKCoordinateRegion(center: home,
+        if let start = home ?? fallback {
+            map.setRegion(MKCoordinateRegion(center: start,
                                              latitudinalMeters: radius * 6,
                                              longitudinalMeters: radius * 6),
                           animated: false)
+            context.coordinator.didFrame = true
         }
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.onPlace = onPlace
+        context.coordinator.radius = radius
         context.coordinator.sync(home: home, radius: radius, on: map)
     }
 
@@ -60,7 +70,10 @@ struct HomePickerMapView: UIViewRepresentable {
         private var placedRadius: Double = 0
         /// Первый показ уже поставленного дома камеру двигать не должен
         /// дважды — `makeUIView` это уже сделал.
-        private var didFrame = false
+        var didFrame = false
+        /// Радиус нужен и тут: на живое положение карта наводится тем же
+        /// масштабом, что и на дом.
+        var radius: Double = 500
 
         init(onPlace: @escaping (CLLocationCoordinate2D) -> Void) {
             self.onPlace = onPlace
@@ -94,6 +107,19 @@ struct HomePickerMapView: UIViewRepresentable {
                 // пальцем карта отвечала бы не на тот вопрос.
                 map.setCenter(home, animated: true)
             }
+        }
+
+        /// Живое положение приходит позже первого кадра, и, пока дома нет,
+        /// оно и есть лучший ответ на «где ты живёшь». Наводимся ОДИН раз:
+        /// карта, которая едет под пальцем на каждое обновление GPS, ставить
+        /// точку не даёт.
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard !didFrame, placed == nil, let live = userLocation.location else { return }
+            didFrame = true
+            mapView.setRegion(MKCoordinateRegion(center: live.coordinate,
+                                                 latitudinalMeters: radius * 6,
+                                                 longitudinalMeters: radius * 6),
+                              animated: true)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
