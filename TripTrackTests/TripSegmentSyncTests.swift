@@ -73,7 +73,7 @@ final class TripSegmentSyncTests: XCTestCase {
 
         guard let trip = repo.fetchTripDetail(id: tripId),
               let entity = repo.fetchEntity(id: tripId) else { return XCTFail("поездка не нашлась") }
-        let p = TripSyncPayload(trip: trip, entity: entity)
+        let p = TripSyncPayload(trip: trip, entity: entity, zone: nil)
 
         XCTAssertEqual(p.segments?.count, 1)
         XCTAssertEqual(p.segments?.first?.fromCheckpointId, a.id)
@@ -90,7 +90,7 @@ final class TripSegmentSyncTests: XCTestCase {
         guard let trip = repo.fetchTripDetail(id: tripId),
               let entity = repo.fetchEntity(id: tripId) else { return XCTFail("поездка не нашлась") }
 
-        let data = try JSONEncoder().encode(TripSyncPayload(trip: trip, entity: entity).segments)
+        let data = try JSONEncoder().encode(TripSyncPayload(trip: trip, entity: entity, zone: nil).segments)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertFalse(json.contains("distance"))
         XCTAssertFalse(json.contains("elapsed"))

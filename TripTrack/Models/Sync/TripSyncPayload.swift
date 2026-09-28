@@ -105,7 +105,17 @@ struct TripSyncPayload: Codable {
 }
 
 extension TripSyncPayload {
-    init(trip: Trip, entity: TripEntity) {
+    /// `zone` по умолчанию читается из нынешних настроек — это и есть
+    /// продовый путь. Параметром она вынесена ПОТОМУ, что иначе пейлоад
+    /// зависит от глобального `UserDefaults` молча: любой тест, собравший
+    /// поездку, начинал резать её треком, если в контейнере симулятора
+    /// осталась включённая зона от соседнего прогона. Так и случилось —
+    /// кадровый тест экрана дома оставил зону включённой, и `TripSyncPayload
+    /// MapperTests` покраснел в другом конце набора. Значение по умолчанию
+    /// вычисляется в момент ВЫЗОВА, поэтому продовые два места ничего не
+    /// передают и читают живое.
+    init(trip: Trip, entity: TripEntity,
+         zone: Zone? = HomeSettings.load().activeZone) {
         self.id = trip.id
         self.title = trip.title
         self.description = trip.tripDescription
@@ -135,7 +145,6 @@ extension TripSyncPayload {
         // высоты считаются по ПОЛНОМУ треку и не меняются от того, что
         // человек закрыл свой двор. Числа — про саму поездку, обрезка — про
         // то, что видно чужим.
-        let zone = HomeSettings.load().activeZone
         self.region = trip.region
         self.isPrivate = trip.isPrivate
         self.isTransfer = trip.isTransfer

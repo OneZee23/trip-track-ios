@@ -68,7 +68,7 @@ final class TripSyncPayloadMapperTests: XCTestCase {
             earnedBadgeIds: ["badge1", "badge2"]
         )
 
-        let p = TripSyncPayload(trip: trip, entity: entity)
+        let p = TripSyncPayload(trip: trip, entity: entity, zone: nil)
         XCTAssertEqual(p.id, tripId)
         XCTAssertEqual(p.distance, 1234.5)
         XCTAssertEqual(p.title, "Morning trip")
@@ -100,7 +100,7 @@ final class TripSyncPayloadMapperTests: XCTestCase {
             previewPolyline: nil, earnedBadgeIds: []
         )
 
-        let p = TripSyncPayload(trip: trip, entity: entity)
+        let p = TripSyncPayload(trip: trip, entity: entity, zone: nil)
         XCTAssertNil(p.title)
         XCTAssertNil(p.previewPolyline)
         XCTAssertNil(p.badgesJson)

@@ -118,7 +118,7 @@ final class DistanceDoorTests: XCTestCase {
             point(0, 160, 16, filled: true), point(0, 180, 18, filled: true),
             point(0, 200, 20),
         ])
-        let payload = TripSyncPayload(trip: trip, entity: entity)
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
         XCTAssertEqual(payload.stoppedTime, 0)
         XCTAssertEqual(payload.drivingTime, 20)
     }
