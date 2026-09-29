@@ -1463,6 +1463,120 @@ home-privacy.md`. Коротко о том, что нельзя нарушить
 - Метка дома едет до карты через `MyMapViewModel` — канал
   `updateUIViewController` на «Атласе» мёртвый, и молча (правило 0.8.1).
 
+### Электро и гибриды (0.8.3)
+
+Письмо пользователя из Германии 24 сентября: «приложение показывает расход в
+литрах, а я езжу на плагин-гибриде». У машины появился тип двигателя, у
+поездки — честная раскладка. Спека — `docs/superpowers/specs/
+2026-09-24-081-plugin-hybrid-design.md`.
+
+- **Хранится только РЕЖИМ поездки; всё остальное считается при показе**
+  (`EnergyEstimate` — чистая функция). Поэтому правка запаса хода или расхода
+  мгновенно пересчитывает всю историю, без миграции и без устаревших чисел.
+  Второй счёт однажды разошёлся бы с первым — та же поломка, из-за которой
+  километры собрали в `TripDistanceGate`.
+- **Обычный гибрид — это `fuel`.** Он жжёт только бензин, литры описывают его
+  полностью; четвёртый вариант не менял бы арифметику, зато заставлял бы
+  человека выбирать между двумя словами об одном.
+- **«Авто» считает по ЗАПАСУ ХОДА НА ДЕНЬ:** первые километры каждого
+  календарного дня — с ночного заряда. День берётся по СТАРТУ поездки, запас
+  тратится по порядку старта, и каждая поездка тратит его СВОИМ режимом —
+  поэтому раскладка дня сходится сама с собой. Поездка через полночь целиком
+  относится ко дню старта; день выбирает тот, кто набрал список
+  (`TripsViewModel.tripsOfSameDay`), а не сама функция.
+- **Единица электричества выводится из приборки** (`ElectricUnit`), как литры
+  и mpg, и **арифметику миль берёт у `DistanceUnit`**: четвёртая копия
+  1609.344 — четвёртое место, где её однажды округлят. Цена киловатт-часа при
+  этом от диалекта НЕ зависит — киловатт-час одинаков во всём мире, и пары
+  `displayPrice`/`priceToPerLitre` у этого типа нет вовсе.
+- **Ноль — «не задано», а не «ноль».** Ни расход, ни цена, ни запас хода не
+  выдумываются: подсказка типичного значения живёт ПЛЕЙСХОЛДЕРОМ в поле, а в
+  базу не уезжает ничего, пока человек не набрал число сам. Цены нет — плитки
+  стоимости нет; цена есть у одной половины — подпись говорит, у какой.
+- **`energyMode` на ПРОВОДЕ едет строкой ВСЕГДА, включая «auto»** — и это
+  отступление от §4 спеки, сделанное с причиной. Уезжай «Авто» отсутствием
+  ключа, оно стало бы неотличимо от «старый клиент молчит», и возврат с
+  «Электро» обратно на «Авто» не доехал бы до второго телефона никогда. В
+  КОЛОНКЕ при этом «Авто» лежит как `nil` (`TripEnergyMode.stored`). Поле в
+  пейлоаде — `String?`, а не тип: `TripSyncPayload` кодируется синтезированным
+  `Codable`, и типизированное поле роняло бы пейлоад целиком на незнакомом
+  значении, а терпимый `init(from:)` читал бы его как «Авто» и ЗАТИРАЛ бы
+  выбор человека.
+- **Выбор режима живёт в состоянии ЭКРАНА, а не в поле внутри `trip`**
+  (`TripDetailView.energyMode`). Правка поля внутри `trip` до экрана не
+  доезжает — проверено зондом на кадре (`b:auto-a:auto` сразу после
+  присваивания), при том что соседние `@State` в той же функции обновляются.
+  Из базы значение приходит один раз, на загрузке; дальше командует экран, а
+  базу обновляет `setEnergyMode`. Держит `HybridEnergyShotTests` — ЧИСЛОМ
+  (`isSelected` и маркер `trip_energy_current_…`), а не цветом пилюли.
+- **До наград это не доходит никогда.** `EnergyEstimate`, `powertrain` и
+  `electricUnit` вписаны в токены `VehicleUnitsStayOutOfRewardsTests`: опыт,
+  уровни и значки считают `Trip.rewardKm` и ничего больше.
+- **CoreData v21**, аддитивно; сервер — миграция `AddVehiclePowertrain`,
+  **выкатывается РАНЬШЕ приложения**. Незнакомый тип двигателя и незнакомый
+  режим ведут себя как отсутствие ключа и НЕ роняют апсерт (урок `language` с
+  белым списком, уронившего profile-update у одиннадцати языков).
+- **На симуляторе — `-seed-hybrid`**: машина «Astra PHEV» с запасом 50 км и
+  две поездки одного дня (17.6 км утром, 82.4 вечером). Раскладку иначе не
+  проверить вовсе: ей нужны три входа разом — тип, запас и СОСЕДИ по дню.
+
+### Правка машины взводит `pendingUpload` (0.8.3)
+
+Гейт `!hasLocalEdits` в `applyRemoteVehicle` был написан с причиной
+(«вернувшееся название машины — досада, вернувшаяся видимость — утечка»), но
+взводить его было НЕКОМУ: `updateVehicleFuel`, `updateVehicleCurrency` и
+`updateVehicleIdentity` меняли поля и не трогали `syncStatus`. То есть полный
+пул (а его 0.6.1 заказывает на каждом устройстве с несовпавшим штампом
+хранилища) возвращал прежние значения поверх только что набранных, а
+приватные оси видимости откатывались молча.
+
+Теперь все три двери ставят `pendingUpload` и двигают `lastModifiedAt` — как
+`updateVehiclePassport`, — а расход и цена топлива в `applyRemoteVehicle`
+встали под тот же гейт, что единица приборки: это ЧИСЛА, по которым считается
+стоимость каждой поездки. Держит `VehicleEnergyWireTests`.
+
+### Координата отметки внутри приватной зоны (0.8.3)
+
+Долг 0.8.2, названный словами в `home-privacy.md`. Трек, превью и EXIF снимка
+внутри зоны обрезались с самого начала, а отметка, поставленная во дворе,
+уезжала точной точкой — осознанно: широта и долгота были в проводе
+ОБЯЗАТЕЛЬНЫМИ, и выбор был из двух поломок (ноль в Гвинейском заливе или
+потеря отметки вместе с именем на втором телефоне).
+
+- **Решение владельца 29 сентября: слать отметку БЕЗ точки.** Поля стали
+  опциональными на проводе и в колонках сервера (`TripSyncPayload
+  .wireCheckpoint`, миграция `RelaxCheckpointCoordinates`); отметка уезжает с
+  именем, временем и «от старта».
+- **`nil` на входе разводится по двум случаям.** Своя копия есть — её
+  координата остаётся (сервер про место просто молчит; то же правило, что у
+  `placeId` и `capturedAt`). Своей копии нет (переустановка, второй телефон) —
+  отметка заводится без места.
+- **«Места нет» — это ровные нули**, и узнаёт их `TripCheckpoint
+  .hasCoordinate`. Договорённость не новая: у находок из пула (0, 0) уже
+  значит «сервер не ручается за место». Такую отметку не рисует карта, не
+  забирают места и не притягивают по расстоянию снимки — но она есть в
+  «Моментах», и часы у неё целы.
+- **Откат миграции неполный, и это сказано вслух:** вернуть `NOT NULL` нечем —
+  к моменту отката строки без координаты уже существуют.
+
+### Шлюз простоя = шлюз записи (0.8.3)
+
+`FixGate.idleAccuracyLimit` был 100 м, и это число не выбирали — его отложили
+(«простой это слайдер старта, а он в 0.8.2», спека 0.8.1 §2.1).
+
+Отдельный, более строгий потолок в простое не покупал НИЧЕГО: фикс, принятый
+в простое, тут же пересматривается потолком записи, а в километры он не идёт
+ни при каком потолке — одометр отбирает точки своей дверью (65 м). Строгость
+покупала только заблокированный слайдер под плохим небом — во дворе, в
+подземном паркинге, между высотками, — то есть ровно репорт «не могу
+передвинуть слайдер, чтобы начать запись».
+
+Потребителей у фикса в простое три, и ни одному 150 м не мешают: слайдер,
+значок качества сигнала (скажет честное «GPS слабый» вместо вечного «Ищем
+спутники») и камера карты. Автотрекинг сюда не ходит —
+`updateMovementForInactivity` выходит первой строкой, пока записи нет.
+Инвариант «простой не строже записи» держит `FixGateTests`.
+
 ### Атлас v3: слот у нижнего края (0.8.2, в работе)
 
 Макеты владельца от 27 сентября (`TripTrack-Atlas-handoff`: 34 состояния,
@@ -2707,9 +2821,9 @@ iPhone 15 Pro Max), оба «главный поток не отвечал дв�
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v20 — 0.8.1)
+## CoreData Schema (versioned, v21 — 0.8.3)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v20 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно), v19 — «Плюс»: `TripEntity.source` (String, `recorded`/`manual`, дефолт `recorded`), `VehicleEntity.cardStyle` (String?), `UserSettingsEntity.avatarFrame`/`showPlusBadge` (String?/Bool, дефолт `true`), v20 — «Черновик» и «Трек без дыр»: `TripEntity.confirmation` (String?, `confirmed`/`draft`, пустая колонка читается как `confirmed`), `TripEntity.roadFillState` (String?, `unchecked`/`pending`/`done`, дефолт `unchecked`); всё аддитивно).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v20 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно), v19 — «Плюс»: `TripEntity.source` (String, `recorded`/`manual`, дефолт `recorded`), `VehicleEntity.cardStyle` (String?), `UserSettingsEntity.avatarFrame`/`showPlusBadge` (String?/Bool, дефолт `true`), v20 — «Черновик» и «Трек без дыр»: `TripEntity.confirmation` (String?, `confirmed`/`draft`, пустая колонка читается как `confirmed`), `TripEntity.roadFillState` (String?, `unchecked`/`pending`/`done`, дефолт `unchecked`), v21 — электро и гибриды: `VehicleEntity.powertrain` (String, дефолт `fuel`), `electricConsumption`/`electricityPrice`/`electricRangeKm` (Double, 0 = «не задано»), `TripEntity.energyMode` (String?, `nil` = «Авто»); всё аддитивно).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
