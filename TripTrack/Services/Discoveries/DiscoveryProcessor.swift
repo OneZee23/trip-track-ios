@@ -56,7 +56,10 @@ final class DiscoveryProcessor {
     /// веху «первый регион» за край, езженный годами. Ключ без версии
     /// достаётся ровно один раз, ниже (не сходится счётчик поездок), и
     /// история пересобирается заново из превью библиотеки.
-    static let historyKey = "discoveries.extremes.v2"
+    /// `nonisolated`: это СТРОКА-ключ, у неё нет актёра (0.8.3). Изоляция
+    /// досталась ей от типа, а читает её `DiscoveryStore.wipe` вне главного
+    /// потока — в Swift 6 это уже ошибка, а не предупреждение.
+    nonisolated static let historyKey = "discoveries.extremes.v2"
 
     /// Значок за первую решённую загадку и за десятую.
     static let firstRiddleBadgeId = "riddle_first"

@@ -51,7 +51,15 @@ enum SentryService {
             // он стоит батареи на реальном телефоне, который и так пишет
             // GPS в фоне.
             options.tracesSampleRate = 0.1
-            options.profilesSampleRate = 0.0
+            // Профайлер выключен, и выключен ЯВНО, а не отсутствием строки:
+            // `profilesSampleRate` снят SDK, а его замена `SentryProfileOptions
+            // .sessionSampleRate` по умолчанию тоже ноль — но умолчание чужого
+            // SDK это не наше решение, а его. Ноль здесь сказан вслух и
+            // переживёт смену умолчания в следующей версии.
+            options.configureProfiling = { profiling in
+                profiling.sessionSampleRate = 0.0
+                profiling.lifecycle = .manual
+            }
 
             // Hard "no" to surfaces that could leak driving data.
             // Session replay is OFF by default (opt-in via experimental

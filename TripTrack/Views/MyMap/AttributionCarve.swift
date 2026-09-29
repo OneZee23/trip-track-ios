@@ -29,10 +29,19 @@ import os
 @MainActor
 enum AttributionCarve {
 
+    // Числа ниже — `nonisolated`: это ЧИСЛА, у них нет актёра (0.8.3).
+    //
+    // Изоляция досталась им от типа: `AttributionCarve` — `@MainActor`,
+    // потому что он ходит в дерево `MKMapView`, а константы поехали следом и
+    // стали недоступны шейдеру и кисти, которые считают кадр вне главного
+    // потока. В Swift 6 это уже ошибка компиляции, а не предупреждение.
+    // Настоящие вопросы «на каком актёре это живёт» (синглтоны сервисов,
+    // managed objects в замыканиях) остаются на 0.9.0 — здесь вопроса нет.
+
     /// Поле вокруг атрибуции — сжато вслед за уменьшенной амплитудой окна
     /// (0.35 вместо полного 0→1): четыре точки уже не читаются отдельным
     /// блоком, потому что перепад под ними вдвое мягче прежнего.
-    static let padding: CGFloat = 8
+    nonisolated static let padding: CGFloat = 8
     /// Растушёвка — ТРИДЦАТЬ ДВЕ точки, и это про форму, а не про Мах-эффект.
     ///
     /// История числа: двенадцать лечили ступени (двадцать четыре кольца до
@@ -48,8 +57,8 @@ enum AttributionCarve {
     /// расстояние, на котором глаз перестаёт собирать его в фигуру, — под
     /// подписью остаётся мягкое посветление, а не плита. Контраст при этом не
     /// меняется вовсе: середина окна как была `windowFloor`, так и осталась.
-    static let feather: CGFloat = 32
-    static let corner: CGFloat = 8
+    nonisolated static let feather: CGFloat = 32
+    nonisolated static let corner: CGFloat = 8
     /// Минимальная альфа МАСКИ в середине окна — НЕ ноль.
     ///
     /// Маска умножает альфу уже нарисованного растра тумана (`layer.mask`), и
@@ -60,11 +69,11 @@ enum AttributionCarve {
     /// `testGlyphContrastInsideTheCarveClearsTheBar`: 0.35 эффективной альфы
     /// держит контраст ~7.5:1 против нужных 4.5:1 по всему диапазону
     /// непрозрачности мглы (`FogVeilPainter.Palette.night.opacityRange`).
-    static let windowFloor: CGFloat = 0.5
+    nonisolated static let windowFloor: CGFloat = 0.5
 
     /// Сколько проходов разметки ждём атрибуцию: она появляется в дереве
     /// карты не обязательно к первому.
-    static let maxTries = 20
+    nonisolated static let maxTries = 20
 
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "attribution")
     private static var loggedFallback = false
