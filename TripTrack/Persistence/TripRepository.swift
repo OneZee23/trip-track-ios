@@ -77,6 +77,7 @@ protocol TripRepository {
     func addCheckpoint(_ checkpoint: TripCheckpoint, to tripId: UUID) -> TripCheckpoint?
     /// Возвращают id поездки — чтобы вызывающий мог поставить её в очередь синка.
     @discardableResult func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) -> UUID?
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID)
     @discardableResult func deleteCheckpoint(id: UUID) -> UUID?
 
     // MARK: Отрезки между отметками
@@ -897,6 +898,24 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
+    /// Записать, как ехал плагин-гибрид в этой поездке.
+    ///
+    /// Правка режима — ПРАВКА ПОЕЗДКИ, и лечится тем же `markCheckpointsChanged`:
+    /// без флага `pendingUpload` следующий pull заменил бы локальное значение
+    /// серверным, то есть отменил бы выбор, сделанный секунду назад. В очередь
+    /// синка поездку ставит `TripManager`, как у отметок и отрезков.
+    ///
+    /// «Авто» пишется в колонку как `nil` (`TripEnergyMode.stored`): у
+    /// поездки, где выбора не делали, хранить нечего. На проводе оно поедет
+    /// строкой — см. `TripEnergyMode`.
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        guard TripEnergyMode.parse(entity.energyMode) != mode else { return }
+        entity.energyMode = mode.stored
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+    }
+
     /// Прикреплённые снимки — JSON-массивом строк в одной колонке, как
     /// `stickersJSON` у поездки: связи с `TripPhotoEntity` нет нарочно, снимок
     /// может уехать с другого телефона позже, чем отметка.
@@ -1304,7 +1323,8 @@ final class CoreDataTripRepository: TripRepository {
             companions: companions, isOnServer: entity.serverCreatedAt != nil,
             source: Self.origin(of: entity),
             confirmation: Self.confirmation(of: entity),
-            roadFillState: Self.roadFillState(of: entity)
+            roadFillState: Self.roadFillState(of: entity),
+            energyMode: TripEnergyMode.parse(entity.energyMode)
         )
     }
 
@@ -1388,6 +1408,17 @@ final class CoreDataTripRepository: TripRepository {
         // Источник поездки (0.8.0) — тем же приёмом, что `dashboardUnits` у
         // машины: ключ отсутствует или правка ещё не уехала — не трогаем.
         if !hasLocalEdits, let remoteSource = p.source { entity.source = remoteSource.rawValue }
+        // Режим энергии (0.8.3) — тем же приёмом. Ключ пришёл, значит второй
+        // телефон имеет мнение, включая «Авто»: у этого поля отсутствие
+        // ключа и «Авто» РАЗНЫЕ вещи (см. `TripSyncPayload.energyMode`), и
+        // `stored` кладёт «Авто» в колонку как `nil`.
+        // Знакомое значение — это ответ второго телефона, включая «Авто»
+        // (у него отсутствие ключа и «Авто» РАЗНЫЕ вещи, см.
+        // `TripSyncPayload.energyMode`); незнакомое и отсутствующее — молчание,
+        // локальное не трогаем. `stored` кладёт «Авто» в колонку как `nil`.
+        if !hasLocalEdits, let remoteMode = TripEnergyMode(rawValue: p.energyMode ?? "") {
+            entity.energyMode = remoteMode.stored
+        }
         entity.fuelCurrency = p.fuelCurrency
         // Превью с сервера — это ЭХО нашего же превью, и при включённой
         // приватной зоне (0.8.2) эхо приходит ОБРЕЗАННЫМ: мы сами отправили
@@ -1479,9 +1510,18 @@ final class CoreDataTripRepository: TripRepository {
             // пул осиротил бы отметки, сверка зарегистрировала бы их заново — и
             // УДАЛЁННОЕ место воскресало бы с полной историей.
             var previous: [UUID: UUID] = [:]
+            // Координата своей отметки — по тому же правилу, что `placeId`
+            // строкой выше, и по той же причине (0.8.3). Внутри приватной
+            // зоны отметка уезжает БЕЗ адреса, и сервер возвращает её такой
+            // же: `nil` в ответе — это «сервер про место молчит», а не
+            // «места нет». Своя копия точнее серверной, и её не перезаписывают.
+            var previousPoint: [UUID: (Double, Double)] = [:]
             if let existing = entity.checkpoints?.array as? [TripCheckpointEntity] {
                 for ce in existing {
                     if let cid = ce.id, let pid = ce.placeId { previous[cid] = pid }
+                    if let cid = ce.id, ce.latitude != 0 || ce.longitude != 0 {
+                        previousPoint[cid] = (ce.latitude, ce.longitude)
+                    }
                     context.delete(ce)
                 }
             }
@@ -1489,8 +1529,14 @@ final class CoreDataTripRepository: TripRepository {
                 let ce = TripCheckpointEntity(context: context)
                 ce.id = c.id
                 ce.timestamp = c.timestamp
-                ce.latitude = c.latitude
-                ce.longitude = c.longitude
+                // Ключа нет — берём своё; своего нет тоже (переустановка,
+                // второй телефон) — отметка остаётся без места, и это
+                // честный ноль: `TripCheckpoint.hasCoordinate` его узнаёт, и
+                // ни карта, ни места такую отметку не трогают.
+                let point = c.latitude.flatMap { lat in c.longitude.map { (lat, $0) } }
+                    ?? previousPoint[c.id]
+                ce.latitude = point?.0 ?? 0
+                ce.longitude = point?.1 ?? 0
                 ce.distanceFromStart = c.distanceFromStart
                 ce.elapsedFromStart = c.elapsedFromStart
                 ce.name = c.name
@@ -1561,9 +1607,20 @@ final class CoreDataTripRepository: TripRepository {
         }
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
-        entity.cityConsumption = p.cityConsumption
-        entity.highwayConsumption = p.highwayConsumption
-        entity.fuelPrice = p.fuelPrice
+        // Расход и цена топлива — под тем же гейтом, что единица приборки, и
+        // по той же причине: это ЧИСЛА, по которым считается стоимость каждой
+        // поездки. Правка, ещё не уехавшая на сервер, сильнее приехавшего
+        // ответа — иначе полный пул (а его 0.6.1 заказывает на каждом
+        // устройстве, у которого не совпал штамп хранилища) возвращает
+        // прежние литры поверх только что набранных.
+        //
+        // Поля неопциональные, «сервер промолчал» ими не выражается, поэтому
+        // гейт один — `hasLocalEdits`.
+        if !hasLocalEdits {
+            entity.cityConsumption = p.cityConsumption
+            entity.highwayConsumption = p.highwayConsumption
+            entity.fuelPrice = p.fuelPrice
+        }
         // A server that predates these columns sends nothing back, and nothing
         // is not "reset to default" — keep whatever this device already knows.
         if let type = p.vehicleType { entity.vehicleType = type }
@@ -1603,6 +1660,16 @@ final class CoreDataTripRepository: TripRepository {
         // Фон карточки (0.8.0, «Плюс») — тем же приёмом, что единица
         // приборки: ключ отсутствует или правка ещё не уехала — не трогаем.
         if !hasLocalEdits, let style = p.cardStyle { entity.cardStyle = style }
+        // Электро и гибриды (0.8.3) — тем же приёмом и с той же ценой ошибки,
+        // что у единицы приборки: вернувшийся тип двигателя или обнулённый
+        // запас хода это НЕ косметика, а другая раскладка у каждой поездки
+        // гибрида — литры вместо киловатт-часов и другие деньги. Пока правка
+        // не уехала, побеждает она; ключа нет — сервер молчит, локальное не
+        // трогаем.
+        if !hasLocalEdits, let pt = p.powertrain { entity.powertrain = pt.rawValue }
+        if !hasLocalEdits, let c = p.electricConsumption { entity.electricConsumption = c }
+        if !hasLocalEdits, let price = p.electricityPrice { entity.electricityPrice = price }
+        if !hasLocalEdits, let range = p.electricRangeKm { entity.electricRangeKm = range }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
         if let about = p.about { entity.about = about }

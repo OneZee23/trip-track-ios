@@ -89,6 +89,13 @@ struct Trip: Identifiable, Codable {
     /// Где поездка в достройке дыр — см. `RoadFillState`.
     var roadFillState: RoadFillState = .unchecked
 
+    /// Как ехал плагин-гибрид — см. `TripEnergyMode`. Умолчание `.auto`:
+    /// считает приложение, пока человек не поправил.
+    ///
+    /// Раскладка (километры, киловатт-часы, литры, деньги) НЕ хранится —
+    /// её считает `EnergyEstimate` при показе. Хранится только этот выбор.
+    var energyMode: TripEnergyMode = .auto
+
     /// Черновик в мир не выходит (спека §3.2).
     var isDraft: Bool { confirmation == .draft }
 
@@ -357,7 +364,8 @@ struct Trip: Identifiable, Codable {
          companions: [TripCompanion] = [], isOnServer: Bool = false,
          source: TripOrigin = .recorded,
          confirmation: TripConfirmation = .confirmed,
-         roadFillState: RoadFillState = .unchecked) {
+         roadFillState: RoadFillState = .unchecked,
+         energyMode: TripEnergyMode = .auto) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
@@ -386,6 +394,7 @@ struct Trip: Identifiable, Codable {
         self.source = source
         self.confirmation = confirmation
         self.roadFillState = roadFillState
+        self.energyMode = energyMode
     }
 
     var earnedBadges: [Badge] {

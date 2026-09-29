@@ -91,6 +91,17 @@ enum DebugMapSeed {
     /// Сбрасывает латчи миграций, как это делает свежая установка после
     /// обновления из стора — `reveal_rebuild_v18_done`,
     /// `territory_backfill_done`, `discoveries.extremes.v2`.
+    /// Плагин-гибрид и две поездки одного дня на нём (0.8.3).
+    ///
+    /// Раскладка энергии иначе непроверяема на симуляторе вовсе: у неё три
+    /// входа — тип двигателя машины, запас хода и СОСЕДНИЕ поездки того же
+    /// дня, — и завести всё это руками значит открыть форму, набрать четыре
+    /// числа и записать две поездки, которых в симуляторе не записать (GPS
+    /// там не едет). Сид кладёт готовую машину «Astra PHEV» с запасом 50 км и
+    /// две поездки: 30 км утром (целиком на батарее) и 60 км вечером (20 км
+    /// остатка плюс топливо) — то есть обе стороны правила «запас на день».
+    static let hybridArgument = "-seed-hybrid"
+
     static let hangStressArgument = "-seed-hang-stress"
 
     static var isRequested: Bool {
@@ -135,6 +146,10 @@ enum DebugMapSeed {
 
     static var isDraftsRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(draftsArgument)
+    }
+
+    static var isHybridRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(hybridArgument)
     }
 
     /// Сеет 400×2000 точек и сбрасывает миграционные латчи — задача H.
@@ -301,6 +316,7 @@ enum DebugMapSeed {
             if isManualRequested { seedManualTrip(persistence: persistence) }
             if isDraftsRequested { seedDrafts(persistence: persistence) }
             if isManyPlacesRequested { seedManyPlaces() }
+            if isHybridRequested { seedHybrid(persistence: persistence) }
             seedGeocodeCache(persistence: persistence)
             seedPhotos(persistence: persistence)
             return
@@ -362,6 +378,7 @@ enum DebugMapSeed {
         if isManualRequested { seedManualTrip(persistence: persistence) }
         if isDraftsRequested { seedDrafts(persistence: persistence) }
         if isManyPlacesRequested { seedManyPlaces() }
+        if isHybridRequested { seedHybrid(persistence: persistence) }
         seedGeocodeCache(persistence: persistence)
         seedPhotos(persistence: persistence)
     }
@@ -404,6 +421,85 @@ enum DebugMapSeed {
     /// Идемпотентно: черновик в базе уже есть — выходим. Иначе повторный
     /// запуск с тем же флагом досевал бы ещё четыре, и снимок «Сегодня · 2»
     /// на втором прогоне показывал бы четыре.
+    // MARK: - Плагин-гибрид (0.8.3)
+
+    /// Машина «Astra PHEV» и две её поездки в один день.
+    ///
+    /// Идемпотентно: второй запуск с тем же флагом находит машину по имени и
+    /// выходит. Числа выбраны так, чтобы обе половины правила «запас хода на
+    /// день» были видны на одном экране — утренняя поездка целиком
+    /// электрическая, вечерняя разрезана по остатку запаса.
+    private static func seedHybrid(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        existing.predicate = NSPredicate(format: "name == %@", "Astra PHEV")
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let vehicle = VehicleEntity(context: context)
+        let vehicleId = UUID()
+        vehicle.id = vehicleId
+        vehicle.name = "Astra PHEV"
+        vehicle.avatarEmoji = "🚗"
+        vehicle.vehicleType = "car"
+        vehicle.createdAt = Date()
+        vehicle.powertrain = Powertrain.pluginHybrid.rawValue
+        vehicle.electricConsumption = 18
+        vehicle.electricityPrice = 8
+        vehicle.electricRangeKm = 50
+        vehicle.cityConsumption = 10
+        vehicle.highwayConsumption = 6
+        vehicle.fuelPrice = 56
+        vehicle.fuelCurrency = "₽"
+        vehicle.visibleToOthers = true
+        vehicle.vehicleLevel = 1
+
+        let calendar = Calendar.current
+        // Часы заданы явно — снимок обязан быть одним и тем же на каждом
+        // прогоне (то же правило, что у сида черновиков).
+        let plan: [(String, Int, Int, [(Double, Double)])] = [
+            ("Утром на работу", 8, 30, [(45.035, 38.975), (44.960, 39.050), (44.900, 39.090)]),
+            ("Вечером к морю", 18, 5,
+             [(45.035, 38.975), (44.700, 38.840), (44.560, 38.780), (44.320, 38.705)])
+        ]
+
+        for (title, hour, minute, waypoints) in plan {
+            guard let start = calendar.date(bySettingHour: hour, minute: minute,
+                                            second: 0, of: Date()) else { continue }
+            let coordinates = densify(waypoints, stepMeters: 600)
+            let seconds = Double(coordinates.count) * 30
+
+            let trip = TripEntity(context: context)
+            trip.id = UUID()
+            trip.startDate = start
+            trip.endDate = start.addingTimeInterval(seconds)
+            trip.title = title
+            trip.region = "Краснодарский край"
+            trip.isPrivate = true
+            trip.vehicleId = vehicleId
+            trip.fuelCurrency = "₽"
+            trip.previewPolyline = Trip.encodePolyline(coordinates)
+            trip.distance = pathLength(coordinates)
+            trip.maxSpeed = 30
+            trip.averageSpeed = trip.distance / max(seconds, 1)
+
+            for (index, coordinate) in coordinates.enumerated() {
+                let point = TrackPointEntity(context: context)
+                point.id = UUID()
+                point.latitude = coordinate.latitude
+                point.longitude = coordinate.longitude
+                point.altitude = 40
+                point.speed = 16 + Double((index * 5) % 14)
+                point.course = 0
+                point.horizontalAccuracy = 5
+                point.timestamp = start.addingTimeInterval(Double(index) * 30)
+                point.trip = trip
+            }
+        }
+        persistence.save()
+        SettingsManager.shared.reloadFromCoreData()
+    }
+
     private static func seedDrafts(persistence: PersistenceController) {
         let context = persistence.container.viewContext
         let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()

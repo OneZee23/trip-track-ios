@@ -335,4 +335,58 @@ final class HomePrivacyTrimTests: XCTestCase {
         XCTAssertNil(TripSyncPayload.wireExif(45.036, nil, zone: zone))
         XCTAssertNil(TripSyncPayload.wireExif(nil, 38.975, zone: nil))
     }
+
+    // MARK: D. Координата отметки (долг 0.8.2, закрыт в 0.8.3)
+
+    /// Отметка, поставленная во дворе, уезжает БЕЗ адреса — но уезжает.
+    ///
+    /// До 0.8.3 широта и долгота отметки были в проводе обязательными, и
+    /// выбор был из двух поломок: ноль в Гвинейском заливе или потеря
+    /// отметки вместе с именем на втором телефоне. Теперь есть третий ответ.
+    func testCheckpointInsideTheZoneLeavesWithoutItsPoint() {
+        let home = CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975)
+        let zone: TripSyncPayload.Zone = (centre: home, radius: 500)
+
+        XCTAssertNil(TripSyncPayload.wireCheckpoint(45.036, 38.975, zone: zone),
+                     "отметка со двора уехала с координатой")
+
+        let outside = TripSyncPayload.wireCheckpoint(45.2, 38.975, zone: zone)
+        XCTAssertEqual(outside?.latitude, 45.2)
+        XCTAssertEqual(outside?.longitude, 38.975)
+
+        // Без зоны — как было, байт в байт.
+        let noZone = TripSyncPayload.wireCheckpoint(45.036, 38.975, zone: nil)
+        XCTAssertEqual(noZone?.latitude, 45.036)
+        XCTAssertEqual(noZone?.longitude, 38.975)
+    }
+
+    /// Имя, время и «от старта» при этом целы: теряется адрес, а не отметка.
+    func testTheTrimmedCheckpointKeepsEverythingButThePoint() throws {
+        zoneOn()
+        let checkpoint = TripCheckpoint(
+            timestamp: t0.addingTimeInterval(10),
+            latitude: north(50).latitude, longitude: north(50).longitude,
+            distanceFromStart: 120, elapsedFromStart: 10, name: "Гараж")
+        var trip = Trip(startDate: t0, endDate: t0.addingTimeInterval(200),
+                        distance: 3000, trackPoints: driveThroughHome())
+        trip.checkpoints = [checkpoint]
+
+        let wire = try XCTUnwrap(payload(for: trip).checkpoints?.first)
+        XCTAssertNil(wire.latitude, "широта двора уехала")
+        XCTAssertNil(wire.longitude, "долгота двора уехала")
+        XCTAssertEqual(wire.name, "Гараж")
+        XCTAssertEqual(wire.elapsedFromStart, 10)
+        XCTAssertEqual(wire.distanceFromStart, 120)
+    }
+
+    /// Ноль в координате — это «места нет», и приложение это знает.
+    func testAPlacelessCheckpointIsRecognisedAsSuch() {
+        let placed = TripCheckpoint(timestamp: t0, latitude: 45.035, longitude: 38.975,
+                                    distanceFromStart: 0, elapsedFromStart: 0)
+        XCTAssertTrue(placed.hasCoordinate)
+
+        let placeless = TripCheckpoint(timestamp: t0, latitude: 0, longitude: 0,
+                                       distanceFromStart: 0, elapsedFromStart: 0)
+        XCTAssertFalse(placeless.hasCoordinate)
+    }
 }

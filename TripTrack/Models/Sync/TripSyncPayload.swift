@@ -20,8 +20,23 @@ struct TripPhotoMetadataPayload: Codable {
 struct TripCheckpointPayload: Codable {
     let id: UUID
     let timestamp: Date
-    let latitude: Double
-    let longitude: Double
+    /// Координата отметки. ОПЦИОНАЛЬНА с 0.8.3, и это правка контракта на
+    /// обеих сторонах — ради приватной зоны у дома.
+    ///
+    /// До 0.8.3 широта и долгота были обязательными, и выбор был из двух
+    /// поломок: отправить ноль (точка в Гвинейском заливе) или выбросить
+    /// отметку из пейлоада, потеряв её вместе с именем на втором телефоне.
+    /// Теперь есть третий ответ: отметка уезжает целиком — с именем, временем
+    /// и «от старта», — но без адреса. На втором телефоне она есть в
+    /// «Моментах» и её нет на карте: ровно то же самое уже делает обрезанный
+    /// трек.
+    ///
+    /// `nil` на ВХОДЕ значит два разных случая, и разводит их
+    /// `applyRemoteTrip`: если своя копия отметки есть, её координата
+    /// остаётся (сервер про это место просто молчит); если копии нет — место
+    /// потеряно, и отметка заводится пустой (`TripCheckpoint.hasCoordinate`).
+    let latitude: Double?
+    let longitude: Double?
     let distanceFromStart: Double
     let elapsedFromStart: Double
     let name: String?
@@ -102,6 +117,28 @@ struct TripSyncPayload: Codable {
     /// незнакомая строка внутри читается как «записана треком», а не роняет
     /// весь пейлоад.
     var source: TripOrigin? = nil
+    /// Как ехал плагин-гибрид (0.8.3). См. `TripEnergyMode`.
+    ///
+    /// **Ключ едет ВСЕГДА, и «Авто» тоже — строкой.** Дисциплина у него не
+    /// такая, как у `source` и `checkpoints`: там отсутствие ключа значит
+    /// «старый сервер молчит», и это единственное, что оно может значить. А
+    /// здесь «Авто» — законный ОТВЕТ человека, вернувшего выбор обратно, и
+    /// уезжай он отсутствием ключа, возврат с «Электро» на «Авто» не доехал бы
+    /// до второго телефона никогда: пул прочитал бы молчание и оставил
+    /// «Электро». Поэтому оптиональность здесь описывает только приходящее
+    /// (старый сервер), а исходящее всегда несёт строку.
+    /// СТРОКОЙ, а не типом, и это не небрежность.
+    ///
+    /// `TripSyncPayload` кодируется СИНТЕЗИРОВАННЫМ `Codable`, а тот на
+    /// незнакомом значении бросает — то есть роняет пейлоад поездки целиком.
+    /// Терпимый `init(from:)` у самого типа (приём `TripOrigin`) эту половину
+    /// чинит, но заводит вторую: незнакомый режим с будущего клиента прочитался
+    /// бы как «Авто» и ЗАТЁР бы локальный выбор человека. Строка разводит все
+    /// три случая честно: ключа нет — старый сервер; значение знакомо — это
+    /// ответ; значение незнакомо — мнения у нас о нём нет, локальное не трогаем.
+    /// Ровно так же разобран `dashboardUnits` у машины — только там для этого
+    /// пришлось писать весь `Codable` руками.
+    var energyMode: String? = nil
 }
 
 extension TripSyncPayload {
@@ -171,7 +208,8 @@ extension TripSyncPayload {
         self.checkpoints = trip.checkpoints.enumerated().map { index, c in
             TripCheckpointPayload(
                 id: c.id, timestamp: c.timestamp,
-                latitude: c.latitude, longitude: c.longitude,
+                latitude: Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.latitude,
+                longitude: Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.longitude,
                 distanceFromStart: c.distanceFromStart, elapsedFromStart: c.elapsedFromStart,
                 name: c.name, photoId: c.photoId, photoIds: c.photoIds, placeId: c.placeId, sortOrder: index)
         }
@@ -181,6 +219,9 @@ extension TripSyncPayload {
                 toCheckpointId: $0.toCheckpointId, name: $0.name)
         }
         self.source = trip.source
+        // Ключ едет ВСЕГДА, и «Авто» тоже: иначе возврат на «Авто»
+        // неотличим от молчания старого клиента — см. поле выше.
+        self.energyMode = trip.energyMode.rawValue
     }
 
     /// Координата кадра внутри зоны с телефона НЕ уезжает.
@@ -193,6 +234,24 @@ extension TripSyncPayload {
     ///
     /// Убираются ОБЕ половины разом: одна широта без долготы это не «меньше
     /// данных», а сломанная пара.
+    /// Координата ОТМЕТКИ внутри зоны с телефона не уезжает (0.8.3).
+    ///
+    /// Долг 0.8.2, названный в `home-privacy.md` словами: трек, превью и EXIF
+    /// снимка там уже обрезаны, а отметка, поставленная во дворе, уезжала
+    /// точной точкой — и уезжала ОСОЗНАННО, потому что широта и долгота были
+    /// в проводе обязательными. Теперь они опциональны на обеих сторонах, и
+    /// отметка уезжает без адреса, сохраняя имя и время.
+    ///
+    /// Убираются ОБЕ половины разом, как у EXIF: одна широта без долготы —
+    /// это не «меньше данных», а сломанная пара.
+    static func wireCheckpoint(_ latitude: Double, _ longitude: Double, zone: Zone?)
+    -> (latitude: Double, longitude: Double)? {
+        guard let zone else { return (latitude, longitude) }
+        let point = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard !PrivacyZone.hides(point, centre: zone.centre, radius: zone.radius) else { return nil }
+        return (latitude, longitude)
+    }
+
     static func wireExif(_ latitude: Double?, _ longitude: Double?, zone: Zone?)
     -> (latitude: Double, longitude: Double)? {
         guard let latitude, let longitude else { return nil }

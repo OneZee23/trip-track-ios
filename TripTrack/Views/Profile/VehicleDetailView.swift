@@ -555,7 +555,13 @@ struct VehicleDetailView: View {
             )
             // Consumption is a fuel figure like the ones below it, so a
             // bicycle drops it too — the odometer card then takes the row.
-            if vehicle.type.burnsFuel {
+            //
+            // И электромобиль тоже (0.8.3): средний расход здесь — это литры,
+            // а у него их нет. Показывать вместо них киловатт-часы нельзя
+            // молча: у топлива это СРЕДНЕЕ городского и трассового, а у
+            // электричества число одно, и плитка «в среднем» врала бы о том,
+            // что его усреднили.
+            if vehicle.type.burnsFuel, vehicle.powertrain.usesFuel {
                 statCard(
                     value: GarageFormat.oneDecimal(avg, lng: l),
                     valueColor: AppTheme.green,
@@ -1143,31 +1149,79 @@ struct VehicleDetailView: View {
         let priceUnit = "\(vehicle.fuelCurrency)/"
             + GarageFormat.volumeShort(dialect.volumeUnit.rawValue, lng: lng)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
-            // screen gutter — the 2pt indent misaligned it with the card below.
-            GarageSectionLabel(text: AppStrings.fuelSectionLabel(l))
+        // Блок энергии (0.8.3): у машины показывается ТО, ЧТО У НЕЁ ЕСТЬ.
+        // Литры у электромобиля не исчезают из базы (смена типа их не стирает),
+        // но показывать их незачем — они отвечают на вопрос, которого у этой
+        // машины нет.
+        let electricDialect = vehicle.electricUnit(app: distanceUnit)
+        let electricUnitLabel = electricDialect.valueUnit(l)
+        let kWhPriceUnit = "\(vehicle.fuelCurrency)/\(AppStrings.unitKWhShort(l))"
 
-            VStack(spacing: 0) {
-                fuelRow(
-                    title: AppStrings.fuelCityRow(l),
-                    value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.cityConsumption), lng: lng)) \(consumptionUnit)",
-                    c: c
-                )
-                fuelDivider(c: c)
-                fuelRow(
-                    title: AppStrings.fuelHighwayRow(l),
-                    value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.highwayConsumption), lng: lng)) \(consumptionUnit)",
-                    c: c
-                )
-                fuelDivider(c: c)
-                fuelRow(
-                    title: AppStrings.fuelPriceRow(l),
-                    value: "\(GarageFormat.fuel(dialect.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng)) \(priceUnit)",
-                    c: c
-                )
+        return VStack(alignment: .leading, spacing: 8) {
+            if vehicle.powertrain.usesFuel {
+                // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
+                // screen gutter — the 2pt indent misaligned it with the card below.
+                GarageSectionLabel(text: AppStrings.fuelSectionLabel(l))
+
+                VStack(spacing: 0) {
+                    fuelRow(
+                        title: AppStrings.fuelCityRow(l),
+                        value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.cityConsumption), lng: lng)) \(consumptionUnit)",
+                        c: c
+                    )
+                    fuelDivider(c: c)
+                    fuelRow(
+                        title: AppStrings.fuelHighwayRow(l),
+                        value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.highwayConsumption), lng: lng)) \(consumptionUnit)",
+                        c: c
+                    )
+                    fuelDivider(c: c)
+                    fuelRow(
+                        title: AppStrings.fuelPriceRow(l),
+                        value: "\(GarageFormat.fuel(dialect.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng)) \(priceUnit)",
+                        c: c
+                    )
+                }
+                .surfaceCard(cornerRadius: 16)
             }
-            .surfaceCard(cornerRadius: 16)
+
+            if vehicle.powertrain.usesElectricity {
+                GarageSectionLabel(text: AppStrings.electricSectionLabel(l))
+
+                VStack(spacing: 0) {
+                    // Незаданное число — прочерк, а не ноль: ноль здесь
+                    // выглядел бы ответом («ничего не тратит»), которого
+                    // человек не давал.
+                    fuelRow(
+                        title: AppStrings.electricConsumptionRow(l),
+                        value: vehicle.electricConsumption > 0
+                            ? "\(GarageFormat.fuel(electricDialect.display(fromPer100: vehicle.electricConsumption), lng: lng)) \(electricUnitLabel)"
+                            : "—",
+                        c: c
+                    )
+                    fuelDivider(c: c)
+                    fuelRow(
+                        title: AppStrings.fuelPriceRow(l),
+                        value: vehicle.electricityPrice > 0
+                            ? "\(GarageFormat.fuel(vehicle.electricityPrice, lng: lng)) \(kWhPriceUnit)"
+                            : "—",
+                        c: c
+                    )
+                    if vehicle.powertrain.needsElectricRange {
+                        fuelDivider(c: c)
+                        fuelRow(
+                            title: AppStrings.electricRangeLabel(l),
+                            value: vehicle.electricRangeKm > 0
+                                ? Measure.distance(km: vehicle.electricRangeKm,
+                                                   unit: vehicle.dashboardUnit(app: distanceUnit),
+                                                   lang: l)
+                                : "—",
+                            c: c
+                        )
+                    }
+                }
+                .surfaceCard(cornerRadius: 16)
+            }
         }
     }
 

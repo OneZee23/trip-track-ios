@@ -1921,8 +1921,16 @@ enum AppStrings {
     static func statFuel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statFuel", ru: "Топливо", en: "Fuel")
     }
+    /// Подпись плитки ДЕНЕГ на экране поездки.
+    ///
+    /// Было «Расход», и до 0.8.3 это читалось: соседняя плитка называлась
+    /// «Топливо», и пара «Топливо · Расход» не спорила сама с собой. С
+    /// появлением «Электричества» плиток стало три, и «Расход» рядом с
+    /// литрами и киловатт-часами стал значить не деньги, а потребление. Слово
+    /// поменяно у трёх языков, где оно двусмысленно (ru, uk, kk); у остальных
+    /// там с самого начала стоит «стоимость» (Kosten, Coût, Koszt).
     static func statCost(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statCost", ru: "Расход", en: "Cost")
+        tr(lang, "statCost", ru: "Стоимость", en: "Cost")
     }
     static func chartAltitudeLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "chartAltitudeLabel", ru: "ВЫСОТА", en: "ALTITUDE")
@@ -6746,6 +6754,14 @@ enum AppStrings {
     static func unitLitresShort(_ lang: LanguageManager.Language) -> String {
         tr(lang, "unitLitresShort", ru: "л", en: "L")
     }
+    /// Киловатт-час, сокращённо. Составляется в подпись расхода
+    /// («кВт·ч/100 км») и стоит у числа энергии на экране поездки.
+    ///
+    /// Переводится, хотя выглядит символом: латиницей его пишет не весь мир —
+    /// у казахского «сағ» вместо «ч», у украинского «год».
+    static func unitKWhShort(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "unitKWhShort", ru: "кВт·ч", en: "kWh")
+    }
     static func tripEditAPublicTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripEditAPublicTrip",
            ru: "Публичную поездку видят другие пользователи в общей ленте. Вернуть её в приватные можно в любой момент.",
@@ -7262,6 +7278,83 @@ enum AppStrings {
         tr(lang, "dashboardUnitsPickerFootnote",
            ru: "Ничего не пересчитывается: пробег, расход и цена остаются теми же величинами. Меняется единица, в которой их показывают и вводят, — число на экране станет другим, машина прежней.",
            en: "Nothing is recalculated: the odometer, consumption and price stay the same quantities. Only the unit they are shown and typed in changes — the figure on screen moves, the car does not.")
+    }
+
+    // MARK: - Электро и гибриды (0.8.3)
+
+    /// Строка «Двигатель» в форме машины — НАД блоком расхода, рядом с тем,
+    /// чем она командует.
+    static func vehiclePowertrainTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePowertrainTitle", ru: "Двигатель", en: "Powertrain")
+    }
+    /// Подзаголовок строки: он и есть ответ на «это что, тип кузова?».
+    static func vehiclePowertrainSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePowertrainSubtitle", ru: "Чем машина едет", en: "What it runs on")
+    }
+    static func powertrainFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainFuel", ru: "Топливо", en: "Fuel")
+    }
+    static func powertrainElectric(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainElectric", ru: "Электро", en: "Electric")
+    }
+    static func powertrainHybrid(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainHybrid", ru: "Плагин-гибрид", en: "Plug-in hybrid")
+    }
+    /// Подвал листа выбора. Отвечает ровно на тот вопрос, из-за которого
+    /// человек с Приусом выбрал бы «гибрид» и получил бы киловатт-часы,
+    /// которых у него нет.
+    static func powertrainPickerFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainPickerFootnote",
+           ru: "Обычный гибрид, который заряжается только от своего двигателя, — это «Топливо»: он жжёт бензин, и литры описывают его полностью.",
+           en: "A regular hybrid that charges only from its own engine is «Fuel»: it burns petrol, and litres describe it fully.")
+    }
+    static func electricSectionLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "electricSectionLabel", ru: "Расход электричества", en: "Electricity consumption")
+    }
+    static func electricConsumptionRow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "electricConsumptionRow", ru: "Расход", en: "Consumption")
+    }
+    static func electricPriceSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "electricPriceSection", ru: "Цена электричества", en: "Electricity price")
+    }
+    static func electricRangeLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "electricRangeLabel", ru: "Запас хода", en: "Battery range")
+    }
+    /// Подсказка под запасом хода: она объясняет, ЧТО приложение делает с этим
+    /// числом, — иначе «50» выглядит справочной величиной из буклета.
+    static func electricRangeHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "electricRangeHint",
+           ru: "Сколько машина проезжает на полном заряде. Первые километры каждого дня приложение считает электрическими.",
+           en: "How far the car goes on a full charge. The app counts the first kilometres of each day as electric.")
+    }
+    /// Плитка энергии на экране поездки.
+    static func statElectricity(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "statElectricity", ru: "Электричество", en: "Electricity")
+    }
+    /// Подпись плитки стоимости, когда цена есть только у топливной части.
+    static func statCostFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "statCostFuel", ru: "Стоимость топлива", en: "Fuel cost")
+    }
+    /// …и когда только у электрической.
+    static func statCostElectricity(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "statCostElectricity", ru: "Стоимость электричества", en: "Electricity cost")
+    }
+    /// Заголовок строки режима под плитками у своей поездки гибрида.
+    static func tripEnergyModeTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripEnergyModeTitle", ru: "Как ехал", en: "How it ran")
+    }
+    /// «Считает приложение». По-немецки и по-испански это слово обязано быть
+    /// «автоматически», а не «Auto»: там «Auto» значит «машина».
+    static func energyModeAuto(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "energyModeAuto", ru: "Авто", en: "Auto")
+    }
+    /// Подпись под плиткой электричества: сколько километров прошло на батарее.
+    ///
+    /// Расстояние приходит УЖЕ напечатанным из `Measure` — подстановкой, а не
+    /// интерполяцией, иначе на одиннадцати языках оно исчезнет.
+    static func tripOnBattery(_ lang: LanguageManager.Language, distance: String) -> String {
+        tr(lang, "tripOnBattery", ru: "{distance} на батарее", en: "{distance} on battery")
+            .replacingOccurrences(of: "{distance}", with: distance)
     }
 
     /// Живая строка под полем ручного пробега: в чём его сейчас ждут.

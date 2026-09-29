@@ -78,6 +78,32 @@ struct Vehicle: Identifiable, Codable {
     /// всегда.
     var dashboardUnits: DashboardUnits
 
+    // MARK: - Электро и гибриды (0.8.3)
+
+    /// Чем машина едет. См. `Powertrain`.
+    var powertrain: Powertrain
+    /// Расход электричества — киловатт-часы на сотню КИЛОМЕТРОВ, всегда.
+    ///
+    /// Ноль значит «не задано», а не «машина не тратит электричество»: без
+    /// числа раскладка поездки просто не показывает киловатт-часы. Выдуманный
+    /// «типичный расход» стоял бы в базе как настоящий и уехал бы на второй
+    /// телефон — поэтому подсказка в форме живёт плейсхолдером, а не значением.
+    ///
+    /// Мили на киловатт-час — только на экране, через `ElectricUnit`.
+    var electricConsumption: Double
+    /// Цена киловатт-часа в валюте машины (`fuelCurrency`).
+    ///
+    /// Ноль — «не задана», и стоимость без неё не считается вовсе. Угадывать
+    /// её нельзя ничем: цена за кВт·ч различается в разы между домашней
+    /// розеткой и быстрой зарядкой, и выдуманное число в чужой валюте хуже
+    /// честного прочерка.
+    var electricityPrice: Double
+    /// Запас хода на батарее, километры. Только у плагин-гибрида.
+    ///
+    /// Ноль — «не задан», и для раскладки это честный ответ гибрида, которого
+    /// не заряжают: вся поездка идёт на топливе.
+    var electricRangeKm: Double
+
     // MARK: - Плюс (0.8.0)
 
     /// Фон карточки машины в гараже — один из восьми вариантов «Плюса».
@@ -145,7 +171,10 @@ struct Vehicle: Identifiable, Codable {
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
          fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current,
-         dashboardUnits: DashboardUnits = .app, cardStyle: String? = nil,
+         dashboardUnits: DashboardUnits = .app,
+         powertrain: Powertrain = .fuel, electricConsumption: Double = 0,
+         electricityPrice: Double = 0, electricRangeKm: Double = 0,
+         cardStyle: String? = nil,
          about: String = "", make: String = "", model: String = "",
          year: Int = 0, bodyType: String = "",
          photosVisible: Bool = false, mapVisible: Bool = true,
@@ -178,6 +207,10 @@ struct Vehicle: Identifiable, Codable {
         self.fuelPrice = fuelPrice
         self.fuelCurrency = fuelCurrency
         self.dashboardUnits = dashboardUnits
+        self.powertrain = powertrain
+        self.electricConsumption = electricConsumption
+        self.electricityPrice = electricityPrice
+        self.electricRangeKm = electricRangeKm
         self.cardStyle = cardStyle
     }
 
@@ -218,6 +251,17 @@ struct Vehicle: Identifiable, Codable {
         // можно было бы сохранить, ещё не существует.
         dashboardUnits = DashboardUnits.parse(
             (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil) ?? .app
+        // Электро и гибриды (0.8.3). Тип двигателя — строкой и через `parse`,
+        // по той же причине, что приборка строкой выше: незнакомое слово из
+        // будущей версии не имеет права уронить разбор всей машины. Отсутствие
+        // и нераспознанное здесь одинаково значат «топливо» — это ответ всех
+        // машин, заведённых до 0.8.3.
+        powertrain = Powertrain.parse(
+            (try? c.decodeIfPresent(String.self, forKey: .powertrain)) ?? nil) ?? .fuel
+        // Ноль — «не задано», и это же умолчание у машины без этих ключей.
+        electricConsumption = try c.decodeIfPresent(Double.self, forKey: .electricConsumption) ?? 0
+        electricityPrice = try c.decodeIfPresent(Double.self, forKey: .electricityPrice) ?? 0
+        electricRangeKm = try c.decodeIfPresent(Double.self, forKey: .electricRangeKm) ?? 0
         // Плюс (0.8.0). Отсутствие ключа — «обычная карточка», как и у
         // паспорта ниже: ни один сохранённый payload и ни один сервер до
         // 0.8.0 этого ключа не шлёт.
@@ -358,6 +402,15 @@ struct Vehicle: Identifiable, Codable {
     /// позвать.
     func consumptionUnit(app appUnit: DistanceUnit) -> ConsumptionUnit {
         ConsumptionUnit.forDashboard(dashboardUnit(app: appUnit))
+    }
+
+    /// В каком диалекте показывать и разбирать расход ЭЛЕКТРИЧЕСТВА ЭТОЙ машины.
+    ///
+    /// Близнец `consumptionUnit(app:)` и по той же причине функция ОТ единицы
+    /// человека, а не чтение глобального выбора: сумме по нескольким машинам
+    /// эту функцию нечем позвать.
+    func electricUnit(app appUnit: DistanceUnit) -> ElectricUnit {
+        ElectricUnit.forDashboard(dashboardUnit(app: appUnit))
     }
 
     /// От какого числа считается уровень. ВСЕГДА треканный: уровень — награда

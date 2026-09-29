@@ -117,6 +117,23 @@ struct TripDetailView: View {
     /// «Вы ехали этот отрезок 3 раза» — по проездам обоих мест отрезка.
     /// Ключ — id отрезка; считается на загрузке, как `placeChips`, не в `body`.
     @State private var segmentHistory: [UUID: [TimeInterval]] = [:]
+    /// Раскладка энергии этой поездки (0.8.3).
+    ///
+    /// Живёт в состоянии, а не считается в `body`: гибриду нужны СОСЕДНИЕ
+    /// поездки того же дня (запас хода тратится по дню), а это запрос в базу —
+    /// в `body`, который перерисовывается на каждый кадр, ему не место. Тот же
+    /// приём, что у `placeChips` и `segmentHistory`.
+    @State private var energyEstimate: EnergyEstimate?
+    /// Выбранный режим энергии — СВОИМ состоянием экрана, а не полем внутри
+    /// `trip`.
+    ///
+    /// Так же, как заголовок и описание, которые экран правит своими
+    /// `@State`-строками: `trip` тут снимок загрузки, и правка поля внутри
+    /// него до экрана не доезжает — проверено кадром (зонд показывал
+    /// `b:auto-a:auto` сразу после присваивания). Из базы значение приходит
+    /// один раз, на загрузке; дальше выбором командует экран, а базу
+    /// обновляет `setEnergyMode`.
+    @State private var energyMode: TripEnergyMode = .auto
     /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
     @State private var showJourneyComposer = false
     /// Открытое путешествие этой поездки — пушится в тот же стек.
@@ -1133,6 +1150,11 @@ struct TripDetailView: View {
         .onChange(of: trip?.isPrivate) { _, _ in
             Task { await loadReactions() }
         }
+        // Режим приезжает из базы ОДИН раз — вместе с поездкой. Дальше им
+        // командует экран (см. `energyMode`).
+        .onChange(of: trip?.energyMode, initial: true) { _, mode in
+            energyMode = mode ?? .auto
+        }
         .sheet(isPresented: $showPhotoPicker) {
             TripPhotoPicker { images in
                 pickedImages = images
@@ -1147,7 +1169,7 @@ struct TripDetailView: View {
 
     private var tripDetailBody: some View {
         tripDetailStage
-        .onChange(of: pickedImages) { handlePickedPhotos($0) }
+        .onChange(of: pickedImages) { _, picked in handlePickedPhotos(picked) }
         .task(id: trip?.photos.count) { restartPinsRebuild() }
         // Имя отметки дозревает из геокодера уже после того, как она встала
         // на карту, — без этого маркер до выхода с экрана звался бы «#1».
@@ -1803,6 +1825,10 @@ isOwn
 
         var markers: [CheckpointMarker] = []
         for (index, checkpoint) in trip.checkpoints.enumerated() {
+            // Отметка без места на карту не идёт (0.8.3): она вернулась с
+            // сервера обрезанной приватной зоной, и рисовать её в Гвинейском
+            // заливе значило бы соврать координатой. В «Моментах» она есть.
+            guard checkpoint.hasCoordinate else { continue }
             var image: UIImage?
             let linked = links[checkpoint.id] ?? []
             if let cover = linked.first {
@@ -1836,6 +1862,7 @@ isOwn
         tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
         reloadPlaceChips()
         reloadSegmentHistory()
+        reloadEnergy()
         // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
         // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
         // Один раз: иначе каждый повторный rebuildPhotoPins() отправлял бы
@@ -2019,6 +2046,42 @@ isOwn
             result[segment.id] = SegmentHistory.times(
                 fromPasses: passes(from), toPasses: passes(to))
         }
+    }
+
+    /// Раскладка энергии: киловатт-часы, литры и деньги этой поездки (0.8.3).
+    ///
+    /// Считается здесь, рядом с `reloadPlaceChips` и по тем же поводам.
+    /// Гибриду нужен ДЕНЬ: запас хода тратится по порядку старта, и соседние
+    /// поездки той же машины за тот же календарный день меняют ответ. Выборка
+    /// маленькая (поездки одного дня, без точек трека), но это всё равно
+    /// запрос в базу, и в `body` ему не место.
+    ///
+    /// У машины на топливе и у электромобиля дня не существует — там ответ
+    /// зависит только от самой поездки, и лишнего запроса нет.
+    private func reloadEnergy() {
+        guard let trip, let vid = trip.vehicleId,
+              let vehicle = settings.vehicles.first(where: { $0.id == vid }),
+              // Сто метров — та же граница «ехали или маневрировали», что
+              // стояла у прежнего топливного блока.
+              trip.distance > 100 else { energyEstimate = nil; return }
+
+        guard vehicle.powertrain == .pluginHybrid else {
+            energyEstimate = EnergyEstimate.resolve(
+                vehicle: vehicle, metres: trip.distance,
+                avgSpeedMS: trip.averageSpeed, mode: energyMode)
+            return
+        }
+
+        // День — КАЛЕНДАРНЫЙ и по СТАРТУ; правило и запрос живут во
+        // вью-модели (спека §3.2).
+        var sameDay = viewModel.tripsOfSameDay(as: trip, vehicleId: vid)
+        // У СВОЕЙ поездки режим берётся с экрана, а не из выборки: в базе он
+        // уже лежит правильный, но порядок «записали — перечитали» не должен
+        // решать, что человек увидит после нажатия.
+        if let index = sameDay.firstIndex(where: { $0.id == trip.id }) {
+            sameDay[index].energyMode = energyMode
+        }
+        energyEstimate = EnergyEstimate.day(vehicle: vehicle, trips: sameDay)[trip.id]
     }
 
     /// Перестроение булавок и маркеров — всегда одно, последнее. Две задачи
@@ -2369,6 +2432,10 @@ isOwn
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
                 statsGrid(trip: trip, c: c)
+                // Строка «Как ехал» — только у СВОЕЙ поездки плагин-гибрида:
+                // у машины на топливе и у электромобиля режим не читается
+                // вовсе, а чужую поездку править нельзя (спека §3.4).
+                energyModeRow(trip: trip, c: c)
             }
 
             // «Моменты» есть у каждой своей поездки, даже без отметок: старт и
@@ -3399,6 +3466,112 @@ isOwn
         Measure.elevationParts(metres: cachedMaxAltitude, unit: distanceUnit, lang: l)
     }
 
+    /// Строка «Как ехал» — ручная правка режима у СВОЕЙ поездки плагин-гибрида.
+    ///
+    /// Её не существует у машины на топливе и у электромобиля (там режим не
+    /// читается вовсе) и у чужой поездки (править нечего). Вопроса после
+    /// поездки нет нигде: он был бы платой вниманием за каждую поездку, а эта
+    /// строка отвечает на тот же вопрос — но только когда человеку есть что
+    /// поправить (решение владельца 25 сентября 2026, спека §1).
+    @ViewBuilder
+    private func energyModeRow(trip: Trip, c: AppTheme.Colors) -> some View {
+        if isOwn, let vid = trip.vehicleId,
+           let vehicle = settings.vehicles.first(where: { $0.id == vid }),
+           vehicle.powertrain == .pluginHybrid {
+            let l = lang.language
+            VStack(alignment: .leading, spacing: 8) {
+                // «50 км на батарее» — ответ на вопрос, который плитка
+                // киловатт-часов не задаёт. Расстояние только через `Measure`
+                // и подстановкой в строку, а не интерполяцией.
+                if let e = energyEstimate, e.electricMetres > 0 {
+                    Text(AppStrings.tripOnBattery(l, distance: Measure.distance(
+                        metres: e.electricMetres, unit: distanceUnit, lang: l)))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                }
+                HStack(spacing: 10) {
+                    Text(AppStrings.tripEnergyModeTitle(l))
+                        .font(.inter(13, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 8)
+                    energyModeSegments(trip: trip, c: c, l: l)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// Сегменты «Авто · Электро · Топливо».
+    ///
+    /// Свои, а не `Picker(.segmented)`: системный сегмент приносит свою
+    /// типографику и свои серые — ровно то, за что в этом приложении не
+    /// ставят системные модалки (CLAUDE.md, «Dialogs»).
+    private func energyModeSegments(
+        trip: Trip, c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        HStack(spacing: 2) {
+            ForEach(TripEnergyMode.allCases, id: \.self) { mode in
+                let selected = energyMode == mode
+                Button {
+                    guard !selected else { return }
+                    Haptics.tap()
+                    setEnergyMode(mode, for: trip)
+                } label: {
+                    Text(energyModeLabel(mode, l))
+                        .font(.inter(12, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? .white : c.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule().fill(selected ? AppTheme.accent : Color.clear))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("trip_energy_mode_\(mode.rawValue)")
+                // Выбор обязан быть СКАЗАН, а не только показан цветом: без
+                // этого VoiceOver читает три одинаковые кнопки подряд, и какая
+                // из них сейчас стоит — неизвестно. Тем же признаком выбор
+                // виден UI-тесту (`isSelected`), то есть проверяется числом, а
+                // не глазами на кадре.
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+        }
+        .padding(2)
+        .background(c.cardAlt, in: Capsule())
+        .animation(.easeInOut(duration: 0.18), value: energyMode)
+        // Имя — на МАРКЕРЕ 1×1, а не на контейнере: `accessibilityIdentifier`
+        // на контейнере SwiftUI раздаёт ВСЕМ детям, и три кнопки режима
+        // теряют свои имена (та же ловушка, что у листа дома в 0.8.2).
+        .overlay(alignment: .topLeading) {
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityIdentifier("trip_energy_current_\(energyMode.rawValue)")
+        }
+    }
+
+    /// Имена режимов. «Авто» здесь — «считает приложение», и у `Powertrain`
+    /// те же два слова для двух других: одно слово на две роли завести можно,
+    /// две разных строки на одно слово — нельзя.
+    private func energyModeLabel(_ mode: TripEnergyMode, _ l: LanguageManager.Language) -> String {
+        switch mode {
+        case .auto:     return AppStrings.energyModeAuto(l)
+        case .electric: return AppStrings.powertrainElectric(l)
+        case .fuel:     return AppStrings.powertrainFuel(l)
+        }
+    }
+
+    /// Правка режима — правка поездки: она уезжает в очередь синка, а плитки
+    /// пересчитываются сразу. Соседи того же дня тоже меняются (их остаток
+    /// запаса стал другим), поэтому пересчёт идёт через `reloadEnergy()`, а не
+    /// правкой одного числа.
+    private func setEnergyMode(_ mode: TripEnergyMode, for trip: Trip) {
+        energyMode = mode
+        mapVM.tripManager.setEnergyMode(mode, forTrip: trip.id)
+        reloadEnergy()
+    }
+
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {
         let l = lang.language
         return LazyVGrid(columns: [
@@ -3471,43 +3644,54 @@ isOwn
                 staggerIndex: 7
             )
 
-            // Fuel consumption (if vehicle configured)
-            if let fuel = tripFuelInfo(trip) {
-                DetailStatCard(
-                    // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
-                    // prefix said "estimated", which every number on this
-                    // screen is — and it made the tile read like a warning.
-                    value: TripDetailFormat.fuelVolume(fuel.volume, lang: l),
-                    unit: fuel.volUnit,
-                    label: AppStrings.statFuel(l),
-                    color: AppTheme.yellow,
-                    staggerIndex: 8
-                )
-                DetailStatCard(
-                    value: TripDetailFormat.money(fuel.cost),
-                    unit: fuel.currency,
-                    label: AppStrings.statCost(l),
-                    color: AppTheme.accent,
-                    staggerIndex: 9
-                )
+            // Энергия поездки (0.8.3): киловатт-часы, литры и деньги.
+            // Плитка части есть, только если у части есть километры И у машины
+            // задан её расход — «не задано» не печатается как «0».
+            if let energy = tripEnergyInfo(trip) {
+                if let electricity = energy.electricity {
+                    DetailStatCard(
+                        value: TripDetailFormat.fuelVolume(electricity.kWh, lang: l),
+                        unit: AppStrings.unitKWhShort(l),
+                        label: AppStrings.statElectricity(l),
+                        color: AppTheme.teal,
+                        staggerIndex: 8
+                    )
+                }
+                if let fuel = energy.fuel {
+                    DetailStatCard(
+                        // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
+                        // prefix said "estimated", which every number on this
+                        // screen is — and it made the tile read like a warning.
+                        value: TripDetailFormat.fuelVolume(fuel.volume, lang: l),
+                        unit: fuel.volUnit,
+                        label: AppStrings.statFuel(l),
+                        color: AppTheme.yellow,
+                        staggerIndex: 9
+                    )
+                }
+                if let cost = energy.cost {
+                    DetailStatCard(
+                        value: TripDetailFormat.money(cost.amount),
+                        unit: energy.currency,
+                        label: cost.label,
+                        color: AppTheme.accent,
+                        staggerIndex: 10
+                    )
+                }
             }
         }
     }
 
-    private func tripFuelInfo(_ trip: Trip) -> (volume: Double, cost: Double, volUnit: String, currency: String)? {
-        let vehicle: Vehicle?
-        if let vid = trip.vehicleId {
-            vehicle = settings.vehicles.first { $0.id == vid }
-        } else {
-            vehicle = nil
-        }
-        // Сто метров — та же граница «ехали или маневрировали», что стояла
-        // здесь как «0.1 км». В метрах, потому что её сосед по строке —
-        // `trip.distance`, а не показанное число.
-        guard let v = vehicle, v.cityConsumption > 0, trip.distance > 100 else { return nil }
-        // Метры и метры в секунду: мили, протёкшие в расход, дают +60 % литров
-        // и денег молча — расстояние входит в него дважды.
-        let fuel = v.fuelCost(metres: trip.distance, avgSpeedMS: trip.averageSpeed)
+    /// Что показать в плитках энергии.
+    ///
+    /// Раскладку считает `EnergyEstimate` и держит `energyEstimate`, которую
+    /// заполняет `reloadEnergy()` — В БАЗУ ЗА ДНЁМ ХОДИТ ОНА, а не `body`:
+    /// поездкам того же дня нужен запрос, а `body` перерисовывается на каждый
+    /// кадр. Здесь остаётся только выбор единиц и подписей.
+    private func tripEnergyInfo(_ trip: Trip) -> TripEnergyTiles? {
+        guard let vid = trip.vehicleId,
+              let v = settings.vehicles.first(where: { $0.id == vid }),
+              let e = energyEstimate else { return nil }
 
         // Литры или галлоны спрашивается у МАШИНЫ ТОЙ ПОЕЗДКИ, а не у
         // настройки аккаунта. Настройка одна, машин в гараже несколько — и до
@@ -3516,18 +3700,41 @@ isOwn
         // панель — галлоны, метрическая — литры.
         let dialect = v.consumptionUnit(app: distanceUnit)
         let currency = trip.fuelCurrency ?? FuelCurrency.current
-        let volShort = dialect.volumeUnit == .gallons
-            ? AppStrings.unitGallonsShort(lang.language)
-            : AppStrings.unitLitresShort(lang.language)
 
-        // Константа галлона живёт в `ConsumptionUnit` и больше нигде: здесь
-        // стояла её ЧЕТВЁРТАЯ копия, и записана она была с обрезанной пятой
-        // цифрой — 3.78541 против точных 3.785411784.
-        let volume = dialect.volumeUnit == .gallons
-            ? fuel.liters / ConsumptionUnit.litresPerGallon
-            : fuel.liters
+        var fuel: TripEnergyTiles.Fuel?
+        if e.litres > 0 {
+            let volShort = dialect.volumeUnit == .gallons
+                ? AppStrings.unitGallonsShort(lang.language)
+                : AppStrings.unitLitresShort(lang.language)
+            // Константа галлона живёт в `ConsumptionUnit` и больше нигде:
+            // здесь стояла её ЧЕТВЁРТАЯ копия, записанная с обрезанной пятой
+            // цифрой — 3.78541 против точных 3.785411784.
+            let volume = dialect.volumeUnit == .gallons
+                ? e.litres / ConsumptionUnit.litresPerGallon
+                : e.litres
+            fuel = .init(volume: volume, volUnit: volShort)
+        }
 
-        return (volume, fuel.cost, volShort, currency)
+        let electricity: TripEnergyTiles.Electricity? = e.kWh > 0 ? .init(kWh: e.kWh) : nil
+
+        // Подпись стоимости говорит, У ЧЕГО она, когда цена есть только у
+        // одной половины: «Стоимость» рядом с одними литрами из двух частей
+        // поездки — это обещание полной суммы, которой у нас нет.
+        var cost: TripEnergyTiles.Cost?
+        if let total = e.totalCost {
+            let label: String
+            switch (e.electricCost, e.fuelCost) {
+            case (.some, .some): label = AppStrings.statCost(lang.language)
+            case (.some, .none): label = AppStrings.statCostElectricity(lang.language)
+            case (.none, .some): label = AppStrings.statCostFuel(lang.language)
+            case (.none, .none): label = AppStrings.statCost(lang.language)
+            }
+            cost = .init(amount: total, label: label)
+        }
+
+        guard fuel != nil || electricity != nil || cost != nil else { return nil }
+        return TripEnergyTiles(electricity: electricity, fuel: fuel,
+                               cost: cost, currency: currency)
     }
 
     // MARK: - Badges Section («Достижения поездки»)

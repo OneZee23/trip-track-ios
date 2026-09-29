@@ -213,4 +213,14 @@ enum GarageFormat {
         let d = AppStrings.unitDistanceShort(lng, unit: .km, value: 100, fractionDigits: 0)
         return "\(volumeShort(VolumeUnit.liters.rawValue, lng: lng))/100\(d)"
     }
+
+    /// Подпись расхода ЭЛЕКТРИЧЕСТВА — «кВт·ч/100 км», и ВСЕГДА сотня километров.
+    ///
+    /// Близнец `consumptionUnit` и по тем же правилам: параметров нет, потому
+    /// что мильная приборка даёт «mi/kWh» — своё слово и своё число, а
+    /// «киловатт-часы на сотню МИЛЬ» это единица, в которой не ездит никто.
+    static func electricConsumptionUnit(lng: LanguageManager.Language) -> String {
+        let d = AppStrings.unitDistanceShort(lng, unit: .km, value: 100, fractionDigits: 0)
+        return "\(AppStrings.unitKWhShort(lng))/100\(d)"
+    }
 }

@@ -825,8 +825,12 @@ struct JourneyDetailView: View {
     }
 
     private func markers(of trip: Trip) -> [CheckpointMarker] {
-        trip.checkpoints.enumerated().map { index, checkpoint in
-            CheckpointMarker(
+        // Номер у отметки — по её месту ВО ВРЕМЕНИ, поэтому нумеруем до
+        // отсева: отметка без координаты (обрезана приватной зоной, 0.8.3) не
+        // рисуется, но и не сдвигает номера соседям.
+        trip.checkpoints.enumerated().compactMap { index, checkpoint in
+            guard checkpoint.hasCoordinate else { return nil }
+            return CheckpointMarker(
                 id: checkpoint.id,
                 latitude: checkpoint.latitude, longitude: checkpoint.longitude,
                 number: index + 1,

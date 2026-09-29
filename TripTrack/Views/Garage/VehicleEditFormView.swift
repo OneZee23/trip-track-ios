@@ -83,6 +83,21 @@ struct VehicleEditFormView: View {
     /// вовсе — см. раздел «Dialogs» в CLAUDE.md.
     @State private var showDashboardPicker = false
 
+    /// Тип двигателя (0.8.3). В `@State`, как приборка, и по той же причине:
+    /// запись прямо из пикера сохранила бы выбор у человека, закрывшего форму
+    /// крестиком, — а вместе с типом уехала бы и половина полей.
+    @State private var powertrain: Powertrain
+    @State private var showPowertrainPicker = false
+    /// Поля электрического блока — в единице ПОКАЗА этой машины. Пустая
+    /// строка значит «не задано»: у поля тогда виден плейсхолдер типичного
+    /// значения, а в базу не пишется ноль, выдающий себя за ответ.
+    @State private var electricConsumption: String
+    @State private var electricPrice: String
+    @State private var electricRange: String
+    @State private var initialElectricConsumption: String
+    @State private var initialElectricPrice: String
+    @State private var initialElectricRange: String
+
     /// Фон карточки машины — косметика «Плюса» (0.8.0). Как и приборка,
     /// ложится в `@State` и сохраняется вместе с формой: запись прямо из
     /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
@@ -146,6 +161,20 @@ struct VehicleEditFormView: View {
                 shownUnit.display(fromPer100: vehicle.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng))
+            _powertrain = State(initialValue: vehicle.powertrain)
+            let shownElectric = ElectricUnit.forDashboard(shownDistance)
+            // Ноль — «не задано», и поле обязано остаться ПУСТЫМ: напечатанный
+            // ноль выглядит ответом, которого человек не давал, и сохранился
+            // бы как настоящий расход.
+            _electricConsumption = State(initialValue: vehicle.electricConsumption > 0
+                ? GarageFormat.fuel(shownElectric.display(fromPer100: vehicle.electricConsumption), lng: lng)
+                : "")
+            _electricPrice = State(initialValue: vehicle.electricityPrice > 0
+                ? GarageFormat.fuel(vehicle.electricityPrice, lng: lng)
+                : "")
+            _electricRange = State(initialValue: vehicle.electricRangeKm > 0
+                ? OdometerField.fieldText(km: vehicle.electricRangeKm, unit: shownDistance)
+                : "")
         } else {
             editedVehicle = nil
             let defaults = Vehicle()
@@ -175,11 +204,20 @@ struct VehicleEditFormView: View {
                 shownUnit.display(fromPer100: defaults.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), lng: lng))
+            // У новой машины двигатель топливный — ответ всех машин до 0.8.3,
+            // и единственный, при котором миграция никому ничего не меняет.
+            _powertrain = State(initialValue: defaults.powertrain)
+            _electricConsumption = State(initialValue: "")
+            _electricPrice = State(initialValue: "")
+            _electricRange = State(initialValue: "")
         }
         _initialCity = State(initialValue: _city.wrappedValue)
         _initialHighway = State(initialValue: _highway.wrappedValue)
         _initialManualOdometer = State(initialValue: _manualOdometer.wrappedValue)
         _initialPrice = State(initialValue: _price.wrappedValue)
+        _initialElectricConsumption = State(initialValue: _electricConsumption.wrappedValue)
+        _initialElectricPrice = State(initialValue: _electricPrice.wrappedValue)
+        _initialElectricRange = State(initialValue: _electricRange.wrappedValue)
     }
 
     var body: some View {
@@ -197,9 +235,19 @@ struct VehicleEditFormView: View {
                         plateCard(c: c, l: l)
                     }
                     avatarCard(c: c, l: l)
+                    // `burnsFuel` тут значит «у этого типа вообще есть
+                    // двигатель»: у велосипеда нет ни блока энергии, ни типа
+                    // двигателя, у машины, мото и мопеда — есть, и все трое
+                    // бывают электрическими.
                     if selectedType.burnsFuel {
-                        fuelCard(c: c, l: l)
-                        priceCard(c: c, l: l)
+                        powertrainCard(c: c, l: l)
+                        if powertrain.usesFuel {
+                            fuelCard(c: c, l: l)
+                            priceCard(c: c, l: l)
+                        }
+                        if powertrain.usesElectricity {
+                            electricCard(c: c, l: l)
+                        }
                     }
                     // Только у СУЩЕСТВУЮЩЕЙ машины. В режиме добавления экран
                     // «Кого пускать» получал `UUID()`, который не совпадает ни
@@ -222,6 +270,9 @@ struct VehicleEditFormView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 24)
                 .animation(.easeInOut(duration: 0.2), value: selectedType)
+                // Смена типа двигателя убирает и приносит целые карточки —
+                // без пружины это подмена содержимого рывком.
+                .animation(.easeInOut(duration: 0.2), value: powertrain)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -251,6 +302,11 @@ struct VehicleEditFormView: View {
         }
         .sheet(isPresented: $showDashboardPicker) {
             dashboardUnitsPicker(lang.language)
+                .environmentObject(lang)
+                .preferredColorScheme(scheme)
+        }
+        .sheet(isPresented: $showPowertrainPicker) {
+            powertrainPicker(lang.language)
                 .environmentObject(lang)
                 .preferredColorScheme(scheme)
         }
@@ -935,6 +991,21 @@ struct VehicleEditFormView: View {
         if let km = OdometerField.storedKm(manualOdometer, unit: oldDistance) {
             manualOdometer = OdometerField.fieldText(km: km, unit: newDistance)
         }
+
+        // Электрические поля — по тому же правилу и с той же ценой ошибки:
+        // 18 кВт·ч/100 км это 3.45 mi/kWh, и переподписанное поле сохранилось
+        // бы как расход, которого не бывает. Цена киловатт-часа НЕ трогается —
+        // киловатт-час одинаков во всём мире (см. `ElectricUnit`).
+        let oldElectric = ElectricUnit.forDashboard(oldDistance)
+        let newElectric = ElectricUnit.forDashboard(newDistance)
+        if let shown = parsed(electricConsumption) {
+            let stored = oldElectric.toPer100(shown)
+            electricConsumption = GarageFormat.fuel(
+                newElectric.display(fromPer100: stored), lng: lng)
+        }
+        if let km = OdometerField.storedKm(electricRange, unit: oldDistance) {
+            electricRange = OdometerField.fieldText(km: km, unit: newDistance)
+        }
     }
 
     private func priceCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
@@ -997,6 +1068,11 @@ struct VehicleEditFormView: View {
         text: Binding<String>,
         maxValue: Double,
         c: AppTheme.Colors,
+        /// Что стоит в пустом поле. У топлива это «0» — там поле никогда не
+        /// бывает пустым по-настоящему, у машины есть расход с первой секунды.
+        /// У электричества пустота ЗАКОННА («не задано»), и подсказка там —
+        /// типичное значение, которое ВИДНО, но не сохраняется.
+        placeholder: String = "0",
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         let lng = lang.language
@@ -1009,7 +1085,7 @@ struct VehicleEditFormView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 4) {
-                TextField("0", text: Binding(
+                TextField(placeholder, text: Binding(
                     get: { text.wrappedValue },
                     set: { newValue in
                         // Allow only digits, dots, and commas
@@ -1036,6 +1112,156 @@ struct VehicleEditFormView: View {
             .padding(.vertical, 6)
             .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
         }
+    }
+
+    // MARK: - Электро и гибриды (0.8.3)
+
+    /// Строка «Двигатель» — НАД блоком расхода, рядом с тем, чем она
+    /// командует (спека §2.4).
+    ///
+    /// В отличие от «Приборки», эта строка есть и у НОВОЙ машины: приборка в
+    /// девяти случаях из десяти совпадает с приложением, а вот электромобиль,
+    /// заведённый как бензиновый, спросит про литры на первом же экране и
+    /// получит их в каждой поездке — молча и неправильно.
+    private func powertrainCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        Button {
+            Haptics.tap()
+            showPowertrainPicker = true
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.vehiclePowertrainTitle(l))
+                        .font(.inter(15, weight: .medium))
+                        .foregroundStyle(c.text)
+                    Text(AppStrings.vehiclePowertrainSubtitle(l))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(powertrain.label(l))
+                    .font(.inter(13, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                // Шеврон, потому что строка ОТКРЫВАЕТ лист (CLAUDE.md,
+                // «Нажатие обязано отвечать»).
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("vehicle_powertrain_row")
+    }
+
+    /// Блок электричества: расход, цена киловатт-часа и — только у гибрида —
+    /// запас хода.
+    ///
+    /// Цена НЕ зависит от диалекта, в отличие от топливной: киловатт-час
+    /// одинаков во всём мире, пересчитывать его не во что (см. `ElectricUnit`).
+    private func electricCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let unit = electricUnit
+        return VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.electricSectionLabel(l), color: c.textSecondary)
+            fuelInputRow(label: AppStrings.electricConsumptionRow(l),
+                         text: $electricConsumption,
+                         maxValue: unit.inputCeiling,
+                         c: c,
+                         placeholder: typicalConsumptionPlaceholder) {
+                unitLabel(unit.valueUnit(l), c: c)
+            }
+
+            Divider().padding(.vertical, 2)
+
+            GarageSectionLabel(text: AppStrings.electricPriceSection(l), color: c.textSecondary)
+            fuelInputRow(label: AppStrings.fuelPricePerUnit(l, unit: AppStrings.unitKWhShort(l)),
+                         text: $electricPrice,
+                         maxValue: 999,
+                         c: c) {
+                currencyButton()
+            }
+
+            if powertrain.needsElectricRange {
+                Divider().padding(.vertical, 2)
+
+                HStack(spacing: 10) {
+                    Text(AppStrings.electricRangeLabel(l))
+                        .font(.inter(15, weight: .medium))
+                        .foregroundStyle(c.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 4) {
+                        TextField(typicalRangePlaceholder, text: Binding(
+                            get: { electricRange },
+                            // Те же ASCII-цифры, что у ручного пробега: `isNumber`
+                            // пропускает арабо-индийские, а `Double(_:)` их потом
+                            // отвергает — и сохранение молча стирало бы значение.
+                            set: { electricRange = String($0.unicodeScalars
+                                .filter { CharacterSet.decimalDigits.contains($0) && $0.isASCII }
+                                .prefix(4)) }
+                        ))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .font(.inter(15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .tint(AppTheme.accent)
+                        .frame(width: 64)
+                        .accessibilityIdentifier("vehicle_electric_range")
+                        unitLabel(AppStrings.unitDistanceShort(
+                            l, unit: vehicleDistanceUnit,
+                            value: Double(electricRange) ?? 100, fractionDigits: 0), c: c)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Text(AppStrings.electricRangeHint(l))
+                    .font(.inter(12))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    /// Лист выбора типа двигателя — тот же домашний `SettingsOptionPicker`,
+    /// что у приборки. Системных меню в этом приложении нет (CLAUDE.md).
+    private func powertrainPicker(_ l: LanguageManager.Language) -> some View {
+        SettingsOptionPicker(
+            title: AppStrings.vehiclePowertrainTitle(l),
+            options: Powertrain.allCases,
+            selection: powertrain,
+            footnote: AppStrings.powertrainPickerFootnote(l),
+            badge: { $0.symbol },
+            badgeIsSymbol: true,
+            label: { $0.label(l) },
+            onSelect: { powertrain = $0 },
+            accessibilityPrefix: "vehicle_powertrain"
+        )
+    }
+
+    /// Единица расхода электричества этой машины.
+    private var electricUnit: ElectricUnit {
+        ElectricUnit.forDashboard(vehicleDistanceUnit)
+    }
+
+    /// Подсказка в пустом поле расхода: типичные 18 кВт·ч/100 км, показанные в
+    /// диалекте этой машины. Это ПЛЕЙСХОЛДЕР — в базу не уезжает ничего, пока
+    /// человек не набрал число сам (спека §2.2).
+    private var typicalConsumptionPlaceholder: String {
+        GarageFormat.fuel(electricUnit.display(fromPer100: 18), lng: lang.language)
+    }
+
+    /// Подсказка в пустом поле запаса хода: типичные 50 км в единице приборки.
+    private var typicalRangePlaceholder: String {
+        OdometerField.fieldText(km: 50, unit: vehicleDistanceUnit)
     }
 
     // MARK: - Privacy
@@ -1360,6 +1586,18 @@ struct VehicleEditFormView: View {
                 // the write would leave this vehicle drifting behind the units
                 // card instead of keeping the currency the form showed.
                 settings.updateVehicleCurrency(id: newId, symbol: currencySymbol)
+                // Тип двигателя и его числа — отдельными дверями, как приборка
+                // ниже: `addVehicle` о них не знает, а «топливо» и нули стоят
+                // умолчанием, поэтому на обычном пути лишней записи нет.
+                if powertrain != Vehicle().powertrain {
+                    settings.setPowertrain(vehicleId: newId, powertrain)
+                }
+                if storedElectricConsumption > 0 || storedElectricPrice > 0
+                    || storedElectricRangeKm > 0 {
+                    settings.updateVehicleEnergy(
+                        id: newId, consumption: storedElectricConsumption,
+                        price: storedElectricPrice, rangeKm: storedElectricRangeKm)
+                }
             }
             // Приборка пишется отдельной дверью — той же, что у правки:
             // `addVehicle` о ней не знает, а «как в приложении» и так стоит
@@ -1440,6 +1678,27 @@ struct VehicleEditFormView: View {
                 if currencySymbol != original.fuelCurrency {
                     settings.updateVehicleCurrency(id: id, symbol: currencySymbol)
                 }
+                // Тип двигателя — ПЕРЕД числами, по той же причине, по которой
+                // перед ними идёт приборка: числа уже разобраны его единицей.
+                if powertrain != original.powertrain {
+                    settings.setPowertrain(vehicleId: id, powertrain)
+                }
+                // Сравнение по СТРОКАМ, а не по разобранным числам: круг
+                // «база → поле → база» у миль не сходится побитово, и
+                // сохранение имени переписывало бы расход, ставя лишнюю
+                // операцию в очередь (ловушка `initialCity` выше).
+                if electricConsumption != initialElectricConsumption
+                    || electricPrice != initialElectricPrice
+                    || electricRange != initialElectricRange {
+                    settings.updateVehicleEnergy(
+                        id: id,
+                        consumption: electricConsumption != initialElectricConsumption
+                            ? storedElectricConsumption : original.electricConsumption,
+                        price: electricPrice != initialElectricPrice
+                            ? storedElectricPrice : original.electricityPrice,
+                        rangeKm: electricRange != initialElectricRange
+                            ? storedElectricRangeKm : original.electricRangeKm)
+                }
             }
         }
 
@@ -1492,6 +1751,23 @@ struct VehicleEditFormView: View {
     /// A price field as it must be STORED: per litre, whatever the field said.
     private func storedPrice(_ text: String) -> Double? {
         parsed(text).map { consumptionUnit.priceToPerLitre($0) }
+    }
+
+    /// Поле расхода электричества → то, что хранить: киловатт-часы на сотню
+    /// КИЛОМЕТРОВ. Пустое поле — ноль, то есть «не задано».
+    private var storedElectricConsumption: Double {
+        parsed(electricConsumption).map { electricUnit.toPer100($0) } ?? 0
+    }
+
+    /// Цена киловатт-часа. Не переводится ничем: киловатт-час универсален.
+    private var storedElectricPrice: Double {
+        parsed(electricPrice) ?? 0
+    }
+
+    /// Запас хода → километры. Разбор тот же, что у ручного пробега, и по той
+    /// же причине: это второй вход, где ошибка с единицей попадает в БАЗУ.
+    private var storedElectricRangeKm: Double {
+        OdometerField.storedKm(electricRange, unit: vehicleDistanceUnit) ?? 0
     }
 
     // MARK: - Единицы

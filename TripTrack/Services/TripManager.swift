@@ -308,6 +308,12 @@ final class TripManager: ObservableObject {
         repository.fetchTripsModifiedSince(date)
     }
 
+    /// Поездки в окне дат, без точек трека. Нужна раскладке энергии гибрида:
+    /// запас хода тратится по дню, и соседей по дню надо знать (0.8.3).
+    func fetchTrips(from start: Date, to end: Date) -> [Trip] {
+        repository.fetchTrips(from: start, to: end)
+    }
+
     func fetchTripsForMap() -> [Trip] {
         repository.fetchTripsForMap()
     }
@@ -548,6 +554,15 @@ final class TripManager: ObservableObject {
 
     func deleteCheckpoint(id: UUID) {
         guard let tripId = repository.deleteCheckpoint(id: id) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
+    /// Как ехал плагин-гибрид — правка поездки, и уезжает она той же дверью,
+    /// что отметки и отрезки: репозиторий взводит `pendingUpload`, очередь
+    /// ставит сюда. Соседние поездки того же дня пересчитывать не нужно —
+    /// раскладка нигде не хранится, её считает `EnergyEstimate` при показе.
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID) {
+        repository.setEnergyMode(mode, forTrip: tripId)
         enqueueTripUpdate(tripId)
     }
 

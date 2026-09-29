@@ -85,6 +85,11 @@ final class PlaceManager: ObservableObject {
         // отката, а «Удалить» обязано стирать без следа. Место появится, когда
         // поездка войдёт в мир (`TripWorldEntry.placesAndReveal`).
         guard repository.fetchEntity(id: tripId)?.confirmation != TripConfirmation.draft.rawValue else { return }
+        // Отметка без координаты местом не становится (0.8.3): место — это
+        // точка на земле, которую узнают на каждом проезде, а узнавать тут
+        // нечего. Такая отметка приезжает только с сервера, обрезанная
+        // приватной зоной у дома.
+        guard checkpoint.hasCoordinate else { return }
         let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
         let (place, isNew) = store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: checkpoint.name)
         repository.setPlaceId(forCheckpoint: checkpoint.id, placeId: place.id)
@@ -159,6 +164,7 @@ final class PlaceManager: ObservableObject {
             // Регистрация ещё не дошла: заводим место сразу с именем, она
             // найдёт его уже названным (и досчитает историю — проездов у него
             // ещё нет). Место новое — уже само по себе изменение списка.
+            guard checkpoint.hasCoordinate else { return }
             let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
             let hadName = store.fetchPlace(id: Place.id(forCell: cell))?.name != nil
             store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: name)

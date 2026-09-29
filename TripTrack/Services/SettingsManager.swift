@@ -943,6 +943,14 @@ final class SettingsManager: ObservableObject {
         // этот бинарник не знает, всё равно нечем. Сама строка в базе при этом
         // остаётся нетронутой — её не перезапишет никто, кроме человека.
         v.dashboardUnits = DashboardUnits.parse(entity.dashboardUnits) ?? .app
+        // Электро и гибриды (0.8.3). Тип двигателя — тем же приёмом, что
+        // приборка строкой выше: нераспознанное значение читается как
+        // «топливо» (ответ всех машин до 0.8.3), а сама строка в базе остаётся
+        // нетронутой — её не перезапишет никто, кроме человека.
+        v.powertrain = Powertrain.parse(entity.powertrain) ?? .fuel
+        v.electricConsumption = entity.electricConsumption
+        v.electricityPrice = entity.electricityPrice
+        v.electricRangeKm = entity.electricRangeKm
         v.cardStyle = entity.cardStyle
         v.about = entity.about ?? ""
         v.make = entity.make ?? ""
@@ -1095,6 +1103,18 @@ final class SettingsManager: ObservableObject {
         entity.plate = type.hasPlate ? plate : ""
         entity.plateVisible = type.hasPlate ? plateVisible : false
         entity.visibleToOthers = visibleToOthers
+        // Правка человека взводит `pendingUpload` и двигает `lastModifiedAt`
+        // — как у паспорта и приборки. Без флага приехавший пул считает машину
+        // синхронизированной и кладёт поверх серверное значение, а гейт
+        // `!hasLocalEdits` в `applyRemoteVehicle` оказывается мёртвым: его
+        // некому взвести.
+        //
+        // Здесь цена промаха выше всего: `plateVisible` и `visibleToOthers` —
+        // это приватные решения человека, и гейт для них написан с причиной
+        // («вернувшееся название машины — досада, вернувшаяся видимость —
+        // утечка»), но взводить его было некому.
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
@@ -1158,6 +1178,13 @@ final class SettingsManager: ObservableObject {
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         guard let entity = try? context.fetch(request).first else { return }
         entity.fuelCurrency = symbol
+        // Правка человека взводит `pendingUpload` и двигает `lastModifiedAt`
+        // — как у паспорта и приборки. Без флага приехавший пул считает машину
+        // синхронизированной и кладёт поверх серверное значение, а гейт
+        // `!hasLocalEdits` в `applyRemoteVehicle` оказывается мёртвым: его
+        // некому взвести.
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
@@ -1201,6 +1228,59 @@ final class SettingsManager: ObservableObject {
             entity.cityConsumption = city
             entity.highwayConsumption = highway
             entity.fuelPrice = price
+        // Правка человека взводит `pendingUpload` и двигает `lastModifiedAt`
+        // — как у паспорта и приборки. Без флага приехавший пул считает машину
+        // синхронизированной и кладёт поверх серверное значение, а гейт
+        // `!hasLocalEdits` в `applyRemoteVehicle` оказывается мёртвым: его
+        // некому взвести.
+            entity.lastModifiedAt = Date()
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            persistenceController.save()
+            loadVehicles()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            }
+        }
+    }
+
+    /// Записать тип двигателя. Своя дверь, как у `setDashboardUnits`, и по той
+    /// же причине: своя строка в очереди синка на своё изменение.
+    ///
+    /// Введённые числа при смене типа НЕ стираются (спека §2.4): гибрид,
+    /// ставший «Топливом», хранит свои киловатт-часы, и возврат к гибриду
+    /// возвращает их. Стирать их значило бы наказывать человека за то, что он
+    /// нажал не туда и нажал обратно.
+    func setPowertrain(vehicleId: UUID, _ powertrain: Powertrain) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.powertrain = powertrain.rawValue
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(
+                SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .update))
+        }
+    }
+
+    /// Записать расход электричества, цену киловатт-часа и запас хода.
+    ///
+    /// Близнец `updateVehicleFuel`: те же три шага и та же очередь. Числа
+    /// приходят УЖЕ нормализованными — киловатт-часы на сотню километров и
+    /// цена за киловатт-час; мили на киловатт-час превращает в них
+    /// `ElectricUnit` на границе разбора поля, а не эта функция.
+    func updateVehicleEnergy(id: UUID, consumption: Double, price: Double, rangeKm: Double) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        if let entity = try? context.fetch(request).first {
+            entity.electricConsumption = consumption
+            entity.electricityPrice = price
+            entity.electricRangeKm = rangeKm
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
