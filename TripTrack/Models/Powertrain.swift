@@ -65,6 +65,18 @@ enum Powertrain: String, Codable, CaseIterable {
         }
     }
 
+    /// Пояснение под названием — «а это про меня?».
+    ///
+    /// Живёт у типа по той же причине, что и `label`: его читает лист выбора,
+    /// а завтра прочтёт ещё кто-нибудь, и разъехаться двум написаниям нельзя.
+    func hint(_ lang: LanguageManager.Language) -> String {
+        switch self {
+        case .fuel:         return AppStrings.powertrainFuelHint(lang)
+        case .electric:     return AppStrings.powertrainElectricHint(lang)
+        case .pluginHybrid: return AppStrings.powertrainHybridHint(lang)
+        }
+    }
+
     /// Жетон в листе выбора — SF Symbol, а не две буквы: «То» и «Эл» на
     /// тринадцати языках это тринадцать пар сокращений, половина из которых
     /// совпадёт между собой.

@@ -7291,22 +7291,59 @@ enum AppStrings {
     static func vehiclePowertrainSubtitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePowertrainSubtitle", ru: "Чем машина едет", en: "What it runs on")
     }
+    /// Заголовок листа — ВОПРОС, а не название поля.
+    ///
+    /// «Двигатель» с вариантами «Топливо · Электро · Плагин-гибрид» требовал
+    /// знать термин заранее: человек, у которого плагин-гибрид и есть, может
+    /// не узнать его по имени. Вопрос «на чём ездит» отвечается без единого
+    /// термина, а «плагин-гибрид» остаётся в пояснении — для тех, кто это
+    /// слово знает и ищет глазами.
+    static func powertrainPickerTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainPickerTitle", ru: "На чём ездит машина?", en: "What does the car run on?")
+    }
+
+    // Варианты названы ВЕЩЕСТВОМ, а не типом двигателя: бензин и розетку
+    // человек видит своими глазами каждую неделю, а «тип силовой установки» —
+    // нет. Заодно это снимает вопрос про обычный гибрид: его не заряжают от
+    // розетки, значит ответ «бензин», и объяснять исключение отдельно больше
+    // не нужно — оно следует из самого вопроса.
     static func powertrainFuel(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "powertrainFuel", ru: "Топливо", en: "Fuel")
+        tr(lang, "powertrainFuel", ru: "Бензин или дизель", en: "Petrol or diesel")
     }
     static func powertrainElectric(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "powertrainElectric", ru: "Электро", en: "Electric")
+        tr(lang, "powertrainElectric", ru: "Электричество", en: "Electricity")
     }
     static func powertrainHybrid(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "powertrainHybrid", ru: "Плагин-гибрид", en: "Plug-in hybrid")
+        tr(lang, "powertrainHybrid", ru: "Бензин и электричество", en: "Petrol and electricity")
     }
-    /// Подвал листа выбора. Отвечает ровно на тот вопрос, из-за которого
-    /// человек с Приусом выбрал бы «гибрид» и получил бы киловатт-часы,
-    /// которых у него нет.
+
+    // Пояснения под вариантами. Каждое отвечает на свой вопрос «а это про
+    // меня?», и первое из них закрывает случай, из-за которого подвал листа
+    // существовал раньше: обычный гибрид — это «бензин».
+    static func powertrainFuelHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainFuelHint",
+           ru: "Обычная машина. Сюда же гибрид, который не заряжают от розетки",
+           en: "An ordinary car. Including a hybrid you never plug in")
+    }
+    static func powertrainElectricHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainElectricHint",
+           ru: "Только зарядка, бака нет",
+           en: "Charging only — there is no fuel tank")
+    }
+    static func powertrainHybridHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "powertrainHybridHint",
+           ru: "Плагин-гибрид: есть и бак, и зарядка от розетки",
+           en: "Plug-in hybrid: it has both a tank and a plug")
+    }
+
+    /// Подвал листа: ЗАЧЕМ вообще спрашиваем. Прежний объяснял исключение
+    /// («обычный гибрид — это Топливо»), но не сам выбор; исключение теперь
+    /// живёт в пояснении у первого варианта, а подвал отвечает на «мне-то
+    /// какая разница».
     static func powertrainPickerFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "powertrainPickerFootnote",
-           ru: "Обычный гибрид, который заряжается только от своего двигателя, — это «Топливо»: он жжёт бензин, и литры описывают его полностью.",
-           en: "A regular hybrid that charges only from its own engine is «Fuel»: it burns petrol, and litres describe it fully.")
+           ru: "От ответа зависит, что приложение посчитает за поездку: литры, киловатт-часы или и то и другое.",
+           en: "The answer decides what the app counts for a trip: litres, kilowatt-hours, or both.")
     }
     static func electricSectionLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "electricSectionLabel", ru: "Расход электричества", en: "Electricity consumption")
@@ -7347,6 +7384,15 @@ enum AppStrings {
     /// «автоматически», а не «Auto»: там «Auto» значит «машина».
     static func energyModeAuto(_ lang: LanguageManager.Language) -> String {
         tr(lang, "energyModeAuto", ru: "Авто", en: "Auto")
+    }
+    // Два других режима — СВОИМИ короткими словами, а не именами вариантов
+    // двигателя: там теперь «Бензин или дизель», и в сегмент шириной в треть
+    // строки это не влезает. Разные вопросы — разные слова.
+    static func energyModeElectric(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "energyModeElectric", ru: "Электро", en: "Electric")
+    }
+    static func energyModeFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "energyModeFuel", ru: "Топливо", en: "Fuel")
     }
     /// Подпись под плиткой электричества: сколько километров прошло на батарее.
     ///

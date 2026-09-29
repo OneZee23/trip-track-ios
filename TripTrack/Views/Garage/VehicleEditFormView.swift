@@ -1235,13 +1235,16 @@ struct VehicleEditFormView: View {
     /// что у приборки. Системных меню в этом приложении нет (CLAUDE.md).
     private func powertrainPicker(_ l: LanguageManager.Language) -> some View {
         SettingsOptionPicker(
-            title: AppStrings.vehiclePowertrainTitle(l),
+            // Заголовок — ВОПРОС, а не имя поля: «Двигатель» с тремя
+            // терминами требовал знать их заранее.
+            title: AppStrings.powertrainPickerTitle(l),
             options: Powertrain.allCases,
             selection: powertrain,
             footnote: AppStrings.powertrainPickerFootnote(l),
             badge: { $0.symbol },
             badgeIsSymbol: true,
             label: { $0.label(l) },
+            subtitle: { $0.hint(l) },
             onSelect: { powertrain = $0 },
             accessibilityPrefix: "vehicle_powertrain"
         )

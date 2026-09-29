@@ -29,6 +29,15 @@ struct SettingsOptionPicker<Option: Hashable>: View {
     /// обычный жетон: у «градиента скорости» одного цвета не существует.
     var badgeTint: ((Option) -> Color?)? = nil
     let label: (Option) -> String
+    /// Строка-пояснение под названием варианта. `nil` у всего типа — листа без
+    /// пояснений (единицы, тема, язык): там вариант объясняет сам себя одним
+    /// словом, и вторая строка была бы шумом.
+    ///
+    /// Нужна там, где выбор ТЕРМИНОЛОГИЧЕН: «Плагин-гибрид» человек, у
+    /// которого он есть, может не узнать по имени, а узнаёт по описанию — «и
+    /// заправляю, и заряжаю». Подвал на этот вопрос не отвечает: он один на
+    /// весь лист, а пояснение нужно КАЖДОМУ варианту.
+    var subtitle: ((Option) -> String?)? = nil
     let onSelect: (Option) -> Void
     /// Stem for the sheet's accessibility identifiers («units_row_0»,
     /// «units_close»), so UI tests match on structure and not on a label that
@@ -132,11 +141,21 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             HStack(spacing: 12) {
                 badgeView(option, isSelected: isSelected, c: c)
 
-                Text(label(option))
-                    .font(.system(size: 14.5, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label(option))
+                        .font(.system(size: 14.5, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+
+                    if let hint = subtitle?(option), !hint.isEmpty {
+                        Text(hint)
+                            .font(.inter(11.5))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
 
                 Spacer(minLength: 8)
 
@@ -150,14 +169,18 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             }
             .padding(.leading, 8)
             .padding(.trailing, 16)
-            .frame(height: 44)
-            // 56 around a 44pt row: the fill bleeds 6pt past the content on
-            // both sides so the pill reads taller than the text inside it,
-            // which is what makes the current choice unmistakable at a glance.
+            // `minHeight`, а не `height`: строка с пояснением выше одной
+            // строки текста, и жёсткая высота обрезала бы её.
+            .frame(minHeight: 44)
+            // Заливка бледнеет на 6 pt за края содержимого — от этого пилюля
+            // читается выше текста внутри, и выбранный вариант виден сразу.
+            // Отрицательный отступ вместо прежних жёстких 56: у строки в 44 pt
+            // он даёт ровно те же 56, а строка с пояснением растёт вместе с
+            // ним, а не вылезает из заливки.
             .background {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? AppTheme.accentBg : Color.clear)
-                    .frame(height: 56)
+                    .padding(.vertical, -6)
             }
             .overlay(alignment: .top) {
                 if showsDivider {

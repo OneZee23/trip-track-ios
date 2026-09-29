@@ -93,6 +93,59 @@ final class HybridEnergyShotTests: XCTestCase {
         snap(app, "h5_passport")
     }
 
+    /// Лист «На чём ездит машина?» — вопрос вместо трёх терминов.
+    func testPowertrainPickerAsksAPlainQuestion() throws {
+        let app = launch()
+        openMe(app)
+
+        let garage = app.buttons["profile_garage_card"].firstMatch
+        guard garage.waitForExistence(timeout: 20) else {
+            throw XCTSkip("карточка гаража на «Я» не найдена")
+        }
+        garage.tap()
+        usleep(2_000_000)
+
+        let card = app.buttons.matching(identifier: "garage_card")
+            .containing(NSPredicate(format: "label CONTAINS[c] 'Astra'")).firstMatch
+        guard card.waitForExistence(timeout: 15) else {
+            throw XCTSkip("карточка засеянного гибрида не найдена")
+        }
+        card.tap()
+        usleep(2_500_000)
+
+        // Строка расхода открывает форму правки — тот же путь, которым это
+        // делает человек, пришедший поправить числа машины.
+        let fuelRow = app.buttons.containing(
+            NSPredicate(format: "label CONTAINS[c] 'асход в городе'")).firstMatch
+        guard fuelRow.waitForExistence(timeout: 15) else {
+            throw XCTSkip("строка расхода в паспорте не найдена")
+        }
+        for _ in 0..<8 where !fuelRow.isHittable {
+            app.swipeUp()
+            usleep(400_000)
+        }
+        fuelRow.tap()
+        usleep(2_500_000)
+
+        let row = app.buttons["vehicle_powertrain_row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "строки «Двигатель» нет в форме")
+        for _ in 0..<8 where !row.isHittable {
+            app.swipeUp()
+            usleep(400_000)
+        }
+        snap(app, "h6_form_row")
+        row.tap()
+        usleep(1_500_000)
+        snap(app, "h7_powertrain_picker")
+
+        // Вариант выбирается по ОПИСАНИЮ, а не по термину: именно это и есть
+        // предмет правки.
+        let hybrid = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'электричеств'")).firstMatch
+        XCTAssertTrue(hybrid.waitForExistence(timeout: 5),
+                      "в листе нет варианта, названного человеческими словами")
+    }
+
     // MARK: -
 
     /// Режим, который экран показывает ПРЯМО СЕЙЧАС.

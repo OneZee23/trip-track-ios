@@ -3551,14 +3551,16 @@ isOwn
         }
     }
 
-    /// Имена режимов. «Авто» здесь — «считает приложение», и у `Powertrain`
-    /// те же два слова для двух других: одно слово на две роли завести можно,
-    /// две разных строки на одно слово — нельзя.
+    /// Имена режимов — СВОИ, короткие.
+    ///
+    /// Раньше два из трёх брались у `Powertrain`, но там теперь стоит вопрос
+    /// «на чём ездит машина» и ответы вроде «Бензин или дизель» — в сегмент
+    /// шириной в треть строки такое не влезает. Разные вопросы — разные слова.
     private func energyModeLabel(_ mode: TripEnergyMode, _ l: LanguageManager.Language) -> String {
         switch mode {
         case .auto:     return AppStrings.energyModeAuto(l)
-        case .electric: return AppStrings.powertrainElectric(l)
-        case .fuel:     return AppStrings.powertrainFuel(l)
+        case .electric: return AppStrings.energyModeElectric(l)
+        case .fuel:     return AppStrings.energyModeFuel(l)
         }
     }
 

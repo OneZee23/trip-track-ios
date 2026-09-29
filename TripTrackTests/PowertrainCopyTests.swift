@@ -36,15 +36,56 @@ final class PowertrainCopyTests: XCTestCase {
         XCTAssertEqual(AppStrings.energyModeAuto(.it), "Automatico")
     }
 
-    /// Три режима поездки тоже обязаны различаться: «Электро» и «Топливо» они
-    /// делят с типом двигателя, «Авто» своё.
+    /// Три режима поездки — СВОИ короткие слова, и они тоже обязаны
+    /// различаться. С типом двигателя их больше не делят: там теперь вопрос
+    /// «на чём ездит машина» и ответы вроде «Бензин или дизель», которым в
+    /// сегменте шириной в треть строки места нет.
     func testEveryLanguageNamesAllThreeModesDifferently() {
         for lang in languages {
             let names = [AppStrings.energyModeAuto(lang),
-                         AppStrings.powertrainElectric(lang),
-                         AppStrings.powertrainFuel(lang)]
+                         AppStrings.energyModeElectric(lang),
+                         AppStrings.energyModeFuel(lang)]
             XCTAssertEqual(Set(names).count, names.count,
                            "\(lang): названия режимов поездки совпали — \(names)")
+            for name in names {
+                XCTAssertFalse(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    /// Слово режима КОРОТКОЕ: три сегмента делят одну строку, и длинный ответ
+    /// из листа двигателя туда не помещается.
+    func testModeWordsStayShort() {
+        for lang in languages {
+            for name in [AppStrings.energyModeElectric(lang), AppStrings.energyModeFuel(lang)] {
+                XCTAssertLessThanOrEqual(name.count, 14,
+                                         "\(lang): «\(name)» не влезет в сегмент")
+            }
+        }
+    }
+
+    // MARK: - Пояснения под вариантами
+
+    /// У КАЖДОГО варианта своё пояснение, и они разные: одинаковая подпись у
+    /// двух строк — это выбор, который нечем сделать.
+    func testEveryPowertrainHasItsOwnHint() {
+        for lang in languages {
+            let hints = Powertrain.allCases.map { $0.hint(lang) }
+            XCTAssertEqual(Set(hints).count, hints.count,
+                           "\(lang): пояснения типов двигателя совпали")
+            for hint in hints {
+                XCTAssertFalse(hint.trimmingCharacters(in: .whitespaces).isEmpty,
+                               "\(lang): пустое пояснение")
+            }
+        }
+    }
+
+    /// Заголовок листа — вопрос, и он переведён везде.
+    func testThePickerAsksAQuestionInEveryLanguage() {
+        let english = AppStrings.powertrainPickerTitle(.en)
+        for lang in languages where lang != .en {
+            XCTAssertNotEqual(AppStrings.powertrainPickerTitle(lang), english,
+                              "\(lang): заголовок листа остался английским")
         }
     }
 
@@ -71,6 +112,10 @@ final class PowertrainCopyTests: XCTestCase {
             ("statCostFuel", AppStrings.statCostFuel),
             ("statCostElectricity", AppStrings.statCostElectricity),
             ("tripEnergyModeTitle", AppStrings.tripEnergyModeTitle),
+            ("powertrainPickerTitle", AppStrings.powertrainPickerTitle),
+            ("powertrainFuelHint", AppStrings.powertrainFuelHint),
+            ("powertrainElectricHint", AppStrings.powertrainElectricHint),
+            ("powertrainHybridHint", AppStrings.powertrainHybridHint),
         ]
         // `unitKWhShort` в этот список НЕ входит: «kWh» — символ СИ, и на
         // половине языков он совпадает с английским по праву. Его держит
