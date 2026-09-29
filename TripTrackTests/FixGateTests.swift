@@ -22,9 +22,38 @@ final class FixGateTests: XCTestCase {
         XCTAssertEqual(decide(201), .reject(.accuracy))
     }
 
-    func testIdleKeepsItsHundredMetreCeiling() {
+    /// 0.8.3: в простое потолок ТОТ ЖЕ, что на записи.
+    ///
+    /// Сто метров держались не по решению, а потому что вопрос отложили до
+    /// этой версии. Их цена — заблокированный слайдер старта во дворе и в
+    /// паркинге: под плохим небом первые фиксы приходят грубее ста метров, и
+    /// человек смотрит на «Ждём сигнал GPS» там, где запись уже вполне можно
+    /// начать.
+    func testIdleUsesTheSameCeilingAsRecording() {
         XCTAssertEqual(decide(90, recording: false), .accept)
-        XCTAssertEqual(decide(150, recording: false), .reject(.accuracy))
+        XCTAssertEqual(decide(150, recording: false), .accept,
+                       "грубый фикс во дворе обязан разблокировать старт")
+        XCTAssertEqual(decide(200, recording: false), .accept)
+        XCTAssertEqual(decide(201, recording: false), .reject(.accuracy),
+                       "выше двухсот метров это позиция по вышкам, а не место")
+    }
+
+    /// Инвариант, а не число: простой НЕ имеет права быть строже записи.
+    ///
+    /// Разойдись они — получится состояние, в котором начать запись нельзя,
+    /// хотя записывать уже было бы можно. Проверка стоит здесь, чтобы
+    /// следующая настройка потолка на стенде не развела их молча.
+    func testIdleIsNeverStricterThanRecording() {
+        XCTAssertGreaterThanOrEqual(FixGate.idleAccuracyLimit,
+                                    FixGate.recordingAccuracyLimit)
+    }
+
+    /// Прочие проверки в простое остаются: телепорт и протухший фикс
+    /// отбрасываются независимо от того, идёт запись или нет.
+    func testIdleStillRejectsTheObviouslyFalse() {
+        XCTAssertEqual(decide(-1, recording: false), .reject(.invalid))
+        XCTAssertEqual(decide(10, age: 10, recording: false), .reject(.stale))
+        XCTAssertEqual(decide(10, speed: 90, recording: false), .reject(.speed))
     }
 
     func testInvalidStaleAndImpossibleSpeedAreRejected() {
