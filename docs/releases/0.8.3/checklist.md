@@ -46,7 +46,7 @@
 - [ ] Версия поднята: `MARKETING_VERSION: "0.8.3"`, `CURRENT_PROJECT_VERSION:
       "66"` во всех трёх таргетах `project.yml`.
 - [ ] `xcodegen generate`, сборка **Debug** и **Release** без ошибок.
-- [ ] Полный прогон `-only-testing:TripTrackTests` — 2538 тестов зелёные
+- [ ] Полный прогон `-only-testing:TripTrackTests` — 2548 тестов зелёные
       (полный UI-таргет не гонять, он виснет).
 - [ ] Отладочные флаги и сиды компилируются ТОЛЬКО в Debug: `-seed-hybrid`,
       `-debug-offline`, `-debug-location-denied`, `-debug-atlas-loading`,
