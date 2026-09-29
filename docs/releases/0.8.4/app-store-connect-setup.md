@@ -29,8 +29,8 @@ App Store Connect → приложение → **Monetization → Subscriptions*
 
 | Product ID | Reference Name | Период | Цена | Вводное предложение |
 |---|---|---|---|---|
-| `com.onezee.TripTrack.pro.yearly` | PRO Yearly | 1 год | *решает владелец* | **7 дней бесплатно** |
-| `com.onezee.TripTrack.pro.monthly` | PRO Monthly | 1 месяц | *решает владелец* | нет |
+| `com.onezee.TripTrack.pro.yearly` | PRO Yearly | 1 год | **19,99 €** | **7 дней бесплатно** |
+| `com.onezee.TripTrack.pro.monthly` | PRO Monthly | 1 месяц | **2,99 €** | нет |
 
 **Product ID переименовать потом НЕЛЬЗЯ НИКОГДА** — его можно только удалить
 и создать заново, потеряв всю историю покупок. Скопировать строки из таблицы
@@ -65,7 +65,9 @@ App Store Connect → приложение → **Monetization → Subscriptions*
 | `com.onezee.TripTrack.tip.large` | Tip Large | «Бак бензина автору» |
 
 Цены в `Config/TripTrack.storekit` стоят 0.99 / 2.99 / 9.99 — это числа для
-локальных прогонов, а не решение. В ASC назначаются свои.
+локальных прогонов, а не решение. В ASC назначаются свои. Средние чаевые при
+этом СОВПАДАЮТ по цене с месяцем PRO (2,99 €) — стоит развести, иначе на
+витрине два разных товара за одни деньги.
 
 - [ ] Три покупки заведены, тип Consumable.
 - [ ] Локализованные названия и описания.
