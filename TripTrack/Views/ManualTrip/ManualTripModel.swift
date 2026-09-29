@@ -46,6 +46,11 @@ final class ManualTripModel: ObservableObject {
     @Published private(set) var route: ManualTripRouter.Route?
     @Published private(set) var isRouting = false
     @Published private(set) var routeError: ManualTripRouteError?
+    /// Почему не записалось. Снимается при каждой новой попытке; `nil` —
+    /// «ещё не пробовали» или «всё вышло». Раньше отказ не оставлял ВООБЩЕ
+    /// НИЧЕГО: лист стоял открытым, кнопка снова становилась активной, и
+    /// понять, записалась поездка или нет, было нечем.
+    @Published private(set) var createError: ManualTripCreateError?
     /// Человек хоть раз подвинул длительность стрелкой ± — решение владельца
     /// 20 сен: пока флаг снят, свежепосчитанный маршрут сам подставляет
     /// `suggestedDuration` (`ManualTripDurationPolicy`), а тронутое рукой
@@ -56,6 +61,14 @@ final class ManualTripModel: ObservableObject {
 
     @Published var query: String = ""
     @Published private(set) var completions: [MKLocalSearchCompletion] = []
+    /// Запрос отправлен, ответа ещё нет.
+    ///
+    /// Без этого флага пустой список означал ТРИ разных вещи сразу — «ничего
+    /// не набрано», «ищем» и «не нашлось», — и экран показывал на все три одно
+    /// и то же белое место. Различить их снаружи нечем: `MKLocalSearchCompleter`
+    /// отвечает и на неудачу пустым списком (нарочно — краснеть на каждом
+    /// втором символе экран не должен).
+    @Published private(set) var isSearching = false
 
     private let completer = MKLocalSearchCompleter()
     private let completerBox = CompleterBox()
@@ -75,6 +88,7 @@ final class ManualTripModel: ObservableObject {
         completer.delegate = completerBox
         completerBox.onResults = { [weak self] results in
             self?.completions = results
+            self?.isSearching = false
         }
     }
 
@@ -99,9 +113,11 @@ final class ManualTripModel: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 1 else {
             completions = []
+            isSearching = false
             completer.queryFragment = ""
             return
         }
+        isSearching = true
         completer.queryFragment = trimmed
     }
 
@@ -232,6 +248,20 @@ final class ManualTripModel: ObservableObject {
         startDate = ManualTripDateDefaults.defaultStartDate(forDay: day)
     }
 
+    /// Убрать заготовку промежуточной точки, за которой человек так и не
+    /// выбрал места.
+    ///
+    /// Живёт здесь, а не в листе, по общему правилу проекта: правило, которое
+    /// держит открытый экран, проверяется руками. Отвечает `true`, только если
+    /// строку действительно убрали, — заполненную точку «Отмена» трогать не
+    /// имеет права.
+    @discardableResult
+    func discardPlaceholderVia(at index: Int) -> Bool {
+        guard index >= 0, index < via.count, via[index].isPlaceholder else { return false }
+        via.remove(at: index)
+        return true
+    }
+
     /// Точка от чипа («Дом», частое место, тап по карте) — в активное поле:
     /// сначала «Откуда», потом «Куда» (`ManualTripActiveField`).
     func assignQuickPoint(_ point: ManualTripPoint) {
@@ -253,8 +283,17 @@ final class ManualTripModel: ObservableObject {
         route != nil && minimumDuration > ManualTripBuilder.maximumDuration
     }
 
+    /// Финиш ещё не наступил: старт в прошлом, а длительность такая, что
+    /// поездка «кончится» позже, чем сейчас. Правило считает
+    /// `ManualTripBuilder.hasEnded` — то же, которым `build` отказывает, —
+    /// иначе экран и сборка разошлись бы, и отказ был бы молчаливым.
+    var endsLater: Bool {
+        !ManualTripBuilder.hasEnded(startDate: startDate, duration: duration)
+    }
+
     var canCreate: Bool {
-        route != nil && !isRouting && !isRouteTooLong && duration >= minimumDuration
+        route != nil && !isRouting && !isRouteTooLong && !endsLater
+            && duration >= minimumDuration
     }
 
     // MARK: - Создание
@@ -272,8 +311,15 @@ final class ManualTripModel: ObservableObject {
         // отозванная (возврат денег) за эти секунды подписка поездку бы не
         // остановила. Тот же довод, по которому `recordableVehicleId`
         // спрашивает хранилище, а не список в памяти.
-        guard ManualTripEntry.level == .open else { return nil }
-        guard let route, let from, let to else { return nil }
+        createError = nil
+        guard ManualTripEntry.level == .open else {
+            createError = .noAccess
+            return nil
+        }
+        guard let route, let from, let to else {
+            createError = .notSaved
+            return nil
+        }
         let draft = ManualTripBuilder.Draft(
             coordinates: route.coordinates,
             startDate: startDate,
@@ -282,7 +328,10 @@ final class ManualTripModel: ObservableObject {
             title: title
         )
         guard let built = ManualTripBuilder.build(draft),
-              let saved = manager.createManualTrip(built) else { return nil }
+              let saved = manager.createManualTrip(built) else {
+            createError = .notSaved
+            return nil
+        }
 
         await ManualTripAftermath.settle(tripId: saved.id)
         return ManualTripCreationResult(
@@ -290,6 +339,17 @@ final class ManualTripModel: ObservableObject {
             endDate: startDate.addingTimeInterval(duration)
         )
     }
+}
+
+/// Почему «Записать» ничего не записало.
+///
+/// Два случая, и слова у них разные: подписку отозвали, пока лист стоял
+/// открытым (гейт спрашивается ЗАНОВО в момент записи — и правильно делает),
+/// либо база отказала. Общее «не удалось» на оба означало бы, что человек с
+/// кончившейся подпиской будет жать кнопку, пока не устанет.
+enum ManualTripCreateError: Equatable {
+    case noAccess
+    case notSaved
 }
 
 /// Итог успешного создания — то, чем кормится тост «Открыть поездку» /

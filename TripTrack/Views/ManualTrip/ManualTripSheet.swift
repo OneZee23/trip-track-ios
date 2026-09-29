@@ -101,7 +101,7 @@ struct ManualTripSheet: View {
                     // Из поиска «Отмена» возвращает в форму, а не закрывает
                     // лист: закрыть форму, потеряв набранное, из второй стадии
                     // человек не просил.
-                    if searchTarget != nil { searchTarget = nil } else { dismiss() }
+                    if searchTarget != nil { cancelSearch() } else { dismiss() }
                 } label: {
                     Text(AppStrings.cancel(lang.language))
                         .font(.inter(16, weight: .medium))
@@ -176,6 +176,19 @@ struct ManualTripSheet: View {
         all.append(contentsOf: model.via.filter { !$0.isPlaceholder })
         if let to = model.to { all.append(to) }
         return all
+    }
+
+    /// Выход из второй стадии. Заготовка промежуточной точки, ради которой
+    /// поиск и открывали, живёт в `model.via` с координатой (0, 0) — и, не
+    /// убери её здесь, оставалась бы в форме пустой строкой «Через», которую
+    /// снимает только кнопка «минус», о которой человек не думал. Маршруту она
+    /// не мешала (и `recomputeRoute`, и карта её отфильтровывают), поэтому
+    /// молчала.
+    private func cancelSearch() {
+        if case .via(let index) = searchTarget {
+            model.discardPlaceholderVia(at: index)
+        }
+        searchTarget = nil
     }
 
     /// Куда идёт следующий тап по карте — явная цель поиска, а пока её нет,
@@ -372,6 +385,14 @@ struct ManualTripSheet: View {
                 .foregroundStyle(AppTheme.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_too_long")
+        } else if model.endsLater {
+            // Тот же случай, что `isRouteTooLong`: кнопка выключена, и рядом
+            // написано почему.
+            Text(AppStrings.manualTripErrorEndsLater(lang.language))
+                .font(.inter(13, weight: .semibold))
+                .foregroundStyle(AppTheme.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("manual_trip_ends_later")
         } else if let error = model.routeError {
             Text(errorText(error))
                 .font(.inter(13, weight: .semibold))
@@ -430,6 +451,34 @@ struct ManualTripSheet: View {
     // MARK: - Кнопка
 
     private func footer(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 10) {
+            if let error = model.createError {
+                Text(createErrorText(error))
+                    .font(.inter(13, weight: .semibold))
+                    .foregroundStyle(AppTheme.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .accessibilityIdentifier("manual_trip_create_error")
+            }
+            createButton(c)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .background(c.bg)
+    }
+
+    /// Причина отказа записи. Два случая, и слова у них разные: общее «не
+    /// удалось» заставило бы человека с кончившейся подпиской жать кнопку,
+    /// пока не устанет.
+    private func createErrorText(_ error: ManualTripCreateError) -> String {
+        switch error {
+        case .noAccess: AppStrings.manualTripErrorNoAccess(lang.language)
+        case .notSaved: AppStrings.manualTripErrorNotSaved(lang.language)
+        }
+    }
+
+    private func createButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.action()
             create()
@@ -450,9 +499,6 @@ struct ManualTripSheet: View {
         .buttonStyle(PressableCardStyle())
         .disabled(!model.canCreate || isCreating)
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
-        .background(c.bg)
         .accessibilityIdentifier("manual_trip_create")
     }
 
@@ -513,6 +559,19 @@ struct ManualTripSheet: View {
                     ForEach(Array(model.completions.enumerated()), id: \.offset) { _, item in
                         completionRow(item, c: c)
                     }
+                }
+                // Пустой список — это «ищем», «не нашлось» или «ещё ничего не
+                // набрано», и до 0.8.4 экран отвечал на все три одинаковым
+                // белым местом. Форму этого состояния дорисует дизайнер; пока
+                // здесь стоит честный минимум.
+                if model.completions.isEmpty && !model.isSearching
+                    && model.query.trimmingCharacters(in: .whitespacesAndNewlines).count > 1 {
+                    Text(AppStrings.noResults(lang.language))
+                        .font(.inter(14))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 28)
+                        .accessibilityIdentifier("manual_trip_no_results")
                 }
             }
             .scrollDismissesKeyboard(.immediately)

@@ -7961,6 +7961,31 @@ enum AppStrings {
            ru: "Не удалось построить маршрут", en: "Could not build the route")
     }
 
+    /// Конец поездки уехал в будущее: старт в прошлом, а длительность такая,
+    /// что финиш ещё не наступил. Стоит рядом с выключенной кнопкой — как
+    /// `manualTripErrorTooLong`, и по той же причине.
+    static func manualTripErrorEndsLater(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorEndsLater",
+           ru: "Поездка ещё не закончилась. Сдвиньте начало или убавьте время",
+           en: "This trip has not ended yet. Move the start or shorten it")
+    }
+
+    /// Запись не удалась. Причину назвать нечем — база отказала, — но молчать
+    /// нельзя: человек нажал кнопку и должен узнать, что ничего не вышло.
+    static func manualTripErrorNotSaved(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorNotSaved",
+           ru: "Не удалось записать поездку", en: "Could not save the trip")
+    }
+
+    /// Подписка кончилась или была отозвана, пока лист стоял открытым. Гейт
+    /// спрашивается заново в момент записи — и это единственный способ узнать
+    /// об этом, поэтому у состояния есть своя фраза, а не общая «не удалось».
+    static func manualTripErrorNoAccess(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorNoAccess",
+           ru: "Подписка недоступна — поездку задним числом сейчас не записать",
+           en: "The subscription is not available — a trip cannot be added right now")
+    }
+
     /// Пометка на карточке и на экране поездки. Короткая нарочно: она стоит в
     /// строке рядом с датой, а не отдельным блоком.
     static func manualTripBadge(_ lang: LanguageManager.Language) -> String {
