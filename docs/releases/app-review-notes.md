@@ -4,7 +4,82 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.8.1 — a track without gaps, drafts, a new look (current submission)
+## v0.8.3 — electric cars and hybrids (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.8.3 started with a letter from a user in Germany: the app showed
+fuel consumption in litres, and he drives a plug-in hybrid.
+
+NO IN-APP PURCHASES IN THIS BUILD. There is no subscription, no tip jar and
+no paywall anywhere in the app, and nothing is submitted under In-App
+Purchase for this version. The app is free and complete as shipped.
+
+ENGINE TYPE FOR A CAR. A car now has a powertrain: petrol or diesel,
+electric, or both at once. An electric car is measured in kilowatt-hours and
+a price per kWh instead of litres; a plug-in hybrid is measured in both. The
+question is asked in plain language ("What does your car run on?") rather
+than with three technical terms.
+
+AN HONEST BREAKDOWN PER TRIP. Each trip shows how far it went on the battery,
+how far on fuel, and what that cost. The electric range is spent per calendar
+day: the first kilometres of each day come off the night's charge. Only the
+MODE of a trip is stored — everything else is computed at display time, so
+correcting the consumption or the range recalculates the whole history at
+once, with no migration and no stale numbers. The user can override the mode
+on any trip: Auto, Electric, Fuel.
+
+A CHECKPOINT INSIDE THE PRIVATE HOME ZONE NO LONGER CARRIES ITS COORDINATES.
+In 0.8.2 the track, the route preview and photo EXIF were already trimmed
+inside the user's private zone; a checkpoint placed there still travelled as
+an exact point. It now travels without latitude and longitude — the name, the
+time and the distance from the start are kept. This release sends strictly
+LESS data to our server than the previous one.
+
+RECORDING STARTS UNDER A BAD SKY. The idle accuracy gate was stricter than
+the recording gate, which blocked the start slider in an underground car
+park, in a courtyard or between tower blocks. The two gates are now the same.
+Distance keeps its own, stricter gate and does not change by a metre.
+
+FIXED. Edits to a car (consumption, fuel price, currency, name, visibility)
+could be rolled back by an incoming sync from a second device.
+
+HOW TO TEST
+1. Open the "Me" tab, then the garage card, then any car, then edit it.
+   The "Engine" row asks what the car runs on and offers three answers with
+   an explanation under each.
+2. Choose "Electricity and fuel" — fields for kWh per 100 km, the price per
+   kWh and the battery range appear next to the existing fuel fields.
+3. Open any trip of that car: the tiles show electricity, fuel and cost, and
+   a row underneath lets you switch the trip between Auto, Electric and Fuel.
+4. Record a trip in the Simulator with Features > Location > Freeway Drive
+   (not City Run: anything that never exceeds 15 km/h is discarded as a
+   walking misfire).
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. Everything above works fully
+signed out and with Cloud Sync off, which is the default.
+
+No new permissions are requested. Location usage is unchanged from 0.7.0.
+```
+
+### Если спросят про «Beta» на двух экранах
+
+Ответ тот же, что и в 0.8.1 и 0.8.2 — секция ниже, она не устарела.
+
+---
+
+## v0.8.2 — отдельной секции нет
+
+Заметки для ревьюера при сабмите 0.8.2 не обновлялись: версия ушла на ревью с
+текстом 0.8.1. Записано, чтобы это не выглядело потерянным файлом. Ничего в
+0.8.2 не требовало объяснений сверх того, что уже сказано ниже (значок «Бета»
+на двух вкладках, отсутствие покупок).
+
+---
+
+## v0.8.1 — a track without gaps, drafts, a new look
 
 ### Короткая версия — вставить в App Store Connect
 
