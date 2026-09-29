@@ -6,7 +6,8 @@ import CoreGraphics
 /// одной строкой каждый и оба неверно. Здесь они чистые функции с таблицей.
 final class PlacesScreenStateTests: XCTestCase {
 
-    private let fifteen = PlacesSlot(height: 844, safeTop: 48, safeBottom: 34)
+    /// 844 с зоной 47 — iPhone 13/14, а не 15 (см. PlacesSlotTests).
+    private let thirteen = PlacesSlot(height: 844, safeTop: 47, safeBottom: 34)
     private let se = PlacesSlot(height: 667, safeTop: 20, safeBottom: 0)
 
     // MARK: Пустая вкладка (13, 14, 15)
@@ -19,16 +20,16 @@ final class PlacesScreenStateTests: XCTestCase {
         XCTAssertEqual(PlacesEmptyState.resolve(places: 0, trips: 3), .noPlaces)
         XCTAssertEqual(PlacesEmptyState.resolve(places: 0, trips: 1), .noPlaces,
                        "одна поездка — уже состояние 13/14, а не 15")
-        XCTAssertEqual(PlacesEmptyState.resolve(places: 0, trips: 3).stop(in: fifteen), .empty)
-        XCTAssertEqual(fifteen.top(of: .empty), 280)
+        XCTAssertEqual(PlacesEmptyState.resolve(places: 0, trips: 3).stop(in: thirteen), .empty)
+        XCTAssertEqual(thirteen.top(of: .empty), 280)
     }
 
     func testNoTripsAtAllStandsAtTheDefaultStop() {
         let state = PlacesEmptyState.resolve(places: 0, trips: 0)
         XCTAssertEqual(state, .noTrips)
         // Состояние 15 спеки: «панель, таб-бар − 374», то есть половина.
-        XCTAssertEqual(state.stop(in: fifteen), .half)
-        XCTAssertEqual(fifteen.top(of: .half), 380)
+        XCTAssertEqual(state.stop(in: thirteen), .half)
+        XCTAssertEqual(thirteen.top(of: .half), 380)
         // На SE половины нет вовсе — там умолчание это список.
         XCTAssertEqual(state.stop(in: se), .list)
     }
@@ -37,7 +38,7 @@ final class PlacesScreenStateTests: XCTestCase {
         for trips in 0...3 {
             XCTAssertEqual(PlacesEmptyState.resolve(places: 1, trips: trips), PlacesEmptyState.notEmpty)
         }
-        XCTAssertEqual(PlacesEmptyState.notEmpty.stop(in: fifteen), fifteen.defaultStop)
+        XCTAssertEqual(PlacesEmptyState.notEmpty.stop(in: thirteen), thirteen.defaultStop)
     }
 
     /// Пустые состояния держат одно положение и не тянутся (спека §4), а
@@ -48,12 +49,12 @@ final class PlacesScreenStateTests: XCTestCase {
         XCTAssertFalse(PlacesEmptyState.notEmpty.isPinned)
 
         XCTAssertFalse(PlacesPanelStop.empty.isDraggable)
-        XCTAssertFalse(fifteen.reachableStops.contains(.empty))
+        XCTAssertFalse(thirteen.reachableStops.contains(.empty))
         XCTAssertFalse(se.reachableStops.contains(.empty))
         // И жест в него не приводит ни с какой высоты и ни с какой скоростью.
         for top in stride(from: CGFloat(0), through: 844, by: 20) {
             for velocity in [CGFloat(-900), 0, 900] {
-                let landed = fifteen.settle(top: top, velocity: velocity, from: .half)
+                let landed = thirteen.settle(top: top, velocity: velocity, from: .half)
                 XCTAssertNotEqual(landed, .empty)
             }
         }

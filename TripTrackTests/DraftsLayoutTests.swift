@@ -77,8 +77,8 @@ final class DraftsLayoutTests: XCTestCase {
     /// Кнопка НИКОГДА не наезжает на таб-бар и не уходит под шапку: между
     /// ними обязано остаться место под список.
     func testTheButtonAlwaysSitsBetweenTheHeaderAndTheTabBar() {
-        for (name, layout) in [("SE", se), ("13 mini", mini), ("13/14", thirteen), ("15/16", sixteen),
-                               ("iPhone 16", sixteen), ("15 Pro Max", proMax)] {
+        for (name, layout) in [("SE", se), ("13 mini", mini), ("13/14", thirteen),
+                               ("15/16", sixteen), ("15 Pro Max", proMax)] {
             XCTAssertLessThan(layout.buttonTop + 52, layout.tabBarTop, "кнопка легла на таб-бар: \(name)")
             XCTAssertGreaterThan(layout.buttonTop, layout.headerBottom + 100,
                                  "кнопке не осталось места под списком: \(name)")
