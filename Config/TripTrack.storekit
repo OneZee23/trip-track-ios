@@ -82,7 +82,7 @@
       "localizations" : [
 
       ],
-      "name" : "plus",
+      "name" : "pro",
       "subscriptions" : [
         {
           "adHocOffers" : [
@@ -103,18 +103,18 @@
           "localizations" : [
             {
               "description" : "Премиум-оформление и ручные поездки",
-              "displayName" : "TripTrack Плюс — год",
+              "displayName" : "TripTrack PRO — год",
               "locale" : "ru"
             },
             {
               "description" : "Premium looks and manual trips",
-              "displayName" : "TripTrack Plus — yearly",
+              "displayName" : "TripTrack PRO — yearly",
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.onezee.TripTrack.plus.yearly",
+          "productID" : "com.onezee.TripTrack.pro.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Plus Yearly",
+          "referenceName" : "PRO Yearly",
           "subscriptionGroupID" : "21504321",
           "type" : "RecurringSubscription",
           "winbackOffers" : [
@@ -135,18 +135,18 @@
           "localizations" : [
             {
               "description" : "Премиум-оформление и ручные поездки",
-              "displayName" : "TripTrack Плюс — месяц",
+              "displayName" : "TripTrack PRO — месяц",
               "locale" : "ru"
             },
             {
               "description" : "Premium looks and manual trips",
-              "displayName" : "TripTrack Plus — monthly",
+              "displayName" : "TripTrack PRO — monthly",
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.onezee.TripTrack.plus.monthly",
+          "productID" : "com.onezee.TripTrack.pro.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Plus Monthly",
+          "referenceName" : "PRO Monthly",
           "subscriptionGroupID" : "21504321",
           "type" : "RecurringSubscription",
           "winbackOffers" : [

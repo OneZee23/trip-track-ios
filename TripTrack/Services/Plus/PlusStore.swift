@@ -94,8 +94,12 @@ final class PlusStore: ObservableObject {
         }
     }
 
-    static let yearlyID = "com.onezee.TripTrack.plus.yearly"
-    static let monthlyID = "com.onezee.TripTrack.plus.monthly"
+    // 0.8.4: подписка называется PRO. Идентификатор продукта в App Store
+    // Connect ПЕРЕИМЕНОВАТЬ НЕЛЬЗЯ — только завести новый и похоронить
+    // старый, — поэтому имя выбрано ДО того, как продукты заведены, и
+    // менять его после первой продажи будет уже нечем.
+    static let yearlyID = "com.onezee.TripTrack.pro.yearly"
+    static let monthlyID = "com.onezee.TripTrack.pro.monthly"
     /// Порядок значим: годовой первый и в пейволе, и в выборке продуктов.
     static let productIDs = [yearlyID, monthlyID]
 

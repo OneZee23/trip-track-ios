@@ -115,7 +115,7 @@ final class PlusPaywallModelTests: XCTestCase {
     func testProfileRowSaysUntilWhenSubscribed() {
         let line = PlusRow.status(
             state: .active, expiresAt: Self.october, trialDays: 7, lang: .ru)
-        XCTAssertTrue(line.hasPrefix("Плюс до "), line)
+        XCTAssertTrue(line.hasPrefix("PRO до "), line)
         XCTAssertTrue(line.contains("12"), line)
         XCTAssertFalse(line.contains("2026"), "год в узкой строке не помещается: \(line)")
     }

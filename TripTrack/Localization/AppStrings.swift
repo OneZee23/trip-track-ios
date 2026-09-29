@@ -7627,7 +7627,7 @@ enum AppStrings {
     /// Имя подписки. Одно слово: им подписан и заголовок пейвола, и строка в
     /// профиле, и значок у имени в ленте — трём написаниям разъехаться нельзя.
     static func plusTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusTitle", ru: "Плюс", en: "Plus")
+        tr(lang, "plusTitle", ru: "PRO", en: "PRO")
     }
 
     /// Что покупают — одной фразой, до списка. Про «оформление» и «поездки»,
@@ -7751,7 +7751,7 @@ enum AppStrings {
     /// «Плюс до 12 окт» — статус в профиле. Дата приходит уже напечатанной
     /// форматтером своего языка.
     static func plusUntil(_ lang: LanguageManager.Language, date: String) -> String {
-        tr(lang, "plusUntil", ru: "Плюс до {date}", en: "Plus until {date}")
+        tr(lang, "plusUntil", ru: "PRO до {date}", en: "PRO until {date}")
             .replacingOccurrences(of: "{date}", with: date)
     }
 
@@ -7806,13 +7806,13 @@ enum AppStrings {
     /// Подпись значка «Плюс» для VoiceOver — сам значок это глиф
     /// без текста.
     static func plusBadgeLabel(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusBadgeLabel", ru: "Подписка «Плюс»", en: "Plus subscriber")
+        tr(lang, "plusBadgeLabel", ru: "Подписка PRO", en: "PRO subscriber")
     }
     /// Заголовок премиум-секции в пикерах косметики. В витрине,
     /// которая платного не продаёт, секции нет вовсе — не «есть, но
     /// заперта» (`PlusGate`).
     static func plusSectionTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusSectionTitle", ru: "С «Плюсом»", en: "With Plus")
+        tr(lang, "plusSectionTitle", ru: "С PRO", en: "With PRO")
     }
     /// «Обычный» — отсутствие косметики: без рамки, без фона
     /// карточки. Имена самих вариантов («Sunset», «Gold») — имена
@@ -7856,7 +7856,7 @@ enum AppStrings {
     }
     /// Тумблер «Значок «Плюс»» в «Приватности».
     static func privacyPlusBadgeTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "privacyPlusBadgeTitle", ru: "Значок «Плюс»", en: "Plus badge")
+        tr(lang, "privacyPlusBadgeTitle", ru: "Значок PRO", en: "PRO badge")
     }
     /// Подпись под тумблером: где именно значок показывается.
     static func privacyPlusBadgeSub(_ lang: LanguageManager.Language) -> String {
