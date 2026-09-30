@@ -193,13 +193,18 @@ final class PlaceReconcileMainThreadTests: XCTestCase {
         let started = Date()
         await manager.reconcile()
         let elapsed = Date().timeIntervalSince(started)
-        Thread.sleep(forTimeInterval: 0.05)
-        watchdog.stop()
+        // Сна перед остановкой здесь БОЛЬШЕ НЕТ. Он стоял, чтобы «дать
+        // последней пробе доехать», но тело теста идёт на главном потоке
+        // (`@MainActor` обязателен у теста с CoreData и `async`), то есть сам
+        // держал main пятьдесят миллисекунд — и проба честно записывала их как
+        // простой. Приём портил ровно то число, которое сторожит тест. Теперь
+        // пограничную пробу отбрасывает `stop()`, и он же отдаёт результат.
+        let maxGapMs = watchdog.stop()
 
         print(String(format: "[places reconcile] СТАЛО: главный поток стоял максимум %.0f мс, весь проход %.0f мс",
-                     watchdog.maxGapMs, elapsed * 1000))
+                     maxGapMs, elapsed * 1000))
         XCTAssertTrue(repo.tripPreviews(needingPlaceMatch: true).isEmpty, "все поездки обязаны сверится")
-        XCTAssertLessThan(watchdog.maxGapMs, 200,
+        XCTAssertLessThan(maxGapMs, 200,
             "reconcile() держал главный поток дольше 200 мс на адверсариальной библиотеке — геометрия снова на главном")
     }
 }

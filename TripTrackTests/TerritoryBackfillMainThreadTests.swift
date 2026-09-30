@@ -138,13 +138,15 @@ final class TerritoryBackfillMainThreadTests: XCTestCase {
         let started = Date()
         await tm.backfillIfNeeded()
         let elapsed = Date().timeIntervalSince(started)
-        Thread.sleep(forTimeInterval: 0.05)
-        watchdog.stop()
+        // Сна перед остановкой больше нет — он сам держал главный поток и
+        // записывался как простой; подробности у близнеца в
+        // `PlaceReconcileMainThreadTests` и в `MainThreadWatchdog.stop`.
+        let maxGapMs = watchdog.stop()
 
         print(String(format: "[territory backfill] СТАЛО: главный поток стоял максимум %.0f мс, весь проход %.0f мс",
-                     watchdog.maxGapMs, elapsed * 1000))
+                     maxGapMs, elapsed * 1000))
         XCTAssertTrue(defaults.bool(forKey: TerritoryManager.backfillKey))
-        XCTAssertLessThan(watchdog.maxGapMs, 200,
+        XCTAssertLessThan(maxGapMs, 200,
             "backfillIfNeeded держал главный поток дольше 200 мс на стрессовой библиотеке — фон снова просочился на main")
     }
 }

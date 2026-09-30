@@ -153,14 +153,16 @@ final class FogMetalBudgetTests: XCTestCase {
             FogMesh.build(layer: layer, device: device)
         }.value
         let elapsedMs = (CACurrentMediaTime() - started) * 1000
-        watchdog.stop()
+        // Число берётся у `stop()` ОДИН раз: печать и проверка обязаны
+        // говорить об одном (см. доккомментарий `MainThreadWatchdog.stop`).
+        let maxGapMs = watchdog.stop()
 
         print(String(format: "[fog metal] сборка FogMesh: %.0f мс вне main, главный поток стоял максимум %.0f мс, отрезков %d",
-                     elapsedMs, watchdog.maxGapMs, mesh.segmentCount))
+                     elapsedMs, maxGapMs, mesh.segmentCount))
         XCTAssertGreaterThan(mesh.segmentCount, 0)
         XCTAssertLessThan(elapsedMs, Self.meshBuildBudgetMs,
                           "сборка буферов вылезла из бюджета спеки §7")
-        XCTAssertLessThan(watchdog.maxGapMs, Self.mainGapBudgetMs,
+        XCTAssertLessThan(maxGapMs, Self.mainGapBudgetMs,
                           "сборка буферов держала главный поток — она обязана идти вне него")
     }
 
