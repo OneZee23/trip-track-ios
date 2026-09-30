@@ -142,3 +142,61 @@ enum ProShowcase {
         return state.freeWeekAvailable ? .tryFreeWeek : .getPro
     }
 }
+
+// MARK: - Плитки
+
+extension ProShowcase {
+    /// Один вариант в сетке витрины.
+    ///
+    /// Значением, а не самим перечислением: четыре косметики — четыре РАЗНЫХ
+    /// типа без общего протокола (`ProfileBackground`, `AvatarFrame`,
+    /// `VehicleCardStyle`, `RouteLineStyle`), и заводить им протокол ради
+    /// одной сетки значило бы тронуть четыре файла, которые работают. Сетка
+    /// же спрашивает у варианта ровно три вещи: чем он назван в базе, платный
+    /// ли он и как зовётся у человека.
+    struct Tile: Identifiable, Equatable {
+        /// `rawValue` — он же ключ в базе и на проводе.
+        let id: String
+        let isPremium: Bool
+        /// Имя собственное («Nebula», «Gold»). Пусто у «без варианта» — у него
+        /// нет имени, есть только отсутствие.
+        let name: String
+    }
+
+    /// Все варианты витрины по порядку: сначала бесплатные, потом платные.
+    ///
+    /// Порядок ВЫВОДИТСЯ из `allCases`, а не выписывается: второй список
+    /// разошёлся бы с первым на первом добавленном фоне — ровно так, как
+    /// разошлись бы числа в заголовках групп.
+    static func tiles(for kind: ProShowcaseKind) -> [Tile] {
+        let all: [Tile]
+        switch kind {
+        case .profileBackground:
+            all = ProfileBackground.allCases.map {
+                Tile(id: $0.rawValue, isPremium: $0.isPlus, name: $0.displayName)
+            }
+        case .avatarFrame:
+            all = AvatarFrame.allCases.map {
+                Tile(id: $0.rawValue, isPremium: $0.isPlus, name: $0.displayName)
+            }
+        case .vehicleCard:
+            all = VehicleCardStyle.allCases.map {
+                Tile(id: $0.rawValue, isPremium: $0.isPlus, name: $0.displayName)
+            }
+        case .routeLine:
+            all = RouteLineStyle.allCases.map {
+                Tile(id: $0.rawValue, isPremium: $0.isPlus, name: $0.displayName)
+            }
+        }
+        return all.filter { !$0.isPremium } + all.filter(\.isPremium)
+    }
+
+    /// Бесплатные и платные врозь — так их и рисует макет, двумя группами со
+    /// своими заголовками и своими числами.
+    static func groups(
+        for kind: ProShowcaseKind
+    ) -> (free: [Tile], premium: [Tile]) {
+        let all = tiles(for: kind)
+        return (free: all.filter { !$0.isPremium }, premium: all.filter(\.isPremium))
+    }
+}

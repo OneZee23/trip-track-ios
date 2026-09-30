@@ -202,4 +202,43 @@ final class ProShowcaseTests: XCTestCase {
             XCTAssertTrue(line.contains("\(lines)"), "\(lang.rawValue): «\(line)»")
         }
     }
+
+    // MARK: - Плитки
+
+    /// Плиток столько же, сколько вариантов, и разбиты они ровно так, как
+    /// считают заголовки групп. Два способа посчитать одно и то же — верный
+    /// способ разойтись.
+    func testTilesMatchTheCountsInTheGroupHeaders() {
+        for kind in ProShowcaseKind.allCases {
+            let groups = ProShowcase.groups(for: kind)
+            XCTAssertEqual(groups.free.count, kind.freeCount, "\(kind)")
+            XCTAssertEqual(groups.premium.count, kind.premiumCount, "\(kind)")
+            XCTAssertEqual(ProShowcase.tiles(for: kind).count,
+                           kind.freeCount + kind.premiumCount, "\(kind)")
+        }
+    }
+
+    /// Бесплатные ВСЕГДА раньше платных: так рисует макет, и так человек
+    /// видит сначала то, что у него уже есть.
+    func testFreeTilesComeFirst() {
+        for kind in ProShowcaseKind.allCases {
+            let tiles = ProShowcase.tiles(for: kind)
+            let firstPremium = tiles.firstIndex(where: \.isPremium) ?? tiles.count
+            let lastFree = tiles.lastIndex(where: { !$0.isPremium }) ?? -1
+            XCTAssertLessThan(lastFree, firstPremium,
+                              "\(kind): платное вклинилось между бесплатными")
+        }
+    }
+
+    /// Идентификатор плитки — это `rawValue`, то есть КЛЮЧ В БАЗЕ и на
+    /// проводе. Пустой у «без варианта» законен ровно один раз на витрину:
+    /// два пустых означали бы две неотличимые плитки.
+    func testTileIdsAreTheStoredKeysAndAreUnique() {
+        for kind in ProShowcaseKind.allCases {
+            let ids = ProShowcase.tiles(for: kind).map(\.id)
+            XCTAssertEqual(Set(ids).count, ids.count, "\(kind): две плитки с одним ключом")
+            XCTAssertEqual(ids.filter(\.isEmpty).count, 1,
+                           "\(kind): «без варианта» обязан быть ровно один")
+        }
+    }
 }
