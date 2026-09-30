@@ -198,6 +198,22 @@ final class PlusStore: ObservableObject {
     nonisolated static var isDebugPlus: Bool {
         ProcessInfo.processInfo.arguments.contains("-debug-plus")
     }
+
+    /// Витрина ПРОДАЁТ, но подписки НЕТ — то есть человек, который может
+    /// купить.
+    ///
+    /// Отдельный флаг от `-debug-plus`, и это не дубль. Тот делает подписчика,
+    /// а у подписчика продающих состояний не бывает вовсе: строка на «Я» ведёт
+    /// в управление подпиской App Store, замков нет, примерять нечего. То
+    /// есть состояния 1, 2, 4, 5, 12, 21, 23 — ровно те, на которые смотрит
+    /// ревью Apple, — снять с `-debug-plus` НЕЛЬЗЯ ни одно.
+    ///
+    /// А без флагов их не снять тоже: `PlusAvailability.isEnabled == false`
+    /// (товаров в App Store Connect ещё нет), и витрина считается спрятанной
+    /// для всех. Отсюда второй флаг: он открывает витрину и НЕ выдаёт права.
+    nonisolated static var isDebugStorefront: Bool {
+        ProcessInfo.processInfo.arguments.contains("-debug-pro-store")
+    }
     #endif
 
     private init() {}
@@ -224,7 +240,7 @@ final class PlusStore: ObservableObject {
         // `-debug-plus` показывает платное на симуляторе и при выключенном
         // «Плюсе»: иначе пейвол и косметику нельзя было бы ни собрать, ни
         // снять на снимок до 0.8.1.
-        if isDebugPlus { return false }
+        if isDebugPlus || isDebugStorefront { return false }
         #endif
         // Выключенный «Плюс» — это витрина без платного для ВСЕХ, см.
         // `PlusAvailability`.

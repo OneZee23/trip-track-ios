@@ -45,6 +45,14 @@ struct ProDemoPager: View {
             .indexViewStyle(.page(backgroundDisplayMode: .interactive))
             .frame(maxHeight: .infinity)
         }
+        // `children: .contain` ОБЯЗАТЕЛЕН рядом с идентификатором на
+        // контейнере: без него SwiftUI схлопывает всё поддерево в ОДИН
+        // элемент и раздаёт ему это имя, а собственные имена детей пропадают —
+        // и из VoiceOver, и из дерева UI-тестов. Поймано кадровым туром:
+        // кнопка «Назад» (`pro_demo_back`) переставала находиться вовсе.
+        // Та же ловушка, что у заголовка секции подсказок в 0.8.0 и у имени
+        // листа дома в 0.8.2.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pro_demo")
     }
 
