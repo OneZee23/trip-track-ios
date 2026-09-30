@@ -21,6 +21,8 @@ struct MyProfileView: View {
     var onTapLevel: () -> Void
     var onTapCountry: () -> Void
     var onTapBackground: () -> Void
+    /// Рамка аватара — СВОЯ витрина с 0.8.4.
+    var onTapAvatarFrame: () -> Void
     var onTapStats: () -> Void
     /// Подписчики / подписки. Same destination the public profile's counters
     /// open — this screen just gives the owner a way in that doesn't go
@@ -542,11 +544,13 @@ struct MyProfileView: View {
                     identifier: "my_profile_row_background",
                     action: onTapBackground
                 )
-                // Вторая дверь в ТОТ ЖЕ лист. Нужна потому, что смотрят в неё
-                // в другой момент: фон выбирают, глядя на баннер, рамку — на
-                // аватар, и человек, ищущий рамку, не станет открывать строку
-                // с названием фона. В витрине без платного строки нет вовсе —
-                // не «есть, но заперта» (`PlusGate`).
+                // СВОЯ витрина с 0.8.4, а не вторая дверь в общий лист: у
+                // фона и у рамки разные превью (баннер против аватара 80) и
+                // разные числа в группах, и совмещённый лист показывал бы
+                // сразу оба, заставляя искать своё. Смотрят в них тоже в
+                // разные моменты: фон выбирают, глядя на баннер, рамку — на
+                // аватар. В витрине без платного строки нет вовсе — не «есть,
+                // но заперта» (`PlusGate`).
                 if avatarFrameAccess != .hidden {
                     divider(c)
                     row(
@@ -555,7 +559,7 @@ struct MyProfileView: View {
                         value: avatarFrameRowValue(l),
                         isUnset: false,
                         identifier: "my_profile_row_avatar_frame",
-                        action: onTapBackground
+                        action: onTapAvatarFrame
                     )
                 }
                 // «Как видят другие» used to hang off an undocumented

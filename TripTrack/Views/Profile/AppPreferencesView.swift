@@ -33,8 +33,10 @@ struct AppPreferencesView: View {
 
     @State private var showUnitsPicker = false
     @State private var showAvgSpeedPicker = false
-    @State private var showRouteLinePicker = false
-    @State private var showPaywall = false
+    /// Открытая витрина оформления. С 0.8.4 цвет линии выбирают в ней, а не
+    /// в домашнем пикере со списком: у витрины есть превью на СВОЁМ маршруте,
+    /// и премиальный цвет в ней примеряется, а не запирается.
+    @State private var showcase: ProShowcaseKind?
     /// Выбор живёт в `UserDefaults`, а не в `SettingsManager`: он локальный и
     /// не синкается вовсе (спека §2). Зеркалится в `@State`, чтобы строка и
     /// пикер перерисовывались сразу после выбора.
@@ -67,14 +69,7 @@ struct AppPreferencesView: View {
         .sheet(isPresented: $showAvgSpeedPicker) {
             avgSpeedPicker(l)
         }
-        .sheet(isPresented: $showRouteLinePicker) {
-            routeLinePicker(l)
-        }
-        .sheet(isPresented: $showPaywall) {
-            PlusPaywallSheet()
-                .environmentObject(lang)
-                .preferredColorScheme(scheme)
-        }
+        .proShowcase($showcase)
         .task {
             // Зеркало «Плюс активен» для тех, кто спрашивает цвет линии вне
             // главного актёра (жилка «Атласа», рендерер маршрута). Пишется
@@ -158,19 +153,21 @@ struct AppPreferencesView: View {
             if routeLineAccess != .hidden {
                 rowDivider(c)
 
-                // Заперто — строка ведёт ПРЯМО в пейвол, а не в пикер с
-                // замками на шести строках из семи. Так не приходится
-                // открывать один лист поверх другого: двух системных
-                // презентаций подряд UIKit не даёт (та же мина, что у
-                // просмотрщика снимков на карте), а выбор, который нельзя
-                // выбрать, всё равно ничего не отвечает.
+                // Строка ведёт в ВИТРИНУ при любом состоянии подписки, и
+                // это разворот решения 0.8.0.
+                //
+                // Тогда заперто вело ПРЯМО в пейвол — чтобы не открывать лист
+                // поверх листа. Дизайн 0.8.4 запрещает такой ответ прямым
+                // текстом (принцип §1.4: «витрины не выбрасывают на пейвол»):
+                // премиальный цвет сначала ПРИМЕРЯЕТСЯ на его собственном
+                // маршруте, и только кнопка внизу предлагает купить. Двух
+                // презентаций подряд при этом всё равно не выходит — пейвол
+                // открывается ПОСЛЕ закрытия витрины, своим состоянием в
+                // `ProShowcaseHost`.
                 SettingsIconRow(
                     icon: "scribble.variable",
                     title: AppStrings.settingsRouteLine(l),
-                    action: {
-                        if routeLineAccess == .locked { showPaywall = true }
-                        else { showRouteLinePicker = true }
-                    }
+                    action: { showcase = .routeLine }
                 ) {
                     HStack(spacing: 6) {
                         if routeLineAccess == .locked {
@@ -235,26 +232,6 @@ struct AppPreferencesView: View {
         return effective == .speed ? AppStrings.routeLineSpeedGradient(l) : effective.displayName
     }
 
-    /// Домашний пикер, как у единиц и темы: системных меню и диалогов в
-    /// приложении нет. Кружок цвета вместо жетона — ответ здесь И ЕСТЬ цвет,
-    /// а две буквы в жетоне про него ничего не говорят.
-    private func routeLinePicker(_ l: LanguageManager.Language) -> some View {
-        SettingsOptionPicker(
-            title: AppStrings.settingsRouteLine(l),
-            options: RouteLineStyle.allCases,
-            selection: routeLine.effective(isPlus: plus.isPlus),
-            footnote: AppStrings.routeLinePickerFootnote(l),
-            badge: { $0 == .speed ? "speedometer" : "" },
-            badgeIsSymbol: true,
-            badgeTint: { $0.color },
-            label: { $0 == .speed ? AppStrings.routeLineSpeedGradient(l) : $0.displayName },
-            onSelect: { style in
-                RouteLineStyle.stored = style
-                routeLine = style
-            },
-            accessibilityPrefix: "settings_route_line"
-        )
-    }
 
     /// Canon draws no picker for this row because canon draws no row — the
     /// setting is ours (see the card of this screen). It gets the same sheet as

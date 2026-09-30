@@ -151,7 +151,9 @@ struct ProfileView: View {
     /// Presented here rather than from «Мой профиль» itself, for the same
     /// reason the three field editors are: one host owns every presentation
     /// this stack raises.
-    @State private var showBackgroundPicker = false
+    /// Открытая витрина оформления. Одна переменная на все виды: четыре
+    /// `@State`-флага рядом умели бы показать два листа сразу.
+    @State private var showcase: ProShowcaseKind?
     /// Лист «Вписать поездку» (0.8.0). Гейт решает, что покажется в нём —
     /// форма или пейвол (`manualTripHost`).
     @State private var showManualTrip = false
@@ -273,6 +275,7 @@ struct ProfileView: View {
             // и на «Ленту», — и список этот закрыт спекой §11: запись, экран
             // поездки и лист ручной поездки перечислены в ней как запрещённые.
             .proContextOffer(tripCount: mapVM.cachedTripCount)
+            .proShowcase($showcase)
     }
 
     // MARK: - Ручная поездка (0.8.0, редизайн 20 сен)
@@ -675,12 +678,6 @@ struct ProfileView: View {
                 .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
         }
-        .sheet(isPresented: $showBackgroundPicker) {
-            ProfileBackgroundPickerSheet()
-                .environmentObject(lang)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
         .sheet(isPresented: $showNameEditor) {
             NameEditorSheet(
                 initialName: auth.userName ?? "",
@@ -746,7 +743,8 @@ struct ProfileView: View {
             // The same screen the LVL pill in the header opens.
             onTapLevel: { push(.levels) },
             onTapCountry: { push(.country) },
-            onTapBackground: { showBackgroundPicker = true },
+            onTapBackground: { showcase = .profileBackground },
+            onTapAvatarFrame: { showcase = .avatarFrame },
             onTapStats: { push(.stats) },
             // Straight onto THIS stack — the same destination the
             // public profile's counters reach, minus the detour

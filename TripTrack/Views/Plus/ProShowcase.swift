@@ -1,7 +1,9 @@
 import Foundation
 
 /// Какая из четырёх витрин оформления открыта — состояния 21…27 матрицы 0.8.4.
-enum ProShowcaseKind: CaseIterable, Equatable {
+enum ProShowcaseKind: String, CaseIterable, Equatable, Identifiable {
+    var id: String { rawValue }
+
     case profileBackground
     case avatarFrame
     case vehicleCard

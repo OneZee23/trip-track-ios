@@ -102,7 +102,9 @@ struct VehicleEditFormView: View {
     /// ложится в `@State` и сохраняется вместе с формой: запись прямо из
     /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
     @State private var cardStyle: VehicleCardStyle
-    @State private var showCardStylePicker = false
+    /// Открытая витрина оформления. Фон карточки машины живёт не в
+    /// `SettingsManager`, а в самой машине, поэтому запись идёт замыканием.
+    @State private var showcase: ProShowcaseKind?
     @State private var showPaywall = false
     @ObservedObject private var plus = PlusAccess.shared
 
@@ -310,11 +312,9 @@ struct VehicleEditFormView: View {
                 .environmentObject(lang)
                 .preferredColorScheme(scheme)
         }
-        .sheet(isPresented: $showCardStylePicker) {
-            cardStylePicker(lang.language)
-                .environmentObject(lang)
-                .preferredColorScheme(scheme)
-        }
+        .proShowcase($showcase,
+                     vehicle: editedVehicle,
+                     onPickVehicleCard: { cardStyle = VehicleCardStyle.from($0) })
         .sheet(isPresented: $showPaywall) {
             PlusPaywallSheet()
                 .environmentObject(lang)
@@ -338,7 +338,11 @@ struct VehicleEditFormView: View {
         let shown = cardStyle.effective(isPlus: plus.isPlus)
         return Button {
             Haptics.tap()
-            if locked { showPaywall = true } else { showCardStylePicker = true }
+            // В ВИТРИНУ при любом состоянии подписки: премиальный фон
+            // примеряется на ЕГО карточке, и только кнопка внизу предлагает
+            // купить (принцип §1.4). До 0.8.4 замок вёл прямо в пейвол, то
+            // есть отвечал предложением на «покажи».
+            showcase = .vehicleCard
         } label: {
             HStack(spacing: 10) {
                 Text(AppStrings.settingsVehicleCardStyle(l))
@@ -365,20 +369,6 @@ struct VehicleEditFormView: View {
         .accessibilityIdentifier("vehicle_card_style_row")
     }
 
-    private func cardStylePicker(_ l: LanguageManager.Language) -> some View {
-        SettingsOptionPicker(
-            title: AppStrings.settingsVehicleCardStyle(l),
-            options: VehicleCardStyle.allCases,
-            selection: cardStyle,
-            footnote: AppStrings.vehicleCardStylePickerFootnote(l),
-            badge: { _ in "car.fill" },
-            badgeIsSymbol: true,
-            badgeTint: { $0.colors.first },
-            label: { $0 == .none ? AppStrings.cosmeticDefaultOption(l) : $0.displayName },
-            onSelect: { cardStyle = $0 },
-            accessibilityPrefix: "vehicle_card_style"
-        )
-    }
 
     // MARK: - Nav Row
 

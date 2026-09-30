@@ -1,0 +1,277 @@
+import SwiftUI
+
+/// Витрина оформления — состояния 21…27 матрицы 0.8.4.
+///
+/// ОДИН лист на все четыре косметики, потому что макет у них один: заголовок,
+/// закреплённое превью, две группы плиток со своими числами, полоса стекла с
+/// единственной кнопкой. Четыре копии этого кода разошлись бы — и разошлись
+/// бы именно в том, что важно: в замке у платной плитки.
+///
+/// **Витрина не выбрасывает на пейвол** (принцип §1.4). Премиальный вариант
+/// сначала ПРИМЕРЯЕТСЯ в превью — человек видит себя с ним, — и только кнопка
+/// внизу предлагает купить. До 0.8.4 тап по замку уводил на пейвол сразу, то
+/// есть отвечал предложением на «покажи».
+struct ProShowcaseSheet: View {
+    let kind: ProShowcaseKind
+    /// Что выбрано в базе сейчас. Внутри листа примерка живёт в своём
+    /// состоянии: закрыть лист крестиком, ничего не купив, не должно менять
+    /// сохранённый выбор.
+    let current: String
+    /// Человек выбрал вариант, доступный ему. Платный без подписки сюда НЕ
+    /// приходит — он только примеряется.
+    let onPick: (String) -> Void
+    /// «Оформить PRO» / «Продлить» — единственная дорога к покупке отсюда.
+    let onOpenPro: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var plus = PlusAccess.shared
+    @ObservedObject private var plusStore = PlusStore.shared
+
+    /// Что примеряется прямо сейчас. Отдельно от `current`: примерка платного
+    /// меняет превью, но не базу.
+    @State private var tried: String?
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        let l = lang.language
+        let state = showcaseState
+        let shown = tried ?? current
+
+        VStack(spacing: 0) {
+            header(c, l)
+            preview(shown, c)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if ProShowcase.showsExpiredCard(state) {
+                        expiredCard(c, l)
+                    }
+                    group(AppStrings.showcaseFree(l), kind.freeCount,
+                          ProShowcase.groups(for: kind).free, shown, state, c)
+                    if ProShowcase.showsPremiumGroup(kind, state) {
+                        group(AppStrings.showcasePro(l), kind.premiumCount,
+                              ProShowcase.groups(for: kind).premium, shown, state, c)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+            .scrollIndicators(.hidden)
+
+            footer(state, c, l)
+        }
+        .background(c.bg)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pro_showcase_\(kind.feature.proIcon)")
+    }
+
+    // MARK: - Состояние
+
+    private var showcaseState: ProShowcase.State {
+        ProShowcase.State(
+            isPlus: plus.isPlus,
+            storefrontHidesPlus: plus.storefrontHidesPlus,
+            // Примерка — это выбранный ПЛАТНЫЙ вариант без подписки.
+            tryingOnPremium: isPremium(tried ?? current) && !plus.isPlus,
+            proHasEnded: plusStore.state == .expired,
+            freeWeekAvailable: plusStore.introEligible)
+    }
+
+    private func isPremium(_ id: String) -> Bool {
+        ProShowcase.tiles(for: kind).first { $0.id == id }?.isPremium ?? false
+    }
+
+    // MARK: - Шапка
+
+    private func header(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        ZStack {
+            Text(kind.title(l))
+                .font(.inter(17, weight: .semibold))
+                .foregroundStyle(c.text)
+            HStack {
+                Spacer()
+                Button {
+                    Haptics.tap()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(c.cardAlt))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("pro_showcase_close")
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 52)
+    }
+
+    // MARK: - Превью
+
+    /// Превью ЗАКРЕПЛЕНО и показывает примеряемый вариант: человек покупает
+    /// не фон, а себя с этим фоном.
+    @ViewBuilder
+    private func preview(_ shown: String, _ c: AppTheme.Colors) -> some View {
+        switch kind {
+        case .profileBackground:
+            ProShowcasePreview.profile(
+                background: ProfileBackground.from(shown),
+                frame: AvatarFrame.from(currentFrame))
+        case .avatarFrame:
+            ProShowcasePreview.profile(
+                background: ProfileBackground.from(currentBackground),
+                frame: AvatarFrame.from(shown))
+        case .vehicleCard:
+            ProShowcasePreview.vehicle(style: VehicleCardStyle.from(shown))
+        case .routeLine:
+            ProShowcasePreview.route(style: RouteLineStyle.from(shown), c)
+        }
+    }
+
+    private var currentBackground: String {
+        SettingsManager.shared.profileBackground
+    }
+
+    private var currentFrame: String {
+        SettingsManager.shared.avatarFrame ?? ""
+    }
+
+    // MARK: - Группы
+
+    private func group(
+        _ title: String,
+        _ count: Int,
+        _ tiles: [ProShowcase.Tile],
+        _ shown: String,
+        _ state: ProShowcase.State,
+        _ c: AppTheme.Colors
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(AppType.section)
+                    .tracking(AppType.sectionTracking)
+                    .foregroundStyle(c.text)
+                Text("\(count)")
+                    .font(AppType.meta)
+                    .foregroundStyle(c.textTertiary)
+            }
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(tiles) { tile in
+                    tileButton(tile, isSelected: tile.id == shown, state, c)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tileButton(
+        _ tile: ProShowcase.Tile,
+        isSelected: Bool,
+        _ state: ProShowcase.State,
+        _ c: AppTheme.Colors
+    ) -> some View {
+        let locked = ProShowcase.isLocked(isPremium: tile.isPremium, state: state)
+        return Button {
+            Haptics.selection()
+            // Платный без подписки ПРИМЕРЯЕТСЯ, а не выбирается: в базу он
+            // не уходит, и кнопка внизу становится предложением.
+            tried = tile.id
+            if !locked { onPick(tile.id) }
+        } label: {
+            ProShowcaseTileView(kind: kind, tile: tile,
+                                isSelected: isSelected, isLocked: locked)
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("pro_tile_\(tile.id.isEmpty ? "none" : tile.id)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    // MARK: - Карточка «PRO закончился»
+
+    /// Первым делом — что выбор НЕ ПОТЕРЯН: человек, увидевший свой обычный
+    /// фон вместо купленного, боится, что настройку стёрли.
+    private func expiredCard(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(AppStrings.showcaseExpiredTitle(l, date: expiredDate(l)))
+                .font(AppType.itemValue)
+                .foregroundStyle(c.text)
+            Text(AppStrings.showcaseExpiredText(l))
+                .font(AppType.body)
+                .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(AppTheme.accentBg))
+        .accessibilityIdentifier("pro_showcase_expired")
+    }
+
+    private func expiredDate(_ l: LanguageManager.Language) -> String {
+        guard let until = plusStore.displayExpiry,
+              let formatter = Self.formatters[l] else { return "" }
+        return formatter.string(from: until)
+    }
+
+    private static let formatters = LocalizedDateFormatter.templates("dMMM")
+
+    // MARK: - Подвал
+
+    /// Полоса стекла с ОДНОЙ кнопкой: «Готово», «Попробовать неделю
+    /// бесплатно», «Оформить PRO» или «Продлить» — решает `ProShowcase`.
+    private func footer(
+        _ state: ProShowcase.State,
+        _ c: AppTheme.Colors,
+        _ l: LanguageManager.Language
+    ) -> some View {
+        let action = ProShowcase.action(state)
+        return Button {
+            Haptics.action()
+            if action.opensPro { onOpenPro() } else { dismiss() }
+        } label: {
+            Text(action.title(l))
+                .font(AppType.button)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppTheme.accent))
+        }
+        .buttonStyle(PressableCardStyle())
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+        .background {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(c.bg.opacity(0.82))
+            }
+            // Полоса достаёт до физического края, содержимое остаётся в
+            // безопасной зоне — та же дисциплина, что у подвала витрины PRO.
+            .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(c.border).frame(height: 1)
+        }
+        .accessibilityIdentifier("pro_showcase_action")
+    }
+}
