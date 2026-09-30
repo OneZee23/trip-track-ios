@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Rota için bağlantı gerekiyor. Tekrar deneyin",
         "manualTripErrorTooLong": "Bu rota tek bir yolculuk için çok uzun",
         "meProSection": "Abonelik",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Arka planlar, çerçeveler, rota rengi, elle eklenen yolculuklar",
         "meProActiveSub": "{date} tarihine kadar · yönet",
         "meProTrialSub": "{date} tarihine kadar bir hafta ücretsiz · yönet",

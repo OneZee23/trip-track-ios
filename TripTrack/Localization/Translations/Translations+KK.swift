@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Бағдар үшін байланыс қажет. Қайталап көріңіз",
         "manualTripErrorTooLong": "Бұл бағдар бір сапарға тым ұзақ",
         "meProSection": "Жазылым",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Фондар, жақтаулар, маршрут түсі, қолмен қосылған сапарлар",
         "meProActiveSub": "{date} дейін · басқару",
         "meProTrialSub": "{date} дейін бір апта тегін · басқару",

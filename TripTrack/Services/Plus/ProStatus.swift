@@ -95,8 +95,11 @@ enum ProStatus: Equatable {
     func rowTitle(lang: LanguageManager.Language) -> String {
         switch self {
         case .expired(let on):
+            // Дату могли не узнать вовсе (Apple молчит с первого запуска).
+            // Тогда остаётся «PRO закончился» — без висящего пробела на конце.
             return AppStrings.meProExpired(lang)
                 .replacingOccurrences(of: "{date}", with: Self.shortDate(on, lang))
+                .trimmingCharacters(in: .whitespaces)
         case .hiddenStorefront:
             return ""
         default:

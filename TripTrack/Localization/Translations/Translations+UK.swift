@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Без зв'язку маршрут не побудувати. Спробуйте ще раз",
         "manualTripErrorTooLong": "Занадто довгий маршрут для однієї поїздки",
         "meProSection": "Підписка",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Фони, рамки, колір лінії, поїздки, дописані вручну",
         "meProActiveSub": "до {date} · керувати",
         "meProTrialSub": "Тиждень безкоштовно до {date} · керувати",

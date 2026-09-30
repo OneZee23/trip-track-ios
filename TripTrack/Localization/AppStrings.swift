@@ -7680,7 +7680,7 @@ enum AppStrings {
     static func meProGraceSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "meProGraceSub",
            ru: "Не прошла оплата, обнови способ в App Store",
-           en: "Payment didn\u{2019}t go through, update it in the App Store")
+           en: "Payment didn't go through, update it in the App Store")
     }
 
     /// Ask To Buy: ждём одобрения, и предлагать купить второй раз нельзя.

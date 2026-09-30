@@ -74,6 +74,22 @@ final class ProStatusTests: XCTestCase {
         }
     }
 
+    /// **Находка ревью задачи 2.** `expiresAt` приходит из
+    /// `currentEntitlements`, а тот при `.expired` права УЖЕ НЕ ОТДАЁТ — то
+    /// есть в момент, когда дату надо показать, живого значения нет.
+    /// `PlusStore.lastKnownExpiry` запоминает её, пока подписка работала, но
+    /// у человека, чья подписка кончилась до обновления, не запомнено ничего.
+    /// Тогда остаётся заголовок без даты — и без висящего пробела.
+    func testExpiredTitleHasNoDanglingSpaceWithoutADate() {
+        for lang in LanguageManager.Language.allCases {
+            let t = ProStatus.expired(on: nil).rowTitle(lang: lang)
+            XCTAssertFalse(t.isEmpty, "\(lang): пустой заголовок")
+            XCTAssertFalse(t.contains("{date}"), "\(lang): токен остался — «\(t)»")
+            XCTAssertEqual(t, t.trimmingCharacters(in: .whitespaces),
+                           "\(lang): висящий пробел — «\(t)»")
+        }
+    }
+
     /// Строки различимы на всех тринадцати языках: одинаковая подпись у двух
     /// статусов — это экран, по которому нельзя понять, что происходит.
     func testStatusSubtitlesDifferInEveryLanguage() {

@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Kailangan ng koneksyon ang ruta. Subukan ulit",
         "manualTripErrorTooLong": "Masyadong mahaba ang rutang ito para sa isang biyahe",
         "meProSection": "Subskripsyon",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Mga background, frame, kulay ng ruta, mga biyaheng idinagdag nang manu-mano",
         "meProActiveSub": "hanggang {date} · pamahalaan",
         "meProTrialSub": "Isang linggong libre hanggang {date} · pamahalaan",

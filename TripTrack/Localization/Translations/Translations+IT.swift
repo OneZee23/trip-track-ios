@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Il percorso richiede una connessione. Riprova",
         "manualTripErrorTooLong": "Questo percorso è troppo lungo per un solo viaggio",
         "meProSection": "Abbonamento",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Sfondi, cornici, colore del percorso, viaggi inseriti a mano",
         "meProActiveSub": "fino al {date} · gestisci",
         "meProTrialSub": "Una settimana gratis fino al {date} · gestisci",

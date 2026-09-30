@@ -35,6 +35,9 @@ struct ProfileView: View {
     /// Два бита про платное — «куплено?» и «эта витрина вообще продаёт?».
     /// Читаются только здесь, решение принимает `PlusGate`.
     @ObservedObject private var plusAccess = PlusAccess.shared
+    /// Нужен ради статуса подписки: `PlusAccess` знает только «есть/нет», а
+    /// строке PRO нужны восемь случаев (триал, грейс, ждём одобрения, дата).
+    @ObservedObject private var plusStore = PlusStore.shared
 
     /// True when hosted as the «Я» tab (0.6.0) — the floating tab bar needs
     /// scroll clearance. False when presented as the legacy Feed sheet.
@@ -1049,18 +1052,22 @@ struct ProfileView: View {
     /// сработать, хуже отсутствующей.
     @ViewBuilder
     private func plusSection() -> some View {
-        let level = PlusGate.allows(
-            .profileBackgrounds,
-            isPlus: plusAccess.isPlus,
+        // ОДИН ответ на «видно ли платное» — статус, а не второй гейт рядом.
+        // Дата окончания берётся `displayExpiry`: при `.expired` Apple живую
+        // уже не отдаёт, и показывать надо запомненную.
+        let status = ProStatus.resolve(
+            state: plusStore.state,
+            expires: plusStore.displayExpiry,
+            isPending: plusStore.awaitingApproval,
             storefrontHidesPlus: plusAccess.storefrontHidesPlus
         )
         VStack(alignment: .leading, spacing: 10) {
-            if level != .hidden {
+            if status.showsRow {
                 // Заголовок раздела появился в 0.8.4 вместе со статусами: до
                 // этого строка висела без имени, а теперь их в разделе две —
                 // подписка и чаевые, и это разные сделки.
                 ProfileSectionLabel(text: AppStrings.meProSection(lang.language))
-                PlusRow { showPaywall = true }
+                PlusRow(status: status) { showPaywall = true }
             }
             if !plusAccess.storefrontHidesPlus {
                 ProfileSupportRow { showTipJar = true }

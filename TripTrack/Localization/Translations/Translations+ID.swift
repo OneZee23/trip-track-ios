@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Rute butuh koneksi. Coba lagi",
         "manualTripErrorTooLong": "Rute ini terlalu panjang untuk satu perjalanan",
         "meProSection": "Langganan",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Latar, bingkai, warna rute, perjalanan isian manual",
         "meProActiveSub": "sampai {date} · kelola",
         "meProTrialSub": "Satu minggu gratis sampai {date} · kelola",

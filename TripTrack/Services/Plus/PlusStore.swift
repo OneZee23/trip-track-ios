@@ -107,6 +107,27 @@ final class PlusStore: ObservableObject {
     @Published private(set) var state: State = .none
     /// До какого числа «Плюс». `nil` — не куплено или Apple не сказала.
     @Published private(set) var expiresAt: Date?
+
+    /// Последняя дата окончания, которую Apple когда-либо называла.
+    ///
+    /// Нужна ровно для строки «PRO закончился {date}». `expiresAt` приходит из
+    /// `currentEntitlements`, а тот при `.expired` и `.grace` права УЖЕ НЕ
+    /// ОТДАЁТ — то есть в момент, когда дату надо показать, живого значения
+    /// нет, и строка выходила бы «PRO закончился» с пустым хвостом. Дату мы
+    /// знали, пока подписка работала: запоминаем её тогда.
+    ///
+    /// Переживает перезапуск: окончание человек видит на следующем запуске, а
+    /// не в ту же секунду.
+    private(set) var lastKnownExpiry: Date? {
+        get { Self.defaults.object(forKey: Self.lastExpiryKey) as? Date }
+        set { Self.defaults.set(newValue, forKey: Self.lastExpiryKey) }
+    }
+
+    private static let lastExpiryKey = "plus.lastKnownExpiry"
+    private static var defaults: UserDefaults { .standard }
+
+    /// Дата для показа: живая, а если Apple молчит — запомненная.
+    var displayExpiry: Date? { expiresAt ?? lastKnownExpiry }
     /// Идёт покупка или восстановление — кнопки на пейволе выключены.
     @Published private(set) var isBusy = false
     /// Покупка ждёт одобрения (Ask To Buy) — состояние 16 строки PRO.
@@ -381,6 +402,9 @@ final class PlusStore: ObservableObject {
         }
 
         expiresAt = expires
+        // Запоминаем, пока Apple ещё называет дату: при `.expired` она уже
+        // молчит, а показать окончание надо именно тогда.
+        if let expires { lastKnownExpiry = expires }
         state = resolved
         #if DEBUG
         // Флаг снимков платного держится ЗДЕСЬ, а не в `PlusAccess.init`:

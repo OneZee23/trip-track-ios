@@ -1425,6 +1425,7 @@ extension Translations {
         "manualTripErrorOffline": "Für die Route braucht es Verbindung. Versuch es noch einmal",
         "manualTripErrorTooLong": "Diese Route ist zu lang für eine Fahrt",
         "meProSection": "Abo",
+        "meProNone": "TripTrack PRO",
         "meProNoneSub": "Hintergründe, Rahmen, Linienfarbe, manuelle Fahrten",
         "meProActiveSub": "bis {date} · verwalten",
         "meProTrialSub": "Eine Woche gratis bis {date} · verwalten",
