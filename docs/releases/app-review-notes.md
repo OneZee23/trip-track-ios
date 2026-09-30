@@ -4,7 +4,115 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.8.3 — electric cars and hybrids (current submission)
+## v0.8.4 — PRO: subscription, cosmetics, manual trips (current submission)
+
+**This is the first TripTrack build that sells anything.** Everything that
+existed before stays free; the subscription adds four cosmetic unlocks and one
+feature, and there is a separate tip that unlocks nothing at all.
+
+### Short version — paste into App Store Connect
+
+```
+TripTrack 0.8.4 introduces "PRO", the app's first paid tier. The app itself
+stays free: recording, the map atlas, places, journeys, photos and statistics
+are all unchanged and unlocked. Nothing that was previously free moved behind
+the subscription.
+
+WHAT PRO UNLOCKS. Four cosmetic things and one feature.
+Cosmetics: eight premium profile backgrounds, six avatar frames, eight
+backgrounds for a vehicle's card in the garage, and styles for the user's own
+route line on the maps. All four are purely decorative, and the ones other
+people can see are visible to them only while the subscription is active. A
+small "PRO" mark can appear next to the user's name and can be switched off in
+Privacy settings.
+The feature: adding a trip the user did not record, point to point along real
+roads (address search or a map tap for start and end, up to three stops in
+between; MKDirections builds the route). A hand-entered trip counts toward the
+user's distance, regions, the Atlas and the assigned vehicle's odometer — it is
+a real road the person drove — but it earns no experience, no levels, no badges
+and no finds, and its card is labelled "Added by hand" in the feed, in the
+profile and on the trip screen itself.
+
+PRICING AND DISCLOSURE. Yearly at EUR 19.99, or monthly at EUR 2.99. The
+7-day free trial is offered on the yearly plan and ONLY to accounts Apple
+reports as eligible (StoreKit's isEligibleForIntroOffer): a returning
+subscriber is never promised a free week they would not get. Before any
+purchase the paywall states the plan, its length, its price and — when a trial
+applies — what happens when the trial ends. "Restore Purchases", "Terms of
+Use" and "Privacy Policy" are on that same screen, one tap away. Cancelling is
+Apple's own Manage Subscription sheet, reached from the user's profile.
+
+TIPS. Three one-time Consumable purchases (small / medium / large) that unlock
+NOTHING. The screen says so in plain words before payment: it is a tip, not a
+disguised feature gate.
+
+SOURCE OF TRUTH. Whether the subscription is active on THIS device is decided
+by StoreKit 2 (Transaction.currentEntitlements and Transaction.updates), so
+PRO keeps working offline and on a second device signed into the same Apple
+ID. Entitlements are re-read every time the app returns to the foreground, so
+an expired subscription closes access even though Apple issues no transaction
+for expiry. After a verified purchase the app separately sends the signed
+transaction to our server; the server is the source of truth only for what
+OTHER people see (cosmetics on a public profile or garage), never for gating
+the purchasing device.
+
+WHEN A SUBSCRIPTION ENDS. Nothing is deleted. The chosen premium background,
+frame, card style and route line fall back to free defaults for display and
+come back exactly as they were if the user subscribes again.
+
+REGION. On the RUS storefront the paywall, all of its entry points, the tip
+screen and every premium-looking row are hidden outright rather than shown
+locked — there is no path to a purchase screen from that storefront. App Store
+payments have not worked there since 1 April 2026. A subscription already
+owned keeps working regardless of storefront.
+```
+
+### How to test the subscription in sandbox
+
+1. On the test device: **Settings → App Store → Sandbox Account** → sign in
+   with a Sandbox Tester Apple ID (App Store Connect → Users and Access →
+   Sandbox Testers). Do this BEFORE opening the paywall; signing in from the
+   in-app sheet also works but is less reliable.
+2. In the app: **Я (Profile) → the PRO row**, or tap any locked cosmetic
+   (profile appearance, a vehicle's card background, the route-line style) —
+   all of them open the same paywall.
+3. The yearly plan is selected by default. If the sandbox account is eligible
+   it reads "7 days free, then EUR 19.99/year"; if it is not, the trial line
+   is absent — that is deliberate, not a missing string.
+4. Tap the purchase button and confirm in the system sheet. Sandbox
+   subscriptions renew every few minutes instead of every year or month —
+   Apple's sandbox behaviour, not a bug. The paywall closes and the cosmetics
+   and the hand-entered-trip entry point unlock immediately.
+5. **Restore:** delete and reinstall, or use a second device, then open the
+   paywall and tap "Restore Purchases" — PRO returns with no new charge. If
+   the Apple ID has no subscription, the app says so instead of failing
+   silently.
+6. **Cancel:** Profile → the active-subscription row → "Manage Subscription"
+   opens Apple's own sheet. Cancelling there does not revoke access until the
+   paid period ends.
+7. **Tips:** Profile → the tip row. Buy any tier and confirm that nothing
+   unlocks — that is the intended behaviour.
+
+### Where to find the hand-entered trip
+
+Three entry points, all of them behind PRO: the **+** in the header of
+"History" on the Я tab, a tap on an **empty day** in the profile's history
+calendar, and the second button on the first-trip welcome card. On the RUS
+storefront none of the three is shown at all.
+
+### What is NOT in this build
+
+- **CarPlay.** The code for a car screen is present in the project, but the
+  `com.apple.developer.carplay-driving-task` entitlement has not been granted
+  yet and is **not** in the Release build. There is no CarPlay behaviour to
+  review in this binary.
+- **No new permissions, no new privacy-manifest entries, no server
+  migrations.** The subscription collects nothing new; the purchase receipt
+  travels the same path introduced in 0.8.0.
+
+---
+
+## v0.8.3 — electric cars and hybrids (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 
@@ -227,7 +335,13 @@ with this build.
 
 ---
 
-## v0.8.x — Plus: subscription, cosmetics, manual trips (DEFERRED, not submitted)
+## v0.8.x — Plus: subscription, cosmetics, manual trips (SUPERSEDED — see v0.8.4 above)
+
+**Этот блок УСТАРЕЛ и вставлять его нельзя.** Он писался, когда монетизацию
+отложили, и врёт в трёх местах: подписка называется PRO, а не «Плюс»; цены
+стали 19,99 € в год и 2,99 € в месяц (здесь стоят прежние 29,99 и 6,99);
+чаевые заведены как Consumable. Актуальный текст — секция v0.8.4 выше.
+Оставлен как запись того, что предполагалось сказать.
 
 **Этот блок в App Store Connect для 0.8.0 НЕ вставляется.** «Плюс» спрятан
 выключателем `PlusAvailability.isEnabled = false`, товаров в сабмите нет.
