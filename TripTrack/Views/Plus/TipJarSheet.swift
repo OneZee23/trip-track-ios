@@ -45,12 +45,12 @@ struct TipJarSheet: View {
             }
             .padding(.horizontal, 16)
 
-            Text(AppStrings.tipTitle(l))
+            Text(AppStrings.tipsTitle(l))
                 .font(.inter(21, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.top, 2)
 
-            Text(AppStrings.tipSubtitle(l))
+            Text(AppStrings.tipsText(l))
                 .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -97,7 +97,7 @@ struct TipJarSheet: View {
                 guard jar.phase == .succeeded else { return }
                 Haptics.success()
                 toastItem = ToastItem(
-                    type: .success, message: AppStrings.tipThanks(lang.language))
+                    type: .success, message: AppStrings.tipsThanks(lang.language))
             }
         } label: {
             HStack(spacing: 12) {

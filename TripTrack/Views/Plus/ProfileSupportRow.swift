@@ -1,59 +1,52 @@
 import SwiftUI
 
-/// Строка «Поддержать» в профиле — вход в `TipJarSheet`.
+/// Вход в чаевые — ОДНА приглушённая строка в самом низу «Я».
 ///
-/// Отдельная от `PlusRow` нарочно: подписка и чаевые — разные сделки, и
-/// поставить их одной строкой значило бы намекнуть, что чаевые что-то дают.
-/// Форма та же, что у `ProfileClubsRow` и `PlusRow`; подпись говорит вслух,
-/// что обещаний нет.
+/// Не карточка и не плитка, и ни одного акцентного элемента: чаевые
+/// отличаются от тарифа ВСЕМ (спека §11). Терракота в этой версии закреплена
+/// за покупкой и за числами; здесь покупки в смысле доступа нет вовсе — за
+/// чаевыми не открывается ничего, и сказано это словами на самом листе
+/// (требование Apple 3.1.1, а не вежливость).
+///
+/// До 0.8.4 это была карточка 68 с акцентной плиткой, шевроном и подписью —
+/// то есть выглядела ровно как строка подписки, и намекала, что чаевые что-то
+/// дают. Написана она была в 0.8.0 и ни разу никуда не подключена: «Плюс» был
+/// спрятан целиком.
 struct ProfileSupportRow: View {
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
 
+    /// Видна ли строка.
+    ///
+    /// Чистой функцией, потому что ответ неочевиден: чаевые видны и
+    /// ПОДПИСЧИКУ — это решение владельца, а не забытый гейт (спека §11:
+    /// «Видны всем с витриной, и с PRO, и без»). Прячет их только витрина,
+    /// которая платного не продаёт: там нет ни строки чаевых, ни раздела
+    /// «Подписка» (состояние 17).
+    static func isVisible(status: ProStatus) -> Bool {
+        status != .hiddenStorefront
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let l = lang.language
-
         Button {
             Haptics.tap()
             onTap()
         } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(AppTheme.accentBg)
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "cup.and.saucer.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(AppTheme.accent)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(AppStrings.profileRowSupport(l))
-                        .font(.inter(14.5, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Text(AppStrings.profileRowSupportSubtitle(l))
-                        .font(.inter(11.5))
-                        .foregroundStyle(c.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+            HStack(spacing: 6) {
+                Image(systemName: "heart")
+                    .font(.system(size: 14))
+                Text(AppStrings.tipsEntry(lang.language))
+                    .font(AppType.meta)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .foregroundStyle(c.textSecondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
             .contentShape(Rectangle())
         }
-        .buttonStyle(PressableCardStyle())
-        .surfaceCard(cornerRadius: 16)
+        .buttonStyle(.plain)
         .accessibilityIdentifier("profile_support_row")
     }
 }

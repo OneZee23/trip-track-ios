@@ -455,6 +455,16 @@ struct ProfileView: View {
                         if auth.isSignedIn {
                             WithMeSection(onTapTrip: { push(.companionTrip($0)) })
                         }
+
+                        // Чаевые — В САМОМ НИЗУ и одной приглушённой строкой.
+                        // Не в разделе «Подписка», где они стояли до 0.8.4:
+                        // соседство с тарифом намекало, что за них что-то
+                        // открывается. Видны и подписчику — решение владельца
+                        // (спека §11), прячет их только витрина, которая
+                        // платного не продаёт.
+                        if ProfileSupportRow.isVisible(status: proStatus) {
+                            ProfileSupportRow { showTipJar = true }
+                        }
                     }
                 }
                 // As a tab (0.6.0), leave room for the floating tab bar so the
@@ -1042,39 +1052,44 @@ struct ProfileView: View {
         .padding(.bottom, 12)
     }
 
-    /// «Плюс» и «Поддержать» — под гаражом, над клубами.
-    ///
-    /// Строка «Плюс» ПРОПАДАЕТ целиком на витрине, которая платного не
-    /// продаёт (`ProStatus.hiddenStorefront` → `showsRow == false`), а не
-    /// показывается серой: спека §1 требует, чтобы платного не было ВИДНО, а
-    /// не только чтобы оно не покупалось. Уже купивший видит строку и там —
-    /// статус разбирает право ПЕРВЫМ, как `PlusGate`.
-    ///
-    /// «Поддержать» спрашивает витрину НАПРЯМУЮ, а не через гейт: чаевые не
-    /// фича, `PlusFeature` для них нет и заводить его нельзя — список из пяти
-    /// закрыт. Причина скрытия при этом та же: кнопка, которая не может
-    /// сработать, хуже отсутствующей.
-    @ViewBuilder
-    private func plusSection() -> some View {
-        // ОДИН ответ на «видно ли платное» — статус, а не второй гейт рядом.
-        // Дата окончания берётся `displayExpiry`: при `.expired` Apple живую
-        // уже не отдаёт, и показывать надо запомненную.
-        let status = ProStatus.resolve(
+    /// Что сейчас с подпиской — ОДИН ответ на два места показа: раздел
+    /// «Подписка» и строка чаевых в самом низу. Два вычисления одного статуса
+    /// однажды разошлись бы — та же по форме находка, что у `PlusRow` в
+    /// задаче 2, где на «видно ли платное» отвечали два места.
+    private var proStatus: ProStatus {
+        ProStatus.resolve(
             state: plusStore.state,
             expires: plusStore.displayExpiry,
             isPending: plusStore.awaitingApproval,
             storefrontHidesPlus: plusAccess.storefrontHidesPlus
         )
-        VStack(alignment: .leading, spacing: 10) {
+    }
+
+    /// Раздел «Подписка» — под гаражом, над клубами.
+    ///
+    /// Строка ПРОПАДАЕТ целиком на витрине, которая платного не продаёт
+    /// (`ProStatus.hiddenStorefront` → `showsRow == false`), а не
+    /// показывается серой: спека §1 требует, чтобы платного не было ВИДНО, а
+    /// не только чтобы оно не покупалось. Уже купивший видит строку и там —
+    /// статус разбирает право ПЕРВЫМ, как `PlusGate`.
+    ///
+    /// Чаевые сюда БОЛЬШЕ НЕ ВХОДЯТ: с 0.8.4 они одной приглушённой строкой
+    /// в самом низу «Я». Соседство с тарифом намекало, что за них что-то
+    /// открывается, — а за ними не открывается ничего, и это единственное,
+    /// что они обещают.
+    @ViewBuilder
+    private func plusSection() -> some View {
+        // ОДИН ответ на «видно ли платное» — статус, а не второй гейт рядом.
+        // Дата окончания берётся `displayExpiry`: при `.expired` Apple живую
+        // уже не отдаёт, и показывать надо запомненную.
+        let status = proStatus
+        return VStack(alignment: .leading, spacing: 10) {
             if status.showsRow {
                 // Заголовок раздела появился в 0.8.4 вместе со статусами: до
                 // этого строка висела без имени, а теперь их в разделе две —
                 // подписка и чаевые, и это разные сделки.
                 ProfileSectionLabel(text: AppStrings.meProSection(lang.language))
                 PlusRow(status: status) { showPaywall = true }
-            }
-            if !plusAccess.storefrontHidesPlus {
-                ProfileSupportRow { showTipJar = true }
             }
         }
         .padding(.horizontal, 16)
