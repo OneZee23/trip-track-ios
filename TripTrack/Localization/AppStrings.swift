@@ -7626,6 +7626,69 @@ enum AppStrings {
 
     /// Имя подписки. Одно слово: им подписан и заголовок пейвола, и строка в
     /// профиле, и значок у имени в ленте — трём написаниям разъехаться нельзя.
+    // MARK: - Строка PRO на «Я» (0.8.4)
+    //
+    // Девять строк раздела «Подписка». Ключи дизайна — `me.pro.*`, и имена
+    // функций выведены из них: `me.pro.none.sub` → `meProNoneSub`. `{date}` —
+    // ТОКЕН, а не интерполяция: `tr()` для одиннадцати языков читает готовую
+    // строку из таблицы и получить дату в момент вызова не может.
+
+    /// Заголовок раздела на «Я», сразу после «Гаража».
+    static func meProSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProSection", ru: "Подписка", en: "Subscription")
+    }
+
+    /// Заголовок строки во всех статусах, кроме закончившегося.
+    static func meProNone(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProNone", ru: "TripTrack PRO", en: "TripTrack PRO")
+    }
+
+    /// Подпись у того, кто ещё не покупал: что вообще входит в набор.
+    static func meProNoneSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProNoneSub",
+           ru: "Фоны, рамки, цвет линии, ручная поездка",
+           en: "Backgrounds, frames, line colour, hand-entered trips")
+    }
+
+    /// Подписка действует. «Управлять» — потому что отмена живёт у Apple.
+    static func meProActiveSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProActiveSub", ru: "до {date} · управлять", en: "until {date} · manage")
+    }
+
+    /// Идут бесплатные дни.
+    static func meProTrialSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProTrialSub",
+           ru: "Неделя бесплатно до {date} · управлять",
+           en: "One week free until {date} · manage")
+    }
+
+    /// ЗАГОЛОВОК закончившейся подписки: «TripTrack PRO» над словами «вернётся
+    /// с подпиской» читалось бы как действующая.
+    static func meProExpired(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProExpired", ru: "PRO закончился {date}", en: "PRO ended {date}")
+    }
+
+    /// И сразу говорим, что данные целы: оформление откатывается, а вписанные
+    /// поездки — нет.
+    static func meProExpiredSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProExpiredSub",
+           ru: "Оформление вернётся с подпиской, вписанные поездки на месте",
+           en: "Your look comes back with the subscription; hand-entered trips stay")
+    }
+
+    /// Льготный период: PRO работает, а платёж не прошёл.
+    static func meProGraceSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProGraceSub",
+           ru: "Не прошла оплата, обнови способ в App Store",
+           en: "Payment didn\u{2019}t go through, update it in the App Store")
+    }
+
+    /// Ask To Buy: ждём одобрения, и предлагать купить второй раз нельзя.
+    static func meProPendingSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "meProPendingSub",
+           ru: "Ждём подтверждения покупки", en: "Waiting for purchase approval")
+    }
+
     static func plusTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusTitle", ru: "PRO", en: "PRO")
     }
@@ -7744,39 +7807,9 @@ enum AppStrings {
            ru: "Не удалось — попробуйте позже", en: "It didn't go through — try again later")
     }
 
-    static func plusManage(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusManage", ru: "Управлять подпиской", en: "Manage subscription")
-    }
 
-    /// «Плюс до 12 окт» — статус в профиле. Дата приходит уже напечатанной
-    /// форматтером своего языка.
-    static func plusUntil(_ lang: LanguageManager.Language, date: String) -> String {
-        tr(lang, "plusUntil", ru: "PRO до {date}", en: "PRO until {date}")
-            .replacingOccurrences(of: "{date}", with: date)
-    }
 
-    /// «7 дней бесплатно» — приманка в строке профиля у того, кто ещё не
-    /// покупал и кому триал доступен.
-    static func plusTrialAvailable(_ lang: LanguageManager.Language, days: Int) -> String {
-        tr(lang, "plusTrialAvailable", ru: "{days} бесплатно", en: "{days} free")
-            .replacingOccurrences(of: "{days}", with: "\(days) \(nounDays(lang, days))")
-    }
 
-    /// Грейс: «Плюс» работает, но платёж не прошёл. Не тревога и не упрёк —
-    /// человек ничего не нарушил, у него протухла карта.
-    static func plusGraceStatus(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusGraceStatus",
-           ru: "Оплата не прошла — Apple пробует ещё раз",
-           en: "Payment didn't go through — Apple is retrying")
-    }
-    static func plusExpiredStatus(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusExpiredStatus", ru: "Подписка кончилась", en: "Subscription ended")
-    }
-    /// Подпись строки у того, кто ещё не покупал и кому триал не полагается.
-    static func plusRowSubtitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusRowSubtitle",
-           ru: "Оформление и ручные поездки", en: "Looks and manual trips")
-    }
 
     // MARK: - Донат (0.8.0)
 

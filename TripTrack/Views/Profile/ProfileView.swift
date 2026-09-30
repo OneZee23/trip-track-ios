@@ -1056,6 +1056,10 @@ struct ProfileView: View {
         )
         VStack(alignment: .leading, spacing: 10) {
             if level != .hidden {
+                // Заголовок раздела появился в 0.8.4 вместе со статусами: до
+                // этого строка висела без имени, а теперь их в разделе две —
+                // подписка и чаевые, и это разные сделки.
+                ProfileSectionLabel(text: AppStrings.meProSection(lang.language))
                 PlusRow { showPaywall = true }
             }
             if !plusAccess.storefrontHidesPlus {

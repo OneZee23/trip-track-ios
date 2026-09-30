@@ -112,46 +112,15 @@ final class PlusPaywallModelTests: XCTestCase {
         return Calendar(identifier: .gregorian).date(from: c)!
     }()
 
-    func testProfileRowSaysUntilWhenSubscribed() {
-        let line = PlusRow.status(
-            state: .active, expiresAt: Self.october, trialDays: 7, lang: .ru)
-        XCTAssertTrue(line.hasPrefix("PRO до "), line)
-        XCTAssertTrue(line.contains("12"), line)
-        XCTAssertFalse(line.contains("2026"), "год в узкой строке не помещается: \(line)")
-    }
-
-    /// Ещё не покупал, но триал полагается — строка это и говорит, числом из
-    /// предложения, а не «Оформить».
-    func testProfileRowOffersTheTrialBeforeAnythingIsBought() {
-        XCTAssertEqual(
-            PlusRow.status(state: .none, expiresAt: nil, trialDays: 7, lang: .ru),
-            "7 дней бесплатно")
-        XCTAssertEqual(
-            PlusRow.status(state: .none, expiresAt: nil, trialDays: nil, lang: .ru),
-            AppStrings.plusRowSubtitle(.ru))
-    }
-
-    func testProfileRowNamesGraceAndExpiryApart() {
-        XCTAssertEqual(
-            PlusRow.status(state: .grace, expiresAt: Self.october, trialDays: nil, lang: .ru),
-            AppStrings.plusGraceStatus(.ru))
-        XCTAssertEqual(
-            PlusRow.status(state: .expired, expiresAt: nil, trialDays: nil, lang: .ru),
-            AppStrings.plusExpiredStatus(.ru))
-    }
-
-    /// Каждая из тринадцати говорит своими словами и не роняет подстановку.
-    func testProfileRowIsTranslatedEverywhere() {
-        for lang in LanguageManager.Language.allCases {
-            let until = PlusRow.status(
-                state: .active, expiresAt: Self.october, trialDays: 7, lang: lang)
-            XCTAssertFalse(until.contains("{"), "\(lang.rawValue): токен не подставлен — \(until)")
-            XCTAssertFalse(until.isEmpty, lang.rawValue)
-            let trial = PlusRow.status(state: .none, expiresAt: nil, trialDays: 7, lang: lang)
-            XCTAssertFalse(trial.contains("{"), "\(lang.rawValue): \(trial)")
-            XCTAssertTrue(trial.contains("7"), "\(lang.rawValue): длина триала потерялась — \(trial)")
-        }
-    }
+    // Четыре теста подписи строки «Плюс» жили здесь до 0.8.4 и заменены
+    // `ProStatusTests`: статусов стало восемь, два из них про витрину, и
+    // отвечает на них `ProStatus`, а не `PlusRow`.
+    //
+    // Один из них описывал то, чего больше нет: строка зазывала триалом
+    // («7 дней бесплатно») у того, кто ещё не покупал. Дизайн 0.8.4 убрал
+    // приманку из строки — подпись там теперь про набор («Фоны, рамки, цвет
+    // линии, ручная поездка»), а обещание недели живёт на пейволе, где рядом
+    // стоит цена и условия автопродления. Так этого и требует Review 3.1.2.
 
     /// **Находка аудита M1.** `introductoryOffer` у продукта есть ВСЕГДА, а
     /// право на него — нет. Вернувшемуся подписчику (отменил → передумал)

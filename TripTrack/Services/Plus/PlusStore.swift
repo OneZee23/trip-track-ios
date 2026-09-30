@@ -109,6 +109,14 @@ final class PlusStore: ObservableObject {
     @Published private(set) var expiresAt: Date?
     /// Идёт покупка или восстановление — кнопки на пейволе выключены.
     @Published private(set) var isBusy = false
+    /// Покупка ждёт одобрения (Ask To Buy) — состояние 16 строки PRO.
+    ///
+    /// Только в ПАМЯТИ и только этой сессии, и это решение, а не недоделка:
+    /// StoreKit не даёт запроса «есть ли висящий запрос на одобрение», а
+    /// сохранённый флаг показывал бы «ждём подтверждения» вечно тому, кому
+    /// родитель отказал (отказ не создаёт транзакции и не приходит никак).
+    /// После перезапуска строка честно падает на настоящее право.
+    @Published private(set) var awaitingApproval = false
     /// Двухбуквенно-трёхбуквенный код витрины (`RUS`, `GEO`, `USA`).
     @Published private(set) var storefrontCountry: String?
     /// Даст ли Apple вводное предложение ЭТОМУ Apple ID.
@@ -381,6 +389,9 @@ final class PlusStore: ObservableObject {
         if Self.isDebugPlus { state = .active }
         #endif
         PlusAccess.shared.isPlus = isPlus
+        // Право приехало — ждать больше нечего. Одобренный Ask To Buy доезжает
+        // через `Transaction.updates` и попадает сюда же.
+        if isPlus { awaitingApproval = false }
         plusLog.notice("""
             state=\(self.state.rawValue, privacy: .public) \
             entitled=\(entitled, privacy: .public) trial=\(isTrial, privacy: .public)
@@ -442,6 +453,7 @@ final class PlusStore: ObservableObject {
             case .pending:
                 // Ask To Buy: вердикт приедет в `Transaction.updates`.
                 plusLog.notice("purchase pending")
+                awaitingApproval = true
                 return .pending
             @unknown default:
                 return .failed(PurchaseError.unknownResult)
