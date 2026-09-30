@@ -37,35 +37,91 @@ struct ProOfferHost: ViewModifier {
                 guard coordinator.pending != nil, data == nil else { return }
                 data = await ProDemoData.current(lang: lang.language)
             }
-            .sheet(isPresented: Binding(
-                get: { coordinator.pending != nil && data != nil },
-                // Свайп вниз — то же самое «Не сейчас», и цена у него та же:
-                // два подряд дают паузу 90 дней. Иначе правило частоты
-                // обходилось бы жестом.
-                set: { if !$0 { coordinator.declined() } }
-            )) {
-                if let moment = coordinator.pending, let data {
-                    let sells = ProContextOffer.sells(
-                        moment,
-                        storefrontHidesPlus: PlusAccess.shared.storefrontHidesPlus)
-                    ProContextSheet(
-                        moment: moment,
-                        data: data,
-                        sells: sells,
-                        onOpen: { feature in
-                            coordinator.accepted()
-                            paywall = feature
-                        },
-                        onDecline: {
-                            if sells { coordinator.declined() } else { coordinator.acknowledged() }
-                        })
-                    .presentationDetents([.height(sheetHeight(moment))])
-                    .presentationDragIndicator(.visible)
+            // ОДИН лист, содержимое решает перечисление.
+            //
+            // Двух системных презентаций подряд UIKit не даёт (CLAUDE.md), а
+            // переход «Подробнее о PRO» → пейвол — это ровно «закрыть один
+            // лист и открыть другой в том же нажатии». `ManualTripEntry` в
+            // этой же версии решает ту же задачу («сначала замок, потом
+            // форма») тем же способом; два `.sheet` рядом означали бы уметь
+            // показать оба сразу (находка ревью).
+            .sheet(item: stage) { stage in
+                switch stage {
+                case .context(let moment):
+                    contextSheet(moment)
+                case .paywall(let feature):
+                    PlusPaywallSheet(feature: feature)
                 }
             }
-            .sheet(item: $paywall) { feature in
-                PlusPaywallSheet(feature: feature)
+    }
+
+    /// Что показывать в единственном листе. `nil` — ничего.
+    ///
+    /// Запись в это состояние идёт ТОЛЬКО через координатор и `paywall`:
+    /// у листа нет своего «открыт/закрыт», и рассинхронизироваться этим двум
+    /// нечем.
+    private var stage: Binding<Stage?> {
+        Binding(
+            get: {
+                if let feature = paywall { return .paywall(feature) }
+                if let moment = coordinator.pending, data != nil {
+                    return .context(moment)
+                }
+                return nil
+            },
+            set: { value in
+                guard value == nil else { return }
+                // Закрытие жестом. У пейвола цены нет, у контекстного листа
+                // есть: свайп вниз — то же «Не сейчас», и два подряд дают
+                // паузу 90 дней. Иначе правило частоты обходилось бы жестом.
+                if paywall != nil {
+                    paywall = nil
+                } else if let moment = coordinator.pending {
+                    if ProContextOffer.sells(
+                        moment,
+                        storefrontHidesPlus: PlusAccess.shared.storefrontHidesPlus) {
+                        coordinator.declined()
+                    } else {
+                        // Извещение закрывают, а не отказываются от него.
+                        coordinator.acknowledged()
+                    }
+                }
+            })
+    }
+
+    enum Stage: Identifiable, Equatable {
+        case context(ProOfferMoment)
+        case paywall(PlusFeature)
+
+        var id: String {
+            switch self {
+            case .context(let moment): return "context.\(moment.rawValue)"
+            case .paywall(let feature): return "paywall.\(feature.proIcon)"
             }
+        }
+    }
+
+    @ViewBuilder
+    private func contextSheet(_ moment: ProOfferMoment) -> some View {
+        if let data {
+            let sells = ProContextOffer.sells(
+                moment,
+                storefrontHidesPlus: PlusAccess.shared.storefrontHidesPlus)
+            ProContextSheet(
+                moment: moment,
+                data: data,
+                sells: sells,
+                onOpen: { feature in
+                    // Один лист: содержимое сменится, презентация — та же.
+                    coordinator.accepted()
+                    paywall = feature
+                },
+                onDecline: {
+                    if sells { coordinator.declined() } else { coordinator.acknowledged() }
+                })
+            .presentationDetents([.height(sheetHeight(moment))])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     /// Высота — ЧИСЛОМ (`ProLayout.contextSheet(titleLines:)`), а не
@@ -87,27 +143,5 @@ extension View {
     /// Вешать ТОЛЬКО на «Ленту» и на «Я». Список закрыт спекой §11.
     func proContextOffer(tripCount: Int) -> some View {
         modifier(ProOfferHost(tripCount: tripCount))
-    }
-}
-
-/// `sheet(item:)` для `PlusFeature`: у него нет `Identifiable`, а заводить его
-/// у перечисления, которое лежит в гейте, значило бы протащить в сервис
-/// требование SwiftUI.
-private struct IdentifiedFeature: Identifiable {
-    let id: String
-    let feature: PlusFeature
-}
-
-private extension View {
-    func sheet<Content: View>(
-        item: Binding<PlusFeature?>,
-        @ViewBuilder content: @escaping (PlusFeature) -> Content
-    ) -> some View {
-        sheet(item: Binding<IdentifiedFeature?>(
-            get: { item.wrappedValue.map { IdentifiedFeature(id: $0.proIcon, feature: $0) } },
-            set: { if $0 == nil { item.wrappedValue = nil } }
-        )) { wrapped in
-            content(wrapped.feature)
-        }
     }
 }

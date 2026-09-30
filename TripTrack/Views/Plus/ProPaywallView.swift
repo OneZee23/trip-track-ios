@@ -308,7 +308,9 @@ struct ProPaywallView: View {
                 .padding(.top, 10)
 
             termsLine(c, l, phase)
-            linksRow(c, l, phase)
+            if phase.showsLinks {
+                linksRow(c, l)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -401,13 +403,18 @@ struct ProPaywallView: View {
 
     // MARK: - Кнопка
 
+    /// Исчерпывающий `switch`, а не цепочка `if/else if`: потеря ветки здесь
+    /// не ловится ни одним тестом (свойства фазы остаются верными, а кнопка с
+    /// экрана исчезает), зато ломает компиляцию — см. `ProPaywallPhase
+    /// .FooterAction`.
     @ViewBuilder
     private func actionArea(
         _ c: AppTheme.Colors, _ l: LanguageManager.Language, _ phase: ProPaywallPhase
     ) -> some View {
-        if phase.showsBuyButton {
+        switch phase.footerAction {
+        case .buy:
             buyButton(l, phase)
-        } else if phase.showsRetry {
+        case .retry:
             wideButton(AppStrings.retry(l)) {
                 Task {
                     didTryLoading = false
@@ -416,9 +423,11 @@ struct ProPaywallView: View {
                 }
             }
             .accessibilityIdentifier("pro_retry")
-        } else if phase.showsPendingCard {
+        case .acknowledge:
             wideButton(AppStrings.commonOk(l), action: onClose)
                 .accessibilityIdentifier("pro_pending_ok")
+        case .none:
+            EmptyView()
         }
     }
 
@@ -529,12 +538,11 @@ struct ProPaywallView: View {
     /// «Восстановить покупки · Условия · Конфиденциальность» — три РАЗНЫХ
     /// нажатия, поэтому три строки, а не одна склеенная: у одной строки на
     /// три адресата не может быть трёх целей нажатия.
-    @ViewBuilder
     private func linksRow(
-        _ c: AppTheme.Colors, _ l: LanguageManager.Language, _ phase: ProPaywallPhase
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
     ) -> some View {
         HStack(spacing: 6) {
-            if phase.showsRestore {
+            Group {
                 Button {
                     Haptics.tap()
                     Task {

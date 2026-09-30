@@ -34,7 +34,10 @@ final class ProContextOfferTests: XCTestCase {
             recordedTripThisSession: false,
             hasNetwork: true,
             onEligibleScreen: true,
-            alreadyShownThisSession: false)
+            alreadyShownThisSession: false,
+            entitlementsKnown: true,
+            afterFailure: false,
+            fromPush: false)
     }
 
     // MARK: - База
@@ -51,9 +54,12 @@ final class ProContextOfferTests: XCTestCase {
     func testEachHardBlockAloneIsEnough() {
         let blocks: [(String, (inout ProContextOffer.Input) -> Void)] = [
             ("подписка активна", { $0.isPlus = true }),
+            ("права ещё не приехали", { $0.entitlementsKnown = false }),
             ("нет сети", { $0.hasNetwork = false }),
             ("первая сессия", { $0.isFirstSession = true }),
             ("только что записал поездку", { $0.recordedTripThisSession = true }),
+            ("после ошибок", { $0.afterFailure = true }),
+            ("из пуша", { $0.fromPush = true }),
             ("не тот экран", { $0.onEligibleScreen = false }),
             ("в этой сессии уже показывали", { $0.alreadyShownThisSession = true })
         ]
@@ -61,8 +67,68 @@ final class ProContextOfferTests: XCTestCase {
             var input = eligible()
             apply(&input)
             XCTAssertNil(ProContextOffer.moment(input), "не закрыл лист: \(why)")
-            XCTAssertTrue(ProContextOffer.isBlocked(input), why)
+            XCTAssertTrue(ProContextOffer.isUnconditionallyBlocked(input), why)
         }
+    }
+
+    /// Безусловные запреты сильнее ВСЕГО, включая статус M4: он единственный,
+    /// кто свободен от порогов, но не от них.
+    func testTheUnconditionalBlocksStopEvenTheNotice() {
+        let blocks: [(String, (inout ProContextOffer.Input) -> Void)] = [
+            ("права ещё не приехали", { $0.entitlementsKnown = false }),
+            ("нет сети", { $0.hasNetwork = false }),
+            ("первая сессия", { $0.isFirstSession = true }),
+            ("только что записал поездку", { $0.recordedTripThisSession = true }),
+            ("после ошибок", { $0.afterFailure = true }),
+            ("из пуша", { $0.fromPush = true }),
+            ("не тот экран", { $0.onEligibleScreen = false }),
+            ("в этой сессии уже показывали", { $0.alreadyShownThisSession = true })
+        ]
+        for (why, apply) in blocks {
+            var input = eligible()
+            input.proExpiredAt = ago(3)
+            apply(&input)
+            XCTAssertNil(ProContextOffer.moment(input), "M4 прошёл мимо запрета: \(why)")
+        }
+    }
+
+    /// **M4 — СТАТУС, а не продажа: без порогов и без счётчика.**
+    ///
+    /// Спека говорит это дважды — §11 («статус, без порогов и счётчика») и
+    /// чек-лист приёмки, пункт 9 («M4 без порогов и без счётчика»). Первая
+    /// редакция подчиняла его всем гейтам подряд, и цена была конкретной:
+    /// человек трижды отказался от M1/M3 (обычное дело — правило трёх отказов
+    /// ровно для таких), потом оформил PRO сам из строки «Я», попользовался,
+    /// подписка истекла — и он НИКОГДА не узнал бы, что оформление сохранено
+    /// и вернётся с подпиской, а вписанные поездки на месте. Это единственное,
+    /// зачем M4 существует.
+    func testExpiryIgnoresEveryThresholdAndEveryRefusal() {
+        var input = eligible()
+        input.proExpiredAt = ago(2)
+        // Нарушено ВСЁ сразу: одна поездка, один день с приложением, лист
+        // показывали вчера, девять отказов, девять подряд.
+        input.tripCount = 1
+        input.firstLaunchAt = ago(1)
+        input.lastOfferAt = ago(1)
+        input.totalDeclines = 9
+        input.consecutiveDeclines = 9
+        XCTAssertEqual(ProContextOffer.moment(input), .expired,
+                       "M4 — статус, а не продажа")
+    }
+
+    /// И обратное: те же нарушения закрывают М1 и М3 наглухо. Иначе
+    /// освобождение M4 было бы освобождением всех.
+    func testTheSameViolationsStillCloseTheOffers() {
+        var input = eligible()
+        input.tripCount = 1
+        input.firstLaunchAt = ago(1)
+        input.lastOfferAt = ago(1)
+        input.totalDeclines = 9
+        input.consecutiveDeclines = 9
+        XCTAssertNil(ProContextOffer.moment(input))
+        XCTAssertTrue(ProContextOffer.isBlocked(input, for: .tenTrips))
+        XCTAssertTrue(ProContextOffer.isBlocked(input, for: .oneMonth))
+        XCTAssertFalse(ProContextOffer.isBlocked(input, for: .expired))
     }
 
     /// Скрытая витрина закрывает ПРЕДЛОЖЕНИЕ, но не ИЗВЕЩЕНИЕ.
@@ -117,7 +183,7 @@ final class ProContextOfferTests: XCTestCase {
         exactly.tripCount = ProContextOffer.minTrips
         exactly.firstLaunchAt = ago(ProContextOffer.minDays)
         exactly.shownMoments = [.tenTrips, .oneMonth]
-        XCTAssertFalse(ProContextOffer.isBlocked(exactly),
+        XCTAssertFalse(ProContextOffer.isBlocked(exactly, for: .tenTrips),
                        "ровно на пороге запрета уже нет")
     }
 
@@ -226,7 +292,8 @@ final class ProContextOfferTests: XCTestCase {
         var input = eligible()
         input.tripCount = 9
         input.firstLaunchAt = ago(20)
-        XCTAssertFalse(ProContextOffer.isBlocked(input), "запретов нет")
+        XCTAssertFalse(ProContextOffer.isBlocked(input, for: .tenTrips),
+                       "запретов нет")
         XCTAssertNil(ProContextOffer.moment(input), "но и повода нет")
     }
 
@@ -238,6 +305,10 @@ final class ProContextOfferTests: XCTestCase {
     func testEachMomentLeadsToWhatItPromised() {
         XCTAssertEqual(ProContextOffer.feature(for: .tenTrips), .profileBackgrounds)
         XCTAssertEqual(ProContextOffer.feature(for: .oneMonth), .routeLineStyle)
+        // Точным значением, а не «одна из пяти»: подмена фичи у извещения
+        // проходила мимо всех проверок (находка ревью), и человек увидел бы
+        // превью не того, о чём ему сообщают.
+        XCTAssertEqual(ProContextOffer.feature(for: .expired), .profileBackgrounds)
         for moment in ProOfferMoment.allCases {
             XCTAssertTrue(PlusFeature.allCases.contains(
                 ProContextOffer.feature(for: moment)), "\(moment)")

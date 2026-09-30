@@ -18,7 +18,7 @@ final class ProPaywallStatesTests: XCTestCase {
     func testNoPricesKeepsTheSetAndRestoreButHidesBuying() {
         let phase = ProPaywallPhase.pricesFailed
         XCTAssertTrue(phase.showsFeatureSet, "набор из пяти виден всегда")
-        XCTAssertTrue(phase.showsRestore, "восстановление работает без цен")
+        XCTAssertTrue(phase.showsLinks, "восстановление работает без цен")
         XCTAssertFalse(phase.showsBuyButton, "покупать нечего")
         XCTAssertTrue(phase.showsRetry)
         XCTAssertTrue(phase.showsPricesFailedCard)
@@ -70,6 +70,60 @@ final class ProPaywallStatesTests: XCTestCase {
         XCTAssertFalse(phase.showsPlanRow)
         XCTAssertFalse(phase.showsRetry)
         XCTAssertTrue(phase.allowsClose)
+        XCTAssertEqual(phase.footerAction, .acknowledge)
+    }
+
+    /// Строки ссылок у «ждём одобрения» нет ни в макете, ни по смыслу: покупка
+    /// уже сделана, восстанавливать нечего, и предлагать это человеку, который
+    /// ждёт чужого решения, значит подсказывать ему, что что-то сломалось.
+    /// Находка ревью: до неё строка рисовалась безусловно.
+    func testPendingHasNoLinksRow() {
+        XCTAssertFalse(ProPaywallPhase.pending.showsLinks)
+        for phase in Self.all where phase != .pending && phase != .bought {
+            XCTAssertTrue(phase.showsLinks,
+                          "\(phase) потерял восстановление — это требование ревью Apple")
+        }
+    }
+
+    /// Спиннер — РОВНО у идущей покупки. Без отрицательной половины проверка
+    /// проходила бы и на `showsSpinnerInButton`, прибитом к `true`: тогда
+    /// кнопка крутилась бы всегда, а текста на ней не было бы никогда
+    /// (находка ревью).
+    func testTheSpinnerBelongsToThePurchaseAndNowhereElse() {
+        for phase in Self.all {
+            XCTAssertEqual(phase.showsSpinnerInButton, phase == .purchasing,
+                           "\(phase)")
+        }
+    }
+
+    /// Тариф переключается РОВНО там, где есть из чего выбирать и ничего не
+    /// идёт. Без положительной половины проверка проходила бы и на
+    /// `allowsTariffChange`, прибитом к `false`: тогда выбрать месячный тариф
+    /// стало бы нечем вовсе (находка ревью).
+    func testTariffsSwitchExactlyWhenPricesAreThereAndNothingIsRunning() {
+        for phase in Self.all {
+            XCTAssertEqual(phase.allowsTariffChange, phase == .priced, "\(phase)")
+        }
+    }
+
+    /// Что стоит на месте кнопки — ЗНАЧЕНИЕМ, потому что потеря ветки в теле
+    /// вида не ловится ничем: свойства фазы остаются верными, а кнопка с
+    /// экрана исчезает. Исчерпывающий `switch` делает такую потерю ошибкой
+    /// компиляции, а таблица — проверяемой.
+    func testEveryPhaseNamesWhatStandsInTheButtonsPlace() {
+        XCTAssertEqual(ProPaywallPhase.priced.footerAction, .buy)
+        XCTAssertEqual(ProPaywallPhase.purchasing.footerAction, .buy)
+        XCTAssertEqual(ProPaywallPhase.loading.footerAction, .buy)
+        XCTAssertEqual(ProPaywallPhase.pricesFailed.footerAction, .retry)
+        XCTAssertEqual(ProPaywallPhase.pending.footerAction, .acknowledge)
+        XCTAssertEqual(ProPaywallPhase.bought.footerAction, .none)
+
+        // Кнопка есть везде, кроме «куплено»: экран без единого способа уйти
+        // кнопкой — это ловушка.
+        for phase in Self.all where phase != .bought {
+            XCTAssertNotEqual(phase.footerAction, ProPaywallPhase.FooterAction.none,
+                              "\(phase) остался без кнопки")
+        }
     }
 
     // MARK: - 9: куплено
@@ -79,7 +133,7 @@ final class ProPaywallStatesTests: XCTestCase {
         let phase = ProPaywallPhase.bought
         XCTAssertFalse(phase.showsFeatureSet)
         XCTAssertFalse(phase.showsBuyButton)
-        XCTAssertFalse(phase.showsRestore)
+        XCTAssertFalse(phase.showsLinks)
         XCTAssertFalse(phase.showsPlanRow)
     }
 

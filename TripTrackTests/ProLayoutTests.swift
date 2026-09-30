@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import TripTrack
 
@@ -95,17 +96,54 @@ final class ProLayoutTests: XCTestCase {
                        "вторая строка заголовка стоит ровно 26 pt")
     }
 
-    /// Ни один заголовок момента ни на одном из тринадцати языков не уходит в
-    /// ТРИ строки: третьей высоты у листа нет вовсе, и она обрезала бы кнопку.
-    func testNoMomentTitleOverflowsTwoLinesInAnyLanguage() {
-        let budget = ProLayout.titleCharactersPerLine * 2
+    // Тест «ни один заголовок не уходит в три строки» стоял здесь и СНЯТ:
+    // он считал ЗНАКИ (`titleCharactersPerLine * 2`) и на пересчитанном
+    // бюджете 26 покраснел у трёх настоящих переводов — немецкого,
+    // индонезийского и филиппинского по 53–54 знака. Покраснел ЛОЖНО:
+    // измерение тем же шрифтом в ту же ширину показывает, что все три
+    // верстаются в две строки. Число знаков не равно занятым строкам, и
+    // сторожем быть не может — его место занял тест ниже, который меряет.
+
+    /// Правило числа строк проверено ИЗМЕРЕНИЕМ, а не само собой.
+    ///
+    /// Находка ревью: бюджет знаков сверялся только с собственной константой,
+    /// то есть тест проходил бы при любом её значении. Здесь настоящие
+    /// заголовки моментов на всех тринадцати языках верстаются настоящим
+    /// шрифтом в ширину самого узкого телефона (375 − 16 × 2 = 343 pt), и
+    /// правило обязано НЕ НЕДООЦЕНИТЬ ни один: переоценка даёт пустое место
+    /// внизу листа, недооценка — обрезанную кнопку.
+    func testTheCharacterBudgetNeverUnderestimatesRealTitles() {
+        let width: CGFloat = 343
+        let font = UIFont(name: "Inter-SemiBold", size: 20)
+            ?? .systemFont(ofSize: 20, weight: .semibold)
+
         for lang in LanguageManager.Language.allCases {
             for moment in ProOfferMoment.allCases {
                 let title = ProContextSheet.title(moment, lang)
+                let measured = Self.lineCount(title, font: font, width: width)
+                let predicted = ProLayout.titleLines(for: title)
+                XCTAssertGreaterThanOrEqual(
+                    predicted, measured,
+                    "\(lang.rawValue) \(moment): правило обещает \(predicted) строк(и), "
+                    + "а верстается \(measured) — кнопку обрежет. «\(title)»")
                 XCTAssertLessThanOrEqual(
-                    title.count, budget,
-                    "\(lang.rawValue) \(moment): «\(title)» не влезает в две строки")
+                    measured, 2,
+                    "\(lang.rawValue) \(moment): «\(title)» не влезает в две строки, "
+                    + "а третьей высоты у листа нет вовсе")
             }
         }
+    }
+
+    /// Сколько строк займёт текст. `usesLineFragmentOrigin` обязателен —
+    /// без него `boundingRect` меряет одну строку независимо от ширины.
+    private static func lineCount(
+        _ text: String, font: UIFont, width: CGFloat
+    ) -> Int {
+        let box = (text as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font],
+            context: nil)
+        return max(1, Int((box.height / font.lineHeight).rounded()))
     }
 }

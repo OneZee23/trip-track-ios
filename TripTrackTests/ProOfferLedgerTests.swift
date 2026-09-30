@@ -139,7 +139,10 @@ final class ProOfferLedgerTests: XCTestCase {
             recordedTripThisSession: false,
             hasNetwork: true,
             onEligibleScreen: true,
-            alreadyShownThisSession: false)
+            alreadyShownThisSession: false,
+            entitlementsKnown: true,
+            afterFailure: false,
+            fromPush: false)
         XCTAssertNil(ProContextOffer.moment(input))
     }
 }

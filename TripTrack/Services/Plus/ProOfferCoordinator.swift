@@ -20,6 +20,14 @@ final class ProOfferCoordinator: ObservableObject {
     private var isFirstSession = false
     private var recordedTripThisSession = false
     private var shownThisSession = false
+    /// Ответили ли уже права StoreKit.
+    ///
+    /// Пока `false`, `isPlus` у `PlusAccess` тоже `false` — но это «не
+    /// знаем», а не «не подписчик». Предлагать в это окно нельзя: платящему
+    /// человеку показался бы лист «Профиль можно оформить», и показ
+    /// записался бы в память НАВСЕГДА — момент M1 у него не появился бы
+    /// больше никогда (находка ревью).
+    private var entitlementsKnown = false
     private var observer: NSObjectProtocol?
     private var stateWatch: AnyCancellable?
 
@@ -46,9 +54,20 @@ final class ProOfferCoordinator: ObservableObject {
         // направление зависимости обязано идти от потребителя к источнику.
         // Иначе `PlusStore` — место, где живёт StoreKit и больше ничего, —
         // начал бы знать про контекстные предложения.
+        //
+        // `dropFirst()` — ОБЯЗАТЕЛЕН, и это не осторожность. `@Published`
+        // отдаёт ТЕКУЩЕЕ значение синхронно в момент подписки, а `state`
+        // стартует `.none` и становится настоящим только после круга к демону
+        // StoreKit. Координатор же создаётся лениво, на первом кадре Ленты
+        // или «Я», то есть заведомо раньше. Без `dropFirst` первая эмиссия
+        // была бы этим `.none` и СТИРАЛА бы правильно запомненное
+        // `proExpiredAt` — человек, ждущий продления, не увидел бы M4 вовсе
+        // (находка ревью).
         stateWatch = PlusStore.shared.$state
+            .dropFirst()
             .sink { [weak self] state in
                 MainActor.assumeIsolated {
+                    self?.entitlementsKnown = true
                     self?.ledger.recordProExpired(
                         at: state == .expired ? PlusStore.shared.displayExpiry : nil)
                 }
@@ -61,7 +80,10 @@ final class ProOfferCoordinator: ObservableObject {
 
     /// Экран показался. Зовут «Лента» и «Я», и только они: запись, экран
     /// поездки и лист ручной поездки в список не входят.
-    func screenAppeared(hasNetwork: Bool, tripCount: Int) {
+    ///
+    /// - Parameter fromPush: экран открыт уведомлением, а не рукой. Спека §11
+    ///   запрещает лист в этом случае: человек шёл за своим делом.
+    func screenAppeared(hasNetwork: Bool, tripCount: Int, fromPush: Bool = false) {
         guard pending == nil else { return }
         let input = ProContextOffer.Input(
             now: Date(),
@@ -78,7 +100,13 @@ final class ProOfferCoordinator: ObservableObject {
             recordedTripThisSession: recordedTripThisSession,
             hasNetwork: hasNetwork,
             onEligibleScreen: true,
-            alreadyShownThisSession: shownThisSession)
+            alreadyShownThisSession: shownThisSession,
+            entitlementsKnown: entitlementsKnown,
+            // «После ошибок» — по той же красной строке, что показывает
+            // баннер связи в «Ленте»: если у человека что-то не уехало, лист
+            // с предложением купить он воспримет ровно так, как не надо.
+            afterFailure: !SyncQueue.shared.failed.isEmpty,
+            fromPush: fromPush)
         guard let moment = ProContextOffer.moment(input) else { return }
         shownThisSession = true
         ledger.recordShown(moment)

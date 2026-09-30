@@ -76,11 +76,22 @@ enum ProContextOffer {
         var onEligibleScreen: Bool
         /// Лист в этой сессии уже показывали.
         var alreadyShownThisSession: Bool
+        /// Права StoreKit уже приехали. `false` — мы ещё не знаем, подписчик
+        /// ли перед нами, и предлагать нельзя НИЧЕГО: холодный старт читает
+        /// `isPlus == false` у живого подписчика, пока демон StoreKit не
+        /// ответил (находка ревью).
+        var entitlementsKnown: Bool
+        /// Только что была ошибка — сеть, покупка, загрузка. Спека §11
+        /// запрещает лист «после ошибок»: человек и так расстроен.
+        var afterFailure: Bool
+        /// Экран открыт из пуш-уведомления, а не рукой. Спека §11 запрещает:
+        /// человек шёл за своим делом, а не за витриной.
+        var fromPush: Bool
     }
 
     static func moment(_ input: Input) -> ProOfferMoment? {
-        guard !isBlocked(input) else { return nil }
         guard let moment = pick(input) else { return nil }
+        guard !isBlocked(input, for: moment) else { return nil }
         // Скрытая витрина (РФ) закрывает ПРЕДЛОЖЕНИЕ, но не ИЗВЕЩЕНИЕ.
         //
         // §11 спеки запрещает лист при скрытой витрине, а матрица требует
@@ -102,16 +113,28 @@ enum ProContextOffer {
 
     /// Запреты. Вынесены отдельно, чтобы их можно было спросить по одному:
     /// «почему не показали» — вопрос, который задают чаще, чем «что показать».
-    static func isBlocked(_ input: Input) -> Bool {
-        // Не обсуждается ни при каких моментах.
-        if input.isPlus { return true }
+    ///
+    /// Запреты делятся НАДВОЕ, и это требование спеки, а не удобство. §11:
+    /// «M4 «PRO закончился» (**статус, без порогов и счётчика**)», и то же
+    /// самое в чек-листе приёмки, пункт 9: «M4 без порогов и без счётчика».
+    /// Сказано дважды, разными словами, в разных разделах — значит не
+    /// случайная фраза.
+    ///
+    /// **Первая редакция подчиняла M4 всем гейтам подряд, и это было
+    /// нарушением спеки** (находка ревью). Цена ошибки конкретна: человек
+    /// трижды отказался от M1/M3 — обычное дело, правило трёх отказов ровно
+    /// для таких, — потом оформил PRO сам из строки «Я», попользовался, и
+    /// подписка истекла. `totalDeclines` так и остался тремя, и он никогда не
+    /// узнал бы, что оформление сохранено и вернётся с подпиской, а вписанные
+    /// поездки на месте. Это и есть то единственное, зачем M4 существует.
+    static func isBlocked(_ input: Input, for moment: ProOfferMoment) -> Bool {
+        if isUnconditionallyBlocked(input) { return true }
         // Витрины здесь НЕТ нарочно: она решает не «показывать ли вообще», а
         // «какие моменты можно» — см. `moment(_:)`.
-        if !input.hasNetwork { return true }
-        if input.isFirstSession { return true }
-        if input.recordedTripThisSession { return true }
-        if !input.onEligibleScreen { return true }
-        if input.alreadyShownThisSession { return true }
+
+        // Дальше — пороги и счётчики, и они про ПРОДАЖУ. Извещение о том, что
+        // подписка кончилась, продажей не является.
+        guard moment != .expired else { return false }
 
         // Трижды сказанное «нет» — это ответ, а не пауза.
         if input.totalDeclines >= maxDeclines { return true }
@@ -131,13 +154,34 @@ enum ProContextOffer {
         return false
     }
 
+    /// Запреты, которые не обсуждаются НИ ПРИ КАКОМ моменте, включая M4.
+    ///
+    /// Здесь остались только те, у которых причина не в продаже: подписка уже
+    /// есть (сообщать о её окончании нечего), права ещё не приехали (мы не
+    /// знаем, что сообщать), нет сети, первая сессия, человек смотрит на итог
+    /// только что записанной поездки, мы не на том экране, и лист в этой
+    /// сессии уже показывали.
+    static func isUnconditionallyBlocked(_ input: Input) -> Bool {
+        if input.isPlus { return true }
+        if !input.entitlementsKnown { return true }
+        if !input.hasNetwork { return true }
+        if input.isFirstSession { return true }
+        if input.recordedTripThisSession { return true }
+        if input.afterFailure { return true }
+        if input.fromPush { return true }
+        if !input.onEligibleScreen { return true }
+        if input.alreadyShownThisSession { return true }
+        return false
+    }
+
     /// Какой момент выигрывает.
     ///
     /// `.expired` первым: человек, у которого PRO БЫЛО и кончилось, отвечает
     /// на другой вопрос — не «зачем это», а «вернуть ли». И он единственный
     /// повторяемый: это статус, у него нет порога, который можно перейти один
-    /// раз (спека §11). Повторы при этом всё равно ограничены — общим
-    /// окном 30 дней и тремя отказами.
+    /// раз (спека §11), а пороги и счётчик отказов его не касаются вовсе —
+    /// см. `isBlocked(_:for:)`. Ограничивает его ровно одно: лист в одну
+    /// сессию показывается один раз.
     private static func pick(_ input: Input) -> ProOfferMoment? {
         if input.proExpiredAt != nil { return .expired }
         if input.tripCount >= tripsForFirstOffer,
