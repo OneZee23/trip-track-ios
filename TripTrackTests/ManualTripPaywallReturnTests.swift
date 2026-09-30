@@ -72,8 +72,35 @@ final class ManualTripPaywallReturnTests: XCTestCase {
     ///
     /// Иначе зашедший на пейвол из листа получил бы поездку одним нажатием,
     /// которого он не делал.
+    ///
+    /// Сторожится ЧТЕНИЕМ ИСХОДНИКА, а не константой. Финальное ревью
+    /// справедливо назвало прежнюю проверку декоративной: константу сам вид не
+    /// читает, и `XCTAssertFalse` на ней утверждал, что константа равна себе —
+    /// то есть не поймал бы никакой регрессии вовсе. Правило же конкретное:
+    /// закрытие пейвола, открытого поверх листа, не имеет права звать
+    /// `create()`.
     func testBuyingDoesNotRecordByItself() {
-        XCTAssertFalse(ManualTripSheet.recordsAutomaticallyAfterPurchase)
+        XCTAssertFalse(ManualTripSheet.recordsAutomaticallyAfterPurchase,
+                       "решение записано константой — она документирует его")
+
+        let source = UnitGuard.repoRoot()
+            .appendingPathComponent("TripTrack/Views/ManualTrip/ManualTripSheet.swift")
+        let text = (try? String(contentsOf: source, encoding: .utf8)) ?? ""
+        XCTAssertFalse(text.isEmpty, "исходника рядом с тестом нет — сторожу нечего читать")
+
+        guard let sheetRange = text.range(of: ".sheet(isPresented: $paywallOverSheet)") else {
+            XCTFail("пейвол больше не открывается поверх листа — правило переехало, "
+                    + "и сторож обязан переехать за ним")
+            return
+        }
+        // Шестьсот знаков после `.sheet(` — с запасом на всё замыкание
+        // презентации (сейчас в нём четыре строки). Считать скобки тут не
+        // надо: вопрос один — не зовётся ли `create()` рядом с показом
+        // пейвола.
+        let closure = text[sheetRange.lowerBound...].prefix(600)
+        XCTAssertFalse(closure.contains("create()"),
+                       "закрытие пейвола зовёт create() — поездка запишется сама, "
+                       + "без нажатия «Записать»")
     }
 
     /// Слова у карточек разные на всех тринадцати языках, и ни одна пара не

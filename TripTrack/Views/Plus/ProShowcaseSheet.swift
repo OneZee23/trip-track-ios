@@ -52,8 +52,19 @@ struct ProShowcaseSheet: View {
                     if ProShowcase.showsExpiredCard(state) {
                         expiredCard(c, l)
                     }
-                    group(AppStrings.showcaseFree(l), kind.freeCount,
-                          ProShowcase.groups(for: kind).free, shown, state, c)
+                    if kind == .routeLine {
+                        // Макет рисует бесплатный вариант линии СТРОКОЙ, а не
+                        // плиткой (спека, состояние 27), и правильно: у
+                        // «По скорости» нет имени собственного — у него
+                        // описание ПОВЕДЕНИЯ, и в кружок 44 оно не влезает.
+                        // Плиткой оно и выходило без подписи вовсе:
+                        // `RouteLineStyle.displayName` для `.speed` пуст по
+                        // построению (находка финального ревью).
+                        speedRow(shown, c, l)
+                    } else {
+                        group(AppStrings.showcaseFree(l), kind.freeCount,
+                              ProShowcase.groups(for: kind).free, shown, state, c)
+                    }
                     if ProShowcase.showsPremiumGroup(kind, state) {
                         group(AppStrings.showcasePro(l), kind.premiumCount,
                               ProShowcase.groups(for: kind).premium, shown, state, c)
@@ -183,6 +194,59 @@ struct ProShowcaseSheet: View {
                     tileButton(tile, isSelected: tile.id == shown, state, c)
                 }
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// «По скорости» — строкой с описанием поведения (состояние 27).
+    private func speedRow(
+        _ shown: String,
+        _ c: AppTheme.Colors,
+        _ l: LanguageManager.Language
+    ) -> some View {
+        let isSelected = shown == RouteLineStyle.speed.rawValue
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(AppStrings.showcaseFree(l))
+                    .font(AppType.section)
+                    .tracking(AppType.sectionTracking)
+                    .foregroundStyle(c.text)
+            }
+            Button {
+                Haptics.selection()
+                tried = RouteLineStyle.speed.rawValue
+                onPick(RouteLineStyle.speed.rawValue)
+            } label: {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [AppTheme.green, AppTheme.yellow, AppTheme.red],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 32, height: 32)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(AppStrings.showcaseLineSpeed(l))
+                            .font(AppType.itemTitle)
+                            .foregroundStyle(isSelected ? AppTheme.accent : c.text)
+                        Text(AppStrings.showcaseLineSpeedSub(l))
+                            .font(AppType.meta)
+                            .foregroundStyle(c.textSecondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .surfaceCard(cornerRadius: 16)
+            .accessibilityIdentifier("pro_tile_speed")
+            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -8224,21 +8224,11 @@ enum AppStrings {
     static func plusBadgeLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusBadgeLabel", ru: "Подписка PRO", en: "PRO subscriber")
     }
-    /// Заголовок премиум-секции в пикерах косметики. В витрине,
-    /// которая платного не продаёт, секции нет вовсе — не «есть, но
-    /// заперта» (`PlusGate`).
-    static func plusSectionTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusSectionTitle", ru: "С PRO", en: "With PRO")
-    }
     /// «Обычный» — отсутствие косметики: без рамки, без фона
     /// карточки. Имена самих вариантов («Sunset», «Gold») — имена
     /// собственные и через таблицы не идут.
     static func cosmeticDefaultOption(_ lang: LanguageManager.Language) -> String {
         tr(lang, "cosmeticDefaultOption", ru: "Обычный", en: "Default")
-    }
-    /// Заголовок листа, где выбирают фон профиля и рамку аватара.
-    static func profileLookTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "profileLookTitle", ru: "Внешний вид", en: "Appearance")
     }
     /// Строка «Рамка аватара» в «Моём профиле».
     static func settingsAvatarFrame(_ lang: LanguageManager.Language) -> String {
