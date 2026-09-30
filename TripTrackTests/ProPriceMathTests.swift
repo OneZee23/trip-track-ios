@@ -60,21 +60,11 @@ final class ProPriceMathTests: XCTestCase {
         XCTAssertNil(ProPriceMath.savingPercent(yearly: -1, monthly: 2.99))
     }
 
-    /// Неделя обещается только годовому и только тому, кому Apple её даст.
-    func testTrialCopyOnlyOnYearlyAndOnlyWhenEligible() {
-        let yearly = PlusProductInfo(id: PlusStore.yearlyID, displayPrice: "19,99 €",
-                                     period: .yearly, trialDays: 7)
-        let monthly = PlusProductInfo(id: PlusStore.monthlyID, displayPrice: "2,99 €",
-                                      period: .monthly, trialDays: 7)
-
-        let eligible = PlusPaywallModel.plans([yearly, monthly],
-                                              eligibleForIntro: true, lang: .ru)
-        XCTAssertNotNil(eligible[0].caption, "годовому неделя положена")
-        XCTAssertNil(eligible[1].caption, "у месячного недели нет НИКОГДА")
-
-        let notEligible = PlusPaywallModel.plans([yearly, monthly],
-                                                 eligibleForIntro: false, lang: .ru)
-        XCTAssertNil(notEligible[0].caption, "вернувшемуся подписчику недели не обещаем")
-        XCTAssertNil(notEligible[1].caption)
-    }
+    // Тест «неделя только годовому» жил здесь и переехал в
+    // `PlusPaywallModelTests`, где ему и место: предмет у него —
+    // `PlusPaywallModel.plans`, а не арифметика выгоды. Там он ещё и сильнее:
+    // проверяет не только годовой и право на предложение, но и подпись
+    // месячного («Без пробной недели»), и отсечение предложения любой другой
+    // длины (`testAnOfferOfAnyOtherLengthIsNotPresentedAsAWeek`). Здесь он
+    // после правки подписей 0.8.4 проверял бы старую копию.
 }

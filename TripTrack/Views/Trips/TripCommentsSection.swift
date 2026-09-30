@@ -400,7 +400,7 @@ struct TripCommentsSection: View {
                     if PlusBadgeVisibility.shows(
                         isPlus: comment.user.isPlus, isOwn: comment.isMine,
                         showsOwnBadge: SettingsManager.shared.showPlusBadge) {
-                        PlusBadge(size: 12)
+                        ProBadge(height: 15)
                     }
                     Text("· \(Self.relativeAge(of: comment.createdAt, lang: lang.language))")
                         .font(.inter(11))

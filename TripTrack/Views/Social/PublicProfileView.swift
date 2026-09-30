@@ -825,7 +825,7 @@ struct PublicProfileView: View {
                 if PlusBadgeVisibility.shows(
                     isPlus: saidPlus, isOwn: isOwnProfile,
                     showsOwnBadge: settings.showPlusBadge) {
-                    PlusBadge(size: 16)
+                    ProBadge(height: 18)
                 }
             }
             .padding(.top, 10)

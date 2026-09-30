@@ -616,6 +616,10 @@ struct FeedView: View {
         }
         } // ZStack
         .animation(.spring(response: 0.36, dampingFraction: 0.82), value: undo.pending?.id)
+        // Контекстное предложение PRO. Вешается РОВНО на два экрана — сюда и
+        // на «Я», — и список этот закрыт спекой §11: запись, экран поездки и
+        // лист ручной поездки перечислены в ней как запрещённые.
+        .proContextOffer(tripCount: mapVM.cachedTripCount)
     }
 
     // MARK: - Header (Figma 140:945)

@@ -3,12 +3,11 @@ import StoreKit
 
 /// Тариф «как его надо показать», отвязанный от StoreKit.
 ///
-/// Существует ради одной проверки: строки пейвола — «Год», «29,99 € в год»,
-/// «7 дней бесплатно, потом …» — обязаны собираться из ответа Apple, а не из
+/// Существует ради одной проверки: строки пейвола — «Год · 19,99 €», «Неделя
+/// бесплатно», «−44 %» — обязаны собираться из ответа Apple, а не из
 /// литералов, и проверить это можно только там, где `Product` собрать нечем.
-/// `Product` не создаётся руками ни в одном тесте: у него нет
-/// инициализатора вовсе.
-/// Тариф, разобранный из ответа Apple.
+/// `Product` не создаётся руками ни в одном тесте: у него нет инициализатора
+/// вовсе.
 ///
 /// `Equatable` у него НЕТ нарочно: с 0.8.4 он несёт `format` — функцию печати
 /// цены, взятую у витрины, — а равенство двух функций не значит ничего.
@@ -52,22 +51,45 @@ struct PlusProductInfo {
     }
 }
 
-/// Один тариф на пейволе.
+/// Один тариф на пейволе — состояния 1, 4, 5 матрицы 0.8.4.
 struct PlusPlan: Identifiable, Equatable {
     let id: String
     let period: PlusProductInfo.Period
-    /// «Год» / «Месяц».
+    /// «Год · 19,99 €» — период и цена ОДНОЙ строкой (макет 0.8.4). До него
+    /// это были два поля, и карточка склеивала их сама; склейка переехала
+    /// сюда, потому что порядок «период · цена» и разделитель — часть копии,
+    /// а копия живёт в таблицах перевода.
     let title: String
-    /// «29,99 € в год».
-    let price: String
-    /// «7 дней бесплатно, потом 29,99 € в год» — только там, где триал есть.
+    /// «Неделя бесплатно», «1,67 € в месяц» или «Без пробной недели».
     let caption: String?
+    /// Акцентом печатается ТОЛЬКО обещание недели: это обещание, а не справка.
+    /// Терракота в этой версии закреплена за покупкой и за числами.
+    let captionIsAccent: Bool
+    /// «−44 %» на верхней кромке. `nil` — посчитать не из чего или выгоды нет.
+    let savingPercent: Int?
+    /// Цена ровно такой, какой её напечатала витрина. Нужна кнопке
+    /// («Оформить за {price} в год») и строке условий.
+    let displayPrice: String
     /// Выделен и выбран при открытии. Годовой (спека §1).
     let isDefault: Bool
+    /// Даст ли Apple бесплатную неделю ПО ЭТОМУ тарифу. Решает и подпись, и
+    /// текст кнопки, и строку условий — один ответ на три места.
+    let hasFreeWeek: Bool
 }
 
 /// Сборка тарифов — чистая функция, потому что проверять здесь надо СТРОКИ.
 enum PlusPaywallModel {
+    /// Длина бесплатного предложения, которую обещает КОПИЯ макета: «Неделя
+    /// бесплатно».
+    ///
+    /// Копия говорит «неделя», а Apple присылает ЧИСЛО дней, и разойтись этим
+    /// двум нельзя: обещать неделю там, где витрина даёт три дня, — это
+    /// Review 3.1.2. Поэтому вся трёхчастная подача триала (подпись, кнопка,
+    /// условия) включается только при РОВНО семи днях; при любом другом числе
+    /// пейвол показывает состояние 4 («недели не положено») и не обещает
+    /// ничего. Недообещать безопасно, переобещать — нет.
+    static let freeWeekDays = 7
+
     /// Годовой всегда первым и всегда выбранным по умолчанию — решение спеки,
     /// а не порядок, в котором Apple вернула продукты (он не обещан).
     /// - Parameter eligibleForIntro: даст ли Apple вводное предложение ЭТОМУ
@@ -83,40 +105,59 @@ enum PlusPaywallModel {
         lang: LanguageManager.Language
     ) -> [PlusPlan] {
         let ordered = infos.sorted { a, _ in a.period == .yearly }
-        return ordered.map { info in
-            let price = info.period == .yearly
-                ? AppStrings.plusPerYear(lang, price: info.displayPrice)
-                : AppStrings.plusPerMonth(lang, price: info.displayPrice)
-            // Неделя обещается ТОЛЬКО годовому и только тому, кому Apple её
-            // даст. До 0.8.4 подпись собиралась у обоих тарифов: у месячного
-            // `introductoryOffer` тоже существует, и пейвол обещал бесплатную
-            // неделю там, где её нет ни при каких условиях.
-            let trial = (info.period == .yearly && eligibleForIntro) ? info.trialDays : nil
-            let caption = trial.map {
-                AppStrings.plusTrialCaption(lang, days: $0, price: price)
+        // Выгода и «в месяц» считаются ОДИН раз на таблицу, а не на карточку:
+        // оба числа про ПАРУ тарифов, и посчитать их внутри годового значило
+        // бы читать оттуда месячный.
+        let yearlyPrice = ordered.first { $0.period == .yearly }?.price
+        let monthlyPrice = ordered.first { $0.period == .monthly }?.price
+        let saving = ProPriceMath.savingPercent(yearly: yearlyPrice, monthly: monthlyPrice)
+        let perMonth = ProPriceMath.perMonth(
+            yearly: yearlyPrice,
+            format: ordered.first { $0.period == .yearly }?.format)
+
+        return ordered.enumerated().map { index, info in
+            let week = info.period == .yearly
+                && eligibleForIntro
+                && info.trialDays == freeWeekDays
+
+            let caption: String?
+            let accent: Bool
+            switch info.period {
+            case .yearly:
+                if week {
+                    caption = AppStrings.proPlanYearTrial(lang)
+                    accent = true
+                } else {
+                    caption = perMonth.map { AppStrings.proPlanYearPerMonth(lang, price: $0) }
+                    accent = false
+                }
+            case .monthly:
+                caption = AppStrings.proPlanMonthSub(lang)
+                accent = false
             }
+
             return PlusPlan(
                 id: info.id,
                 period: info.period,
                 title: info.period == .yearly
-                    ? AppStrings.plusPlanYear(lang)
-                    : AppStrings.plusPlanMonth(lang),
-                price: price,
+                    ? AppStrings.proPlanYear(lang, price: info.displayPrice)
+                    : AppStrings.proPlanMonth(lang, price: info.displayPrice),
                 caption: caption,
-                isDefault: info.period == .yearly
+                captionIsAccent: accent,
+                savingPercent: info.period == .yearly ? saving : nil,
+                displayPrice: info.displayPrice,
+                isDefault: index == 0,
+                hasFreeWeek: week
             )
         }
     }
 
-    /// Что выбрано при открытии листа. Годовой; если его не привезли —
-    /// первый из тех, что привезли, а не «ничего».
+    /// Что выбрать при открытии. `nil` только когда продуктов нет вовсе.
     static func defaultSelection(_ plans: [PlusPlan]) -> String? {
-        plans.first(where: \.isDefault)?.id ?? plans.first?.id
+        plans.first { $0.isDefault }?.id ?? plans.first?.id
     }
 
-    /// Сколько дней в периоде предложения. Месяц у Apple — тридцать дней, год —
-    /// триста шестьдесят пять: точные календарные границы здесь не нужны,
-    /// число попадает только в подпись «N дней бесплатно».
+    /// Длина вводного предложения в днях из периода Apple.
     static func days(unit: Product.SubscriptionPeriod.Unit, value: Int) -> Int {
         switch unit {
         case .day:   return value

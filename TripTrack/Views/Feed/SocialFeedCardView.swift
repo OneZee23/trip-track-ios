@@ -174,7 +174,7 @@ struct SocialFeedCardView: View {
                     if PlusBadgeVisibility.shows(
                         isPlus: trip.author.isPlus, isOwn: isOwn,
                         showsOwnBadge: SettingsManager.shared.showPlusBadge) {
-                        PlusBadge(size: 13)
+                        ProBadge(height: 16)
                     }
                     if isOwn {
                         // Subtle "this is you" badge — explicit signal that

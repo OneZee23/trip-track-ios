@@ -65,4 +65,47 @@ final class ProLayoutTests: XCTestCase {
         XCTAssertEqual(base.dialogTop, 302)
         XCTAssertEqual(max15.dialogTop, 346)
     }
+
+    // MARK: - Число строк заголовка контекстного листа
+
+    /// Считается по ДЛИНЕ СТРОКИ, а не по номеру момента: «PRO закончился» —
+    /// одна строка на любом языке, а «Уже десять поездок. Профиль можно
+    /// оформить» — две, и по-немецки длиннее русского.
+    func testTitleLinesFollowTheStringNotTheMoment() {
+        XCTAssertEqual(ProLayout.titleLines(for: "PRO закончился"), 1)
+        XCTAssertEqual(
+            ProLayout.titleLines(for: "Уже десять поездок. Профиль можно оформить"), 2)
+        XCTAssertEqual(ProLayout.titleLines(for: ""), 1)
+    }
+
+    /// Порог ошибается в сторону ДВУХ строк: лист на 26 pt выше нужного
+    /// показывает пустое место внизу, а на 26 pt ниже — обрезает кнопку.
+    func testTheThresholdErrsTowardsTheTallerSheet() {
+        let short = String(repeating: "a", count: ProLayout.titleCharactersPerLine)
+        let long = short + "a"
+        XCTAssertEqual(ProLayout.titleLines(for: short), 1)
+        XCTAssertEqual(ProLayout.titleLines(for: long), 2)
+
+        let phone = ProLayout(height: 844, safeTop: 47, safeBottom: 34)
+        XCTAssertGreaterThan(phone.contextSheet(titleLines: 2),
+                             phone.contextSheet(titleLines: 1),
+                             "две строки обязаны давать лист выше")
+        XCTAssertEqual(phone.contextSheet(titleLines: 2)
+                       - phone.contextSheet(titleLines: 1), 26,
+                       "вторая строка заголовка стоит ровно 26 pt")
+    }
+
+    /// Ни один заголовок момента ни на одном из тринадцати языков не уходит в
+    /// ТРИ строки: третьей высоты у листа нет вовсе, и она обрезала бы кнопку.
+    func testNoMomentTitleOverflowsTwoLinesInAnyLanguage() {
+        let budget = ProLayout.titleCharactersPerLine * 2
+        for lang in LanguageManager.Language.allCases {
+            for moment in ProOfferMoment.allCases {
+                let title = ProContextSheet.title(moment, lang)
+                XCTAssertLessThanOrEqual(
+                    title.count, budget,
+                    "\(lang.rawValue) \(moment): «\(title)» не влезает в две строки")
+            }
+        }
+    }
 }

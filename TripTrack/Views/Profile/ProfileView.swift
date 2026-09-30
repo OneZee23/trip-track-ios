@@ -269,6 +269,10 @@ struct ProfileView: View {
                 guard homeAcceptedTick > 0 else { return }
                 await refreshJourneyPrompts(trips: allTrips)
             }
+            // Контекстное предложение PRO. Вешается РОВНО на два экрана — сюда
+            // и на «Ленту», — и список этот закрыт спекой §11: запись, экран
+            // поездки и лист ручной поездки перечислены в ней как запрещённые.
+            .proContextOffer(tripCount: mapVM.cachedTripCount)
     }
 
     // MARK: - Ручная поездка (0.8.0, редизайн 20 сен)

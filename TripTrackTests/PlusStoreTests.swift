@@ -121,8 +121,8 @@ final class PlusStoreTests: XCTestCase {
     /// английский, системный и человеку не объясняет ничего.
     func testFailureCopyIsOursAndTranslatedEverywhere() {
         for lang in LanguageManager.Language.allCases {
-            let failed = AppStrings.plusPurchaseFailed(lang)
-            let pending = AppStrings.plusPurchasePending(lang)
+            let failed = AppStrings.proFailed(lang)
+            let pending = AppStrings.proDeferredText(lang)
             XCTAssertFalse(failed.isEmpty, lang.rawValue)
             XCTAssertFalse(pending.isEmpty, lang.rawValue)
             XCTAssertNotEqual(failed, pending, "\(lang.rawValue): два разных случая, один текст")

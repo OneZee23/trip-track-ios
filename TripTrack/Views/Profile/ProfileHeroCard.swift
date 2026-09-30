@@ -116,7 +116,7 @@ struct ProfileHeroCard: View {
                         if PlusBadgeVisibility.shows(
                             isPlus: plus.isPlus, isOwn: true,
                             showsOwnBadge: settings.showPlusBadge) {
-                            PlusBadge(size: 15)
+                            ProBadge(height: 18)
                         }
                     }
                     .contentShape(Rectangle())

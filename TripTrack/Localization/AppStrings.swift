@@ -7689,76 +7689,417 @@ enum AppStrings {
            ru: "Ждём подтверждения покупки", en: "Waiting for purchase approval")
     }
 
-    static func plusTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusTitle", ru: "PRO", en: "PRO")
+    // MARK: - Витрина PRO (0.8.4)
+    //
+    // Копия из макетов владельца от 29 сентября (`TripTrack-PRO-handoff`,
+    // раздел 14). Цена и процент приходят ПОДСТАНОВКОЙ: печатает их витрина
+    // Apple, а не мы (правило 0.8.0), и валюты в самих строках нет ни на
+    // одном из тринадцати языков.
+
+    /// Заголовок витрины. «PRO» не переводится — переводится только то, что
+    /// вокруг него.
+    static func proTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proTitle", ru: "TripTrack PRO", en: "TripTrack PRO")
+    }
+    /// Обещание под заголовком. Две вещи, за которые платят, одной строкой.
+    static func proPromise(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proPromise",
+           ru: "Оформление, которое видят другие, и история без единой дыры",
+           en: "A look others see, and a history without a single gap")
+    }
+    static func proGroupVisible(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proGroupVisible", ru: "Видно другим", en: "Others can see")
+    }
+    static func proGroupPrivate(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proGroupPrivate", ru: "Только тебе", en: "Only you")
     }
 
-    /// Что покупают — одной фразой, до списка. Про «оформление» и «поездки»,
-    /// а не про «безлимит» и «профи»: платного, что ограничивает бесплатное,
-    /// в 0.8.0 нет ни одного.
-    static func plusPaywallSubtitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPaywallSubtitle",
-           ru: "Оформление, которое видят все, и поездки, которые не обязательно ехать",
-           en: "Looks everyone can see, and trips you don't have to drive")
+    static func proFeatureBg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureBg", ru: "Фон профиля", en: "Profile background")
+    }
+    /// Число сверх бесплатных, а не всего: бесплатных одиннадцать, и «19
+    /// фонов» не сказало бы, за что платят.
+    static func proFeatureBgSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureBgSub",
+           ru: "8 фонов сверх бесплатных", en: "8 backgrounds beyond the free ones")
+    }
+    static func proFeatureFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureFrame", ru: "Рамка аватара", en: "Avatar frame")
+    }
+    static func proFeatureFrameSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureFrameSub",
+           ru: "6 рамок, видны в ленте", en: "6 frames, visible in the feed")
+    }
+    static func proFeatureCar(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureCar", ru: "Фон карточки машины", en: "Car card background")
+    }
+    static func proFeatureCarSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureCarSub",
+           ru: "8 фонов для твоей машины", en: "8 backgrounds for your car")
+    }
+    static func proFeatureLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureLine", ru: "Цвет линии маршрута", en: "Route line colour")
+    }
+    static func proFeatureLineSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureLineSub",
+           ru: "6 цветов вместо градиента", en: "6 colours instead of the gradient")
+    }
+    static func proFeatureManual(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureManual", ru: "Вписанная поездка", en: "Hand-entered trip")
+    }
+    static func proFeatureManualSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFeatureManualSub",
+           ru: "Дорога, которую не записал", en: "The road that wasn\'t recorded")
     }
 
-    static func plusFeatureBackgrounds(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusFeatureBackgrounds",
-           ru: "Премиум-фоны профиля", en: "Premium profile backgrounds")
-    }
-    static func plusFeatureAvatarFrame(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusFeatureAvatarFrame",
-           ru: "Рамка аватара и значок у имени", en: "Avatar frame and a badge by your name")
-    }
-    static func plusFeatureCardStyle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusFeatureCardStyle",
-           ru: "Фон карточки машины в гараже", en: "A background for your car's card")
-    }
-    static func plusFeatureRouteLine(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusFeatureRouteLine",
-           ru: "Цвет линии маршрута на своих картах", en: "Route line colour on your own maps")
-    }
-    static func plusFeatureManualTrip(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusFeatureManualTrip",
-           ru: "Ручная поездка: откуда и куда по дорогам",
-           en: "Manual trip: from here to there, along the roads")
-    }
-
-    static func plusPlanYear(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPlanYear", ru: "Год", en: "Year")
-    }
-    static func plusPlanMonth(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPlanMonth", ru: "Месяц", en: "Month")
-    }
-
-    /// «29,99 € в год». Цена приходит подстановкой и ТОЛЬКО из
-    /// `Product.displayPrice`: валюту, разделитель и позицию знака решает
-    /// витрина Apple, а не мы, и вписать сюда «€» значило бы соврать всем, у
-    /// кого витрина не еврозона.
-    static func plusPerYear(_ lang: LanguageManager.Language, price: String) -> String {
-        tr(lang, "plusPerYear", ru: "{price} в год", en: "{price} per year")
+    /// «Год · 19,99 €». Период и цена одной строкой — так рисует макет, и
+    /// склейка живёт здесь, потому что разделитель это часть копии.
+    static func proPlanYear(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "proPlanYear", ru: "Год · {price}", en: "Year · {price}")
             .replacingOccurrences(of: "{price}", with: price)
     }
-    static func plusPerMonth(_ lang: LanguageManager.Language, price: String) -> String {
-        tr(lang, "plusPerMonth", ru: "{price} в месяц", en: "{price} per month")
-            .replacingOccurrences(of: "{price}", with: price)
+    /// Подпись годового, когда неделя положена. Акцентом — это обещание.
+    static func proPlanYearTrial(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proPlanYearTrial", ru: "Неделя бесплатно", en: "One week free")
     }
-
-    /// «7 дней бесплатно, потом 29,99 € в год». Длина триала приходит из
-    /// `introductoryOffer`, а не записана в текст: поменяв её в App Store
-    /// Connect, мы не имеем права оставить на экране старое число.
-    static func plusTrialCaption(
-        _ lang: LanguageManager.Language, days: Int, price: String
+    /// «1,67 € в месяц» — цена года, поделённая на двенадцать. Считает
+    /// `ProPriceMath`, печатает витрина.
+    static func proPlanYearPerMonth(
+        _ lang: LanguageManager.Language, price: String
     ) -> String {
-        tr(lang, "plusTrialCaption",
-           ru: "{days} бесплатно, потом {price}", en: "{days} free, then {price}")
-            .replacingOccurrences(of: "{days}", with: "\(days) \(nounDays(lang, days))")
+        tr(lang, "proPlanYearPerMonth", ru: "{price} в месяц", en: "{price} per month")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    /// «−44 %». Процент считается из цен витрины и в разных валютах разный.
+    static func proPlanSave(_ lang: LanguageManager.Language, percent: Int) -> String {
+        tr(lang, "proPlanSave", ru: "−{percent} %", en: "−{percent} %")
+            .replacingOccurrences(of: "{percent}", with: String(percent))
+    }
+    static func proPlanMonth(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "proPlanMonth", ru: "Месяц · {price}", en: "Month · {price}")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    static func proPlanMonthSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proPlanMonthSub", ru: "Без пробной недели", en: "No free week")
+    }
+
+    /// Кнопка, когда неделя положена. Обещает ровно то, что списание
+    /// подтвердит: ноль сейчас, цена через неделю (строкой условий ниже).
+    static func proCtaTrial(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtaTrial",
+           ru: "Попробовать неделю бесплатно", en: "Try one week free")
+    }
+    static func proCtaYear(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "proCtaYear",
+           ru: "Оформить за {price} в год", en: "Subscribe for {price} a year")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    static func proCtaMonth(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "proCtaMonth",
+           ru: "Оформить за {price} в месяц", en: "Subscribe for {price} a month")
             .replacingOccurrences(of: "{price}", with: price)
     }
 
-    static func plusSubscribe(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusSubscribe", ru: "Оформить", en: "Subscribe")
+    /// Условия под кнопкой с неделей. Обязательны для ревью 3.1.2: цена после
+    /// пробного периода и то, что отменить можно в любой момент.
+    static func proTermsTrial(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "proTermsTrial",
+           ru: "Потом {price} в год. Отменить можно в любой момент",
+           en: "Then {price} a year. Cancel anytime")
+            .replacingOccurrences(of: "{price}", with: price)
     }
+    static func proTermsAuto(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proTermsAuto",
+           ru: "Продлевается автоматически. Отмена в любой момент",
+           en: "Renews automatically. Cancel anytime")
+    }
+
+    static func proPricesFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proPricesFailed", ru: "Цены не загрузились", en: "Prices didn\'t load")
+    }
+    static func proPricesFailedSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proPricesFailedSub",
+           ru: "Нет связи с App Store", en: "No connection to the App Store")
+    }
+
+    /// Ask To Buy: покупку одобряет владелец семейной группы.
+    static func proDeferredTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDeferredTitle", ru: "Ждём подтверждения", en: "Waiting for approval")
+    }
+    static func proDeferredText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDeferredText",
+           ru: "Покупку одобрит владелец семейной группы. PRO включится сразу после этого.",
+           en: "The family organiser will approve the purchase. PRO turns on right after.")
+    }
+    static func proFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proFailed",
+           ru: "Не получилось. Попробуй ещё раз", en: "Didn\'t go through. Try again")
+    }
+    /// Восстановление не нашло покупок. Говорит и про второй Apple ID: это
+    /// самая частая причина, и без неё человек решает, что мы потеряли оплату.
+    static func proRestoreNone(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proRestoreNone",
+           ru: "На этом Apple ID покупок нет. Если PRO на другом, войди в него в App Store",
+           en: "No purchases on this Apple ID. If PRO is on another one, sign in to it in the App Store")
+    }
+
+    /// «Понятно» — общая кнопка согласия.
+    ///
+    /// Общая НАРОЧНО, отдельной функцией: то же слово уже печатала
+    /// `visibilityNoticeDismiss`, названная по ОДНОМУ месту показа. Функция
+    /// формата, названная по одному месту и зовомая из двух, — это баг, просто
+    /// ещё не сработавший (CLAUDE.md, про `GarageFormat.odometer`).
+    static func commonOk(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "commonOk", ru: "Понятно", en: "Got it")
+    }
+
+    // MARK: - Демонстрация функций PRO (0.8.4)
+    //
+    // Копия из HTML-макетов владельца (`PR-02`, `PR-02b`, `PR-02c`, `PR-03`) —
+    // в табличном разделе спеки её нет вовсе, и это отмечено в отчёте задачи.
+    // Двух страниц из пяти в макетах не нарисовано (рамка аватара и карточка
+    // машины при наличии машины); их текст дописан в том же голосе.
+    //
+    // Каждая страница отвечает на три вопроса одним абзацем: что это, где это
+    // видно и кому. «Кому» обязательно: половина набора видна другим, половина
+    // только владельцу, и это и есть разбивка витрины на две группы.
+
+    static func proDemoBgTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoBgTitle",
+           ru: "8 фонов, которые видят все", en: "8 backgrounds everyone sees")
+    }
+    static func proDemoBgText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoBgText",
+           ru: "Фон стоит за твоим именем в профиле и в ленте у других. Выбери один, меняй когда хочешь.",
+           en: "The background sits behind your name on your profile and in other people\'s feeds. Pick one, change it whenever.")
+    }
+    static func proDemoFrameTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoFrameTitle",
+           ru: "6 рамок вокруг твоего аватара", en: "6 frames around your avatar")
+    }
+    static func proDemoFrameText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoFrameText",
+           ru: "Рамка видна всюду, где видно тебя: в ленте, в профиле, в комментариях. Меняй когда хочешь.",
+           en: "The frame shows everywhere you do: in the feed, on your profile, in comments. Change it whenever.")
+    }
+    static func proDemoCarTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoCarTitle",
+           ru: "8 фонов для твоей машины", en: "8 backgrounds for your car")
+    }
+    static func proDemoCarText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoCarText",
+           ru: "Карточка машины стоит в твоём профиле и в ленте у других. Выбери фон, меняй когда хочешь.",
+           en: "Your car card sits on your profile and in other people\'s feeds. Pick a background, change it whenever.")
+    }
+    /// Гараж пуст — состояние 3. Последняя фраза обязательна: без неё силуэт
+    /// читается поломкой, а не примером.
+    static func proDemoCarTextNoVehicle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoCarTextNoVehicle",
+           ru: "Карточка машины стоит в твоём профиле и в ленте у других. Пока машины нет, показываем пример.",
+           en: "Your car card sits on your profile and in other people\'s feeds. There\'s no car yet, so this is an example.")
+    }
+    static func proDemoCarEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoCarEmptyTitle", ru: "Твоя машина", en: "Your car")
+    }
+    static func proDemoCarEmptySub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoCarEmptySub",
+           ru: "появится здесь, когда добавишь её в гараж",
+           en: "will show up here once you add it to the garage")
+    }
+    static func proDemoLineTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoLineTitle",
+           ru: "Твой маршрут одним цветом", en: "Your route in one colour")
+    }
+    static func proDemoLineText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoLineText",
+           ru: "Вместо градиента по скорости сплошная линия на карте каждой поездки. Видно только тебе.",
+           en: "A solid line on every trip\'s map instead of the speed gradient. Only you see it.")
+    }
+    static func proDemoLineTextNoTrips(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoLineTextNoTrips",
+           ru: "Вместо градиента по скорости сплошная линия на карте каждой поездки. Пока поездок нет, показываем пример.",
+           en: "A solid line on every trip\'s map instead of the speed gradient. No trips yet, so this is an example.")
+    }
+    static func proDemoManualTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoManualTitle",
+           ru: "Дорога, которую приложение не видело", en: "The road the app never saw")
+    }
+    /// «Без опыта и значков» сказано ВСЛУХ и до покупки: вписанная поездка
+    /// даёт километры, но не награды (правило 0.8.0), и узнать об этом после
+    /// оплаты человек не должен.
+    static func proDemoManualText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoManualText",
+           ru: "Поставь точки на карте, выбери день и машину. Поездка пойдёт в километры и на карту, без опыта и значков.",
+           en: "Drop points on the map, pick a day and a car. The trip counts towards kilometres and the atlas, without XP or badges.")
+    }
+    /// Подпись под нарисованным превью. Обязательна: показать пример без неё
+    /// значит соврать, что это его дорога.
+    static func proDemoExample(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proDemoExample", ru: "Пример", en: "Example")
+    }
+
+    // MARK: - Куплено и контекстное предложение (0.8.4)
+
+    static func proBoughtTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtTitle", ru: "Ты в PRO", en: "You\'re in PRO")
+    }
+    /// «Неделя бесплатно до 6 окт., потом 19,99 € в год» — обе половины
+    /// обязательны: человек только что нажал «бесплатно», и когда начнутся
+    /// списания, он должен прочитать здесь, а не в App Store.
+    static func proBoughtTrial(
+        _ lang: LanguageManager.Language, date: String, price: String
+    ) -> String {
+        tr(lang, "proBoughtTrial",
+           ru: "Неделя бесплатно до {date}, потом {price} в год",
+           en: "One week free until {date}, then {price} a year")
+            .replacingOccurrences(of: "{date}", with: date)
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    static func proBoughtPaid(_ lang: LanguageManager.Language, date: String) -> String {
+        tr(lang, "proBoughtPaid",
+           ru: "До {date}, продлится автоматически",
+           en: "Until {date}, renews automatically")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+    /// Где теперь искать купленное. Экран «Куплено» отвечает на «и что
+    /// дальше»: без этой строки человек остаётся с подпиской и без дороги к
+    /// ней.
+    static func proBoughtText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtText",
+           ru: "Фоны, рамки и цвет линии ждут в своих витринах. Вписанные поездки теперь можно добавлять из «Истории».",
+           en: "Backgrounds, frames and the line colour are waiting in their showcases. Hand-entered trips can now be added from History.")
+    }
+    /// Значок PRO появляется у имени сам, и сказать об этом надо СРАЗУ: он
+    /// виден чужим, а человек его не выбирал.
+    static func proBoughtBadge(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtBadge",
+           ru: "Значок PRO рядом с именем можно выключить в приватности",
+           en: "The PRO badge next to your name can be turned off in Privacy")
+    }
+    static func proBoughtPickBg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtPickBg",
+           ru: "Выбрать фон профиля", en: "Pick a profile background")
+    }
+    /// Купил из листа ручной поездки (состояние 36б) — возвращаемся к нему со
+    /// всем набранным, а не на витрину и не в «Историю».
+    static func proBoughtBackToTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtBackToTrip",
+           ru: "Вернуться к поездке", en: "Back to the trip")
+    }
+
+    /// M1 — десять поездок.
+    static func proCtxM1Title(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM1Title",
+           ru: "Уже десять поездок. Профиль можно оформить",
+           en: "Ten trips already. Your profile can have a look")
+    }
+    static func proCtxM1Text(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM1Text",
+           ru: "8 фонов и 6 рамок в PRO, их видят в ленте и в профиле",
+           en: "8 backgrounds and 6 frames in PRO, seen in the feed and on your profile")
+    }
+    /// M3 — месяц с приложением.
+    static func proCtxM3Title(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM3Title",
+           ru: "Твой маршрут может быть любого цвета",
+           en: "Your route can be any colour")
+    }
+    static func proCtxM3Text(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM3Text",
+           ru: "6 сплошных цветов вместо градиента по скорости",
+           en: "6 solid colours instead of the speed gradient")
+    }
+    /// M4 — подписка закончилась. Обещание «данные на месте» стоит ПЕРВЫМ
+    /// делом: человек, потерявший подписку, боится потерять и поездки.
+    static func proCtxM4Title(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM4Title", ru: "PRO закончился", en: "PRO has ended")
+    }
+    static func proCtxM4Text(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxM4Text",
+           ru: "Оформление сохранено и вернётся с подпиской, вписанные поездки на месте",
+           en: "Your look is saved and comes back with the subscription; hand-entered trips stay")
+    }
+    static func proCtxMore(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxMore", ru: "Подробнее о PRO", en: "More about PRO")
+    }
+    static func proCtxRenew(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxRenew", ru: "Продлить", en: "Renew")
+    }
+    static func proCtxNotNow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proCtxNotNow", ru: "Не сейчас", en: "Not now")
+    }
+
+    /// «Позже» — общая отсрочка.
+    ///
+    /// Отдельно от `proCtxNotNow` («Не сейчас») нарочно: у того есть ЦЕНА —
+    /// два подряд дают паузу 90 дней, три выключают предложение навсегда. У
+    /// «Позже» на экране «Куплено» цены нет вовсе, и один текст на два разных
+    /// смысла однажды посчитал бы закрытие карточки за отказ.
+    static func commonLater(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "commonLater", ru: "Позже", en: "Later")
+    }
+
+    // MARK: - Витрины оформления (0.8.4)
+    //
+    // Четыре витрины — фон профиля, рамка аватара, фон карточки машины, цвет
+    // линии маршрута. Заголовки короткие нарочно: они стоят в шапке листа над
+    // закреплённым превью, а не в списке настроек.
+
+    static func showcaseBg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseBg", ru: "Фон профиля", en: "Profile background")
+    }
+    static func showcaseFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseFrame", ru: "Рамка аватара", en: "Avatar frame")
+    }
+    static func showcaseCar(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseCar", ru: "Фон карточки", en: "Card background")
+    }
+    static func showcaseLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseLine", ru: "Линия маршрута", en: "Route line")
+    }
+    /// Заголовок группы. Число рядом с ним ВЫВОДИТСЯ из перечисления
+    /// вариантов (`ProShowcaseKind.freeCount`), а не пишется в строке: в
+    /// тексте оно однажды разошлось бы с сеткой под ним.
+    static func showcaseFree(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseFree", ru: "Бесплатные", en: "Free")
+    }
+    /// «PRO» не переводится ни на один из тринадцати.
+    static func showcasePro(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcasePro", ru: "PRO", en: "PRO")
+    }
+    static func showcaseDone(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseDone", ru: "Готово", en: "Done")
+    }
+    /// Кнопка примерки, когда бесплатной недели человеку не положено.
+    static func showcaseGetPro(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseGetPro", ru: "Оформить PRO", en: "Get PRO")
+    }
+    /// Карточка над сеткой, когда подписка кончилась (состояние 24). Первым
+    /// делом — что выбор НЕ ПОТЕРЯН: человек, увидевший свой обычный фон,
+    /// боится, что его настройку стёрли.
+    static func showcaseExpiredTitle(
+        _ lang: LanguageManager.Language, date: String
+    ) -> String {
+        tr(lang, "showcaseExpiredTitle",
+           ru: "PRO закончился {date}", en: "PRO ended {date}")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+    static func showcaseExpiredText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseExpiredText",
+           ru: "Твой выбор сохранён и вернётся с подпиской. Пока показывается обычный фон.",
+           en: "Your choice is saved and comes back with the subscription. The regular one shows for now.")
+    }
+    /// Бесплатный вариант линии маршрута — единственный, у которого есть не
+    /// имя собственное, а описание поведения.
+    static func showcaseLineSpeed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseLineSpeed", ru: "По скорости", en: "By speed")
+    }
+    static func showcaseLineSpeedSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseLineSpeedSub",
+           ru: "Зелёный, жёлтый и красный по темпу",
+           en: "Green, yellow and red by pace")
+    }
+
     static func plusRestore(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusRestore", ru: "Восстановить покупки", en: "Restore purchases")
     }
@@ -7769,19 +8110,6 @@ enum AppStrings {
         tr(lang, "plusPrivacyLink", ru: "Конфиденциальность", en: "Privacy")
     }
 
-    /// Подвал автопродления. Обязателен для ревью Apple и обязан называть три
-    /// вещи: что продлевается само, где это выключить и за сколько до конца
-    /// периода. Чисел-единиц в нём нет — только часы, которые к расстояниям
-    /// отношения не имеют.
-    static func plusAutoRenewFooter(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusAutoRenewFooter",
-           ru: "Подписка продлевается автоматически. Чтобы этого не произошло, "
-             + "отключите продление не позднее чем за 24 часа до конца оплаченного "
-             + "периода — в настройках Apple ID. Оплата списывается с вашего Apple ID.",
-           en: "The subscription renews automatically. To stop it, turn renewal off at "
-             + "least 24 hours before the paid period ends, in your Apple ID settings. "
-             + "Payment is charged to your Apple ID.")
-    }
 
     /// Продукты не приехали. Это РЕЗУЛЬТАТ, а не ошибка (витрина без
     /// соглашения, продукт ещё не разъехался), и человеку он говорится
@@ -7792,20 +8120,7 @@ enum AppStrings {
            en: "Prices didn't load — check your connection")
     }
 
-    /// Ask To Buy или подтверждение банка: ничего не упало, вердикт придёт
-    /// позже. Лист остаётся открытым, а строка объясняет, чего ждать.
-    static func plusPurchasePending(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPurchasePending",
-           ru: "Ждём подтверждения покупки", en: "Waiting for the purchase to be confirmed")
-    }
 
-    /// Сбой покупки. Текст ошибки StoreKit сюда НЕ попадает: он английский,
-    /// системный и человеку не объясняет ничего — а «попробуйте позже» хотя бы
-    /// говорит, что делать.
-    static func plusPurchaseFailed(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPurchaseFailed",
-           ru: "Не удалось — попробуйте позже", en: "It didn't go through — try again later")
-    }
 
 
 
