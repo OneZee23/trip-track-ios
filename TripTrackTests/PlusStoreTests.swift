@@ -196,15 +196,31 @@ final class PlusStoreTests: XCTestCase {
         let session = try makeSession()
         defer { session.clearTransactions() }
 
+        // Сброс до покупки: ключ живёт в `UserDefaults`, а контейнер
+        // симулятора переживает прогоны — без этого «дата запомнилась»
+        // подтверждалось бы значением от соседнего теста.
+        PlusStore.forgetLastKnownExpiryForTesting()
+
         try await session.buyProduct(productIdentifier: PlusStore.yearlyID)
         await PlusStore.shared.refreshAll()
         XCTAssertTrue(PlusStore.shared.isPlus)
+        XCTAssertNotNil(PlusStore.shared.expiresAt, "Apple назвала дату, пока право живо")
 
         session.clearTransactions()
         await PlusStore.shared.refreshEntitlements()
 
         XCTAssertFalse(PlusStore.shared.isPlus)
         XCTAssertFalse(PlusAccess.shared.isPlus)
+
+        // **Находка повторного ревью задачи 2.** Дата окончания обязана
+        // ПЕРЕЖИТЬ потерю права: `currentEntitlements` при `.expired` её уже
+        // не отдаёт, а строка «PRO закончился {date}» должна её показать.
+        // Запоминается она, пока подписка работала, — этот переход и есть
+        // ровно тот случай, и натурального истечения для него не нужно.
+        XCTAssertNotNil(PlusStore.shared.lastKnownExpiry,
+                        "дата не запомнилась, пока Apple её называла")
+        XCTAssertEqual(PlusStore.shared.displayExpiry, PlusStore.shared.lastKnownExpiry,
+                       "живой даты больше нет — показываем запомненную")
     }
 
     /// «Восстановить покупки» — то, что ревью Apple жмёт первой кнопкой.

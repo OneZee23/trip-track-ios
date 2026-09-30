@@ -96,10 +96,15 @@ enum ProStatus: Equatable {
         switch self {
         case .expired(let on):
             // Дату могли не узнать вовсе (Apple молчит с первого запуска).
-            // Тогда остаётся «PRO закончился» — без висящего пробела на конце.
-            return AppStrings.meProExpired(lang)
-                .replacingOccurrences(of: "{date}", with: Self.shortDate(on, lang))
-                .trimmingCharacters(in: .whitespaces)
+            // Тогда остаётся «PRO закончился» — и пробел на месте даты надо
+            // СХЛОПНУТЬ, а не подрезать: у турецкого и казахского токен стоит
+            // в СЕРЕДИНЕ шаблона («PRO {date} tarihinde bitti»), и обрезка
+            // концов оставляла бы двойной пробел внутри строки. Поймано
+            // повторным ревью задачи 2 — первая правка чинила 11 языков из 13,
+            // а сторож на остальных двух проходил вакуумно.
+            return Self.squeezingSpaces(
+                AppStrings.meProExpired(lang)
+                    .replacingOccurrences(of: "{date}", with: Self.shortDate(on, lang)))
         case .hiddenStorefront:
             return ""
         default:
@@ -134,6 +139,13 @@ enum ProStatus: Equatable {
         guard let date else { return AppStrings.meProNoneSub(lang) }
         return template.replacingOccurrences(of: "{date}",
                                              with: Self.shortDate(date, lang))
+    }
+
+    /// Двойные пробелы в один, концы подрезаны. Нужна там, где подстановка
+    /// могла оказаться пустой в СЕРЕДИНЕ строки.
+    static func squeezingSpaces(_ text: String) -> String {
+        text.split(separator: " ", omittingEmptySubsequences: true)
+            .joined(separator: " ")
     }
 
     /// «12 окт» — день и месяц своим порядком для каждого языка. Года нет

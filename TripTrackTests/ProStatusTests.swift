@@ -87,6 +87,9 @@ final class ProStatusTests: XCTestCase {
             XCTAssertFalse(t.contains("{date}"), "\(lang): токен остался — «\(t)»")
             XCTAssertEqual(t, t.trimmingCharacters(in: .whitespaces),
                            "\(lang): висящий пробел — «\(t)»")
+            // Двойной пробел ВНУТРИ строки: у турецкого и казахского токен
+            // стоит в середине шаблона, и обрезка концов его не видит.
+            XCTAssertFalse(t.contains("  "), "\(lang): двойной пробел — «\(t)»")
         }
     }
 

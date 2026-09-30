@@ -123,11 +123,20 @@ final class PlusStore: ObservableObject {
         set { Self.defaults.set(newValue, forKey: Self.lastExpiryKey) }
     }
 
-    private static let lastExpiryKey = "plus.lastKnownExpiry"
+    private static let lastExpiryKey = "plus.lastKnownExpiry.v1"
     private static var defaults: UserDefaults { .standard }
 
     /// Дата для показа: живая, а если Apple молчит — запомненная.
     var displayExpiry: Date? { expiresAt ?? lastKnownExpiry }
+
+    #if DEBUG
+    /// Шов для теста: `UserDefaults` переживает прогоны, и без сброса
+    /// проверка «дата запомнилась» проходила бы вакуумно на значении,
+    /// оставленном соседним прогоном.
+    static func forgetLastKnownExpiryForTesting() {
+        defaults.removeObject(forKey: lastExpiryKey)
+    }
+    #endif
     /// Идёт покупка или восстановление — кнопки на пейволе выключены.
     @Published private(set) var isBusy = false
     /// Покупка ждёт одобрения (Ask To Buy) — состояние 16 строки PRO.
