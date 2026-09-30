@@ -42,6 +42,43 @@
 	-->
 	<key>SENTRY_DSN</key>
 	<string>$(SENTRY_DSN)</string>
+	<!--
+		МАНИФЕСТ СЦЕН — ради экрана автомобиля (0.8.4), и это самый рискованный
+		ключ в файле: ошибка здесь кладёт не CarPlay, а ВЕСЬ экран телефона.
+
+		Объявлена ТОЛЬКО роль CarPlay. Роль окна телефона не объявлена нарочно:
+		приложение на жизненном цикле SwiftUI (`@main struct TripTrackApp: App`),
+		и свою сцену SwiftUI заводит сам. Объявить её здесь значило бы
+		назначить ей делегата, которого у SwiftUI-приложения нет.
+
+		`UIApplicationSupportsMultipleScenes` обязателен: CarPlay это ВТОРАЯ
+		сцена того же процесса, и без этого ключа система её не создаст. На
+		iPhone он ничего не меняет — многооконности там нет, а приложение
+		iPhone-only.
+
+		ПРОВЕРЯТЬ ПЕРВЫМ ДЕЛОМ на симуляторе: экран телефона обязан собраться
+		как прежде. Тестом это не задать — манифест читает система до нашего
+		кода.
+	-->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>TripTrackCarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

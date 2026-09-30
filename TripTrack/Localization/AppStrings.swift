@@ -8039,6 +8039,64 @@ enum AppStrings {
         tr(lang, "commonLater", ru: "Позже", en: "Later")
     }
 
+    // MARK: - Экран автомобиля (0.8.4)
+    //
+    // Слов здесь мало нарочно: читают их глазами, которые обязаны смотреть на
+    // дорогу. Ни одного списка, ни одной истории, ни одной карты — только
+    // «пишется ли моя поездка» и одна кнопка.
+
+    /// Заголовок, пока пишется.
+    static func carPlayRecordingTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayRecordingTitle", ru: "Записывается", en: "Recording")
+    }
+    static func carPlayPausedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayPausedTitle", ru: "На паузе", en: "Paused")
+    }
+    /// Заголовок, когда не пишется. Имя приложения, а не «Готово к записи»:
+    /// на экране автомобиля человек сначала узнаёт, ЧЬЁ это окно.
+    static func carPlayIdleTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayIdleTitle", ru: "TripTrack", en: "TripTrack")
+    }
+    static func carPlayIdleBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayIdleBody",
+           ru: "Поездка не записывается", en: "No trip is being recorded")
+    }
+    /// Командовать записью нечем: экран телефона ни разу не собрался.
+    /// Говорится прямо — «Начать» здесь была бы кнопкой, которая ничего не
+    /// делает.
+    static func carPlayUnavailableBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayUnavailableBody",
+           ru: "Откройте TripTrack на телефоне", en: "Open TripTrack on your phone")
+    }
+
+    static func carPlayDistance(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayDistance", ru: "Расстояние", en: "Distance")
+    }
+    static func carPlayTime(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayTime", ru: "Время", en: "Time")
+    }
+    static func carPlaySpeed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlaySpeed", ru: "Скорость", en: "Speed")
+    }
+
+    /// Подпись КОРОТКАЯ нарочно: «Начать запись» выходило 20 знаков
+    /// по-немецки и 25 по-французски, а `CPTextButton` такое обрезает. Объект
+    /// при этом из контекста ясен — над кнопкой стоит «Ничего не пишется».
+    static func carPlayStart(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayStart", ru: "Начать", en: "Start")
+    }
+    static func carPlayPause(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayPause", ru: "Пауза", en: "Pause")
+    }
+    static func carPlayResume(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayResume", ru: "Продолжить", en: "Resume")
+    }
+    /// «Завершить», а не «Стоп»: поездка при этом СОХРАНЯЕТСЯ, и слово должно
+    /// говорить про исход, а не про нажатие.
+    static func carPlayFinish(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "carPlayFinish", ru: "Завершить", en: "Finish")
+    }
+
     // MARK: - Витрины оформления (0.8.4)
     //
     // Четыре витрины — фон профиля, рамка аватара, фон карточки машины, цвет

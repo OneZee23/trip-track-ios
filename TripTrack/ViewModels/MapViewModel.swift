@@ -245,6 +245,11 @@ final class MapViewModel: ObservableObject {
         // Hand the connectivity manager a weak self so commands from
         // the Watch hit the same control surface as on-screen taps.
         PhoneConnectivityManager.shared.mapViewModel = self
+        // И то же самое для экрана автомобиля — четвёртой поверхности к той же
+        // записи. Слабая ссылка, как у часов: CarPlay не должен удерживать в
+        // живых модель мёртвого экрана телефона, а её отсутствие — законное
+        // состояние экрана машины, а не ошибка.
+        CarPlayLink.shared.attach(self)
 
         setupRecordingBindings()
         StartupTrace.mark("MapViewModel.init setupRecordingBindings")
@@ -525,6 +530,10 @@ final class MapViewModel: ObservableObject {
         case liveActivity
         /// The Watch companion app over WatchConnectivity.
         case watch
+        /// The button on the car screen. A fourth surface, and it gets its own
+        /// case for the reason this enum exists: «запись встала на паузу, пока
+        /// я вёл» is unanswerable unless the log says the car asked.
+        case carPlay
     }
 
     /// Поставить отметку на маршруте — с Live Activity или с экрана записи.

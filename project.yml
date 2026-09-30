@@ -65,6 +65,10 @@ targets:
       - target: TripTrackLiveActivityExtension
       - package: Sentry
         product: Sentry
+      # Экран автомобиля (0.8.4). Линкуется в приложение, а не в расширение:
+      # CarPlay это ВТОРАЯ СЦЕНА того же процесса, а не отдельная цель — запись,
+      # база и `TripManager` у телефона и у машины общие.
+      - sdk: CarPlay.framework
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
@@ -84,10 +88,17 @@ targets:
         # the custom grid, and it is why the app asks for read access only.
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip or to a vehicle in your garage. Photos stay on your device unless you publish the trip, or open your vehicle photos to other people yourself."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "0.8.3"
-        CURRENT_PROJECT_VERSION: "66"
+        MARKETING_VERSION: "0.8.4"
+        CURRENT_PROJECT_VERSION: "67"
       configs:
         Debug:
+          # CarPlay ТОЛЬКО здесь, и это не осторожность. Entitlement
+          # `com.apple.developer.carplay-driving-task` выдаёт Apple по заявке,
+          # и до выдачи RELEASE-сборка с ним НЕ ПОДПИШЕТСЯ — то есть общий
+          # файл сломал бы следующую отправку в App Store. Симулятор CarPlay
+          # entitlements строго не проверяет, поэтому смотреть и снимать кадры
+          # можно уже сейчас, а на устройстве — после ответа Apple.
+          CODE_SIGN_ENTITLEMENTS: TripTrack/TripTrackDebug.entitlements
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Dev"
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
@@ -98,43 +109,56 @@ targets:
           # internet and never touches the local network.
           INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Connects to your local TripTrack development server."
         Release:
+          # Без CarPlay — см. длинную причину под блоком настроек.
+          CODE_SIGN_ENTITLEMENTS: TripTrack/TripTrack.entitlements
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    entitlements:
-      path: TripTrack/TripTrack.entitlements
-      # Source of truth for capabilities — xcodegen rewrites the
-      # entitlements file from these properties on every generate. Without
-      # this block, toggling a capability off in Xcode's Signing pane
-      # leaves the file as empty <dict/> and the next generate keeps it
-      # empty, breaking Sign in with Apple and Push.
-      # NOTE: `aps-environment: development` is correct for dev builds.
-      # Archives for App Store automatically rewrite to `production` when
-      # signed against a prod provisioning profile.
-      properties:
-        aps-environment: development
-        com.apple.developer.applesignin:
-          - Default
-        # UNIVERSAL LINKS — deliberately still off. Turning the two lines
-        # below on makes `https://trip-track.app/u/<id>` open the app
-        # directly instead of Safari; everything else for it already ships:
-        # the app parses the URL (`TripTrackApp.handleWebLink`), the website
-        # serves `/.well-known/apple-app-site-association` naming both bundle
-        # ids, and the landing page's «Открыть в приложении» button covers the
-        # link with the entitlement off.
-        #
-        # It needs one thing this repo cannot do: the Associated Domains
-        # capability on the App IDs themselves (both `com.onezee.TripTrack`
-        # and `.dev`). Without it the build fails at signing — «Provisioning
-        # profile doesn't include the Associated Domains capability». Enable
-        # it by building once from Xcode with the capability added (Xcode
-        # updates the App ID and the profile), or with
-        # `xcodebuild -allowProvisioningUpdates`, then uncomment:
-        #
-        # com.apple.developer.associated-domains:
-        #   - applinks:trip-track.app
-        #   - applinks:www.trip-track.app
-
+    # ENTITLEMENTS РАЗВЕДЕНЫ ПО КОНФИГУРАЦИЯМ, и блока `entitlements:` здесь
+    # больше нет (0.8.4, ради CarPlay).
+    #
+    # Тот блок делал файл `TripTrack.entitlements` производным: xcodegen
+    # перезаписывал его из `properties` на каждом генерировании, и это
+    # защищало от «выключил capability в Xcode — файл стал пустым <dict/>, а
+    # следующий generate это закрепил». Но `properties` у него ОДНИ на все
+    # конфигурации, а CarPlay нужен РОВНО в Debug: entitlement
+    # `com.apple.developer.carplay-driving-task` выдаёт Apple по заявке, и до
+    # выдачи Release-сборка с ним НЕ ПОДПИШЕТСЯ — то есть общий файл сломал бы
+    # следующую отправку в App Store.
+    #
+    # Поэтому пути ставятся руками ниже, а защиту, которую давал блок, теперь
+    # даёт `EntitlementsWiringTests`: он читает ОБА файла и падает, если у
+    # Release пропал push или Sign in with Apple, если он опустел, или если в
+    # него просочился CarPlay. Это строго больше того, что проверял xcodegen:
+    # тот следил за одним файлом и ничего не знал про то, что в нём НЕ должно
+    # лежать.
+    #
+    # `aps-environment: development` в обоих файлах — ВЕРНО: архив для App
+    # Store переписывает его на `production` сам, подписываясь продовым
+    # профилем. Менять руками не надо.
+    #
+    # UNIVERSAL LINKS — по-прежнему намеренно выключены (переехало сюда из
+    # снятого блока `entitlements:`, чтобы знание не потерялось вместе с ним).
+    # Включение делает так, что `https://trip-track.app/u/<id>` открывает
+    # приложение вместо Safari; всё остальное для этого уже готово:
+    # приложение разбирает ссылку (`TripTrackApp.handleWebLink`), сайт отдаёт
+    # `/.well-known/apple-app-site-association` с обоими bundle id, а кнопка
+    # «Открыть в приложении» на странице закрывает случай с выключенным
+    # entitlement.
+    #
+    # Нужна одна вещь, которой этот репозиторий сделать не может: capability
+    # Associated Domains на самих App ID (и `com.onezee.TripTrack`, и `.dev`).
+    # Без неё сборка падает на подписи — «Provisioning profile doesn't include
+    # the Associated Domains capability». Включается однократной сборкой из
+    # Xcode с добавленной capability (Xcode обновит App ID и профиль) или
+    # `xcodebuild -allowProvisioningUpdates`, после чего в ОБА файла прав
+    # дописывается:
+    #
+    #   com.apple.developer.associated-domains:
+    #     - applinks:trip-track.app
+    #     - applinks:www.trip-track.app
+    #
+    # «В оба» — это разница с прежним устройством: раньше файл был один.
   TripTrackLiveActivityExtension:
     type: app-extension
     platform: iOS
@@ -152,8 +176,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "0.8.3"
-        CURRENT_PROJECT_VERSION: "66"
+        MARKETING_VERSION: "0.8.4"
+        CURRENT_PROJECT_VERSION: "67"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -198,8 +222,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
-        MARKETING_VERSION: "0.8.3"
-        CURRENT_PROJECT_VERSION: "66"
+        MARKETING_VERSION: "0.8.4"
+        CURRENT_PROJECT_VERSION: "67"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:
