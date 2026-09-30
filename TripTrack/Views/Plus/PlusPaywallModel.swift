@@ -8,7 +8,13 @@ import StoreKit
 /// литералов, и проверить это можно только там, где `Product` собрать нечем.
 /// `Product` не создаётся руками ни в одном тесте: у него нет
 /// инициализатора вовсе.
-struct PlusProductInfo: Equatable {
+/// Тариф, разобранный из ответа Apple.
+///
+/// `Equatable` у него НЕТ нарочно: с 0.8.4 он несёт `format` — функцию печати
+/// цены, взятую у витрины, — а равенство двух функций не значит ничего.
+/// Сравнивать тарифы никто не сравнивает; понадобится — пусть не соберётся и
+/// автор напишет `==` руками по числам, а не получит синтезированное молча.
+struct PlusProductInfo {
     enum Period: String, Equatable { case yearly, monthly }
 
     let id: String
@@ -22,6 +28,28 @@ struct PlusProductInfo: Equatable {
     /// Длина вводного бесплатного предложения в днях. `nil` — предложения нет
     /// (месячный) или оно не бесплатное.
     let trialDays: Int?
+    /// Цена ЧИСЛОМ, для арифметики выгоды (`ProPriceMath`). `displayPrice`
+    /// разобрать обратно нельзя: в нём валюта, разделитель и сторона знака той
+    /// витрины, где стоит человек.
+    let price: Decimal?
+    /// Печать числа ТЕМ ЖЕ стилем, которым Apple напечатала `displayPrice`.
+    /// Своего форматтера у нас нет и быть не должно (правило 0.8.0): «1,67 €»
+    /// в Германии и «€1.67» в Ирландии — это решение витрины, не наше.
+    let format: ((Decimal) -> String)?
+
+    init(id: String,
+         displayPrice: String,
+         period: Period,
+         trialDays: Int?,
+         price: Decimal? = nil,
+         format: ((Decimal) -> String)? = nil) {
+        self.id = id
+        self.displayPrice = displayPrice
+        self.period = period
+        self.trialDays = trialDays
+        self.price = price
+        self.format = format
+    }
 }
 
 /// Один тариф на пейволе.
@@ -59,7 +87,12 @@ enum PlusPaywallModel {
             let price = info.period == .yearly
                 ? AppStrings.plusPerYear(lang, price: info.displayPrice)
                 : AppStrings.plusPerMonth(lang, price: info.displayPrice)
-            let caption = (eligibleForIntro ? info.trialDays : nil).map {
+            // Неделя обещается ТОЛЬКО годовому и только тому, кому Apple её
+            // даст. До 0.8.4 подпись собиралась у обоих тарифов: у месячного
+            // `introductoryOffer` тоже существует, и пейвол обещал бесплатную
+            // неделю там, где её нет ни при каких условиях.
+            let trial = (info.period == .yearly && eligibleForIntro) ? info.trialDays : nil
+            let caption = trial.map {
                 AppStrings.plusTrialCaption(lang, days: $0, price: price)
             }
             return PlusPlan(
@@ -115,7 +148,9 @@ extension PlusProductInfo {
             id: product.id,
             displayPrice: product.displayPrice,
             period: period,
-            trialDays: trial
+            trialDays: trial,
+            price: product.price,
+            format: { $0.formatted(product.priceFormatStyle) }
         )
     }
 }
