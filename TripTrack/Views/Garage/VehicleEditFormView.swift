@@ -105,7 +105,6 @@ struct VehicleEditFormView: View {
     /// Открытая витрина оформления. Фон карточки машины живёт не в
     /// `SettingsManager`, а в самой машине, поэтому запись идёт замыканием.
     @State private var showcase: ProShowcaseKind?
-    @State private var showPaywall = false
     @ObservedObject private var plus = PlusAccess.shared
 
     /// Snapshot of the edited vehicle taken at init — used for
@@ -315,11 +314,6 @@ struct VehicleEditFormView: View {
         .proShowcase($showcase,
                      vehicle: editedVehicle,
                      onPickVehicleCard: { cardStyle = VehicleCardStyle.from($0) })
-        .sheet(isPresented: $showPaywall) {
-            PlusPaywallSheet()
-                .environmentObject(lang)
-                .preferredColorScheme(scheme)
-        }
     }
 
     // MARK: - Фон карточки (0.8.0)
