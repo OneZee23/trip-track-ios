@@ -1378,7 +1378,7 @@ extension Translations {
         "tipsThanks": "Terima kasih!",
         "tipsEntry": "Bilang terima kasih ke penulis",
         "tipsTitle": "Terima kasih ke penulis",
-        "tipsText": "Ini cuma ucapan terima kasih. Tidak ada yang terbuka atau berubah, aplikasinya gratis sepenuhnya.",
+        "tipsText": "Ini cuma ucapan terima kasih. Tidak ada yang terbuka atau berubah: semua yang kamu pakai memang gratis.",
         "tipsCoffee": "Kopi untuk penulis",
         "tipsMeal": "Makan untuk penulis",
         "tipsFuel": "Satu tangki bensin untuk penulis",

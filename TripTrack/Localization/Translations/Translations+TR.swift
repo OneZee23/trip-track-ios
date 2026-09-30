@@ -1378,7 +1378,7 @@ extension Translations {
         "tipsThanks": "Teşekkürler!",
         "tipsEntry": "Yazara teşekkür et",
         "tipsTitle": "Yazara teşekkürler",
-        "tipsText": "Bu sadece bir teşekkür. Hiçbir şey açılmaz ve değişmez, uygulama tamamen ücretsiz.",
+        "tipsText": "Bu sadece bir teşekkür. Hiçbir şey açılmaz ve değişmez: kullandığın her şey zaten ücretsiz.",
         "tipsCoffee": "Yazara bir kahve",
         "tipsMeal": "Yazara bir öğle yemeği",
         "tipsFuel": "Yazara bir depo benzin",

@@ -1378,7 +1378,7 @@ extension Translations {
         "tipsThanks": "Merci !",
         "tipsEntry": "Dire merci à l’auteur",
         "tipsTitle": "Merci à l’auteur",
-        "tipsText": "C’est juste un merci. Rien ne se débloque et rien ne change, l’app est entièrement gratuite.",
+        "tipsText": "C’est juste un merci. Rien ne se débloque et rien ne change : tout ce que vous utilisez est déjà gratuit.",
         "tipsCoffee": "Un café pour l’auteur",
         "tipsMeal": "Un repas pour l’auteur",
         "tipsFuel": "Un plein d’essence pour l’auteur",

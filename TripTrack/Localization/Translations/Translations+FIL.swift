@@ -1378,7 +1378,7 @@ extension Translations {
         "tipsThanks": "Salamat!",
         "tipsEntry": "Magpasalamat sa may-akda",
         "tipsTitle": "Salamat sa may-akda",
-        "tipsText": "Pasasalamat lang ito. Walang mabubukas o magbabago, libre ang app nang buo.",
+        "tipsText": "Pasasalamat lang ito. Walang mabubukas o magbabago: libre naman ang lahat ng ginagamit mo.",
         "tipsCoffee": "Kape para sa may-akda",
         "tipsMeal": "Pananghalian para sa may-akda",
         "tipsFuel": "Isang tangke ng gasolina para sa may-akda",

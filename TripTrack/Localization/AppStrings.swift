@@ -8251,8 +8251,8 @@ enum AppStrings {
     /// требование Apple к донату, а не вежливость.
     static func tipsText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tipsText",
-           ru: "Это просто спасибо. Ничего не откроется и не изменится, приложение бесплатное целиком.",
-           en: "It\'s just a thank you. Nothing unlocks or changes; the app is entirely free.")
+           ru: "Это просто спасибо. Ничего не откроется и не изменится: всё, чем вы пользуетесь, и так бесплатно.",
+           en: "It's just a thank you. Nothing unlocks or changes: everything you use is free anyway.")
     }
     /// Имена трёх уровней. Цену к ним печатает витрина Apple — своей здесь нет.
     static func tipsCoffee(_ lang: LanguageManager.Language) -> String {
