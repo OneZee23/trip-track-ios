@@ -1425,7 +1425,7 @@ extension Translations {
         "proGroupVisible": "Başkaları görür",
         "proGroupPrivate": "Yalnızca sana",
         "proFeatureBg": "Profil arka planı",
-        "proFeatureBgSub": "Ücretsizlerin dışında 8 arka plan",
+        "proFeatureBgSub": "Ücretsizlere ek 8 arka plan",
         "proFeatureFrame": "Avatar çerçevesi",
         "proFeatureFrameSub": "6 çerçeve, akışta görünür",
         "proFeatureCar": "Araç kartı arka planı",

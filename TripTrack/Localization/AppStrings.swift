@@ -7721,7 +7721,7 @@ enum AppStrings {
     /// фонов» не сказало бы, за что платят.
     static func proFeatureBgSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureBgSub",
-           ru: "8 фонов сверх бесплатных", en: "8 backgrounds beyond the free ones")
+           ru: "8 фонов сверх бесплатных", en: "8 more beyond the free ones")
     }
     static func proFeatureFrame(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureFrame", ru: "Рамка аватара", en: "Avatar frame")
@@ -7742,7 +7742,7 @@ enum AppStrings {
     }
     static func proFeatureLineSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureLineSub",
-           ru: "6 цветов вместо градиента", en: "6 colours instead of the gradient")
+           ru: "6 цветов вместо градиента", en: "6 colours, not the gradient")
     }
     static func proFeatureManual(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureManual", ru: "Вписанная поездка", en: "Hand-entered trip")

@@ -1428,7 +1428,7 @@ extension Translations {
         "proFeatureBgSub": "8 fondos además de los gratuitos",
         "proFeatureFrame": "Marco del avatar",
         "proFeatureFrameSub": "6 marcos, visibles en el feed",
-        "proFeatureCar": "Fondo de la tarjeta del coche",
+        "proFeatureCar": "Fondo de la tarjeta",
         "proFeatureCarSub": "8 fondos para tu coche",
         "proFeatureLine": "Color de la línea de ruta",
         "proFeatureLineSub": "6 colores en vez del degradado",

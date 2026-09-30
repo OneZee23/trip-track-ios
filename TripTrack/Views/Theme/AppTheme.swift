@@ -278,19 +278,31 @@ extension View {
 
 struct ShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = -1
+    /// «Уменьшить движение» — и блик НЕ едет вовсе.
+    ///
+    /// Бесконечная `repeatForever`-анимация это ровно то, что настройка
+    /// просит убрать, и просит не из вкуса: у части людей движущийся блик
+    /// вызывает тошноту. Соседний `SkeletonPlaceholder` это уже соблюдал, а
+    /// `shimmer()` — нет; поправлено в одном месте на всех вызывающих.
+    /// Место под содержимое при этом остаётся: гаснет движение, а не сам
+    /// скелетон.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.08), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .offset(x: phase * 300)
+                if !reduceMotion {
+                    LinearGradient(
+                        colors: [.clear, .white.opacity(0.08), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .offset(x: phase * 300)
+                }
             }
             .clipped()
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                     phase = 1
                 }

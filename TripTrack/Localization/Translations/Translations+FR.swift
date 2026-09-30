@@ -1433,7 +1433,7 @@ extension Translations {
         "proFeatureLine": "Couleur du tracé",
         "proFeatureLineSub": "6 couleurs au lieu du dégradé",
         "proFeatureManual": "Trajet ajouté à la main",
-        "proFeatureManualSub": "La route qui n’a pas été enregistrée",
+        "proFeatureManualSub": "La route non enregistrée",
         "proPlanYear": "An · {price}",
         "proPlanYearTrial": "Une semaine offerte",
         "proPlanYearPerMonth": "{price} par mois",

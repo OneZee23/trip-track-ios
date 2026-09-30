@@ -1432,7 +1432,7 @@ extension Translations {
         "proFeatureCarSub": "8 background para sa kotse mo",
         "proFeatureLine": "Kulay ng linya ng ruta",
         "proFeatureLineSub": "6 na kulay kapalit ng gradient",
-        "proFeatureManual": "Manu-manong idinagdag na biyahe",
+        "proFeatureManual": "Manu-manong biyahe",
         "proFeatureManualSub": "Ang daang hindi naitala",
         "proPlanYear": "Taon · {price}",
         "proPlanYearTrial": "Isang linggong libre",

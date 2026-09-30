@@ -1432,7 +1432,7 @@ extension Translations {
         "proFeatureCarSub": "8 latar untuk mobilmu",
         "proFeatureLine": "Warna garis rute",
         "proFeatureLineSub": "6 warna alih-alih gradien",
-        "proFeatureManual": "Perjalanan yang ditulis manual",
+        "proFeatureManual": "Perjalanan manual",
         "proFeatureManualSub": "Jalan yang tidak terekam",
         "proPlanYear": "Tahun · {price}",
         "proPlanYearTrial": "Satu minggu gratis",
