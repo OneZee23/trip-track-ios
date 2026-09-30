@@ -96,10 +96,14 @@ final class ManualTripAuditTests: XCTestCase {
 
     /// Два случая с РАЗНЫМИ словами. Общее «не удалось» на оба заставило бы
     /// человека с кончившейся подпиской жать кнопку, пока не устанет.
+    ///
+    /// 0.8.4 заменил строку КАРТОЧКОЙ (заголовок + текст + своя кнопка), и
+    /// правило переехало на новые ключи вместе с ней. Само правило то же:
+    /// прежние `manualTripErrorNoAccess`/`NotSaved` удалены как мёртвые.
     func testTheTwoRefusalsSayDifferentThings() {
         for lang in LanguageManager.Language.allCases {
-            let noAccess = AppStrings.manualTripErrorNoAccess(lang)
-            let notSaved = AppStrings.manualTripErrorNotSaved(lang)
+            let noAccess = AppStrings.manualFailedProTitle(lang)
+            let notSaved = AppStrings.manualFailedDbTitle(lang)
             XCTAssertNotEqual(noAccess, notSaved, "\(lang): один текст на два отказа")
             XCTAssertFalse(noAccess.isEmpty)
             XCTAssertFalse(notSaved.isEmpty)
@@ -111,8 +115,11 @@ final class ManualTripAuditTests: XCTestCase {
     func testTheNewLinesAreTranslatedEverywhere() {
         let strings: [(String, (LanguageManager.Language) -> String)] = [
             ("manualTripErrorEndsLater", AppStrings.manualTripErrorEndsLater),
-            ("manualTripErrorNotSaved", AppStrings.manualTripErrorNotSaved),
-            ("manualTripErrorNoAccess", AppStrings.manualTripErrorNoAccess),
+            ("manualFailedProTitle", AppStrings.manualFailedProTitle),
+            ("manualFailedProText", AppStrings.manualFailedProText),
+            ("manualFailedDbTitle", AppStrings.manualFailedDbTitle),
+            ("manualFailedDbText", AppStrings.manualFailedDbText),
+            ("manualHonesty", AppStrings.manualHonesty),
         ]
         for (name, fn) in strings {
             let en = fn(.en)

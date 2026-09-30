@@ -8100,6 +8100,43 @@ enum AppStrings {
            en: "Green, yellow and red by pace")
     }
 
+    // MARK: - Ручная поездка: отказ записи (0.8.4)
+    //
+    // Карточка, а не строка: у отказа есть ПРИЧИНА и есть ДЕЙСТВИЕ, и они
+    // разные у двух случаев. Общее «не удалось» заставило бы человека с
+    // кончившейся подпиской жать «Повторить», пока не устанет.
+
+    /// Подписка кончилась, пока лист был открыт и заполнен (состояние 36а).
+    static func manualFailedProTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualFailedProTitle",
+           ru: "PRO закончился, пока лист был открыт",
+           en: "PRO ended while this sheet was open")
+    }
+    /// «Точки, время и машина на месте» — обязательная половина: человек
+    /// боится, что набранное пропадёт, и именно поэтому пейвол показывается
+    /// ВТОРЫМ листом поверх, а не подменой содержимого.
+    static func manualFailedProText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualFailedProText",
+           ru: "Продли, и поездка запишется. Точки, время и машина на месте.",
+           en: "Renew and the trip will save. Points, time and car are kept.")
+    }
+    static func manualFailedDbTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualFailedDbTitle", ru: "Не удалось сохранить", en: "Couldn\'t save")
+    }
+    static func manualFailedDbText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualFailedDbText",
+           ru: "Что-то с базой. Попробуй ещё раз, набранное на месте.",
+           en: "Something\'s wrong with the database. Try again, everything is kept.")
+    }
+    /// Строка под кнопкой «Записать». Говорит ВСЛУХ и ДО записи, что
+    /// вписанная поездка даёт километры, но не награды (правило 0.8.0):
+    /// узнать об этом после — хуже, чем не купить.
+    static func manualHonesty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualHonesty",
+           ru: "Пойдёт в километры, одометр и атлас. Опыт и значки только за записанные поездки",
+           en: "Counts toward distance, the odometer and the atlas. XP and badges only for recorded trips")
+    }
+
     static func plusRestore(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusRestore", ru: "Восстановить покупки", en: "Restore purchases")
     }
@@ -8128,26 +8165,57 @@ enum AppStrings {
 
     // MARK: - Донат (0.8.0)
 
-    /// Заголовок листа чаевых. «Поддержать», а не «Купить»: покупкой это не
-    /// является — доступа за ним нет никакого (правило 3.1.1).
-    static func tipTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "tipTitle", ru: "Поддержать автора", en: "Support the author")
+    // MARK: - Чаевые (переименованы в 0.8.4)
+    //
+    // Три функции звались `tipTitle`/`tipSubtitle`/`tipThanks`, а дизайн даёт
+    // восемь ключей под `tips.*`. Имена по ключу выходят обманчиво похожими
+    // (`tipsTitle` против `tipTitle`), и держать обе пары значило бы держать
+    // тринадцать языков мёртвой копии. Поэтому три ПЕРЕИМЕНОВАНЫ вместе со
+    // своими строками во всех одиннадцати таблицах, пять добавлены.
+    //
+    // Чаевые отличаются от тарифа ВСЕМ: вход одной приглушённой строкой внизу
+    // «Я», ни одного акцентного элемента, слова «ничего не откроется» на
+    // самом листе, показ только по своему тапу. Видны всем с витриной — и с
+    // PRO, и без.
+
+    /// Вход внизу «Я». «Сказать спасибо», а не «Поддержать»: второе звучит
+    /// как обязанность.
+    static func tipsEntry(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsEntry",
+           ru: "Сказать спасибо автору", en: "Say thanks to the author")
     }
-    /// Единственное обещание листа — что обещаний нет.
-    static func tipSubtitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "tipSubtitle",
-           ru: "Спасибо — и больше ничего: доступ это не открывает",
-           en: "A thank-you and nothing else: it unlocks nothing")
+    /// Заголовок листа. Не «Купить» и не «Поддержать»: покупкой это не
+    /// является — доступа за ним нет никакого (правило Apple 3.1.1).
+    static func tipsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsTitle", ru: "Спасибо автору", en: "Thanks to the author")
     }
-    static func tipThanks(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "tipThanks", ru: "Спасибо!", en: "Thank you!")
+    /// Единственное обещание листа — что обещаний нет. Сказано СЛОВАМИ, и это
+    /// требование Apple к донату, а не вежливость.
+    static func tipsText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsText",
+           ru: "Это просто спасибо. Ничего не откроется и не изменится, приложение бесплатное целиком.",
+           en: "It\'s just a thank you. Nothing unlocks or changes; the app is entirely free.")
     }
-    static func profileRowSupport(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "profileRowSupport", ru: "Поддержать", en: "Support")
+    /// Имена трёх уровней. Цену к ним печатает витрина Apple — своей здесь нет.
+    static func tipsCoffee(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsCoffee", ru: "Кофе автору", en: "Coffee for the author")
     }
-    static func profileRowSupportSubtitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "profileRowSupportSubtitle",
-           ru: "Чаевые автору, без обещаний", en: "A tip for the author, no promises")
+    static func tipsMeal(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsMeal", ru: "Обед автору", en: "Lunch for the author")
+    }
+    static func tipsFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsFuel",
+           ru: "Бак бензина автору", en: "A tank of fuel for the author")
+    }
+    static func tipsThanks(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsThanks", ru: "Спасибо!", en: "Thank you!")
+    }
+    /// И ещё раз то же обещание, уже после списания: приложение остаётся
+    /// бесплатным.
+    static func tipsThanksText(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsThanksText",
+           ru: "Это очень поддерживает. Приложение останется бесплатным.",
+           en: "That means a lot. The app stays free.")
     }
 
     // MARK: - Косметика «Плюса» (0.8.0)
@@ -8318,21 +8386,7 @@ enum AppStrings {
            en: "This trip has not ended yet. Move the start or shorten it")
     }
 
-    /// Запись не удалась. Причину назвать нечем — база отказала, — но молчать
-    /// нельзя: человек нажал кнопку и должен узнать, что ничего не вышло.
-    static func manualTripErrorNotSaved(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripErrorNotSaved",
-           ru: "Не удалось записать поездку", en: "Could not save the trip")
-    }
 
-    /// Подписка кончилась или была отозвана, пока лист стоял открытым. Гейт
-    /// спрашивается заново в момент записи — и это единственный способ узнать
-    /// об этом, поэтому у состояния есть своя фраза, а не общая «не удалось».
-    static func manualTripErrorNoAccess(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripErrorNoAccess",
-           ru: "Подписка недоступна — поездку задним числом сейчас не записать",
-           en: "The subscription is not available — a trip cannot be added right now")
-    }
 
     /// Пометка на карточке и на экране поездки. Короткая нарочно: она стоит в
     /// строке рядом с датой, а не отдельным блоком.

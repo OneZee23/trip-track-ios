@@ -19,6 +19,14 @@ import MapKit
 /// модалок в приложении нет вовсе (CLAUDE.md, «Dialogs»), а «нет дороги» —
 /// это состояние формы, а не вопрос к человеку.
 struct ManualTripSheet: View {
+    /// Покупка НЕ записывает поездку сама — «Записать» человек нажимает сам.
+    ///
+    /// Константой, потому что это решение, а не деталь: автозапись после
+    /// покупки означала бы, что человек, зашедший на пейвол из листа,
+    /// получает поездку одним нажатием, которого он не делал. Держит
+    /// `ManualTripPaywallReturnTests`.
+    static let recordsAutomaticallyAfterPurchase = false
+
     /// Кто пишет в базу. Приходит снаружи, а не берётся из синглтона: у
     /// `TripManager` его нет — экземпляр держит `MapViewModel`, и оба входа
     /// (лента и «Мои») до него дотягиваются.
@@ -37,6 +45,23 @@ struct ManualTripSheet: View {
     /// в активное поле (`ManualTripActiveField`), как и в поиске.
     @State private var mapTapArmed = false
     @State private var frequentPlaces: [Place] = []
+    /// Геометрия платной части — числом, а не измерением (правило проекта).
+    /// Карта-герой 40 % высоты экрана: прежние 260 pt были одинаковы у SE и
+    /// у Pro Max, то есть на первом занимали полэкрана, а на втором — треть.
+    private var layout: ProLayout {
+        let metrics = WindowLayoutMetrics.shared
+        return ProLayout(height: metrics.size?.height ?? 844,
+                         safeTop: metrics.safeAreaInsets?.top ?? 47,
+                         safeBottom: metrics.safeAreaInsets?.bottom ?? 34)
+    }
+
+    /// Пейвол открыт ПОВЕРХ этого листа (состояние 36б).
+    ///
+    /// Именно поверх, а не подменой содержимого хоста: `@StateObject model`
+    /// остаётся жив, и набранное — точки, остановки, время, машина —
+    /// сохраняется САМО, без отдельного кода восстановления. Подменить
+    /// содержимое значило бы уничтожить модель вместе с ним (§12.2 спеки).
+    @State private var paywallOverSheet = false
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -81,6 +106,15 @@ struct ManualTripSheet: View {
             frequentPlaces = ManualTripFrequentPlaces.top(
                 PlaceManager.shared.places, passCount: { PlaceManager.shared.passCount(for: $0) }
             )
+        }
+        // Второй лист ПОВЕРХ первого — законный случай: он не «вместо», а
+        // «над», и первый под ним не закрывается. Запрет на две презентации
+        // подряд (CLAUDE.md) про другое — про «закрыть одну и открыть другую
+        // в одном нажатии», чего здесь не происходит.
+        .sheet(isPresented: $paywallOverSheet) {
+            ProPaywallView(feature: .manualTrip,
+                           origin: .manualTrip,
+                           onClose: { paywallOverSheet = false })
         }
     }
 
@@ -130,7 +164,7 @@ struct ManualTripSheet: View {
                     onPick: quickPick,
                     onArmMapTap: { mapTapArmed = true }
                 )
-                mapCard(c, height: 260)
+                mapCard(c, height: layout.manualMap)
                 routeStatus(c)
                 ManualTripWhenVehicleCard(model: model, vehicles: settings.recordableVehicles)
                 titleCard(c)
@@ -453,28 +487,105 @@ struct ManualTripSheet: View {
     private func footer(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 10) {
             if let error = model.createError {
-                Text(createErrorText(error))
-                    .font(.inter(13, weight: .semibold))
-                    .foregroundStyle(AppTheme.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                refusalCard(error, c)
                     .padding(.horizontal, 16)
-                    .accessibilityIdentifier("manual_trip_create_error")
             }
             createButton(c)
+            Text(AppStrings.manualHonesty(lang.language))
+                .font(AppType.caption)
+                .foregroundStyle(c.textTertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20)
+                .accessibilityIdentifier("manual_trip_honesty")
         }
         .padding(.top, 10)
         .padding(.bottom, 14)
         .background(c.bg)
     }
 
-    /// Причина отказа записи. Два случая, и слова у них разные: общее «не
-    /// удалось» заставило бы человека с кончившейся подпиской жать кнопку,
-    /// пока не устанет.
-    private func createErrorText(_ error: ManualTripCreateError) -> String {
+    /// Карточка отказа записи — состояния 36а и 36в.
+    ///
+    /// Карточка, а не строка: у отказа есть ПРИЧИНА и есть ДЕЙСТВИЕ, и у двух
+    /// случаев они разные. Общее «не удалось» заставило бы человека с
+    /// кончившейся подпиской жать «Повторить», пока не устанет, а человека с
+    /// отказом базы — идти покупать то, что у него и так есть.
+    private func refusalCard(
+        _ error: ManualTripCreateError, _ c: AppTheme.Colors
+    ) -> some View {
+        let l = lang.language
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(refusalTitle(error, l))
+                .font(AppType.itemValue)
+                .foregroundStyle(c.text)
+            Text(refusalText(error, l))
+                .font(AppType.body)
+                .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Haptics.action()
+                switch error.action {
+                case .renew:
+                    // Пейвол — ВТОРОЙ лист ПОВЕРХ этого, а не подмена
+                    // содержимого хоста. Модель под ним остаётся жива, и
+                    // точки, остановки, время и машина сохраняются САМИ;
+                    // подмена уничтожила бы `@StateObject` вместе с
+                    // набранным (§12.2 спеки).
+                    model.clearCreateError()
+                    paywallOverSheet = true
+                case .retry:
+                    create()
+                }
+            } label: {
+                Text(refusalAction(error, l))
+                    .font(AppType.action)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(AppTheme.accent)
+                    )
+            }
+            .buttonStyle(PressableCardStyle())
+            .padding(.top, 8)
+            .accessibilityIdentifier("manual_trip_refusal_action")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(c.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(c.border, lineWidth: 1)
+        )
+        .accessibilityIdentifier("manual_trip_create_error")
+    }
+
+    private func refusalTitle(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
         switch error {
-        case .noAccess: AppStrings.manualTripErrorNoAccess(lang.language)
-        case .notSaved: AppStrings.manualTripErrorNotSaved(lang.language)
+        case .noAccess: return AppStrings.manualFailedProTitle(l)
+        case .notSaved: return AppStrings.manualFailedDbTitle(l)
+        }
+    }
+
+    private func refusalText(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
+        switch error {
+        case .noAccess: return AppStrings.manualFailedProText(l)
+        case .notSaved: return AppStrings.manualFailedDbText(l)
+        }
+    }
+
+    private func refusalAction(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
+        switch error.action {
+        case .renew: return AppStrings.proCtxRenew(l)
+        case .retry: return AppStrings.retry(l)
         }
     }
 

@@ -45,7 +45,11 @@ private struct ManualTripHost: ViewModifier {
             // («сначала замок, потом форма») UIKit не даёт, а держать здесь
             // два `.sheet` значило бы уметь показать оба сразу.
             if ManualTripEntry.isLocked {
-                PlusPaywallSheet()
+                // С замком — СРАЗУ на страницу вписанной поездки, а не в
+                // список из пяти функций: человек нажал именно её, и
+                // отвечать ему оглавлением значит заставить искать то, что он
+                // уже выбрал (спека, состояние 38).
+                PlusPaywallSheet(feature: .manualTrip)
                     .environmentObject(lang)
             } else {
                 ManualTripSheet(tripManager: tripManager, preset: preset, onCreated: onCreated)
