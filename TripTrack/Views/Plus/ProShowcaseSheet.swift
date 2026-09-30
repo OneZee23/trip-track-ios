@@ -58,6 +58,14 @@ struct ProShowcaseSheet: View {
                         group(AppStrings.showcasePro(l), kind.premiumCount,
                               ProShowcase.groups(for: kind).premium, shown, state, c)
                     }
+                    if let note = footnote(l) {
+                        Text(note)
+                            .font(AppType.caption)
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("pro_showcase_footnote")
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
@@ -199,6 +207,25 @@ struct ProShowcaseSheet: View {
         .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier("pro_tile_\(tile.id.isEmpty ? "none" : tile.id)")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    /// Сноска под сеткой — «кому это видно».
+    ///
+    /// Перенесена из домашних пикеров, которые витрина заменила: у цвета линии
+    /// и у фона карточки машины они БЫЛИ, и в них лежал ответ, которого больше
+    /// нигде нет («цвет виден только на ваших картах», «фон видно в гараже и в
+    /// публичном профиле»). Витрина макета сноски не рисует, но потерять этот
+    /// ответ значило бы оставить подписчика, который до страниц демонстрации
+    /// не доходит, без него вовсе: демонстрацию видит тот, кто ещё НЕ купил.
+    ///
+    /// У фона профиля и рамки аватара сноски нет: они видны в ленте и в
+    /// профиле, то есть там же, где сам человек, и объяснять это нечем.
+    private func footnote(_ l: LanguageManager.Language) -> String? {
+        switch kind {
+        case .routeLine:   return AppStrings.routeLinePickerFootnote(l)
+        case .vehicleCard: return AppStrings.vehicleCardStylePickerFootnote(l)
+        case .profileBackground, .avatarFrame: return nil
+        }
     }
 
     // MARK: - Карточка «PRO закончился»
