@@ -8238,6 +8238,17 @@ enum AppStrings {
 
     /// Вход внизу «Я». «Сказать спасибо», а не «Поддержать»: второе звучит
     /// как обязанность.
+    /// Одна строка на карточке итогов — там, где приложение только что
+    /// показало человеку его дорогу.
+    ///
+    /// Сначала дать, потом тихо спросить: поэтому фраза говорит про ЭТУ
+    /// дорогу, а не про приложение вообще, и не повторяет цифры, которые
+    /// стоят выше на том же экране.
+    static func tipMomentLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipMomentLine",
+           ru: "Если TripTrack пригодился в этой дороге — автору можно сказать спасибо",
+           en: "If TripTrack helped on this drive, you can say thanks to the author")
+    }
     static func tipsEntry(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tipsEntry",
            ru: "Сказать спасибо автору", en: "Say thanks to the author")

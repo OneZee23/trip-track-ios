@@ -1376,6 +1376,7 @@ extension Translations {
         "plusPrivacyLink": "Confidentialité",
         "plusPricesUnavailable": "Prix non chargés — vérifiez la connexion",
         "tipsThanks": "Merci !",
+        "tipMomentLine": "Si TripTrack vous a été utile sur ce trajet, vous pouvez remercier l’auteur",
         "tipsEntry": "Dire merci à l’auteur",
         "tipsTitle": "Merci à l’auteur",
         "tipsText": "C’est juste un merci. Rien ne se débloque et rien ne change : tout ce que vous utilisez est déjà gratuit.",

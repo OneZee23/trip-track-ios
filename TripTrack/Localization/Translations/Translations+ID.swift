@@ -1376,6 +1376,7 @@ extension Translations {
         "plusPrivacyLink": "Privasi",
         "plusPricesUnavailable": "Harga gagal dimuat — periksa koneksi",
         "tipsThanks": "Terima kasih!",
+        "tipMomentLine": "Kalau TripTrack membantu di perjalanan ini, kamu bisa berterima kasih ke pembuatnya",
         "tipsEntry": "Bilang terima kasih ke penulis",
         "tipsTitle": "Terima kasih ke penulis",
         "tipsText": "Ini cuma ucapan terima kasih. Tidak ada yang terbuka atau berubah: semua yang kamu pakai memang gratis.",

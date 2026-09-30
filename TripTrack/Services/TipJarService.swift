@@ -194,6 +194,11 @@ final class TipJarService: ObservableObject {
             report = Self.describe(transaction, verified: true)
             #endif
             phase = .succeeded
+            // Человек поблагодарил — год не спрашиваем (`TipMoment`). Отметка
+            // стоит ЗДЕСЬ, а не на экране: это единственное место, которое
+            // знает, что чаевые ПРОШЛИ, и оно одно на все входы — строку в
+            // подвале «Я» и карточку итогов поездки.
+            TipLedger().noteTipped()
             tipLog.notice("""
                 tx verified source=\(source, privacy: .public) \
                 id=\(Self.shortId(transaction.id), privacy: .public) \

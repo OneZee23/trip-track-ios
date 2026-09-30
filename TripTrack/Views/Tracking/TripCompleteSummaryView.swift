@@ -54,6 +54,14 @@ struct TripCompleteSummaryView: View {
     /// What the editor is typing into until it is saved. See the sheet below.
     @State private var notesDraft: String = ""
     @State private var showNotesEditor = false
+
+    // MARK: - «Сказать спасибо» (0.8.4)
+
+    /// Показывать ли карточку. Решает `TipMoment` ОДИН раз, на появлении
+    /// экрана: спрашивать календарь на каждой перерисовке незачем, а ответ за
+    /// время, пока человек смотрит на свой итог, не меняется.
+    @State private var showTipCard = false
+    @State private var showTipJar = false
     @State private var showDraftDiscard = false
     @State private var selectedBadge: Badge?
     /// Выгорание тумана на герое (0.7.0). Живёт у экрана, а не у блока
@@ -164,6 +172,25 @@ struct TripCompleteSummaryView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
             }
+
+            // Просьба сказать спасибо — ПОСЛЕДНЕЙ строкой и только иногда.
+            // Сначала человек увидел свою дорогу, километры, награды и то, что
+            // она открыла на карте; вопрос идёт после всего этого и ничего не
+            // перекрывает. Когда он вообще уместен — решает `TipMoment`.
+            if showTipCard {
+                TripSummaryTipCard(
+                    onTip: {
+                        showTipCard = false
+                        showTipJar = true
+                    },
+                    onDismiss: {
+                        TipLedger().noteDeclined()
+                        withAnimation(.easeOut(duration: 0.2)) { showTipCard = false }
+                    }
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+            }
         }
         }
         // Pinned, not scrolled: the actions belong to the sheet, not to the
@@ -214,6 +241,10 @@ struct TripCompleteSummaryView: View {
             }
         }
         .onAppear { tripNotes = trip.tripDescription ?? "" }
+        .sheet(isPresented: $showTipJar) {
+            TipJarSheet().environmentObject(lang)
+        }
+        .onAppear(perform: decideTipCard)
     }
 
     /// Фото + Готово, pinned to the bottom of the sheet.
@@ -504,6 +535,48 @@ struct TripCompleteSummaryView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal, 20)
         .padding(.top, 14)
+    }
+
+    /// Спросить ли на этой карточке «сказать спасибо».
+    ///
+    /// Решается ОДИН раз, на появлении экрана, и отдаётся чистой функции
+    /// `TipMoment`: «не чаще раза в полгода» и «два отказа — навсегда»
+    /// проверяются календарём, а не экраном, и тестом их можно задать только
+    /// так.
+    ///
+    /// Отметка «спрашивали» ставится В МОМЕНТ ПОКАЗА, а не нажатия: полгода
+    /// считаются от того, когда человека потревожили, а ответил он или просто
+    /// закрыл экран — уже не важно.
+    private func decideTipCard() {
+        guard !showTipCard else { return }
+        #if DEBUG
+        // Иначе карточку не увидеть вовсе: ей нужны двадцать поездок, месяц с
+        // приложением и дорога в сто километров разом. Флаг ЯВНЫЙ и
+        // детерминированный — принцип отладочных флагов 0.8.2; журнал он при
+        // этом НЕ трогает, чтобы прогон не съедал настоящий срок молчания.
+        if ProcessInfo.processInfo.arguments.contains("-debug-tip-moment") {
+            showTipCard = true
+            return
+        }
+        #endif
+        let ledger = TipLedger()
+        let ask = TipMoment.shouldAsk(.init(
+            now: Date(),
+            storefrontHidesPlus: PlusAccess.shared.storefrontHidesPlus,
+            tripDistanceMetres: trip.distance,
+            isDraft: trip.isDraft,
+            tripCount: mapVM.cachedTripCount,
+            // Тот же источник, что у предложения PRO: ответ на «когда человек
+            // поставил приложение» обязан быть один.
+            firstLaunchAt: ProOfferLedger().firstLaunchAt,
+            lastAskedAt: ledger.lastAskedAt,
+            declines: ledger.declines,
+            tippedAt: ledger.tippedAt,
+            afterFailure: !SyncQueue.shared.failed.isEmpty
+        ))
+        guard ask else { return }
+        ledger.noteAsked()
+        showTipCard = true
     }
 
     /// Поездка и правда что-то открыла. Тот же сигнал, что поднимает блок

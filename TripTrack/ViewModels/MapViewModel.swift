@@ -1275,6 +1275,28 @@ final class MapViewModel: ObservableObject {
         pendingCompletionData = nil
     }
 
+#if DEBUG
+    /// Открыть карточку итогов последней поездки — ТОЛЬКО по флагу запуска.
+    ///
+    /// Экран итогов иначе недостижим ничем, кроме настоящей поездки: он
+    /// показывается один раз на финише и закрывается навсегда. Значит его
+    /// нельзя ни снять кадром, ни проверить туром — а это один из главных
+    /// экранов приложения, и именно на нём с 0.8.4 живёт просьба сказать
+    /// спасибо.
+    ///
+    /// Флаг ЯВНЫЙ и детерминированный (принцип 0.8.2), компилируется только в
+    /// Debug и ничего не пишет: берёт самую свежую завершённую поездку и
+    /// показывает по ней тот же лист, что и финиш. Наград и находок в нём при
+    /// этом не будет — их считает финиш, а мы его не проводили; это видно
+    /// глазами и это честно.
+    func debugShowSummaryForLastTrip() {
+        guard ProcessInfo.processInfo.arguments.contains("-debug-trip-summary") else { return }
+        guard let trip = tripManager.fetchTrips(limit: 1, offset: 0).first else { return }
+        lastCompletionData = nil
+        lastCompletedTrip = trip
+    }
+#endif
+
     func refreshTripStats() {
         let stats = tripManager.fetchTripStats()
         cachedTotalKm = stats.totalDistance / 1000.0

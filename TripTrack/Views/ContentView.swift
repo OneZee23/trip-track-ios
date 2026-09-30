@@ -346,6 +346,9 @@ struct ContentView: View {
             // Configure auto-trip detection
             AutoTripService.shared.configure(mapViewModel: mapVM)
             AutoTripService.shared.startIfNeeded()
+            #if DEBUG
+            mapVM.debugShowSummaryForLastTrip()
+            #endif
         }
     }
 

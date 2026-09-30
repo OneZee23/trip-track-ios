@@ -1376,6 +1376,7 @@ extension Translations {
         "plusPrivacyLink": "Privacy",
         "plusPricesUnavailable": "Hindi na-load ang mga presyo — tingnan ang koneksyon",
         "tipsThanks": "Salamat!",
+        "tipMomentLine": "Kung nakatulong sa iyo ang TripTrack sa biyaheng ito, maaari kang magpasalamat sa may-akda",
         "tipsEntry": "Magpasalamat sa may-akda",
         "tipsTitle": "Salamat sa may-akda",
         "tipsText": "Pasasalamat lang ito. Walang mabubukas o magbabago: libre naman ang lahat ng ginagamit mo.",

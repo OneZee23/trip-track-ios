@@ -1376,6 +1376,7 @@ extension Translations {
         "plusPrivacyLink": "Datenschutz",
         "plusPricesUnavailable": "Preise nicht geladen — prüfe die Verbindung",
         "tipsThanks": "Danke!",
+        "tipMomentLine": "Wenn dir TripTrack auf dieser Fahrt geholfen hat, kannst du dem Autor danke sagen",
         "tipsEntry": "Dem Autor danke sagen",
         "tipsTitle": "Danke an den Autor",
         "tipsText": "Das ist einfach ein Danke. Es wird nichts freigeschaltet und nichts verändert: Alles, was du nutzt, ist ohnehin kostenlos.",
