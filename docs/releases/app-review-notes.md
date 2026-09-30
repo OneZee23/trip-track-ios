@@ -100,6 +100,24 @@ Three entry points, all of them behind PRO: the **+** in the header of
 calendar, and the second button on the first-trip welcome card. On the RUS
 storefront none of the three is shown at all.
 
+### Answering the 2.5.4 rejection of 0.8.2
+
+Version 0.8.2 (65) was rejected on 30 September 2026 under guideline 2.5.4:
+the app declared `bluetooth-central` in `UIBackgroundModes` while no Bluetooth
+Low Energy functionality could be found.
+
+**The finding was correct and the capability has been removed.** A car stereo
+is a classic-Bluetooth audio sink (A2DP/HFP); BLE scanning never sees one. The
+app detects the car through the audio route
+(`AVAudioSession.routeChangeNotification`), which needs no background mode.
+The only remaining background mode is `location`, which is the app's core
+function: a drive keeps recording while the phone is in a pocket and the app
+is in the background.
+
+Core Bluetooth is still used, but only in the foreground: the "choose your car
+stereo" sheet lists nearby BLE devices. The state-restoration identifier and
+the `willRestoreState` handler were removed along with the background mode.
+
 ### What is NOT in this build
 
 - **CarPlay.** The code for a car screen is present in the project, but the

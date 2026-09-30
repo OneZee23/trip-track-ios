@@ -79,10 +79,29 @@
 			</array>
 		</dict>
 	</dict>
+	<!--
+		ФОНОВЫЕ РЕЖИМЫ — ТОЛЬКО ТЕ, ЧТО ПРИЛОЖЕНИЕ ПРАВДА ИСПОЛЬЗУЕТ.
+		Каждый лишний — отказ ревью по 2.5.4, и такой отказ мы уже получили.
+
+		`location` — запись поездки продолжается, когда телефон в кармане; это
+		и есть смысл приложения.
+
+		`bluetooth-central` СНЯТ 30 сентября 2026 после отказа 2.5.4 по 0.8.2:
+		«we are unable to locate any Bluetooth Low Energy functionality».
+		Апелляции не требовалось — Apple права. Магнитола это классический
+		Bluetooth (A2DP/HFP), и BLE-сканирование её НЕ ВИДИТ НИКОГДА; так
+		написано и в самом коде (`AudioRouteDetector.currentBluetoothOutputName`).
+		Машину ловит аудио-маршрут, а не Core Bluetooth, и фон ему не нужен.
+		Сканирование BLE осталось и работает на переднем плане — для него
+		фоновый режим не требуется.
+
+		Добавляешь сюда режим — сначала убедись, что функция РАБОТАЕТ и её
+		видно человеку; ревьюер будет искать её руками. Держит
+		`BackgroundModesTests`.
+	-->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
-		<string>bluetooth-central</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
