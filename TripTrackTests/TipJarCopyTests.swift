@@ -66,22 +66,22 @@ final class TipJarCopyTests: XCTestCase {
     /// (спека §11 — «видны всем с витриной, и с PRO, и без»). Прячет их только
     /// витрина, которая платного не продаёт.
     func testTipsAreShownToSubscribersToo() {
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .active(until: Date())))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .trial(until: Date())))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .none))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .expired(on: Date())))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .grace))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .pending))
-        XCTAssertTrue(ProfileSupportRow.isVisible(status: .proWithoutStore(until: nil)),
+        XCTAssertTrue(TipEntry.isVisible(status: .active(until: Date())))
+        XCTAssertTrue(TipEntry.isVisible(status: .trial(until: Date())))
+        XCTAssertTrue(TipEntry.isVisible(status: .none))
+        XCTAssertTrue(TipEntry.isVisible(status: .expired(on: Date())))
+        XCTAssertTrue(TipEntry.isVisible(status: .grace))
+        XCTAssertTrue(TipEntry.isVisible(status: .pending))
+        XCTAssertTrue(TipEntry.isVisible(status: .proWithoutStore(until: nil)),
                       "купил на другой витрине — сказать спасибо всё равно можно")
-        XCTAssertFalse(ProfileSupportRow.isVisible(status: .hiddenStorefront),
+        XCTAssertFalse(TipEntry.isVisible(status: .hiddenStorefront),
                        "витрина не продаёт — ни подписки, ни чаевых")
     }
 
     /// Ровно ОДИН статус прячет строку. Без этой половины проверка проходила
     /// бы и на `isVisible`, прибитом к `true`.
     func testExactlyOneStatusHidesTheTips() {
-        let hidden = Self.everyStatus.filter { !ProfileSupportRow.isVisible(status: $0) }
+        let hidden = Self.everyStatus.filter { !TipEntry.isVisible(status: $0) }
         XCTAssertEqual(hidden, [.hiddenStorefront])
     }
 
@@ -128,45 +128,40 @@ final class TipJarCopyTests: XCTestCase {
         .grace, .pending, .hiddenStorefront, .proWithoutStore(until: nil)
     ]
 
-    // MARK: - Где строка стоит
+    // MARK: - Где стоит вход
 
-    /// Строка «Поддержать» есть в КАЖДОЙ раскладке профиля.
+    /// Вход в чаевые — РОВНО ОДИН, и он в листе настроек, рядом с автором.
     ///
-    /// У «Я» два хвоста: своя разметка у «поездок ещё нет» и своя у обычного
-    /// профиля. Первая редакция 0.8.4 добавила строку только во вторую, и
-    /// человек без единой поездки видел раздел «Подписка», но не видел
-    /// «Поддержать» — при том что он-то и есть адресат: поддержать работу
-    /// хочется раньше, чем накопится история.
+    /// До 0.8.4 строка жила в подвале «Я», и первая редакция 0.8.4 забыла её в
+    /// одной из ДВУХ раскладок профиля: человек без единой поездки видел
+    /// раздел «Подписка», но не видел «Поддержать». Переезд в карточку автора
+    /// (решение владельца 30 сен 2026) убрал саму возможность такой ошибки —
+    /// лист настроек один. Сторож держит это буквально: появится второй вход,
+    /// и тест скажет, где именно.
     ///
-    /// Инвариант выражен через КЛУБЫ, а не числом: раздел клубов рисуется в
-    /// обеих ветках и никуда не денется, поэтому «строка поддержки стоит
-    /// столько же раз, сколько клубы» и значит «во всех раскладках». Числом
-    /// было бы хрупко — ветки профиля ещё будут добавляться.
-    ///
-    /// Поведением это не задать: обе ветки — разметка одного экрана, и
-    /// различает их состояние библиотеки. Поймал это снимочный тур
-    /// `PlusShotTests` (он идёт по чистой установке), но он не входит в
-    /// обычный прогон — отсюда сторож здесь.
-    func testSupportRowAppearsInEveryProfileLayout() throws {
-        let url = UnitGuard.repoRoot()
-            .appendingPathComponent("TripTrack/Views/Profile/ProfileView.swift")
-        let source = try String(contentsOf: url, encoding: .utf8)
+    /// Поведением не задать: обе прежние ветки были разметкой одного экрана, и
+    /// различало их состояние библиотеки.
+    func testTipEntryLivesOnlyInSettingsAndIsGated() throws {
+        let root = UnitGuard.repoRoot()
 
-        func callSites(_ name: String) -> Int {
-            source.components(separatedBy: "\n")
-                .filter { line in
-                    let t = line.trimmingCharacters(in: .whitespaces)
-                    return t == "\(name)()" || t.hasPrefix("\(name)(c)")
-                }
-                .count
-        }
+        let settings = try String(
+            contentsOf: root.appendingPathComponent(
+                "TripTrack/Views/Profile/ProfileSettingsSheet.swift"),
+            encoding: .utf8)
+        XCTAssertTrue(settings.contains("settings_support"),
+                      "вход в чаевые пропал из листа настроек")
+        XCTAssertTrue(settings.contains("TipEntry.isVisible(status:"),
+                      "вход в чаевые не закрыт правилом `TipEntry.isVisible` — "
+                      + "на витрине, которая платного не продаёт, он покажет "
+                      + "кнопку, которая не может сработать")
 
-        let clubs = callSites("clubsSection")
-        let support = callSites("supportRow")
-        XCTAssertGreaterThan(clubs, 0, "не нашёл вызовов clubsSection — тест смотрит не туда")
-        XCTAssertEqual(support, clubs,
-                       "раскладок профиля \(clubs), а строка «Поддержать» стоит в \(support): "
-                       + "в какой-то ветке её забыли")
+        let profile = try String(
+            contentsOf: root.appendingPathComponent(
+                "TripTrack/Views/Profile/ProfileView.swift"),
+            encoding: .utf8)
+        XCTAssertFalse(profile.contains("TipJarSheet"),
+                       "чаевые вернулись в «Я» вторым входом — их место в листе "
+                       + "настроек, рядом с автором")
     }
 
 }

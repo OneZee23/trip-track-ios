@@ -56,6 +56,10 @@ struct ProfileSettingsSheet: View {
     /// единицу, а лист поверх листа своего окружения не наследует — строка
     /// показала бы прежнюю единицу до закрытия экрана.
     @ObservedObject private var units = UnitsManager.shared
+    /// Ради одной строки — «Сказать спасибо»: её видно везде, кроме витрины,
+    /// которая платного не продаёт.
+    @ObservedObject private var plusStore = PlusStore.shared
+    @ObservedObject private var plusAccess = PlusAccess.shared
 
     /// The «Уведомления» master over the server's notification prefs. Created
     /// here and owned here — nothing outside this sheet reads it.
@@ -65,6 +69,9 @@ struct ProfileSettingsSheet: View {
     @State private var showThemePicker = false
     /// «Единицы и формат» — the once-per-install rows, one level down.
     @State private var showAppPrefs = false
+    /// Настоящий лист чаевых. Имя своё, потому что `showTipJar` рядом — это
+    /// DEBUG-проба StoreKit (`TipJarDebugView`), совсем другой экран.
+    @State private var showTips = false
     @State private var showCloudSync = false
     @State private var showDebugLogs = false
     /// «Приватность» — the three visibility switches, one level down.
@@ -164,6 +171,9 @@ struct ProfileSettingsSheet: View {
             DebugLogsView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $showTips) {
+            TipJarSheet().environmentObject(lang)
         }
         #if DEBUG
         .sheet(isPresented: $showTipJar) {
@@ -464,8 +474,38 @@ struct ProfileSettingsSheet: View {
                 action: { showDebugLogs = true }
             )
             .accessibilityIdentifier("settings_send_logs")
+
+            // «Сказать спасибо» — ЗДЕСЬ, а не в подвале «Я» (решение владельца
+            // 30 сен 2026). Карточка отвечает на «кто это сделал и как с ним
+            // связаться», и благодарность — часть того же разговора; внизу
+            // ленты профиля она стояла ни с чем не рядом.
+            //
+            // Прячет её только витрина, которая платного не продаёт: там
+            // платёж физически не пройдёт. Подписчику видна — чаевые и
+            // подписка разные сделки (решение владельца, спека §11).
+            if TipEntry.isVisible(status: proStatus) {
+                rowDivider(c)
+
+                SettingsLinkRow(
+                    icon: "heart.fill",
+                    title: AppStrings.tipsEntry(l),
+                    subtitle: AppStrings.settingsTipsSub(l),
+                    action: { showTips = true }
+                )
+                .accessibilityIdentifier("settings_support")
+            }
         }
         .surfaceCard(cornerRadius: 16)
+    }
+
+    /// Статус подписки — ОДИН ответ на «видно ли платное», тот же, что у «Я».
+    private var proStatus: ProStatus {
+        ProStatus.resolve(
+            state: plusStore.state,
+            expires: plusStore.displayExpiry,
+            isPending: plusStore.awaitingApproval,
+            storefrontHidesPlus: plusAccess.storefrontHidesPlus
+        )
     }
 
     /// The one address the app publishes (privacy policy + terms). Swap it the

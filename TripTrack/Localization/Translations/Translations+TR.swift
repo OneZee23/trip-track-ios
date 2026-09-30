@@ -1377,6 +1377,7 @@ extension Translations {
         "plusPricesUnavailable": "Fiyatlar yüklenmedi — bağlantıyı kontrol edin",
         "tipsThanks": "Teşekkürler!",
         "tipMomentLine": "TripTrack bu yolda işine yaradıysa, yazarına teşekkür edebilirsin",
+        "settingsTipsSub": "Sadece bir teşekkür — hiçbir şey açılmaz",
         "tipsEntry": "Yazara teşekkür et",
         "tipsTitle": "Yazara teşekkürler",
         "tipsText": "Bu sadece bir teşekkür. Hiçbir şey açılmaz ve değişmez: kullandığın her şey zaten ücretsiz.",

@@ -201,4 +201,43 @@ final class PlusShotTests: XCTestCase {
             snap("w084_showcase_tryon")
         }
     }
+
+    /// Вход в чаевые переехал в лист настроек, в карточку автора (решение
+    /// владельца 30 сен 2026). Кадром, потому что исходник может содержать
+    /// строку и при этом не рисовать её: гейт `TipEntry.isVisible` стоит
+    /// РЯДОМ, и ошибка в нём выглядит как пустое место, а не как сбой.
+    func test_support_row_sits_with_the_author() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-debug-pro-store"]
+        app.launch()
+
+        let recovery = app.buttons.matching(identifier: "recovery_continue").firstMatch
+        if recovery.waitForExistence(timeout: 3), recovery.isHittable {
+            recovery.tap(); sleep(2)
+        }
+
+        app.buttons.matching(identifier: "tab_profile").firstMatch.tap()
+        usleep(1_500_000)
+
+        let gear = app.buttons.matching(identifier: "profile_gear").firstMatch
+        XCTAssertTrue(gear.waitForExistence(timeout: 6), "шестерёнки нет")
+        gear.tap()
+        usleep(1_500_000)
+
+        let support = app.descendants(matching: .any)
+            .matching(identifier: "settings_support").firstMatch
+        // Карточка автора — в самом низу листа, поэтому крутим до неё.
+        for _ in 0..<12 where !support.isHittable {
+            app.swipeUp()
+            usleep(300_000)
+        }
+        XCTAssertTrue(support.waitForExistence(timeout: 4),
+                      "строки «Сказать спасибо» нет в карточке автора")
+        XCTAssertTrue(
+            app.descendants(matching: .any)
+                .matching(identifier: "settings_write_author").firstMatch.exists,
+            "она обязана стоять РЯДОМ с автором — соседа не видно")
+        snap("w084_support_in_settings")
+    }
+
 }

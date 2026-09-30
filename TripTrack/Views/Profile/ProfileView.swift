@@ -215,9 +215,8 @@ struct ProfileView: View {
     @State private var toastItem: ToastItem?
 
     /// Витрина «Плюса» и лист чаевых. Два листа, а не один с сегментом:
-    /// подписка и чаевые — разные сделки (см. `ProfileSupportRow`).
+    /// подписка и чаевые — разные сделки (см. `TipEntry`).
     @State private var showPaywall = false
-    @State private var showTipJar = false
 
     // MARK: - Подсказка путешествия (0.6.6) — состояние
 
@@ -353,8 +352,6 @@ struct ProfileView: View {
                         plusSection()
 
                         clubsSection()
-
-                        supportRow()
                     } else {
                         if !auth.isSignedIn {
                             guestSignInCard(c)
@@ -461,7 +458,6 @@ struct ProfileView: View {
                             WithMeSection(onTapTrip: { push(.companionTrip($0)) })
                         }
 
-                        supportRow()
                     }
                 }
                 // As a tab (0.6.0), leave room for the floating tab bar so the
@@ -1069,29 +1065,6 @@ struct ProfileView: View {
     /// в самом низу «Я». Соседство с тарифом намекало, что за них что-то
     /// открывается, — а за ними не открывается ничего, и это единственное,
     /// что они обещают.
-    /// Чаевые — В САМОМ НИЗУ и одной приглушённой строкой.
-    ///
-    /// Не в разделе «Подписка», где они стояли до 0.8.4: соседство с тарифом
-    /// намекало, что за них что-то открывается. Видны и подписчику — решение
-    /// владельца (спека §11), прячет их только витрина, которая платного не
-    /// продаёт.
-    ///
-    /// ОТДЕЛЬНОЙ ФУНКЦИЕЙ, потому что хвостов у профиля ДВА: своя разметка у
-    /// «поездок ещё нет» и своя у обычного профиля. Первая редакция 0.8.4
-    /// добавила строку только во вторую — и человек без единой поездки видел
-    /// раздел «Подписка», но не видел «Поддержать». Это тот самый адресат:
-    /// поддержать работу хочется раньше, чем накопится история. Поймано
-    /// снимочным туром `PlusShotTests` (он идёт по чистой установке, то есть
-    /// ровно по пустой ветке), а не сборкой и не глазами.
-    ///
-    /// Заводишь новую строку в подвале «Я» — веди её сюда, а не в одну из
-    /// двух веток.
-    @ViewBuilder
-    private func supportRow() -> some View {
-        if ProfileSupportRow.isVisible(status: proStatus) {
-            ProfileSupportRow { showTipJar = true }
-        }
-    }
 
     @ViewBuilder
     private func plusSection() -> some View {
@@ -1117,9 +1090,6 @@ struct ProfileView: View {
         // правило «диалог вешать в корне экрана» их не касается.
         .sheet(isPresented: $showPaywall) {
             PlusPaywallSheet().environmentObject(lang)
-        }
-        .sheet(isPresented: $showTipJar) {
-            TipJarSheet().environmentObject(lang)
         }
     }
 

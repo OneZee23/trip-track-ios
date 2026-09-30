@@ -1377,6 +1377,7 @@ extension Translations {
         "plusPricesUnavailable": "No se cargaron los precios: revisa la conexión",
         "tipsThanks": "¡Gracias!",
         "tipMomentLine": "Si TripTrack te ha servido en este trayecto, puedes darle las gracias al autor",
+        "settingsTipsSub": "Solo un gracias: no se desbloquea nada",
         "tipsEntry": "Dar las gracias al autor",
         "tipsTitle": "Gracias al autor",
         "tipsText": "Es solo un gracias. No se desbloquea ni cambia nada: todo lo que usas ya es gratis.",
