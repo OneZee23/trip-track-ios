@@ -112,6 +112,9 @@ final class PlusShotTests: XCTestCase {
             app.swipeUp()
             usleep(300_000)
         }
+        // Подвал «Я» со строкой поддержки: её отсутствие в пустой ветке
+        // профиля этот кадр и поймал.
+        snap("w084_support_row")
         XCTAssertTrue(support.waitForExistence(timeout: 4), "строки «Поддержать» нет")
         support.tap()
         let jar = app.descendants(matching: .any).matching(identifier: "tip_jar").firstMatch

@@ -127,4 +127,46 @@ final class TipJarCopyTests: XCTestCase {
         .none, .trial(until: nil), .active(until: nil), .expired(on: nil),
         .grace, .pending, .hiddenStorefront, .proWithoutStore(until: nil)
     ]
+
+    // MARK: - Где строка стоит
+
+    /// Строка «Поддержать» есть в КАЖДОЙ раскладке профиля.
+    ///
+    /// У «Я» два хвоста: своя разметка у «поездок ещё нет» и своя у обычного
+    /// профиля. Первая редакция 0.8.4 добавила строку только во вторую, и
+    /// человек без единой поездки видел раздел «Подписка», но не видел
+    /// «Поддержать» — при том что он-то и есть адресат: поддержать работу
+    /// хочется раньше, чем накопится история.
+    ///
+    /// Инвариант выражен через КЛУБЫ, а не числом: раздел клубов рисуется в
+    /// обеих ветках и никуда не денется, поэтому «строка поддержки стоит
+    /// столько же раз, сколько клубы» и значит «во всех раскладках». Числом
+    /// было бы хрупко — ветки профиля ещё будут добавляться.
+    ///
+    /// Поведением это не задать: обе ветки — разметка одного экрана, и
+    /// различает их состояние библиотеки. Поймал это снимочный тур
+    /// `PlusShotTests` (он идёт по чистой установке), но он не входит в
+    /// обычный прогон — отсюда сторож здесь.
+    func testSupportRowAppearsInEveryProfileLayout() throws {
+        let url = UnitGuard.repoRoot()
+            .appendingPathComponent("TripTrack/Views/Profile/ProfileView.swift")
+        let source = try String(contentsOf: url, encoding: .utf8)
+
+        func callSites(_ name: String) -> Int {
+            source.components(separatedBy: "\n")
+                .filter { line in
+                    let t = line.trimmingCharacters(in: .whitespaces)
+                    return t == "\(name)()" || t.hasPrefix("\(name)(c)")
+                }
+                .count
+        }
+
+        let clubs = callSites("clubsSection")
+        let support = callSites("supportRow")
+        XCTAssertGreaterThan(clubs, 0, "не нашёл вызовов clubsSection — тест смотрит не туда")
+        XCTAssertEqual(support, clubs,
+                       "раскладок профиля \(clubs), а строка «Поддержать» стоит в \(support): "
+                       + "в какой-то ветке её забыли")
+    }
+
 }
