@@ -92,10 +92,10 @@ Testing врёт в двух местах (см. доккомментарии т
 ## CarPlay — в этом сабмите НЕ участвует
 
 - [ ] В «What's New» и в заметках ревьюеру про CarPlay НЕ СКАЗАНО ничего.
-- [ ] `TripTrack/TripTrack.entitlements` (Release) без
-      `com.apple.developer.carplay-driving-task` — держит
-      `EntitlementsWiringTests`, но проверить и глазами: невыданный
-      entitlement не «падает потом», а не даёт подписать сборку.
+- [ ] Права `com.apple.developer.carplay-driving-task` нет НИ В ОДНОМ файле
+      (`TripTrack.entitlements`, `TripTrackDebug.entitlements`) — держит
+      `EntitlementsWiringTests`. Невыданное право не «падает потом», а не даёт
+      подписать сборку — и не только релизную: Debug на устройство тоже.
 - [ ] Заявка на entitlement отправлена Apple (действие владельца, к
       следующей версии).
 

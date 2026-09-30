@@ -104,7 +104,7 @@ storefront none of the three is shown at all.
 
 - **CarPlay.** The code for a car screen is present in the project, but the
   `com.apple.developer.carplay-driving-task` entitlement has not been granted
-  yet and is **not** in the Release build. There is no CarPlay behaviour to
+  yet and is **not** in this build at all. There is no CarPlay behaviour to
   review in this binary.
 - **No new permissions, no new privacy-manifest entries, no server
   migrations.** The subscription collects nothing new; the purchase receipt

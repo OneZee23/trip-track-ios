@@ -55,7 +55,7 @@ submission». Товары и цены — в
 
 **CARPLAY НЕ УПОМИНАЕТСЯ НИГДЕ.** Экран автомобиля в этой сборке есть в коде,
 но entitlement `com.apple.developer.carplay-driving-task` Apple ещё не
-выдавала, и в Release-сборке его нет (см. `EntitlementsWiringTests`). То есть
+выдавала, и его нет ни в одном файле прав (см. `EntitlementsWiringTests`). То есть
 у человека из App Store CarPlay не заработает. Анонсировать его — обещать
 неработающее; он уезжает в ту версию, которая выйдет после ответа Apple.
 

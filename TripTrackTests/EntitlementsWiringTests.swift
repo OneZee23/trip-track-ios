@@ -5,15 +5,26 @@ import XCTest
 ///
 /// До 0.8.4 файл был один и его ПЕРЕЗАПИСЫВАЛ xcodegen из `project.yml`: это
 /// защищало от «выключил capability в Xcode — файл стал пустым `<dict/>`, а
-/// следующий generate это закрепил». CarPlay разделил файлы (entitlement
-/// `com.apple.developer.carplay-driving-task` выдаёт Apple по заявке, и до
-/// выдачи Release-сборка с ним НЕ ПОДПИШЕТСЯ), и `properties` у xcodegen одни
-/// на все конфигурации — значит защиту пришлось забрать у него.
+/// следующий generate это закрепил». Ради CarPlay файлы разделили, а
+/// `properties` у xcodegen одни на все конфигурации — значит защиту пришлось
+/// забрать у него.
 ///
-/// Здесь она СТРОГО БОЛЬШЕ: xcodegen следил за одним файлом и ничего не знал
-/// про то, чего в нём быть НЕ должно. Читаются сами файлы с диска — тот же
-/// приём, что у `SentryDSNWiringTests`, и по той же причине: вопрос ровно
-/// один — доехало ли значение до артефакта.
+/// **CarPlay при этом НЕ ЛЕЖИТ НИ В ОДНОМ ИЗ НИХ, и это проверено опытом, а
+/// не предположением.** Право `com.apple.developer.carplay-driving-task`
+/// выдаёт Apple по заявке. Пока не выдано, сборка С НИМ не подписывается ни
+/// для App Store, ни НА УСТРОЙСТВО — даже Debug: «Provisioning profile … doesn't
+/// include the CarPlay Driving Task App capability». Apple сама пишет: «To
+/// continue building for device during request processing, remove entitlement
+/// and add upon approval». Владелец ставит сборку на телефон каждый день, так
+/// что цена ошибки здесь — сломанная ежедневная работа.
+///
+/// Симулятор, вопреки ожиданию, право ТОЖЕ проверяет: без него приложение
+/// исчезает с домашнего экрана CarPlay (проверено снятием кадра до и после).
+/// То есть посмотреть экран машины можно только временно вписав ключ руками —
+/// см. CLAUDE.md, раздел «Экран автомобиля».
+///
+/// Поэтому сегодня файлы ОДИНАКОВЫ, и сторож держит именно это: разъехаться
+/// они имеют право ровно в тот день, когда Apple ответит.
 final class EntitlementsWiringTests: XCTestCase {
 
     private static let carPlay = "com.apple.developer.carplay-driving-task"
@@ -22,14 +33,17 @@ final class EntitlementsWiringTests: XCTestCase {
 
     // MARK: - Release
 
-    /// **CarPlay в Release НЕ ДОЛЖЕН ПОПАСТЬ НИКОГДА, пока Apple его не
-    /// выдала.** Отправка в App Store с невыданным entitlement не «падает
-    /// потом» — она не подписывается вовсе, и владелец узнаёт об этом в
-    /// момент, когда собирался выкладывать.
-    func testReleaseCarriesNoCarPlayUntilAppleGrantsIt() throws {
-        let release = try Self.plist("TripTrack/TripTrack.entitlements")
-        XCTAssertNil(release[Self.carPlay],
-                     "CarPlay просочился в Release — эта сборка не подпишется")
+    /// **CarPlay не лежит НИ В ОДНОМ файле, пока Apple его не выдала.**
+    /// Сборка с невыданным правом не «падает потом» — она не подписывается
+    /// вовсе: в Release это сорванная отправка в App Store, в Debug —
+    /// сломанная установка на телефон, то есть ежедневная работа владельца.
+    func testNeitherFileCarriesCarPlayUntilAppleGrantsIt() throws {
+        for path in ["TripTrack/TripTrack.entitlements",
+                     "TripTrack/TripTrackDebug.entitlements"] {
+            let plist = try Self.plist(path)
+            XCTAssertNil(plist[Self.carPlay],
+                         "CarPlay просочился в \(path) — эта сборка не подпишется")
+        }
     }
 
     /// Прежняя защита xcodegen: файл не имеет права опустеть. Выключенная в
@@ -45,13 +59,6 @@ final class EntitlementsWiringTests: XCTestCase {
 
     // MARK: - Debug
 
-    /// В Debug CarPlay есть — иначе сцену не посмотреть ни в симуляторе, ни
-    /// на устройстве после выдачи.
-    func testDebugCarriesCarPlay() throws {
-        let debug = try Self.plist("TripTrack/TripTrackDebug.entitlements")
-        XCTAssertEqual(debug[Self.carPlay] as? Bool, true)
-    }
-
     /// И не потерял того, что было у него до CarPlay: Debug-сборкой владелец
     /// пользуется каждый день, и вход с пушами ему нужны там не меньше.
     func testDebugKeepsSignInAndPush() throws {
@@ -62,18 +69,21 @@ final class EntitlementsWiringTests: XCTestCase {
 
     // MARK: - Разница между файлами названа
 
-    /// Единственное, чем файлы отличаются, — CarPlay. Любое второе расхождение
-    /// означает, что Debug и Release разъехались по возможностям, и человек
-    /// проверяет одно, а выкладывает другое.
-    func testTheOnlyDifferenceIsCarPlay() throws {
+    /// Сегодня состав у файлов ОДИНАКОВЫЙ. Расхождение означает, что Debug и
+    /// Release разъехались по возможностям, и человек проверяет одно, а
+    /// выкладывает другое.
+    ///
+    /// Законно разъехаться им предстоит ровно один раз — когда Apple выдаст
+    /// CarPlay и он появится сначала в Debug. Тогда этот тест правят ВМЕСТЕ с
+    /// решением, а не молча: ожидаемая разница вписывается сюда списком.
+    func testBothFilesCarryTheSameKeys() throws {
         let release = try Self.plist("TripTrack/TripTrack.entitlements")
         let debug = try Self.plist("TripTrack/TripTrackDebug.entitlements")
-        let extra = Set(debug.keys).subtracting(release.keys)
-        let missing = Set(release.keys).subtracting(debug.keys)
-        XCTAssertEqual(extra, [Self.carPlay],
-                       "в Debug появилось что-то ещё: \(extra.sorted())")
-        XCTAssertTrue(missing.isEmpty,
-                      "Debug потерял ключи Release: \(missing.sorted())")
+        XCTAssertEqual(Set(debug.keys), Set(release.keys),
+                       "состав прав разъехался: только в Debug "
+                       + "\(Set(debug.keys).subtracting(release.keys).sorted()), "
+                       + "только в Release "
+                       + "\(Set(release.keys).subtracting(debug.keys).sorted())")
     }
 
     // MARK: -

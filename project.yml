@@ -92,12 +92,12 @@ targets:
         CURRENT_PROJECT_VERSION: "67"
       configs:
         Debug:
-          # CarPlay ТОЛЬКО здесь, и это не осторожность. Entitlement
+          # Файлы прав разведены по конфигурациям ради CarPlay, но самого
+          # CarPlay сейчас нет НИ В ОДНОМ из них: право
           # `com.apple.developer.carplay-driving-task` выдаёт Apple по заявке,
-          # и до выдачи RELEASE-сборка с ним НЕ ПОДПИШЕТСЯ — то есть общий
-          # файл сломал бы следующую отправку в App Store. Симулятор CarPlay
-          # entitlements строго не проверяет, поэтому смотреть и снимать кадры
-          # можно уже сейчас, а на устройстве — после ответа Apple.
+          # и до выдачи сборка с ним не подписывается НИ для App Store, НИ на
+          # устройство — даже Debug. Подробности и как посмотреть экран машины
+          # в симуляторе — в CLAUDE.md, раздел «Экран автомобиля».
           CODE_SIGN_ENTITLEMENTS: TripTrack/TripTrackDebug.entitlements
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Dev"
@@ -109,7 +109,6 @@ targets:
           # internet and never touches the local network.
           INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Connects to your local TripTrack development server."
         Release:
-          # Без CarPlay — см. длинную причину под блоком настроек.
           CODE_SIGN_ENTITLEMENTS: TripTrack/TripTrack.entitlements
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
@@ -121,17 +120,15 @@ targets:
     # перезаписывал его из `properties` на каждом генерировании, и это
     # защищало от «выключил capability в Xcode — файл стал пустым <dict/>, а
     # следующий generate это закрепил». Но `properties` у него ОДНИ на все
-    # конфигурации, а CarPlay нужен РОВНО в Debug: entitlement
-    # `com.apple.developer.carplay-driving-task` выдаёт Apple по заявке, и до
-    # выдачи Release-сборка с ним НЕ ПОДПИШЕТСЯ — то есть общий файл сломал бы
-    # следующую отправку в App Store.
+    # конфигурации, а CarPlay однажды понадобится РОВНО в Debug — и разделить
+    # файлы под это можно было только сняв блок.
     #
     # Поэтому пути ставятся руками ниже, а защиту, которую давал блок, теперь
-    # даёт `EntitlementsWiringTests`: он читает ОБА файла и падает, если у
-    # Release пропал push или Sign in with Apple, если он опустел, или если в
-    # него просочился CarPlay. Это строго больше того, что проверял xcodegen:
-    # тот следил за одним файлом и ничего не знал про то, что в нём НЕ должно
-    # лежать.
+    # даёт `EntitlementsWiringTests`: он читает ОБА файла и падает, если
+    # пропал push или Sign in with Apple, если файл опустел, если состав прав
+    # у двух файлов разъехался, или если в любой из них просочился CarPlay.
+    # Это строго больше того, что проверял xcodegen: тот следил за одним
+    # файлом и ничего не знал про то, что в нём НЕ должно лежать.
     #
     # `aps-environment: development` в обоих файлах — ВЕРНО: архив для App
     # Store переписывает его на `production` сам, подписываясь продовым
