@@ -33,7 +33,7 @@ a real road the person drove — but it earns no experience, no levels, no badge
 and no finds, and its card is labelled "Added by hand" in the feed, in the
 profile and on the trip screen itself.
 
-PRICING AND DISCLOSURE. Yearly at EUR 19.99, or monthly at EUR 2.99. The
+PRICING AND DISCLOSURE. Yearly at EUR 24.99, or monthly at EUR 5.99. The
 7-day free trial is offered on the yearly plan and ONLY to accounts Apple
 reports as eligible (StoreKit's isEligibleForIntroOffer): a returning
 subscriber is never promised a free week they would not get. Before any
@@ -77,7 +77,7 @@ owned keeps working regardless of storefront.
    (profile appearance, a vehicle's card background, the route-line style) —
    all of them open the same paywall.
 3. The yearly plan is selected by default. If the sandbox account is eligible
-   it reads "7 days free, then EUR 19.99/year"; if it is not, the trial line
+   it reads "7 days free, then EUR 24.99/year"; if it is not, the trial line
    is absent — that is deliberate, not a missing string.
 4. Tap the purchase button and confirm in the system sheet. Sandbox
    subscriptions renew every few minutes instead of every year or month —
@@ -339,7 +339,7 @@ with this build.
 
 **Этот блок УСТАРЕЛ и вставлять его нельзя.** Он писался, когда монетизацию
 отложили, и врёт в трёх местах: подписка называется PRO, а не «Плюс»; цены
-стали 19,99 € в год и 2,99 € в месяц (здесь стоят прежние 29,99 и 6,99);
+стали 24,99 € в год и 5,99 € в месяц (здесь стоят прежние 29,99 и 6,99);
 чаевые заведены как Consumable. Актуальный текст — секция v0.8.4 выше.
 Оставлен как запись того, что предполагалось сказать.
 

@@ -3,7 +3,7 @@ import XCTest
 
 /// Подписи выгоды считаются из `Decimal` цен витрины, а не берутся из макета.
 ///
-/// «−44 %» верно ровно для пары 19,99 / 2,99. В иене, форинте и рупии Apple
+/// «−65 %» верно ровно для пары 24,99 / 5,99. В иене, форинте и рупии Apple
 /// округляет иначе, и захардкоженный чип соврал бы; посчитать нечем — подписи
 /// нет вовсе. Это единственное место, где мы считаем деньги сами, и цена
 /// ошибки здесь — отказ ревью 3.1.2 или неверное обещание человеку.
@@ -16,8 +16,8 @@ final class ProPriceMathTests: XCTestCase {
     }
 
     func testDesignPairGivesTheDesignNumbers() {
-        XCTAssertEqual(ProPriceMath.savingPercent(yearly: 19.99, monthly: 2.99), 44)
-        XCTAssertEqual(ProPriceMath.perMonth(yearly: 19.99, format: euro), "1.67 €")
+        XCTAssertEqual(ProPriceMath.savingPercent(yearly: 24.99, monthly: 5.99), 65)
+        XCTAssertEqual(ProPriceMath.perMonth(yearly: 24.99, format: euro), "2.08 €")
     }
 
     /// Валюта без дробной части и с другим отношением цен: число ДРУГОЕ, и оно
@@ -38,26 +38,26 @@ final class ProPriceMathTests: XCTestCase {
     /// Год дороже двенадцати месяцев или ровно равен им — выгоды нет, и чипа
     /// тоже. Ноль процентов на витрине читался бы как сбой, а не как «нет».
     func testNoChipWhenThereIsNoSaving() {
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: 40, monthly: 2.99))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: 80, monthly: 5.99))
         XCTAssertNil(ProPriceMath.savingPercent(yearly: 3000, monthly: 250),
                      "год ровно равен двенадцати месяцам — выгоды нет")
     }
 
     /// Цены не приехали — обе подписи молчат, а не печатают ноль.
     func testNothingIsPrintedWithoutPrices() {
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: nil, monthly: 2.99))
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: 19.99, monthly: nil))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: nil, monthly: 5.99))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: 24.99, monthly: nil))
         XCTAssertNil(ProPriceMath.perMonth(yearly: nil, format: euro))
-        XCTAssertNil(ProPriceMath.perMonth(yearly: 19.99, format: nil))
+        XCTAssertNil(ProPriceMath.perMonth(yearly: 24.99, format: nil))
     }
 
     /// Нулевая и отрицательная цена — не «бесплатно», а мусор на входе:
     /// делить на такое нельзя, и обещать нечего.
     func testGarbageInputsAreRefused() {
         XCTAssertNil(ProPriceMath.perMonth(yearly: 0, format: euro))
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: 0, monthly: 2.99))
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: 19.99, monthly: 0))
-        XCTAssertNil(ProPriceMath.savingPercent(yearly: -1, monthly: 2.99))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: 0, monthly: 5.99))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: 24.99, monthly: 0))
+        XCTAssertNil(ProPriceMath.savingPercent(yearly: -1, monthly: 5.99))
     }
 
     // Тест «неделя только годовому» жил здесь и переехал в
