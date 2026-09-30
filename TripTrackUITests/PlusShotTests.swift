@@ -75,7 +75,28 @@ final class PlusShotTests: XCTestCase {
         XCTAssertTrue(paywall.waitForExistence(timeout: 6), "пейвол не открылся")
         // Цены приезжают из StoreKit асинхронно — кадр без них не тот кадр.
         usleep(2_500_000)
-        snap("w084_paywall")
+
+        // ЦЕНЫ В УТ-ПРОГОНЕ ЕСТЬ НЕ ВСЕГДА, и кадр обязан об этом СКАЗАТЬ.
+        //
+        // `storeKitConfiguration` из `project.yml` xcodegen 2.45 пишет только в
+        // `LaunchAction`; у `TestAction` его в схеме НЕТ, хотя формат схемы это
+        // поддерживает. Значит продукты в туре берутся из store симулятора,
+        // засеянного прежним запуском ИЗ XCODE, — а на чистом симуляторе их
+        // нет вовсе, и витрина честно показывает «цены не пришли».
+        //
+        // Молча снятый такой кадр — это скриншот для ревью Apple, на котором
+        // вместо тарифов ошибка. Поэтому имя кадра говорит правду, и падением
+        // это НЕ делается: на чистом симуляторе оно было бы шумом, а не
+        // находкой.
+        let plans = app.descendants(matching: .any)
+            .matching(identifier: "pro_plans").firstMatch
+        let pricesLoaded = plans.waitForExistence(timeout: 2)
+        if !pricesLoaded {
+            print("[shot] ЦЕНЫ НЕ ЗАГРУЗИЛИСЬ: в схеме у TestAction нет "
+                  + "StoreKit-конфигурации. Кадр витрины НЕ годится для ревью — "
+                  + "снимать его запуском из Xcode (Run), см. CLAUDE.md.")
+        }
+        snap(pricesLoaded ? "w084_paywall" : "w084_paywall_NO_PRICES")
         XCTAssertTrue(
             app.descendants(matching: .any)
                 .matching(identifier: "plus_restore").firstMatch.exists,
