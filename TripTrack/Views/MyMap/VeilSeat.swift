@@ -131,9 +131,17 @@ final class VeilSeat {
 /// `viewWillDisappear` есть.
 final class VeilHostMapView: MKMapView {
     var onWindowChange: ((UIWindow?) -> Void)?
+    var onLayout: (() -> Void)?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         onWindowChange?(window)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Internal MapKit containers get their real size in super. Seat
+        // geometry must follow that layout even when SwiftUI state is idle.
+        onLayout?()
     }
 }

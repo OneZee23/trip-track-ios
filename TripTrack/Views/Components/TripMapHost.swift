@@ -83,6 +83,14 @@ final class TripMapHost: ObservableObject {
     /// экран. Слот героя показывает его, пока карты в нём нет: пустой
     /// прямоугольник на месте карты — это моргание, которое видно.
     @Published private(set) var snapshot: UIImage?
+    /// First fully drawn, fitted viewport. Latched for this map's lifetime:
+    /// fullscreen transfer, later pans and a return must not flash a loader.
+    @Published private(set) var hasRenderedRoute = false
+
+    func didRenderRoute(on map: MKMapView) {
+        guard map === mapView, !hasRenderedRoute else { return }
+        hasRenderedRoute = true
+    }
 
     /// Представление смонтировано. Зовёт `RouteMapView.makeUIView`.
     func retain() {
@@ -178,5 +186,6 @@ final class TripMapHost: ObservableObject {
         mapView = nil
         coordinator = nil
         snapshot = nil
+        hasRenderedRoute = false
     }
 }

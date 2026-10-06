@@ -139,6 +139,8 @@ struct TripSyncPayload: Codable {
     /// Ровно так же разобран `dashboardUnits` у машины — только там для этого
     /// пришлось писать весь `Codable` руками.
     var energyMode: String? = nil
+    /// Absent means an older peer; an explicit empty array clears boundaries.
+    var recordingBreaks: [Date]? = nil
 }
 
 extension TripSyncPayload {
@@ -194,6 +196,7 @@ extension TripSyncPayload {
         self.lastModifiedAt = entity.lastModifiedAt ?? Date()
         self.serverCreatedAt = entity.serverCreatedAt
         self.trackPoints = Self.wireTrack(trip.trackPoints, zone: zone)
+        self.recordingBreaks = trip.recordingBreaks
         self.photos = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
             return TripPhotoMetadataPayload(
@@ -316,6 +319,7 @@ extension TripSyncPayload {
         var drv: TimeInterval = 0
         var stp: TimeInterval = 0
         for i in 1..<points.count {
+            guard points[i].recordingSegmentIndex == points[i - 1].recordingSegmentIndex else { continue }
             let dt = points[i].timestamp.timeIntervalSince(points[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { continue }
             let avgKmh = ((points[i].speed + points[i - 1].speed) / 2.0) * 3.6

@@ -20,13 +20,12 @@ final class MapExpansionTests: XCTestCase {
         }
     }
 
-    /// `expanding` и `collapsing` — это кадр В РАМКЕ ГЕРОЯ: пружине нужно от
-    /// чего оттолкнуться, иначе карта возникает на весь экран сразу.
-    func testOnlyExpandedFillsTheScreen() {
-        XCTAssertFalse(MapExpansionState.collapsed.fillsScreen)
-        XCTAssertFalse(MapExpansionState.expanding.fillsScreen)
-        XCTAssertTrue(MapExpansionState.expanded.fillsScreen)
-        XCTAssertFalse(MapExpansionState.collapsing.fillsScreen)
+    /// Mount at final size before fading in; keep it mounted while fading out.
+    func testOnlyExpandedTargetsVisibleOpacity() {
+        XCTAssertFalse(MapExpansionState.collapsed.isVisible)
+        XCTAssertFalse(MapExpansionState.expanding.isVisible)
+        XCTAssertTrue(MapExpansionState.expanded.isVisible)
+        XCTAssertFalse(MapExpansionState.collapsing.isVisible)
     }
 
     func testChromeAndTouchesOnlyOnTheStandingMap() {
@@ -49,9 +48,9 @@ final class MapExpansionTests: XCTestCase {
 
     // MARK: - Времена
 
-    func testChromeArrivesAfterSixtyPercentOfTheSpring() {
+    func testChromeAppearsWithTheStableMap() {
         let delay = MapExpansionState.chromeDelay(reduceMotion: false)
-        XCTAssertEqual(delay, MapExpansionState.response * 0.6, accuracy: 0.0001)
+        XCTAssertEqual(delay, 0)
         XCTAssertLessThan(delay, MapExpansionState.settleDelay(reduceMotion: false))
     }
 
@@ -63,7 +62,7 @@ final class MapExpansionTests: XCTestCase {
             MapExpansionState.settleDelay(reduceMotion: true),
             MapExpansionState.reducedDuration)
         XCTAssertLessThan(
-            MapExpansionState.reducedDuration, MapExpansionState.response)
+            MapExpansionState.reducedDuration, MapExpansionState.duration)
     }
 
 }

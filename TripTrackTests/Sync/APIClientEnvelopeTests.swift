@@ -14,6 +14,13 @@ final class APIClientEnvelopeTests: XCTestCase {
         client = APIClient(session: session, tokenStore: TokenStore.shared)
     }
 
+    override func tearDown() async throws {
+        session?.invalidateAndCancel()
+        session = nil
+        client = nil
+        MockURLProtocol.reset()
+    }
+
     struct TestPayload: Codable, Equatable { let value: Int }
     struct TestRequest: Codable { let x: Int }
 
@@ -24,6 +31,23 @@ final class APIClientEnvelopeTests: XCTestCase {
         }
         let res: TestPayload = try await client.post("/test", body: TestRequest(x: 1), requiresAuth: false)
         XCTAssertEqual(res, TestPayload(value: 42))
+    }
+
+    func testTransientFailureRetriesThroughInjectedProtocol() async throws {
+        MockURLProtocol.requestHandler = { req in
+            if MockURLProtocol.recordedRequests.count == 1 {
+                throw URLError(.notConnectedToInternet)
+            }
+            let body = Data(#"{"status":"ok","payload":{"value":42}}"#.utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body)
+        }
+
+        let res: TestPayload = try await client.post(
+            "/test-retry", body: TestRequest(x: 1), requiresAuth: false)
+
+        XCTAssertEqual(res, TestPayload(value: 42))
+        XCTAssertEqual(MockURLProtocol.recordedRequests.count, 2,
+                       "A fresh retry session must keep the injected URLProtocol")
     }
 
     func testErrorEnvelopeMapsToTypedError() async {

@@ -99,6 +99,7 @@ final class MapViewModel: ObservableObject {
     private var pendingCompletedTrip: Trip?
     private var pendingCompletionData: TripCompletionData?
     @Published var discardedJunkTrip: Bool = false
+    @Published var discardedJunkTripReason: TripJunkClassifier.Reason?
 
     // MARK: - Camera (idle mode only)
     @Published var zoomDelta: Double = 0
@@ -889,6 +890,21 @@ final class MapViewModel: ObservableObject {
             }
     }
 
+    /// Returns a fresh question if GPS/time changed the promised outcome.
+    /// Otherwise finishes synchronously using the exact end time just checked.
+    /// A cancelled confirmation never reaches this method.
+    func stopRecording(confirming preview: RecordingFinishPreview) -> RecordingFinishPreview? {
+        guard isRecording, let current = tripManager.recordingFinishPreview() else { return nil }
+        guard preview.confirmsSameOutcome(as: current) else { return current }
+        stopRecording(suggestedEndDate: current.endDate)
+        PhoneConnectivityManager.shared.publish(
+            isRecording: isRecording, isPaused: isPaused,
+            speedKmh: speed * 3.6, distanceKm: distance / 1000,
+            elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
+        )
+        return nil
+    }
+
     func stopRecording(suggestedEndDate: Date? = nil) {
         // Re-entry guard — manual Stop tap, Live Activity Stop intent, and
         // AutoTripService.autoStopTrip can all reach this method on the same
@@ -907,6 +923,7 @@ final class MapViewModel: ObservableObject {
         // Stale from the previous trip would otherwise suppress the tab switch
         // for a perfectly good one.
         discardedJunkTrip = false
+        discardedJunkTripReason = nil
         // Notify subscribers (Feed, Stats) regardless of which cleanup branch
         // runs, including the junk-discard where the trip is deleted. The
         // object carries whether anything was actually saved — ContentView
@@ -974,6 +991,9 @@ final class MapViewModel: ObservableObject {
         if let trip = completedTrip, route == .discardJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
+            discardedJunkTripReason = TripJunkClassifier.reason(
+                distanceMeters: trip.distance, durationSeconds: trip.duration, maxSpeedMS: trip.maxSpeed
+            )
             discardedJunkTrip = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
@@ -1325,8 +1345,8 @@ final class MapViewModel: ObservableObject {
                 let gap = Date().timeIntervalSince(self.lastSpeedUpdate)
                 if sampleMS == 0 {
                     // Sub-floor sample (<1 m/s). This is EITHER a genuine stop OR
-                    // an unknown-speed fix — CLLocation.speed == -1 is clamped to
-                    // 0 upstream and such fixes are deliberately KEPT in degraded
+                    // an unknown-speed fix — rawSpeed clamps -1 to 0 for this
+                    // HUD only; unknown fixes are deliberately KEPT in degraded
                     // GPS (tunnel/taiga). So snap the HUD to 0 only after TWO
                     // consecutive sub-floor samples: a lone unknown-speed fix
                     // among real speeds must NOT flash the speedometer 60→0→60,
@@ -1360,17 +1380,6 @@ final class MapViewModel: ObservableObject {
                 if self.gpsSignalStale { self.gpsSignalStale = false }
 
                 if self.isRecording && !self.isPaused {
-                    self.trackManager.addPoint(update.coordinate)
-                    // Территория — это «города и регионы» статистики: черновик
-                    // её не красит (спека §3.2). «Моя» перестроит её целиком.
-                    if self.tripManager.activeTrip?.isDraft != true {
-                        let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
-                        // Animate fog reveal when a new tile is discovered
-                        if isNewTile {
-                            self.revealFog(at: update.coordinate)
-                        }
-                    }
-
                     // Update Live Activity with current tracking data
                     LiveActivityManager.shared.updateActivity(
                         speedKmh: self.speed * 3.6,
@@ -1390,6 +1399,19 @@ final class MapViewModel: ObservableObject {
                         distanceKm: self.distance / 1000,
                         elapsedSeconds: elapsed
                     )
+                }
+            }
+            .store(in: &cancellables)
+
+        tripManager.recordedLocationPublisher
+            .sink { [weak self] location in
+                guard let self, self.isRecording, !self.isPaused else { return }
+                self.trackManager.addPoint(location.coordinate)
+                // Recording validation is shared with persistence. A rejected
+                // GPS teleport must not discover territory via a parallel path.
+                if self.tripManager.activeTrip?.isDraft != true,
+                   self.territoryManager.recordVisit(coordinate: location.coordinate) {
+                    self.revealFog(at: location.coordinate)
                 }
             }
             .store(in: &cancellables)

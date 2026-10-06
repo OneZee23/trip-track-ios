@@ -159,9 +159,9 @@ final class TripMapHostTests: XCTestCase {
         XCTAssertTrue(host.canClaim(replacement, for: .hero))
     }
 
-    /// UIKit уже применил flexibleWidth/Height до layoutSubviews: сравнить
-    /// frame с bounds недостаточно — камера всё ещё ждёт ненулевую рамку.
-    func testSlotReportsResizeEvenWhenAutoresizingAlreadyMatchedFrame() {
+    /// A matching frame is insufficient: route fitting still needs the
+    /// destination's first usable size, and a zero-size slot is not ready.
+    func testSlotReportsFirstUsableSizeEvenWhenMapFrameAlreadyMatches() {
         let map = host.map(orMake: { MKMapView() })
         let slot = TripMapSlotView()
         var sizes: [CGSize] = []
@@ -172,8 +172,57 @@ final class TripMapHostTests: XCTestCase {
         map.frame = slot.bounds
         slot.layoutSubviews()
         slot.layoutSubviews()
-        XCTAssertEqual(sizes, [.zero, CGSize(width: 320, height: 200)],
-                       "один fit на новый размер, даже когда frame уже совпал")
+        XCTAssertEqual(sizes, [CGSize(width: 320, height: 200)],
+                       "fit waits for usable bounds and runs once even when the frame matches")
+    }
+
+    /// SwiftUI creates the fullscreen slot before assigning its bounds.
+    /// Reparenting must not collapse the live map or grow it to old + new size
+    /// through an autoresizing mask before layout corrects that frame again.
+    func testZeroSizeDestinationPreservesViewportUntilItsFirstLayout() {
+        let map = host.map(orMake: { MKMapView() })
+        let hero = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+        let fullscreen = TripMapSlotView()
+        hero.adopt(map)
+        var sizes: [CGSize] = []
+        fullscreen.onResize = { sizes.append(map.bounds.size) }
+        defer { fullscreen.onResize = nil }
+
+        fullscreen.adopt(map)
+        fullscreen.layoutSubviews()
+        XCTAssertNil(hero.map)
+        XCTAssertTrue(map.superview === fullscreen)
+        XCTAssertEqual(map.frame, hero.bounds, "ownership changes before viewport size")
+        XCTAssertTrue(sizes.isEmpty, "zero-sized destinations cannot fit a route")
+
+        fullscreen.bounds.size = CGSize(width: 440, height: 956)
+        XCTAssertEqual(map.bounds.size, hero.bounds.size,
+                       "autoresizing must not add the new slot size to the retained viewport")
+        fullscreen.layoutSubviews()
+        fullscreen.layoutSubviews()
+        XCTAssertEqual(map.frame, fullscreen.bounds)
+        XCTAssertEqual(sizes, [CGSize(width: 440, height: 956)])
+        XCTAssertEqual(host.creationCount, 1)
+    }
+
+    func testTransientEmptyLayoutDoesNotCollapseAnOwnedMap() {
+        let map = host.map(orMake: { MKMapView() })
+        let slot = TripMapSlotView(frame: CGRect(x: 0, y: 0, width: 440, height: 956))
+        slot.adopt(map)
+        let previousFrame = map.frame
+        var resizes = 0
+        slot.onResize = { resizes += 1 }
+        defer { slot.onResize = nil }
+
+        slot.bounds.size = .zero
+        slot.layoutSubviews()
+        XCTAssertEqual(map.frame, previousFrame)
+        XCTAssertEqual(resizes, 0)
+
+        slot.bounds.size = CGSize(width: 320, height: 200)
+        slot.layoutSubviews()
+        XCTAssertEqual(map.frame, slot.bounds)
+        XCTAssertEqual(resizes, 1)
     }
 
     /// Пуш чужого экрана поверх поездки НЕ разбирает карту.

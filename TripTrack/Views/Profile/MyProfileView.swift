@@ -178,16 +178,17 @@ struct MyProfileView: View {
         } label: {
             VStack(spacing: 3) {
                 Text(count.map(String.init) ?? "—")
-                    .font(.system(size: 20, weight: .heavy).monospacedDigit())
+                    .font(.interScaled(20, weight: .heavy, relativeTo: .title3).monospacedDigit())
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
 
                 HStack(spacing: 3) {
                     Text(label)
-                        .font(.inter(11, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
+                        .font(.interScaled(11, weight: .semibold, relativeTo: .caption))
+                        .foregroundStyle(c.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                     // The one thing that says these two halves are doors and
                     // not a read-out.
                     Image(systemName: "chevron.right")
@@ -196,6 +197,7 @@ struct MyProfileView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -338,8 +340,9 @@ struct MyProfileView: View {
                     }
                 } label: {
                     Text(AppStrings.myProfileChangeAvatar(l))
-                        .font(.inter(12))
+                        .font(.interScaled(12, relativeTo: .caption))
                         .foregroundStyle(c.textSecondary)
+                        .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -395,9 +398,10 @@ struct MyProfileView: View {
             // There is no Done button — the hint is the only thing telling the
             // user the tap already stuck.
             Text(AppStrings.myProfileAvatarHint(l))
-                .font(.inter(11))
-                .foregroundStyle(c.textTertiary)
+                .font(.interScaled(11, relativeTo: .caption))
+                .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             // The retired-avatar easter egg, said out loud exactly once: here,
             // with the grid open and an irreversible tap one finger away.
@@ -411,7 +415,7 @@ struct MyProfileView: View {
             // that something rare was lost arrives after it is gone.
             if !Self.avatars.contains(settings.avatarEmoji) {
                 Text(AppStrings.myProfileAvatarRetired(l, emoji: settings.avatarEmoji))
-                    .font(.inter(11, weight: .medium))
+                    .font(.interScaled(11, weight: .medium, relativeTo: .caption))
                     .foregroundStyle(AppTheme.accent)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -632,7 +636,10 @@ struct MyProfileView: View {
         identifier: String,
         action: @escaping () -> Void
     ) -> some View {
-        SettingsIconRow(icon: icon, title: label, action: action) {
+        SettingsIconRow(
+            icon: icon, title: label, action: action,
+            stacksTrailingAtAccessibilitySize: !value.isEmpty
+        ) {
             HStack(spacing: 8) {
                 if !value.isEmpty {
                     SettingsRowValue(text: value, tint: isUnset ? AppTheme.accent : nil)

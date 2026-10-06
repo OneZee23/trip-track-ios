@@ -15,28 +15,39 @@ import SwiftUI
 /// Роли набора — в `AppType` ниже; руками размеры и веса больше не
 /// подбираются.
 ///
-/// Always `fixedSize`: the app sizes ALL type with fixed
-/// `.system(size:)` values, and `Font.custom(_:size:)` — unlike
-/// `.system(size:)` — scales with the user's Dynamic Type setting. On a
-/// device with enlarged text the Inter runs ballooned while the SF text
-/// around them stayed put (feed metrics, 2026-08-06). Теперь, когда SF в
-/// тексте не осталось, это ограничение можно снять — но снимать его надо
-/// отдельной волной, с проверкой каждой раскладки на крупном шрифте.
+/// `inter` keeps the existing fixed geometry for map overlays, branding and
+/// other layouts not yet checked at accessibility sizes. Forms and settings
+/// use `interScaled` after their rows have been made multiline/adaptive.
+/// Scaling is deliberately adopted by flow, not by replacing every font at
+/// once: increasing text inside a fixed row would only hide more of it.
 extension Font {
     static func inter(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let name: String
+        .custom(interName(for: weight), fixedSize: size)
+    }
+
+    /// Inter at the same default size, following the user's Dynamic Type
+    /// setting. The semantic style controls the scaling curve, not the base
+    /// size. Call sites must allow the resulting text to wrap and grow.
+    static func interScaled(
+        _ size: CGFloat,
+        weight: Font.Weight = .regular,
+        relativeTo style: Font.TextStyle = .body
+    ) -> Font {
+        .custom(interName(for: weight), size: size, relativeTo: style)
+    }
+
+    private static func interName(for weight: Font.Weight) -> String {
         if weight == .heavy || weight == .black {
-            name = "Inter-ExtraBold"
+            return "Inter-ExtraBold"
         } else if weight == .bold {
-            name = "Inter-Bold"
+            return "Inter-Bold"
         } else if weight == .semibold {
-            name = "Inter-SemiBold"
+            return "Inter-SemiBold"
         } else if weight == .medium {
-            name = "Inter-Medium"
+            return "Inter-Medium"
         } else {
-            name = "Inter-Regular"
+            return "Inter-Regular"
         }
-        return .custom(name, fixedSize: size)
     }
 }
 

@@ -29,26 +29,33 @@ struct ProShowcaseHost: ViewModifier {
     /// `PlusFeature` живёт в гейте, и вешать на него `Identifiable` значило бы
     /// протащить требование SwiftUI в сервисный тип. Фича выводится.
     @State private var paywall: ProShowcaseKind?
+    @State private var pendingPaywall: ProShowcaseKind?
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $kind) { kind in
+            .sheet(item: $kind, onDismiss: presentPendingPaywall) { kind in
                 ProShowcaseSheet(
                     kind: kind,
                     current: current(kind),
+                    vehicleID: vehicle?.id,
                     onPick: { pick(kind, $0) },
                     onOpenPro: {
-                        // Витрина не продаёт сама: она закрывается, и продаёт
-                        // пейвол. Два листа подряд здесь не выходит — второй
-                        // открывается ПОСЛЕ закрытия первого, своим состоянием.
+                        // Request the next sheet here; present it only after
+                        // SwiftUI finishes dismissing the current one.
+                        pendingPaywall = kind
                         self.kind = nil
-                        paywall = kind
                     })
                 .environmentObject(lang)
             }
             .sheet(item: $paywall) { kind in
                 PlusPaywallSheet(feature: kind.feature).environmentObject(lang)
             }
+    }
+
+    private func presentPendingPaywall() {
+        guard let next = pendingPaywall else { return }
+        pendingPaywall = nil
+        paywall = next
     }
 
     /// Что выбрано в базе. Витрина примеряет у себя, а сохранённое читает
@@ -66,10 +73,9 @@ struct ProShowcaseHost: ViewModifier {
     /// приходит — витрина его только примеряет.
     private func pick(_ kind: ProShowcaseKind, _ id: String) {
         switch kind {
-        case .profileBackground: settings.profileBackground = id
-        case .avatarFrame:        settings.setAvatarFrame(id.isEmpty ? nil : id)
         case .vehicleCard:        onPickVehicleCard(id)
-        case .routeLine:          RouteLineStyle.stored = RouteLineStyle.from(id)
+        default:
+            settings.selectCosmetic(kind, id: id, isPlus: PlusAccess.shared.isPlus)
         }
     }
 }

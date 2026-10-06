@@ -9,6 +9,7 @@ struct ManualTripWhenVehicleCard: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let calendar = Calendar.current
 
@@ -23,7 +24,9 @@ struct ManualTripWhenVehicleCard: View {
             Divider().overlay(c.border)
             vehicleRow(c)
         }
-        .padding(16)
+        // The native compact date control has an intrinsic width at AX5.
+        // Give it the card's space rather than widening the whole sheet.
+        .padding(dynamicTypeSize.isAccessibilitySize ? 8 : 16)
         .surfaceCard(cornerRadius: 16)
     }
 
@@ -33,25 +36,41 @@ struct ManualTripWhenVehicleCard: View {
     // `DatePicker` с датой И временем не сжимается сам — на общей строке он
     // забирал всю ширину и обрезал «Сегодня»/«Вчера» до многоточия.
     private func whenRow(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let dayLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.manualTripStart(lang.language))
-                .font(.inter(11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-            HStack(spacing: 8) {
+                .font(.interScaled(11, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+            dayLayout {
                 dayChip(title: AppStrings.today(lang.language), day: Date(), c: c)
                 dayChip(title: AppStrings.yesterday(lang.language),
                         day: calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date(), c: c)
-                Spacer(minLength: 0)
             }
-            DatePicker(
-                "", selection: $model.startDate, in: model.startBounds,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityIdentifier("manual_trip_start")
+            if dynamicTypeSize.isAccessibilitySize {
+                // Native compact controls keep their native date/time editors.
+                // Separate rows give each its full width at large text sizes.
+                startPicker(components: [.date], identifier: "manual_trip_start")
+                startPicker(components: [.hourAndMinute], identifier: "manual_trip_start_time")
+            } else {
+                startPicker(components: [.date, .hourAndMinute], identifier: "manual_trip_start")
+            }
         }
+    }
+
+    private func startPicker(
+        components: DatePickerComponents, identifier: String
+    ) -> some View {
+        DatePicker(
+            AppStrings.manualTripStart(lang.language),
+            selection: $model.startDate, in: model.startBounds,
+            displayedComponents: components
+        )
+        .labelsHidden()
+        .datePickerStyle(.compact)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .accessibilityIdentifier(identifier)
     }
 
     private func dayChip(title: String, day: Date, c: AppTheme.Colors) -> some View {
@@ -61,13 +80,14 @@ struct ManualTripWhenVehicleCard: View {
             model.setStartDay(day)
         } label: {
             Text(title)
-                .font(.inter(13, weight: .semibold))
+                .font(.interScaled(13, weight: .semibold))
                 .foregroundStyle(selected ? .white : c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(selected ? AppTheme.accent : c.cardAlt, in: Capsule())
-                .contentShape(Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
     }
@@ -75,19 +95,30 @@ struct ManualTripWhenVehicleCard: View {
     // MARK: - Длительность
 
     private func durationRow(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return layout {
             Text(AppStrings.manualTripDuration(lang.language))
-                .font(.inter(11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-            Spacer(minLength: 8)
+                .font(.interScaled(11, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+            durationControls(c)
+        }
+    }
+
+    private func durationControls(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 10) {
             durationButton("minus", c: c) {
                 model.adjustDuration(by: -ManualTripModel.durationStep)
             }
             Text(ManualTripDurationText.string(model.duration, lang: lang.language))
-                .font(.inter(15, weight: .bold))
+                .font(.interScaled(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .frame(minWidth: 72)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_duration")
             durationButton("plus", c: c) {
                 model.adjustDuration(by: ManualTripModel.durationStep)
@@ -107,9 +138,13 @@ struct ManualTripWhenVehicleCard: View {
                 .foregroundStyle(c.text)
                 .frame(width: 32, height: 32)
                 .background(c.cardAlt, in: Circle())
-                .contentShape(Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
+        .accessibilityLabel("\(icon == "plus" ? "+" : "−") \(ManualTripDurationText.string(ManualTripModel.durationStep, lang: lang.language))")
+        .accessibilityValue(ManualTripDurationText.string(model.duration, lang: lang.language))
+        .accessibilityIdentifier("manual_trip_duration_\(icon)")
     }
 
     private func suggestedButton(_ suggested: TimeInterval, c: AppTheme.Colors) -> some View {
@@ -119,8 +154,11 @@ struct ManualTripWhenVehicleCard: View {
         } label: {
             Text(AppStrings.manualTripSuggestedTime(
                 lang.language, time: ManualTripDurationText.string(suggested, lang: lang.language)))
-                .font(.inter(12.5, weight: .semibold))
+                .font(.interScaled(12.5, weight: .semibold))
                 .foregroundStyle(AppTheme.accent)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
@@ -132,8 +170,8 @@ struct ManualTripWhenVehicleCard: View {
     private func vehicleRow(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(AppStrings.vehiclePickerTitle(lang.language))
-                .font(.inter(11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
+                .font(.interScaled(11, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     vehicleChip(id: nil, title: AppStrings.noVehicle(lang.language), c: c)
@@ -152,13 +190,14 @@ struct ManualTripWhenVehicleCard: View {
             model.vehicleId = id
         } label: {
             Text(title)
-                .font(.inter(14, weight: .semibold))
+                .font(.interScaled(14, weight: .semibold))
                 .foregroundStyle(selected ? .white : c.text)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(selected ? AppTheme.accent : c.cardAlt, in: Capsule())
-                .contentShape(Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
     }

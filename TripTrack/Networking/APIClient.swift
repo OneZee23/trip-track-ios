@@ -524,6 +524,9 @@ final class APIClient {
                 attemptSession = session
             } else {
                 let freshConfig = URLSessionConfiguration.ephemeral
+                // Keep the injected transport on retries as well: dropping
+                // URLProtocol handlers lets mocked requests reach the network.
+                freshConfig.protocolClasses = session.configuration.protocolClasses
                 freshConfig.timeoutIntervalForRequest = 90
                 attemptSession = URLSession(configuration: freshConfig)
                 // Backoff 0.8s, 1.2s before attempts 2 and 3 — formula

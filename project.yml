@@ -89,7 +89,7 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip or to a vehicle in your garage. Photos stay on your device unless you publish the trip, or open your vehicle photos to other people yourself."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         MARKETING_VERSION: "0.8.4"
-        CURRENT_PROJECT_VERSION: "67"
+        CURRENT_PROJECT_VERSION: "73"
       configs:
         Debug:
           # Файлы прав разведены по конфигурациям ради CarPlay, но самого
@@ -174,7 +174,7 @@ targets:
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
         MARKETING_VERSION: "0.8.4"
-        CURRENT_PROJECT_VERSION: "67"
+        CURRENT_PROJECT_VERSION: "73"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -220,7 +220,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
         MARKETING_VERSION: "0.8.4"
-        CURRENT_PROJECT_VERSION: "67"
+        CURRENT_PROJECT_VERSION: "73"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:
@@ -280,8 +280,11 @@ targets:
     platform: iOS
     sources:
       - path: TripTrackUITests
+      - path: Config/TripTrack.storekit
+        buildPhase: resources
     dependencies:
       - target: TripTrack
+      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrackUITests

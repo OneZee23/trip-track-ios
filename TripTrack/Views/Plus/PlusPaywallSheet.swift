@@ -10,10 +10,28 @@ struct PlusPaywallSheet: View {
     /// С какой фичи пришли, если пришли с замка. Витрина откроет её
     /// демонстрацию сразу.
     var feature: PlusFeature? = nil
+    var origin: ProBoughtView.Origin = .storefront
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = SettingsManager.shared
+    @State private var choosingBackground = false
 
     var body: some View {
-        ProPaywallView(feature: feature, onClose: { dismiss() })
+        // Меняем содержимое того же листа: закрытие пейвола и одновременный
+        // показ второго sheet могут потерять переход в SwiftUI.
+        if choosingBackground {
+            ProShowcaseSheet(
+                kind: .profileBackground,
+                current: settings.profileBackground,
+                onPick: { settings.selectCosmetic(.profileBackground, id: $0,
+                                                  isPlus: PlusAccess.shared.isPlus) },
+                onOpenPro: { choosingBackground = false })
+        } else {
+            ProPaywallView(
+                feature: feature,
+                origin: origin,
+                onPickBackground: { choosingBackground = true },
+                onClose: { dismiss() })
+        }
     }
 }

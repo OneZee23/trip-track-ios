@@ -23,6 +23,10 @@ final class TripsViewModel: ObservableObject {
         tripManager.tripDetail(id: id)
     }
 
+    func tripDetailAsync(id: UUID) async -> Trip? {
+        await tripManager.tripDetailAsync(id: id)
+    }
+
     /// Поездки ТОЙ ЖЕ машины за ТОТ ЖЕ календарный день — для раскладки
     /// энергии плагин-гибрида (0.8.3).
     ///

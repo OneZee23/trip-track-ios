@@ -1239,6 +1239,7 @@ final class CoreDataTripRepository: TripRepository {
 
     private func tripFromEntity(_ entity: TripEntity, includeTrackPoints: Bool = true) -> Trip? {
         guard let id = entity.id, let startDate = entity.startDate else { return nil }
+        let breaks = Self.recordingBreaks(of: entity)
 
         let points: [TrackPoint]
         if includeTrackPoints {
@@ -1324,11 +1325,30 @@ final class CoreDataTripRepository: TripRepository {
             source: Self.origin(of: entity),
             confirmation: Self.confirmation(of: entity),
             roadFillState: Self.roadFillState(of: entity),
-            energyMode: TripEnergyMode.parse(entity.energyMode)
+            energyMode: TripEnergyMode.parse(entity.energyMode),
+            recordingBreaks: breaks
         )
     }
 
     // MARK: - Sync Helpers
+
+    static func recordingBreaks(of entity: TripEntity) -> [Date] {
+        guard let json = entity.recordingBreaksJSON,
+              let data = json.data(using: .utf8),
+              let breaks = try? JSONDecoder().decode([Date].self, from: data) else { return [] }
+        return RecordingBreaks.normalized(breaks)
+    }
+
+    /// Assignment only: the caller owns the enclosing save/transaction.
+    static func setRecordingBreaks(_ breaks: [Date], on entity: TripEntity) {
+        let normalized = RecordingBreaks.normalized(breaks)
+        guard !normalized.isEmpty,
+              let data = try? JSONEncoder().encode(normalized) else {
+            entity.recordingBreaksJSON = nil
+            return
+        }
+        entity.recordingBreaksJSON = String(data: data, encoding: .utf8)
+    }
 
     func markAllPendingUpload() {
         // Scope each batch update to the CURRENT user's localUserId so we
@@ -1387,6 +1407,11 @@ final class CoreDataTripRepository: TripRepository {
         // ещё не уехавшая, сильнее приехавшего ответа. Считается ДО
         // присваиваний, пока `syncStatus` ещё не переписан ниже.
         let hasLocalEdits = entity.syncStatus == SyncStatus.pendingUpload.rawValue
+        // Old servers omit this field. Never erase a recorded pause merely
+        // because an older peer knows only about coordinates and timestamps.
+        if entity.id == nil || !hasLocalEdits, let breaks = p.recordingBreaks {
+            Self.setRecordingBreaks(breaks, on: entity)
+        }
         entity.id = p.id
         entity.title = p.title
         entity.tripDescription = p.description

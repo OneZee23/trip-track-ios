@@ -165,6 +165,10 @@ final class PlusStore: ObservableObject {
 
     private var updatesTask: Task<Void, Never>?
     private var storefrontTask: Task<Void, Never>?
+    private var storefrontProductsTask: Task<Void, Never>?
+    private var productRequestGeneration: UInt64 = 0
+    private let fetchProducts: @MainActor () async throws -> [Product]
+    private let fetchIntroEligibility: @MainActor ([Product]) async -> Bool
     private var recheckTask: Task<Void, Never>?
     private var foregroundObserver: NSObjectProtocol?
     private var foregroundTask: Task<Void, Never>?
@@ -216,7 +220,18 @@ final class PlusStore: ObservableObject {
     }
     #endif
 
-    private init() {}
+    init(
+        fetchProducts: @escaping @MainActor () async throws -> [Product] = {
+            try await Product.products(for: PlusStore.productIDs)
+        },
+        fetchIntroEligibility: @escaping @MainActor ([Product]) async -> Bool = { products in
+            guard let subscription = products.compactMap(\.subscription).first else { return false }
+            return await subscription.isEligibleForIntroOffer
+        }
+    ) {
+        self.fetchProducts = fetchProducts
+        self.fetchIntroEligibility = fetchIntroEligibility
+    }
 
     // MARK: - Чистые правила
 
@@ -292,7 +307,7 @@ final class PlusStore: ObservableObject {
         }
         storefrontTask = Task { [weak self] in
             for await storefront in Storefront.updates {
-                self?.applyStorefront(storefront.countryCode)
+                self?.storefrontDidChange(storefront.countryCode)
             }
         }
         // Вход в аккаунт — момент, когда накопленную привязку наконец есть
@@ -358,29 +373,40 @@ final class PlusStore: ObservableObject {
     }
 
     func loadProducts() async {
+        guard !Task.isCancelled else { return }
+        productRequestGeneration &+= 1
+        let request = productRequestGeneration
+        let country = storefrontCountry ?? "unknown"
         do {
-            let found = try await Product.products(for: Self.productIDs)
+            let found = try await fetchProducts()
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
             // Пустой ответ — это РЕЗУЛЬТАТ, а не ошибка: витрина без
             // соглашения о платных приложениях, продукт ещё не разъехался по
             // серверам Apple, схема без `.storekit`. Пейвол в этом случае
             // показывает «цены не загрузились», а не пустые карточки.
-            products = Self.productIDs.compactMap { id in found.first { $0.id == id } }
-            await refreshIntroEligibility()
-            plusLog.notice("products loaded: \(self.products.count, privacy: .public)")
+            let ordered = Self.productIDs.compactMap { id in found.first { $0.id == id } }
+            // Право на вводное предложение тоже относится к текущему
+            // аккаунту: за этим await витрина может успеть смениться ещё раз.
+            let eligible = await fetchIntroEligibility(ordered)
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
+            products = ordered
+            introEligible = eligible
+            plusLog.notice("products loaded: \(self.products.count, privacy: .public) storefront=\(country, privacy: .public)")
+            for product in ordered {
+                plusLog.notice("""
+                    product id=\(product.id, privacy: .public) \
+                    currency=\(product.priceFormatStyle.currencyCode, privacy: .public) \
+                    displayPrice=\(product.displayPrice, privacy: .public)
+                    """)
+            }
+            let missing = Self.productIDs.filter { id in !ordered.contains { $0.id == id } }
+            if !missing.isEmpty {
+                plusLog.notice("products missing: \(missing.joined(separator: ","), privacy: .public)")
+            }
         } catch {
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
             plusLog.error("products failed: \(error.localizedDescription, privacy: .public)")
         }
-    }
-
-    /// Право на вводное предложение — у ГРУППЫ, а не у продукта: Apple даёт
-    /// бесплатную неделю один раз на группу подписок, и спрашивать её у
-    /// каждого тарифа отдельно бессмысленно.
-    private func refreshIntroEligibility() async {
-        guard let subscription = products.compactMap(\.subscription).first else {
-            introEligible = false
-            return
-        }
-        introEligible = await subscription.isEligibleForIntroOffer
     }
 
     // MARK: - Права
@@ -438,6 +464,7 @@ final class PlusStore: ObservableObject {
         if Self.isDebugPlus { state = .active }
         #endif
         PlusAccess.shared.isPlus = isPlus
+        SettingsManager.shared.restoreRetainedCosmetics(isPlus: isPlus)
         // Право приехало — ждать больше нечего. Одобренный Ask To Buy доезжает
         // через `Transaction.updates` и попадает сюда же.
         if isPlus { awaitingApproval = false }
@@ -596,19 +623,44 @@ final class PlusStore: ObservableObject {
         applyStorefront(await Storefront.current?.countryCode)
     }
 
+    /// Смена страны меняет и каталог. Иначе PRO уже виден на новой витрине,
+    /// а пейвол продолжает продавать объекты Product с ценами прежней.
+    /// Задачу можно дождаться; слушатель остаётся свободен для следующей
+    /// смены страны, даже если запрос к StoreKit ещё не закончен.
+    @discardableResult
+    func storefrontDidChange(_ code: String?) -> Task<Void, Never>? {
+        guard applyStorefront(code) else { return nil }
+        storefrontProductsTask?.cancel()
+        let task = Task<Void, Never> { [weak self] in
+            await self?.loadProducts()
+        }
+        storefrontProductsTask = task
+        return task
+    }
+
     /// `nil` — это «не знаю», а НЕ «витрина сменилась на разрешающую».
     /// `Storefront.current` умеет промолчать офлайн, и сброс на этом молчании
     /// открывал бы платное на витрине, которая его не продаёт, — на всю
     /// сессию. Поэтому известное значение переживает молчание и запоминается
     /// до следующего запуска.
-    private func applyStorefront(_ code: String?) {
+    @discardableResult
+    private func applyStorefront(_ code: String?) -> Bool {
         guard let code else {
             plusLog.notice("storefront unknown — keeping last known")
-            return
+            return false
+        }
+        let changed = storefrontCountry != code
+        if changed {
+            // Стираем старую цену ДО открытия витрины. Номер запроса
+            // защищает и от ответов, которые пережили отмену задачи.
+            productRequestGeneration &+= 1
+            products = []
+            introEligible = false
         }
         storefrontCountry = code
         UserDefaults.standard.set(code, forKey: PlusAccess.storefrontKey)
         PlusAccess.shared.storefrontHidesPlus = Self.hidesPlus(countryCode: code)
         plusLog.notice("storefront=\(code, privacy: .public)")
+        return changed
     }
 }

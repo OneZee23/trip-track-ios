@@ -23,6 +23,7 @@ struct ProPaywallView: View {
     /// единственная кнопка, и ведёт она обратно к набранной поездке, а не в
     /// витрину фонов (состояние 36б).
     var origin: ProBoughtView.Origin = .storefront
+    let onPickBackground: () -> Void
     let onClose: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -75,7 +76,7 @@ struct ProPaywallView: View {
                               until: store.displayExpiry,
                               isTrial: store.state == .trial,
                               yearlyPrice: plans.first { $0.period == .yearly }?.displayPrice,
-                              onPickBackground: onClose,
+                              onPickBackground: onPickBackground,
                               onClose: onClose)
             } else {
                 VStack(spacing: 0) {
@@ -349,10 +350,12 @@ struct ProPaywallView: View {
                                 },
                                 isSelected: plan.id == selectedId,
                                 onTap: { selectedId = plan.id })
+                    .accessibilityIdentifier("pro_plan_\(plan.id)")
                     .disabled(!phase.allowsTariffChange)
                 }
             }
             .opacity(phase.dimsChrome ? 0.4 : 1)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("pro_plans")
         } else if phase.showsTariffSkeleton {
             HStack(spacing: 8) {

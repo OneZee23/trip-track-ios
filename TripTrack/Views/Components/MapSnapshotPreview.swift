@@ -89,7 +89,7 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v4"
+        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v5"
     }
 
     @MainActor
@@ -135,6 +135,9 @@ struct MapSnapshotPreview: View {
                     isDark: isDark
                 )
             }.value
+            // A theme/size change cancels this view task, but not the detached
+            // snapshotter. Its old image must not overwrite the new preview.
+            guard !Task.isCancelled else { return }
             if image != nil { break }
             // First miss → drop the shimmer NOW ("no map for this trip"),
             // don't make the user watch a fake load for the full backoff
@@ -170,9 +173,11 @@ struct MapSnapshotPreview: View {
         config.pointOfInterestFilter = .excludingAll
         options.preferredConfiguration = config
 
-        if isDark {
-            options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
-        }
+        // Snapshotters run outside the app's window. Leaving light mode
+        // unspecified inherits the phone's dark appearance and caches a dark
+        // map under the light key when the app explicitly uses light mode.
+        let traits = UITraitCollection(userInterfaceStyle: isDark ? .dark : .light)
+        options.traitCollection = traits
 
         let snapshotter = MKMapSnapshotter(options: options)
 
@@ -206,7 +211,7 @@ struct MapSnapshotPreview: View {
             // Start dot (green)
             let dotRadius: CGFloat = 2.5
             let startPt = points[0]
-            gc.setFillColor(UIColor.systemGreen.cgColor)
+            gc.setFillColor(UIColor.systemGreen.resolvedColor(with: traits).cgColor)
             gc.fillEllipse(in: CGRect(
                 x: startPt.x - dotRadius, y: startPt.y - dotRadius,
                 width: dotRadius * 2, height: dotRadius * 2
@@ -225,7 +230,7 @@ struct MapSnapshotPreview: View {
             let poleDir: CGFloat = drawUp ? -1 : 1
 
             // Flagpole
-            gc.setStrokeColor(UIColor.label.cgColor)
+            gc.setStrokeColor(UIColor.label.resolvedColor(with: traits).cgColor)
             gc.setLineWidth(1)
             gc.beginPath()
             gc.move(to: CGPoint(x: endPt.x, y: endPt.y))

@@ -108,7 +108,8 @@ struct PlacesView: View {
             AtlasBetaSheet(model: .make(.places), onDismiss: { showsBeta = false })
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).card)
         }
-        .task { model.reload() }
+        // The model fills the first frame in init and observes changes itself.
+        // Reloading here repeated that same CoreData work on every tab entry.
         .onChange(of: sort) { _, value in value.save() }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToPlace)) { note in
             guard let id = note.object as? UUID else { return }

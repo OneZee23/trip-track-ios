@@ -71,6 +71,12 @@ struct TripTrackApp: App {
         }
         #endif
         #if DEBUG && targetEnvironment(simulator)
+        // Reset the persisted value once, rather than pinning AppStorage to
+        // false through NSArgumentDomain. The latter can hide a completed
+        // onboarding when a UI test repeats the flow in the same container.
+        if ProcessInfo.processInfo.arguments.contains("-ui-test-onboarding") {
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        }
         if DebugForeignTripFixture.isRequested {
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)

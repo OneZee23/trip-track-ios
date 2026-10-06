@@ -99,6 +99,63 @@ final class RoadGapFillerTests: XCTestCase {
         XCTAssertEqual(entity.distance, distanceBefore, "километры достройку не видят")
     }
 
+    func testPausedSectionNeverRequestsARoad() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs())
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)], on: entity)
+        try pc.container.viewContext.save()
+        let router = StubRoadRouter { _, _ in self.road() }
+        let result = await filler(router).fill(tripId: try XCTUnwrap(entity.id))
+        pc.container.viewContext.refreshAllObjects()
+
+        XCTAssertEqual(result, .done)
+        XCTAssertEqual(router.calls, 0)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertEqual(entity.roadFillState, RoadFillState.done.rawValue)
+    }
+
+    func testLibraryScanDoesNotFillAnExplicitPause() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs(), processed: true)
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)], on: entity)
+        entity.distance = 400
+        try pc.container.viewContext.save()
+
+        let router = StubRoadRouter { _, _ in self.road() }
+        let count = await filler(router).scanLibrary()
+        pc.container.viewContext.refreshAllObjects()
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(router.calls, 0)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertEqual(entity.distance, 400)
+    }
+
+    func testPauseMetadataArrivingDuringDirectionsPreventsApplyingTheRoad() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs())
+        let id = try XCTUnwrap(entity.id)
+        let pcRef = pc!
+        let router = StubRoadRouter { _, _ in
+            let context = pcRef.newBackgroundContext()
+            context.performAndWait {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                if let current = try? context.fetch(request).first {
+                    CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)],
+                                                              on: current)
+                    try? context.save()
+                }
+            }
+            return self.road()
+        }
+        var enqueued: [UUID] = []
+        _ = await filler(router, enqueue: { enqueued.append($0) }).fill(tripId: id)
+        pc.container.viewContext.refreshAllObjects()
+
+        XCTAssertEqual(router.calls, 1)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertTrue(enqueued.isEmpty)
+        XCTAssertEqual(CoreDataTripRepository.recordingBreaks(of: entity),
+                       [TrackTestKit.epoch.addingTimeInterval(80)])
+    }
+
     func testImplausibleRoadKeepsTheStraightLine() async throws {
         let entity = try await processedTunnelTrip()
         let router = StubRoadRouter { _, _ in self.road(distance: 5000) }

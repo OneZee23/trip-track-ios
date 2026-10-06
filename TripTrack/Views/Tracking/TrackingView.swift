@@ -37,10 +37,10 @@ struct TrackingView: View {
     @State private var pendingGarage = false
     /// Ending a recording is the one irreversible control on this screen.
     @State private var confirmStop = false
+    @State private var stopPreview: RecordingFinishPreview?
 
     var body: some View {
-        let _ = recLog.notice("body: isRecording=\(viewModel.isRecording, privacy: .public) isMapReady=\(isMapReady, privacy: .public) refusal=\(String(describing: viewModel.startRefusal), privacy: .public)")
-        return ZStack {
+        ZStack {
             // Map is ALWAYS instantiated so "ready" can never hang on a missed
             // async hop. The loader overlay sits on top until the map's first
             // render (onMapReady) or the timeout fallback in `.task` below.
@@ -178,12 +178,6 @@ struct TrackingView: View {
         .onChange(of: viewModel.isRecording) { _, now in
             recLog.notice("VIEW sees isRecording=\(now, privacy: .public)")
         }
-        // Does the change even reach this view? If this fires while `body:`
-        // stays silent, SwiftUI is receiving the invalidation and skipping the
-        // redraw. If it never fires, the subscription itself is broken.
-        .onReceive(viewModel.objectWillChange) { _ in
-            recLog.notice("objectWillChange received")
-        }
         // Гараж поверх записи, а не переключением таба: «назад» возвращает
         // сюда же, к записи, откуда человек и шёл его открывать.
         .fullScreenCover(isPresented: $showGarage) {
@@ -230,14 +224,17 @@ struct TrackingView: View {
             .environmentObject(lang)
         }
         .overlay {
-            if confirmStop {
-                stopConfirmSheet
+            if confirmStop, let preview = stopPreview {
+                stopConfirmSheet(preview: preview)
                     // Everything behind the scrim is out of bounds while the
                     // question is on screen — for the rotor as much as for a
                     // finger.
                     .accessibilityElement(children: .contain)
                     .accessibilityAddTraits(.isModal)
             }
+        }
+        .onChange(of: viewModel.isRecording) { _, recording in
+            if !recording { dismissStopConfirm() }
         }
         .onAppear {
             // Returning to a map that has already rendered once: no loader,
@@ -352,6 +349,8 @@ struct TrackingView: View {
         HStack(spacing: 12) {
             Button {
                 Haptics.tap()
+                guard let preview = viewModel.tripManager.recordingFinishPreview() else { return }
+                stopPreview = preview
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                     confirmStop = true
                 }
@@ -454,7 +453,7 @@ struct TrackingView: View {
     /// So: the same dark-glass card the HUD is built from, docked to the same
     /// edge as the controls it is about, with the safe answer nearest the thumb
     /// and the irreversible one furthest from it.
-    private var stopConfirmSheet: some View {
+    private func stopConfirmSheet(preview: RecordingFinishPreview) -> some View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
@@ -467,74 +466,13 @@ struct TrackingView: View {
                 // asked whether to end it.
                 .accessibilityHidden(true)
 
-            VStack(spacing: 16) {
-                VStack(spacing: 6) {
-                    Text(AppStrings.stopConfirmTitle(lang.language))
-                        .font(.inter(20, weight: .heavy))
-                        .foregroundStyle(.white)
-                    Text(AppStrings.stopConfirmBody(lang.language))
-                        .font(.inter(13.5))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .vertical) {
+                stopConfirmContent(preview: preview)
+                ScrollView {
+                    stopConfirmContent(preview: preview)
                 }
-
-                // What is about to be saved. The question «завершить?» is much
-                // easier to answer when the trip it is about is on the card.
-                HStack(spacing: 8) {
-                    Text(confirmDistanceText)
-                    Text("·").foregroundStyle(.white.opacity(0.3))
-                    Text(viewModel.duration)
-                }
-                .font(.inter(14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.75))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(.white.opacity(0.08)))
-
-                VStack(spacing: 8) {
-                    confirmButton(
-                        title: AppStrings.stopConfirmAction(lang.language),
-                        icon: "checkmark",
-                        fill: AppTheme.red,
-                        identifier: "stop_confirm_finish"
-                    ) {
-                        Haptics.success()
-                        confirmStop = false
-                        viewModel.toggleRecording()
-                    }
-
-                    if !viewModel.isPaused {
-                        confirmButton(
-                            title: AppStrings.stopConfirmPause(lang.language),
-                            icon: "pause.fill",
-                            fill: Color.white.opacity(0.1),
-                            identifier: "stop_confirm_pause"
-                        ) {
-                            Haptics.tap()
-                            dismissStopConfirm()
-                            viewModel.togglePause()
-                        }
-                    }
-
-                    Button {
-                        Haptics.tap()
-                        dismissStopConfirm()
-                    } label: {
-                        Text(AppStrings.cancel(lang.language))
-                            .font(.inter(16, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("stop_confirm_cancel")
-                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 22)
-            .padding(.bottom, 10)
             .background(
                 RoundedRectangle(cornerRadius: 26)
                     .fill(Color(red: 28/255, green: 28/255, blue: 30/255))
@@ -546,8 +484,93 @@ struct TrackingView: View {
             .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
             .padding(.horizontal, 16)
             .padding(.bottom, safeAreaBottom + 12)
+            .padding(.top, safeAreaTop + 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+
+    private func stopConfirmContent(preview: RecordingFinishPreview) -> some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text(preview.discardReason == nil
+                     ? AppStrings.stopConfirmTitle(lang.language)
+                     : AppStrings.recordingDiscardTitle(lang.language))
+                    .font(.interScaled(20, weight: .heavy, relativeTo: .title3))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("stop_confirm_title")
+                Text(preview.discardReason.map { AppStrings.recordingDiscardReason($0, lang.language) }
+                     ?? AppStrings.stopConfirmBody(lang.language))
+                    .font(.interScaled(13.5, relativeTo: .subheadline))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("stop_confirm_explanation")
+            }
+
+            // The recording this question is about. «Завершить?» is much
+            // easier to answer when the trip it is about is on the card.
+            HStack(spacing: 8) {
+                Text(confirmDistanceText(metres: preview.distance))
+                Text("·").foregroundStyle(.white.opacity(0.3))
+                Text(preview.formattedDuration)
+            }
+            .font(.interScaled(14, weight: .semibold, relativeTo: .subheadline))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(.white.opacity(0.08)))
+
+            VStack(spacing: 8) {
+                confirmButton(
+                    title: preview.discardReason == nil
+                        ? AppStrings.stopConfirmAction(lang.language)
+                        : AppStrings.recordingDiscardAction(lang.language),
+                    icon: preview.discardReason == nil ? "checkmark" : "trash",
+                    fill: AppTheme.red,
+                    identifier: "stop_confirm_finish"
+                ) {
+                    if let updated = viewModel.stopRecording(confirming: preview) {
+                        stopPreview = updated
+                        Haptics.tap()
+                    } else {
+                        dismissStopConfirm()
+                    }
+                }
+
+                if !viewModel.isPaused {
+                    confirmButton(
+                        title: AppStrings.stopConfirmPause(lang.language),
+                        icon: "pause.fill",
+                        fill: Color.white.opacity(0.1),
+                        identifier: "stop_confirm_pause"
+                    ) {
+                        Haptics.tap()
+                        dismissStopConfirm()
+                        viewModel.togglePause()
+                    }
+                }
+
+                Button {
+                    Haptics.tap()
+                    dismissStopConfirm()
+                } label: {
+                    Text(AppStrings.recordingReturn(lang.language))
+                        .font(.interScaled(16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 50)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("stop_confirm_cancel")
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 22)
+        .padding(.bottom, 10)
     }
 
     private func confirmButton(
@@ -562,11 +585,15 @@ struct TrackingView: View {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .bold))
                 Text(title)
-                    .font(.inter(16, weight: .bold))
+                    .font(.interScaled(16, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .frame(height: 52)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+            .frame(minHeight: 52)
             .background(fill, in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
@@ -576,6 +603,7 @@ struct TrackingView: View {
     private func dismissStopConfirm() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
             confirmStop = false
+            stopPreview = nil
         }
     }
 
@@ -595,8 +623,9 @@ struct TrackingView: View {
         )
     }
 
-    private var confirmDistanceText: String {
-        "\(recordedDistance.value) \(recordedDistance.unit)"
+    private func confirmDistanceText(metres: Double) -> String {
+        let parts = Measure.distanceParts(metres: metres, unit: distanceUnit, lang: lang.language, style: .tenths)
+        return "\(parts.value) \(parts.unit)"
     }
 
     /// Высота над уровнем моря в третьей плитке — «340 м» / «1 115 ft».
@@ -697,8 +726,8 @@ struct TrackingView: View {
     /// The map has drawn at least once — dismiss the loader and remember it
     /// past this view's lifetime.
     private func markMapReady() {
-        recLog.notice("markMapReady isMapReady=\(isMapReady, privacy: .public)")
         guard !isMapReady else { return }
+        recLog.notice("map ready")
         viewModel.trackingMapDidRender = true
         withAnimation(.easeOut(duration: 0.4)) { isMapReady = true }
     }
@@ -710,7 +739,9 @@ struct TrackingView: View {
             Image(systemName: "trash")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.7))
-            Text(AppStrings.junkTripDiscarded(lang.language))
+            Text(viewModel.discardedJunkTripReason == .noDrivingSpeed
+                 ? AppStrings.recordingDiscardedSlow(lang.language)
+                 : AppStrings.junkTripDiscarded(lang.language))
                 .font(.inter(13, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
@@ -889,8 +920,7 @@ struct TrackingView: View {
     // MARK: - Idle Overlay
 
     private var idleOverlay: some View {
-        let _ = recLog.notice("idleOverlay rebuilt")
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             // Space for shared top bar. Not hit-testable: it is a spacer over a
             // live map, and as a hit-testable one it ate every drag that began
             // in the top ~110pt of the screen — the map simply would not move

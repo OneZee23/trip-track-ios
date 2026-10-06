@@ -4,10 +4,12 @@ import XCTest
 /// Дыра — соседние НЕдостроенные точки, ≥ 10 с И ≥ 150 м (спека §2.3): те же
 /// числа, что в замере по поездкам 8 сентября.
 final class TrackGapFinderTests: XCTestCase {
-    private func p(_ north: Double, _ s: Double, filled: Bool = false) -> TrackGapFinder.Point {
+    private func p(_ north: Double, _ s: Double, filled: Bool = false,
+                   segment: Int = 0) -> TrackGapFinder.Point {
         let c = TrackTestKit.coordinate(east: 0, north: north)
         return .init(latitude: c.latitude, longitude: c.longitude,
-                     timestamp: TrackTestKit.epoch.addingTimeInterval(s), isInterpolated: filled)
+                     timestamp: TrackTestKit.epoch.addingTimeInterval(s), isInterpolated: filled,
+                     recordingSegmentIndex: segment)
     }
 
     func testLongAndSlowIsAGap() {
@@ -32,5 +34,19 @@ final class TrackGapFinderTests: XCTestCase {
 
     func testUnsortedInputIsHandled() {
         XCTAssertEqual(TrackGapFinder.openGaps(in: [p(200, 12), p(0, 0)]).count, 1)
+    }
+
+    func testExplicitPauseIsNotAnOpenOrPreviouslyFilledGPSGap() {
+        let paused = [p(0, 0), p(200, 60, segment: 1)]
+        XCTAssertTrue(TrackGapFinder.openGaps(in: paused).isEmpty)
+        XCTAssertTrue(TrackGapFinder.gaps(in: paused, includeFilled: true).isEmpty)
+    }
+
+    func testGPSGapInsideResumedSectionStillFills() {
+        let points = [p(0, 0), p(200, 60, segment: 1), p(400, 80, segment: 1)]
+        let gaps = TrackGapFinder.openGaps(in: points)
+        XCTAssertEqual(gaps.count, 1)
+        XCTAssertEqual(gaps.first?.from.recordingSegmentIndex, 1)
+        XCTAssertEqual(gaps.first?.seconds, 20)
     }
 }

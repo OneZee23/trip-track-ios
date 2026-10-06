@@ -18,6 +18,12 @@ enum TripDistanceGate {
     /// `dt` we can't judge implied speed, so reject anything over 1 km as a jump.
     static let maxSegmentDistance: Double = 1000.0
 
+    /// A corrupt filter estimate is not a speed record. Discard it instead of
+    /// clamping it to the ceiling, which would invent a 300 km/h achievement.
+    static func isPlausibleSpeed(_ speed: Double) -> Bool {
+        speed.isFinite && speed >= 0 && speed <= FixGate.maxSpeedMS
+    }
+
     /// Whether a segment covering `meters` over `dt` seconds should count.
     ///
     /// With a usable `dt` (> 0) it gates on IMPLIED SPEED, so a real sparse-GPS /
@@ -67,12 +73,46 @@ enum TripDistanceGate {
         let latitude: Double
         let longitude: Double
         let timestamp: Date?
+        let recordingSegmentIndex: Int
+        let speed: Double?
 
-        init(latitude: Double, longitude: Double, timestamp: Date?) {
+        init(latitude: Double, longitude: Double, timestamp: Date?, recordingSegmentIndex: Int = 0,
+             speed: Double? = nil) {
             self.latitude = latitude
             self.longitude = longitude
             self.timestamp = timestamp
+            self.recordingSegmentIndex = recordingSegmentIndex
+            self.speed = speed
         }
+    }
+
+    /// Maximum supported by trusted, chronologically ordered recorded samples.
+    /// Include the first actual speed: a two-point drive may start moving and
+    /// finish stopped. A missing interval >10s can also establish a lower bound
+    /// on the real maximum via displacement/time, even when both endpoint
+    /// speeds are zero or unknown. This is not an instantaneous arrival speed.
+    /// Never infer it across an explicit pause or an implausible GPS jump.
+    static func maximumRecordedSpeed(_ samples: [Sample]) -> Double {
+        var maximum = samples.reduce(0.0) { current, sample in
+            guard let speed = sample.speed, isPlausibleSpeed(speed) else { return current }
+            return max(current, speed)
+        }
+
+        for (from, to) in zip(samples, samples.dropFirst()) {
+            guard from.recordingSegmentIndex == to.recordingSegmentIndex,
+                  let start = from.timestamp, let end = to.timestamp else { continue }
+            let dt = end.timeIntervalSince(start)
+            guard dt > 10, dt.isFinite else { continue }
+            let fromCoordinate = CLLocationCoordinate2D(latitude: from.latitude, longitude: from.longitude)
+            let toCoordinate = CLLocationCoordinate2D(latitude: to.latitude, longitude: to.longitude)
+            guard CLLocationCoordinate2DIsValid(fromCoordinate), CLLocationCoordinate2DIsValid(toCoordinate)
+            else { continue }
+            let meters = CLLocation(latitude: from.latitude, longitude: from.longitude)
+                .distance(from: CLLocation(latitude: to.latitude, longitude: to.longitude))
+            guard meters > 0, meters.isFinite, isPlausibleSegment(meters: meters, dt: dt) else { continue }
+            maximum = max(maximum, meters / dt)
+        }
+        return maximum
     }
 
     /// Сумма пути по точкам — тем же шагом, каким её набирает живая запись.
@@ -90,6 +130,12 @@ enum TripDistanceGate {
         var anchor = samples[0]
 
         for sample in samples.dropFirst() {
+            // A user pause is not a GPS gap. Start the next recorded section
+            // with a fresh anchor, even if the missing journey looks plausible.
+            guard sample.recordingSegmentIndex == anchor.recordingSegmentIndex else {
+                anchor = sample
+                continue
+            }
             let from = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
             let to = CLLocation(latitude: sample.latitude, longitude: sample.longitude)
             let meters = to.distance(from: from)

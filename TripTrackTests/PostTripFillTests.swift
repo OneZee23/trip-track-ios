@@ -95,6 +95,39 @@ final class PostTripFillTests: XCTestCase {
         XCTAssertFalse(points(entity).contains(where: \.isInterpolated))
     }
 
+    func testPauseStaysEmptyAndDoesNotReturnToDistanceDuringPostProcessing() async throws {
+        let entity = tunnelTrip()
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)], on: entity)
+        entity.distance = 400 // Two recorded 200m sections; the missing 600m was paused.
+        try pc.container.viewContext.save()
+
+        await PostTripTrackProcessor(persistenceController: pc, cloudSyncEnabled: { false })
+            .processTrip(try XCTUnwrap(entity.id))
+
+        XCTAssertEqual(entity.distance, 400, accuracy: 1)
+        XCTAssertTrue(entity.isTrackProcessed)
+        XCTAssertEqual(entity.roadFillState, RoadFillState.done.rawValue)
+        XCTAssertFalse(points(entity).contains(where: \.isInterpolated))
+    }
+
+    func testSpikeRemovalDoesNotCompareGeometryAcrossPause() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: [
+            .init(east: 0, north: 0, seconds: 0),
+            .init(east: 200, north: 0, seconds: 20),
+            .init(east: 0, north: 10, seconds: 120),
+            .init(east: 0, north: 20, seconds: 121),
+        ])
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(120)], on: entity)
+        let ids = Set(points(entity).map(\.id))
+        try pc.container.viewContext.save()
+        await PostTripTrackProcessor(persistenceController: pc, cloudSyncEnabled: { false })
+            .processTrip(try XCTUnwrap(entity.id))
+
+        XCTAssertEqual(Set(points(entity).filter { !$0.isInterpolated }.map(\.id)), ids,
+                       "The end of the first section is not a detour to the start of the second")
+        XCTAssertEqual(entity.distance, 210, accuracy: 1)
+    }
+
     /// Review Focus 1: 5 км за 11 с — прыжок GPS, а не дыра.
     func testTeleportGapStaysUnfilled() async throws {
         let entity = TrackTestKit.insertTrip(into: pc, points: [

@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Izinkan akses lokasi",
         "onboardingLocationSub": "Akses lokasi diperlukan untuk merekam rutemu. Datamu tetap di perangkat.",
         "onboardingBackgroundTitle": "Perekaman di latar belakang",
-        "onboardingBackgroundSub": "Supaya perjalanan tetap terekam saat ponsel di saku, akses lokasi harus disetel ke «Selalu» — dengan «Saat menggunakan app» perekaman berhenti di latar belakang. Data gerak («Gerak & Kebugaran») membuat aplikasi bisa mengenali awal perjalanan tanpa menyalakan GPS terus-menerus, jadi baterai lebih awet.",
+        "onboardingBackgroundSub": "Akses lokasi «Selalu» membantu mendeteksi perjalanan saat aplikasi tidak terbuka. «Gerakan & Kebugaran» mendeteksi gerakan tanpa terus menyalakan GPS. Kamu bisa mengizinkan atau menolak setiap permintaan di dialog sistem.",
         "onboardingBackgroundAllow": "Izinkan «Selalu»",
         "onboardingNotificationsTitle": "Biar nggak ketinggalan",
         "onboardingNotificationsSub": "Notifikasi tentang reaksi, pengikut baru, dan komentar di perjalananmu. Nyalakan supaya tanggapannya tidak terlewat.",

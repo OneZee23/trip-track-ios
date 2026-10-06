@@ -9,6 +9,16 @@ struct Trip: Identifiable, Codable {
     var maxSpeed: Double // m/s
     var averageSpeed: Double // m/s
     var trackPoints: [TrackPoint]
+    /// Explicit recording pauses, persisted separately from GPS gaps. A point
+    /// at or after a boundary belongs to the next recording segment.
+    private var storedRecordingBreaks: [Date]?
+    var recordingBreaks: [Date] {
+        get { RecordingBreaks.normalized(storedRecordingBreaks ?? []) }
+        set {
+            storedRecordingBreaks = RecordingBreaks.normalized(newValue)
+            trackPoints = RecordingBreaks.annotate(trackPoints, breaks: newValue)
+        }
+    }
     var photos: [TripPhoto]
     /// Отметки на маршруте — «до моря 2:14». Пустой массив у поездок, которых
     /// это ещё не касалось, поэтому значение по умолчанию обязательно: инициализатор
@@ -211,7 +221,9 @@ struct Trip: Identifiable, Codable {
 
     /// Точки, которым можно верить для чисел: без грубых и без достроенных.
     /// Форму маршрута рисуют ВСЕ точки, считают — только эти (спека §2.4).
-    var measuredPoints: [TrackPoint] { trackPoints.filter(\.countsForDistance) }
+    var measuredPoints: [TrackPoint] {
+        RecordingBreaks.annotate(trackPoints, breaks: recordingBreaks).filter(\.countsForDistance)
+    }
 
     /// Time spent actually moving vs sitting stationary (engine running but
     /// not making progress — traffic, lights, parked-but-recording). Computed
@@ -246,6 +258,10 @@ struct Trip: Identifiable, Codable {
         // остановке и на каждом разрыве — там отсчёт начинается заново.
         var movingAnchor: TrackPoint?
         for i in 1..<points.count {
+            guard points[i].recordingSegmentIndex == points[i - 1].recordingSegmentIndex else {
+                movingAnchor = nil
+                continue
+            }
             let dt = points[i].timestamp.timeIntervalSince(points[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { movingAnchor = nil; continue }
             let avgMS = (points[i].speed + points[i - 1].speed) / 2.0
@@ -365,14 +381,16 @@ struct Trip: Identifiable, Codable {
          source: TripOrigin = .recorded,
          confirmation: TripConfirmation = .confirmed,
          roadFillState: RoadFillState = .unchecked,
-         energyMode: TripEnergyMode = .auto) {
+         energyMode: TripEnergyMode = .auto,
+         recordingBreaks: [Date] = []) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
         self.distance = distance
         self.maxSpeed = maxSpeed
         self.averageSpeed = averageSpeed
-        self.trackPoints = trackPoints
+        self.trackPoints = RecordingBreaks.annotate(trackPoints, breaks: recordingBreaks)
+        self.storedRecordingBreaks = RecordingBreaks.normalized(recordingBreaks)
         self.photos = photos
         self.checkpoints = checkpoints
         self.segments = segments
@@ -395,6 +413,53 @@ struct Trip: Identifiable, Codable {
         self.confirmation = confirmation
         self.roadFillState = roadFillState
         self.energyMode = energyMode
+    }
+
+    // The optional backing field keeps cached trips from older builds
+    // decodable without changing the existing wire names of other fields.
+    private enum CodingKeys: String, CodingKey {
+        case id, startDate, endDate, distance, maxSpeed, averageSpeed, trackPoints
+        case storedRecordingBreaks = "recordingBreaks"
+        case photos, checkpoints, segments, title, titleIsCustom, tripDescription
+        case fuelUsed, elevation, region, isPrivate, isTransfer, vehicleId
+        case fuelCurrency, previewPolyline, earnedBadgeIds, xpEarned, companions
+        case isOnServer, source, confirmation, roadFillState, energyMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(UUID.self, forKey: .id),
+            startDate: try c.decode(Date.self, forKey: .startDate),
+            endDate: try c.decodeIfPresent(Date.self, forKey: .endDate),
+            distance: try c.decode(Double.self, forKey: .distance),
+            maxSpeed: try c.decode(Double.self, forKey: .maxSpeed),
+            averageSpeed: try c.decode(Double.self, forKey: .averageSpeed),
+            trackPoints: try c.decode([TrackPoint].self, forKey: .trackPoints),
+            photos: try c.decode([TripPhoto].self, forKey: .photos),
+            checkpoints: try c.decodeIfPresent([TripCheckpoint].self, forKey: .checkpoints) ?? [],
+            segments: try c.decodeIfPresent([TripSegment].self, forKey: .segments) ?? [],
+            title: try c.decodeIfPresent(String.self, forKey: .title),
+            titleIsCustom: try c.decodeIfPresent(Bool.self, forKey: .titleIsCustom) ?? false,
+            tripDescription: try c.decodeIfPresent(String.self, forKey: .tripDescription),
+            fuelUsed: try c.decode(Double.self, forKey: .fuelUsed),
+            elevation: try c.decode(Double.self, forKey: .elevation),
+            region: try c.decodeIfPresent(String.self, forKey: .region),
+            isPrivate: try c.decode(Bool.self, forKey: .isPrivate),
+            isTransfer: try c.decodeIfPresent(Bool.self, forKey: .isTransfer) ?? false,
+            vehicleId: try c.decodeIfPresent(UUID.self, forKey: .vehicleId),
+            fuelCurrency: try c.decodeIfPresent(String.self, forKey: .fuelCurrency),
+            previewPolyline: try c.decodeIfPresent(Data.self, forKey: .previewPolyline),
+            earnedBadgeIds: try c.decode([String].self, forKey: .earnedBadgeIds),
+            xpEarned: try c.decode(Int.self, forKey: .xpEarned),
+            companions: try c.decodeIfPresent([TripCompanion].self, forKey: .companions) ?? [],
+            isOnServer: try c.decodeIfPresent(Bool.self, forKey: .isOnServer) ?? false,
+            source: try c.decodeIfPresent(TripOrigin.self, forKey: .source) ?? .recorded,
+            confirmation: try c.decodeIfPresent(TripConfirmation.self, forKey: .confirmation) ?? .confirmed,
+            roadFillState: try c.decodeIfPresent(RoadFillState.self, forKey: .roadFillState) ?? .unchecked,
+            energyMode: try c.decodeIfPresent(TripEnergyMode.self, forKey: .energyMode) ?? .auto,
+            recordingBreaks: try c.decodeIfPresent([Date].self, forKey: .storedRecordingBreaks) ?? []
+        )
     }
 
     var earnedBadges: [Badge] {
@@ -441,15 +506,27 @@ extension Trip {
 /// Shared classifier so post-trip cleanup (MapViewModel.stopRecording) and
 /// orphan recovery (TripManager.cleanupOrphanedTrips) can't drift apart.
 enum TripJunkClassifier {
+    enum Reason: Equatable {
+        case tooShort
+        case noDrivingSpeed
+    }
+
     /// Всё в СИ: это ПОРОГИ ЗАПИСИ, а не показ. Мусорная поездка одинакова у
     /// всех, и её границы человеку нигде не называются — тост про удаление
     /// чисел не приводит.
     static func isJunk(distanceMeters: Double, durationSeconds: TimeInterval, maxSpeedMS: Double) -> Bool {
+        reason(distanceMeters: distanceMeters, durationSeconds: durationSeconds, maxSpeedMS: maxSpeedMS) != nil
+    }
+
+    /// The confirmation and the actual finish share these exact boundaries.
+    static func reason(distanceMeters: Double, durationSeconds: TimeInterval, maxSpeedMS: Double) -> Reason? {
         let isParkingManeuver = distanceMeters < AutoTripPolicy.junkTripMinDistance
             && durationSeconds < AutoTripPolicy.junkTripMinDuration
         let isWalkingMisfire = maxSpeedMS * 3.6 < AutoTripPolicy.junkTripWalkingSpeedKmh
             && durationSeconds > AutoTripPolicy.junkTripWalkingMinDuration
-        return isParkingManeuver || isWalkingMisfire
+        if isParkingManeuver { return .tooShort }
+        if isWalkingMisfire { return .noDrivingSpeed }
+        return nil
     }
 }
 

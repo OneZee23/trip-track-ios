@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Standortzugriff erlauben",
         "onboardingLocationSub": "Für die Aufzeichnung deiner Routen wird Standortzugriff benötigt. Deine Daten bleiben auf dem Gerät.",
         "onboardingBackgroundTitle": "Aufnahme im Hintergrund",
-        "onboardingBackgroundSub": "Damit Fahrten weiterlaufen, während das Handy in der Tasche steckt, muss der Standortzugriff auf «Immer» stehen — mit «Beim Verwenden» bricht die Aufnahme im Hintergrund ab. Mit Bewegungsdaten («Bewegung & Fitness») erkennt die App den Beginn einer Fahrt, ohne GPS dauerhaft laufen zu lassen — das schont den Akku.",
+        "onboardingBackgroundSub": "Der Standortzugriff „Immer“ hilft, Fahrten zu erkennen, wenn die App nicht geöffnet ist. „Bewegung & Fitness“ erkennt Bewegung, ohne GPS ständig zu nutzen. Bei jeder Systemabfrage kannst du den Zugriff erlauben oder ablehnen.",
         "onboardingBackgroundAllow": "«Immer» erlauben",
         "onboardingNotificationsTitle": "Bleib auf dem Laufenden",
         "onboardingNotificationsSub": "Mitteilungen zu Reaktionen, neuen Followern und Kommentaren zu deinen Fahrten. Schalte sie ein, damit du keine Reaktion verpasst.",

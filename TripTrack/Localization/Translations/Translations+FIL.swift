@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Payagan ang lokasyon",
         "onboardingLocationSub": "Kailangan ng access sa lokasyon para ma-record ang mga ruta mo. Nananatili sa device mo ang datos.",
         "onboardingBackgroundTitle": "Pag-record sa background",
-        "onboardingBackgroundSub": "Para magpatuloy ang pag-record habang nasa bulsa ang telepono, kailangang naka-«Palagi» ang access sa lokasyon — sa «Habang ginagamit» huhinto ang pag-record sa background. Ang datos ng galaw («Motion & Fitness») ang nagpapaalam sa app na may nagsisimulang biyahe nang hindi laging nakabukas ang GPS, kaya mas tumatagal ang baterya.",
+        "onboardingBackgroundSub": "Ang «Palagi» na access sa lokasyon ay tumutulong matukoy ang mga biyahe kapag hindi bukas ang app. Natutukoy ng «Galaw at Fitness» ang paggalaw nang hindi palaging gumagamit ng GPS. Maaari mong payagan o tanggihan ang bawat hiling sa mga dialog ng system.",
         "onboardingBackgroundAllow": "Payagan ang «Palagi»",
         "onboardingNotificationsTitle": "Manatiling updated",
         "onboardingNotificationsSub": "Mga abiso tungkol sa reaksyon, bagong follower at komento sa mga biyahe mo. I-on para hindi mo makaligtaan ang tugon.",

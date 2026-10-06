@@ -269,7 +269,8 @@ struct FeedView: View {
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: feedVM.tripManager),
                         pushPath: $authorPath,
-                        focus: focus
+                        focus: focus,
+                        preview: feedVM.allTrips.first(where: { $0.id == id })
                     )
                 case .socialTrip(let t, let focus):
                     // Same screen as our own trips, fed from the feed's copy.

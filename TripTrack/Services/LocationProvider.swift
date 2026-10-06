@@ -5,7 +5,8 @@ import Combine
 /// Унифицированные данные о позиции
 struct LocationUpdate {
     let coordinate: CLLocationCoordinate2D
-    let speed: CLLocationSpeed // м/с
+    /// м/с; отрицательное значение — скорость неизвестна, а не остановка.
+    let speed: CLLocationSpeed
     /// Градусы, 0 = север. `nil` — курс неизвестен, и это НЕ ноль.
     ///
     /// До 0.6.7 здесь стояло `location.course >= 0 ? location.course : 0`, то
@@ -25,7 +26,7 @@ struct LocationUpdate {
     static func from(_ location: CLLocation) -> LocationUpdate {
         LocationUpdate(
             coordinate: location.coordinate,
-            speed: max(0, location.speed),
+            speed: location.speed,
             course: location.course >= 0 ? location.course : nil,
             altitude: location.altitude,
             timestamp: location.timestamp,

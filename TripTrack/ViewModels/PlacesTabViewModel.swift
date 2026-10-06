@@ -2,7 +2,8 @@ import Foundation
 import Combine
 
 /// Список вкладки «Места»: считается на загрузке и по `.placesChanged`,
-/// а не в `body` — `passes(for:)` ходит в CoreData на каждое место.
+/// а не в `body`. Проезды всех мест читаются одной выборкой: запрос на
+/// каждую строку задерживал открытие вкладки с большой историей.
 ///
 /// Вторая половина экрана — подсказки «Похоже, вы здесь бываете»
 /// (`PlaceSuggestions`). Их счёт разбирает превью ВСЕЙ библиотеки, поэтому
@@ -83,11 +84,9 @@ final class PlacesTabViewModel: ObservableObject {
 
     func reload() {
         let places = manager.places
-        var passesByPlace: [UUID: [PlacePass]] = [:]
+        let passesByPlace = manager.passes(for: places.map(\.id))
         items = PlaceListItem.sorted(places.map { place in
-            let passes = manager.passes(for: place.id)
-            passesByPlace[place.id] = passes
-            return PlaceListItem.build(place: place, passes: passes)
+            PlaceListItem.build(place: place, passes: passesByPlace[place.id] ?? [])
         })
         lastPass = freshestReading(passesByPlace)
         // Поднимаются только когда их будут показывать: у человека с сотней

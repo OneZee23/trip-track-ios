@@ -68,6 +68,7 @@ struct FullscreenMapSheet: View {
     var onAddCheckpoint: ((TripRouteLocator.Fix) -> Void)?
     /// Forwarded to the map — someone else's trip carries no fog of mine.
     var showsFog: Bool = true
+    var elevationStyle: MKStandardMapConfiguration.ElevationStyle = .realistic
     /// Social trips pass `true` — their preview polyline is sparsely sampled
     /// and the gap-splitting in RouteMapView would zero out the bounds.
     var treatAsPreview: Bool = false
@@ -92,6 +93,7 @@ struct FullscreenMapSheet: View {
     /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумает его
     /// экран, когда кадр приехал на полный размер.
     var fitTick: Int = 0
+    var animatesFit: Bool = true
     /// Принимает ли карта пальцы. На едущем кадре — нет: жест спорил бы с
     /// пружиной раскрытия.
     var mapIsInteractive: Bool = true
@@ -204,6 +206,7 @@ struct FullscreenMapSheet: View {
                 onRouteTap: onAddCheckpoint == nil ? nil : { handleTap($0, metersPerPoint: $1) },
                 fogCutoffDate: fogCutoffDate,
                 showsFog: showsFog,
+                elevationStyle: elevationStyle,
                 treatAsPreview: treatAsPreview,
                 carColorName: carColorName,
                 zoomTick: zoomTick,
@@ -214,6 +217,7 @@ struct FullscreenMapSheet: View {
                 playbackCoords: (canReplay || canCrawl) ? playbackSeries : nil,
                 playbackFollow: followsCar,
                 fitInsets: (canReplay || canCrawl) ? replayFitInsets : plainFitInsets,
+                animatesFit: animatesFit,
                 host: host,
                 hostPresentation: .fullscreen,
                 fitTick: fitTick

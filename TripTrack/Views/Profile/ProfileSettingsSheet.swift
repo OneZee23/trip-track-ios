@@ -45,6 +45,7 @@ struct ProfileSettingsSheet: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var settings = SettingsManager.shared
@@ -209,9 +210,9 @@ struct ProfileSettingsSheet: View {
         // with no shadow, the same `SheetCloseCircle` the garage sheets use.
         HStack(alignment: .center) {
             Text(AppStrings.settingsTitle(l))
-                .font(.inter(22, weight: .bold))
+                .font(.interScaled(22, weight: .bold, relativeTo: .title2))
                 .foregroundStyle(AppTheme.colors(for: scheme).text)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 8)
 
@@ -524,25 +525,34 @@ struct ProfileSettingsSheet: View {
 
     private func footer(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let footerLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 16))
+        let versionLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 6))
         return VStack(spacing: 10) {
-            HStack(spacing: 6) {
+            versionLayout {
                 Text("TRIP TRACK")
                     .font(.custom("PressStart2P-Regular", size: 8))
                     .foregroundStyle(AppTheme.accent)
                 Text("· v\(version) · OneZee")
-                    .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
+                    .font(.interScaled(12))
+                    .foregroundStyle(c.textSecondary)
             }
 
-            HStack(spacing: 16) {
+            footerLayout {
                 Button {
                     Haptics.tap()
                     UIApplication.shared.open(AppConfig.privacyPolicyURL(l))
                 } label: {
                     Text(AppStrings.privacyPolicy(l))
-                        .font(.inter(11, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
+                        .font(.interScaled(11, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
                         .underline()
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
 
@@ -551,9 +561,12 @@ struct ProfileSettingsSheet: View {
                     UIApplication.shared.open(AppConfig.termsURL(l))
                 } label: {
                     Text(AppStrings.termsOfService(l))
-                        .font(.inter(11, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
+                        .font(.interScaled(11, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
                         .underline()
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
             }
@@ -568,10 +581,12 @@ struct ProfileSettingsSheet: View {
                 UIApplication.shared.open(AppConfig.osmCopyrightURL)
             } label: {
                 Text(AppStrings.osmAttribution(l))
-                    .font(.inter(11))
-                    .foregroundStyle(c.textTertiary)
+                    .font(.interScaled(11))
+                    .foregroundStyle(c.textSecondary)
                     .underline()
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("settings_osm_attribution")
@@ -582,9 +597,10 @@ struct ProfileSettingsSheet: View {
             // не кнопка, а строка. Стоит рядом с OSM потому, что вопрос у
             // человека один («откуда это»), а источника два.
             Text(AppStrings.naturalEarthAttribution(l))
-                .font(.inter(11))
-                .foregroundStyle(c.textTertiary)
+                .font(.interScaled(11))
+                .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("settings_ne_attribution")
         }
         .frame(maxWidth: .infinity)
@@ -708,6 +724,7 @@ private struct SettingsToggleRow: View {
     var isEnabled: Bool = true
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -721,44 +738,48 @@ private struct SettingsToggleRow: View {
             }
             .frame(width: 30, height: 30)
 
-            Text(title)
-                .font(.inter(14.5, weight: .semibold))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                // The label yields the row's width last: on a 360pt phone
-                // «Поездки на глобальной карте» plus disc plus switch is the
-                // tight case, and it should shrink rather than push the «?» off.
-                .layoutPriority(1)
-
-            if let hint {
-                SettingsHintButton(text: hint)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    titleText(c)
+                    HStack {
+                        if let hint { SettingsHintButton(text: hint).frame(width: 44, height: 44) }
+                        Spacer(minLength: 8)
+                        toggle
+                    }
+                }
+            } else {
+                titleText(c)
+                if let hint { SettingsHintButton(text: hint) }
+                Spacer(minLength: 8)
+                toggle
             }
-
-            Spacer(minLength: 8)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(AppTheme.accent)
-                // Canon's switch is 46×28 — the system's 51×31 at 0.9.
-                .scaleEffect(0.9)
-                // 28, not 44: `scaleEffect` is a geometry effect and does not
-                // shrink layout size, so a 44 frame made the switch the tallest
-                // thing in the row and every switch row 70pt against canon's 56
-                // — three of them stacked in one card is where that read as a
-                // sparse, unfinished list. The 44pt target is grown back with
-                // padding and pulled out of layout again.
-                .frame(width: 46, height: 28)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-                .padding(.vertical, -8)
-                .disabled(!isEnabled)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 13)
+        // A real 44pt toggle target leaves the usual row at 56pt. Long text
+        // grows the row, without shrinking type to keep a fixed height.
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 13 : 6)
         .opacity(isEnabled ? 1 : 0.55)
         .animation(.easeOut(duration: 0.2), value: isEnabled)
     }
+
+    private func titleText(_ c: AppTheme.Colors) -> some View {
+        Text(title)
+            .font(.interScaled(14.5, weight: .semibold))
+            .foregroundStyle(c.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+    }
+
+    private var toggle: some View {
+        Toggle(title, isOn: isOn)
+            .labelsHidden()
+            .tint(AppTheme.accent)
+            .scaleEffect(0.9)
+            .frame(width: 51, height: 44)
+            .contentShape(Rectangle())
+            .disabled(!isEnabled)
+    }
+
 }
 
 /// Canon's author link (1691:540): the same row geometry with a second line
@@ -803,14 +824,13 @@ private struct SettingsLinkRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.inter(14.5, weight: .semibold))
+                        .font(.interScaled(14.5, weight: .semibold))
                         .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
-                        .font(.inter(11))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
+                        .font(.interScaled(11))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 8)

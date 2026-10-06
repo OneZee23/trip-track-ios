@@ -68,6 +68,29 @@ final class TripRouteLocatorTests: XCTestCase {
                        "путь до последней точки разошёлся с одометром поездки")
     }
 
+    func testDistancePrefixResumesAfterPauseWithoutCountingTheMissingJourney() {
+        let values: [(metres: Double, seconds: Double, accuracy: Double)] = [
+            (0, 0, 8), (10, 1, 8), (5000, 120, 150), (5010, 121, 8), (5020, 122, 8)
+        ]
+        let points = values.map {
+            TrackPoint(latitude: 45 + $0.metres / Self.metersPerDegree, longitude: 38.9,
+                       speed: 10, horizontalAccuracy: $0.accuracy,
+                       timestamp: start.addingTimeInterval($0.seconds))
+        }
+        let segmented = RecordingBreaks.annotate(points, breaks: [start.addingTimeInterval(120)])
+        let prefix = TripRouteLocator.distancePrefix(segmented)
+        XCTAssertEqual(prefix[1], 10, accuracy: 0.1)
+        XCTAssertEqual(prefix[2], prefix[1], accuracy: 1e-9)
+        XCTAssertEqual(prefix[3], prefix[1], accuracy: 1e-9,
+                       "First trustworthy point after pause establishes a new anchor")
+        XCTAssertEqual(prefix[4], 20, accuracy: 0.1)
+        let odometer = TripDistanceGate.totalDistance(segmented.filter(\.countsForDistance).map {
+            .init(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp,
+                  recordingSegmentIndex: $0.recordingSegmentIndex)
+        })
+        XCTAssertEqual(prefix[4], odometer, accuracy: 1e-9)
+    }
+
     /// Отметка на середине даёт половину пути и половину времени.
     func testAPointInTheMiddleReadsHalfTheTrip() {
         let points = straightTrack(seconds: 300)   // 3000 м, 300 с

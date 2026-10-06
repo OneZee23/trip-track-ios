@@ -102,6 +102,7 @@ struct VehicleEditFormView: View {
     /// ложится в `@State` и сохраняется вместе с формой: запись прямо из
     /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
     @State private var cardStyle: VehicleCardStyle
+    @State private var cardStyleWasPicked = false
     /// Открытая витрина оформления. Фон карточки машины живёт не в
     /// `SettingsManager`, а в самой машине, поэтому запись идёт замыканием.
     @State private var showcase: ProShowcaseKind?
@@ -313,7 +314,10 @@ struct VehicleEditFormView: View {
         }
         .proShowcase($showcase,
                      vehicle: editedVehicle,
-                     onPickVehicleCard: { cardStyle = VehicleCardStyle.from($0) })
+                     onPickVehicleCard: {
+                         cardStyle = VehicleCardStyle.from($0)
+                         cardStyleWasPicked = true
+                     })
     }
 
     // MARK: - Фон карточки (0.8.0)
@@ -1593,7 +1597,8 @@ struct VehicleEditFormView: View {
                 settings.setDashboardUnits(vehicleId: newId, dashboardUnits)
             }
             if cardStyle != .none {
-                settings.setCardStyle(vehicleId: newId, cardStyle)
+                settings.selectCosmetic(.vehicleCard, id: cardStyle.rawValue,
+                                        vehicleID: newId, isPlus: plus.isPlus)
             }
             settings.selectVehicle(id: newId)
 
@@ -1606,8 +1611,9 @@ struct VehicleEditFormView: View {
             if dashboardUnits != original.dashboardUnits {
                 settings.setDashboardUnits(vehicleId: id, dashboardUnits)
             }
-            if cardStyle != VehicleCardStyle.from(original.cardStyle) {
-                settings.setCardStyle(vehicleId: id, cardStyle)
+            if cardStyleWasPicked || cardStyle != VehicleCardStyle.from(original.cardStyle) {
+                settings.selectCosmetic(.vehicleCard, id: cardStyle.rawValue,
+                                        vehicleID: id, isPlus: plus.isPlus)
             }
             // Реальный пробег живёт отдельной записью: он не часть «личности»
             // машины и не должен тащить за собой её sync-операцию, когда

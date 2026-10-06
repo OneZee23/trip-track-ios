@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Consenti la posizione",
         "onboardingLocationSub": "Per registrare i tuoi percorsi serve l'accesso alla posizione. I tuoi dati restano sul dispositivo.",
         "onboardingBackgroundTitle": "Registrazione in background",
-        "onboardingBackgroundSub": "Perché i viaggi continuino a registrarsi con il telefono in tasca, l'accesso alla posizione deve essere su «Sempre» — con «Mentre usi l'app» la registrazione si interrompe in background. I dati di movimento («Motion e fitness») permettono di riconoscere l'inizio di un viaggio senza tenere il GPS sempre acceso, e la batteria dura di più.",
+        "onboardingBackgroundSub": "L’accesso alla posizione «Sempre» aiuta a rilevare i viaggi quando l’app non è aperta. «Movimento e fitness» rileva gli spostamenti senza tenere il GPS sempre attivo. Puoi consentire o rifiutare ogni richiesta nelle finestre di sistema.",
         "onboardingBackgroundAllow": "Consenti «Sempre»",
         "onboardingNotificationsTitle": "Resta aggiornato",
         "onboardingNotificationsSub": "Notifiche su reazioni, nuovi follower e commenti ai tuoi viaggi. Attivale per non perderti nessuna risposta.",

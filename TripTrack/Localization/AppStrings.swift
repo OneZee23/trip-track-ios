@@ -1136,14 +1136,12 @@ enum AppStrings {
            ru: "Запись в фоне",
            en: "Recording in the background")
     }
-    // This page's button also fires the Motion & Fitness prompt
-    // (OnboardingView.requestAlwaysAndAdvance), and the copy named only
-    // location — activity data was asked for with nothing disclosed about
-    // it, so the sensor and its battery reason are spelled out here.
+    // The background step asks for location, then Motion & Fitness. Explain
+    // their purpose without choosing an answer on the person's behalf.
     static func onboardingBackgroundSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingBackgroundSub",
-           ru: "Чтобы поездки писались, когда телефон в кармане, нужен доступ к геолокации «Всегда» — с «При использовании» запись прервётся в фоне. Датчик движения («Движение и фитнес») помогает заметить начало поездки без постоянного GPS — так батарея расходуется меньше.",
-           en: "For trips to keep recording with the phone in your pocket, location access must be «Always» — with «While Using» recording stops in the background. Motion & Fitness data lets the app spot a drive starting without keeping GPS on, so the battery lasts longer.")
+           ru: "Геолокация «Всегда» помогает замечать начало поездки, когда приложение закрыто. «Движение и фитнес» определяет движение без постоянной работы GPS. В системных окнах можно разрешить или отклонить доступ.",
+           en: "Always location access helps detect drives when the app isn’t open. Motion & Fitness detects movement without continuously running GPS. You can allow or decline each request in the system prompts.")
     }
     static func onboardingBackgroundAllow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingBackgroundAllow", ru: "Разрешить «Всегда»", en: "Allow «Always»")

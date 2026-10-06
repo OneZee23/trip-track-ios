@@ -92,7 +92,7 @@ struct TipJarSheet: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tip_jar")
         .toast(item: $toastItem)
-        .task { if jar.products.isEmpty { await jar.load() } }
+        .task { await jar.load() }
     }
 
     /// Состояние 20: «Спасибо!». Сердце 64 на приглушённом фоне, короткое
@@ -158,7 +158,7 @@ struct TipJarSheet: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Text(product.displayName)
+                Text(tipTitle(product))
                     .font(.inter(14.5, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -177,5 +177,18 @@ struct TipJarSheet: View {
         .buttonStyle(PressableCardStyle())
         .disabled(jar.phase == .purchasing)
         .opacity(jar.phase == .purchasing ? 0.5 : 1)
+    }
+
+    private func tipTitle(_ product: Product) -> String {
+        switch product.id {
+        case TipJarService.tipID:
+            return AppStrings.tipsCoffee(lang.language)
+        case TipJarService.tipMediumID:
+            return AppStrings.tipsMeal(lang.language)
+        case TipJarService.tipLargeID:
+            return AppStrings.tipsFuel(lang.language)
+        default:
+            return product.displayName
+        }
     }
 }

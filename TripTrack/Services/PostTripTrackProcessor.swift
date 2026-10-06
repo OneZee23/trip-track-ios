@@ -69,7 +69,9 @@ final class PostTripTrackProcessor {
         }
 
         // Remove spike points (GPS multipath / jumps)
-        let cleanedPoints = removeSpikePoints(originalPoints, context: context)
+        let cleanedPoints = removeSpikePoints(originalPoints,
+                                              recordingBreaks: CoreDataTripRepository.recordingBreaks(of: entity),
+                                              context: context)
         guard cleanedPoints.count >= 2 else {
             entity.roadFillState = RoadFillState.done.rawValue
             entity.isTrackProcessed = true
@@ -116,7 +118,8 @@ final class PostTripTrackProcessor {
     /// A spike is a point that creates an implausible detour: the angle between
     /// (prev → point) and (point → next) is sharp AND the point is far from the
     /// straight line between prev and next.
-    private func removeSpikePoints(_ points: [TrackPointEntity], context: NSManagedObjectContext) -> [TrackPointEntity] {
+    private func removeSpikePoints(_ points: [TrackPointEntity], recordingBreaks: [Date],
+                                   context: NSManagedObjectContext) -> [TrackPointEntity] {
         guard points.count >= 3 else { return points }
 
         var keepFlags = Array(repeating: true, count: points.count)
@@ -128,6 +131,11 @@ final class PostTripTrackProcessor {
             let prev = points[i - 1]
             let curr = points[i]
             let next = points[i + 1]
+
+            // The end/start of a recorded section has no neighbouring geometry
+            // across the user's pause; it cannot be judged as a detour there.
+            if let from = prev.timestamp, let to = next.timestamp,
+               RecordingBreaks.crosses(from: from, to: to, breaks: recordingBreaks) { continue }
 
             let locPrev = CLLocation(latitude: prev.latitude, longitude: prev.longitude)
             let locCurr = CLLocation(latitude: curr.latitude, longitude: curr.longitude)
@@ -179,7 +187,9 @@ final class PostTripTrackProcessor {
     @discardableResult
     static func fillOpenGaps(entity: TripEntity, context: NSManagedObjectContext) -> Int {
         let stored = liveTrackPoints(of: entity)
-        let gaps = TrackGapFinder.openGaps(in: stored.compactMap(gapPoint)).filter(GapFill.isFillable)
+        let breaks = CoreDataTripRepository.recordingBreaks(of: entity)
+        let points = stored.compactMap { gapPoint($0, recordingBreaks: breaks) }
+        let gaps = TrackGapFinder.openGaps(in: points).filter(GapFill.isFillable)
         guard !gaps.isEmpty else { return 0 }
         let altitudes = altitudeLookup(stored)
         for gap in gaps {
@@ -199,9 +209,14 @@ final class PostTripTrackProcessor {
     }
 
     static func gapPoint(_ p: TrackPointEntity) -> TrackGapFinder.Point? {
+        gapPoint(p, recordingBreaks: [])
+    }
+
+    static func gapPoint(_ p: TrackPointEntity, recordingBreaks: [Date]) -> TrackGapFinder.Point? {
         guard let ts = p.timestamp else { return nil }
         return .init(latitude: p.latitude, longitude: p.longitude, timestamp: ts,
-                     isInterpolated: p.isInterpolated)
+                     isInterpolated: p.isInterpolated,
+                     recordingSegmentIndex: RecordingBreaks.segmentIndex(at: ts, breaks: recordingBreaks))
     }
 
     /// Высота настоящих точек по времени — края дыры берут её отсюда.
@@ -269,12 +284,15 @@ final class PostTripTrackProcessor {
             TripDistanceGate.countsForDistance(horizontalAccuracy: $0.horizontalAccuracy,
                                                isInterpolated: $0.isInterpolated)
         }
-        let totalDistance = TripDistanceGate.totalDistance(
-            trusted.map {
-                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
-            }
-        )
-        let maxSpeed = trusted.dropFirst().reduce(0.0) { max($0, $1.speed) }
+        let breaks = CoreDataTripRepository.recordingBreaks(of: entity)
+        let samples = trusted.map { point in
+            TripDistanceGate.Sample(latitude: point.latitude, longitude: point.longitude, timestamp: point.timestamp,
+                                   recordingSegmentIndex: point.timestamp.map {
+                                       RecordingBreaks.segmentIndex(at: $0, breaks: breaks)
+                                   } ?? 0, speed: point.speed)
+        }
+        let totalDistance = TripDistanceGate.totalDistance(samples)
+        let maxSpeed = TripDistanceGate.maximumRecordedSpeed(samples)
 
         entity.distance = totalDistance
         entity.maxSpeed = maxSpeed

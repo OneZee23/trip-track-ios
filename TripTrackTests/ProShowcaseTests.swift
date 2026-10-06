@@ -56,10 +56,27 @@ final class ProShowcaseTests: XCTestCase {
     /// 24 — подписка была и кончилась: предлагают ПРОДЛИТЬ, а не
     /// «попробовать неделю», которой такому человеку всё равно не дадут.
     func testAnEndedSubscriptionIsOfferedARenewalNotATrial() {
-        XCTAssertEqual(ProShowcase.action(state(ended: true)), .renew)
+        XCTAssertEqual(ProShowcase.action(state(ended: true)), .done,
+                       "бесплатный выбор можно завершить без покупки")
         XCTAssertEqual(
             ProShowcase.action(state(tryingOn: true, ended: true)), .renew,
             "примерка не отменяет того, что подписка была")
+    }
+
+    func testExpiredFreeSelectionCanFinishAfterPremiumTryOn() {
+        XCTAssertEqual(ProShowcase.action(state(tryingOn: true, ended: true)), .renew)
+        XCTAssertEqual(ProShowcase.action(state(tryingOn: false, ended: true)), .done)
+    }
+
+    func testRetainedChoiceNamesTheActualObjectAndVariantInEveryLanguage() {
+        for language in LanguageManager.Language.allCases {
+            for kind in ProShowcaseKind.allCases {
+                let text = AppStrings.cosmeticRetainedChoice(language, kind: kind, name: "SavedVariant")
+                XCTAssertTrue(text.contains(kind.title(language)), "\(language) \(kind)")
+                XCTAssertTrue(text.contains("SavedVariant"))
+                XCTAssertFalse(text.contains("{"))
+            }
+        }
     }
 
     /// Витрина не продаёт платное — кнопка закрывает лист и никуда не ведёт.
@@ -109,6 +126,109 @@ final class ProShowcaseTests: XCTestCase {
                        "подписка снова активна")
         XCTAssertFalse(ProShowcase.showsExpiredCard(state(hidden: true, ended: true)),
                        "продлевать негде — кнопка была бы мёртвой")
+    }
+
+    // MARK: - Сохранённый выбор и примерка
+
+    private var previewCases: [(kind: ProShowcaseKind, premium: String,
+                                anotherPremium: String, free: String)] {
+        [
+            (.profileBackground, ProfileBackground.plusNebula.rawValue,
+             ProfileBackground.plusLava.rawValue, ProfileBackground.sunset.rawValue),
+            (.avatarFrame, AvatarFrame.flame.rawValue,
+             AvatarFrame.gold.rawValue, AvatarFrame.none.rawValue),
+            (.vehicleCard, VehicleCardStyle.carbon.rawValue,
+             VehicleCardStyle.racing.rawValue, VehicleCardStyle.none.rawValue),
+            (.routeLine, RouteLineStyle.amber.rawValue,
+             RouteLineStyle.violet.rawValue, RouteLineStyle.speed.rawValue)
+        ]
+    }
+
+    /// Открытие витрины не является примеркой сохранённого платного выбора.
+    /// Без подписки превью и выделение должны указывать на бесплатную плитку,
+    /// даже если платные варианты доступны для отдельной примерки ниже.
+    func testSavedPremiumWithoutEntitlementStartsAtVisibleFreeDefault() {
+        for item in previewCases {
+            for hidden in [false, true] {
+                let shown = ProShowcase.previewID(
+                    for: item.kind, current: item.premium, tried: nil,
+                    isPlus: false, storefrontHidesPlus: hidden)
+                XCTAssertEqual(shown, "", "\(item.kind), hidden=\(hidden)")
+                XCTAssertTrue(ProShowcase.groups(for: item.kind).free.contains {
+                    $0.id == shown
+                }, "\(item.kind): выделение должно остаться в видимой сетке")
+            }
+        }
+    }
+
+    /// Один и тот же сохранённый ID снова виден после продления, в том числе
+    /// в регионе, где новые подписки не продаются.
+    func testSavedPremiumReturnsAfterEntitlementResumesInHiddenStorefront() {
+        for item in previewCases {
+            let before = ProShowcase.previewID(
+                for: item.kind, current: item.premium, tried: nil,
+                isPlus: true, storefrontHidesPlus: false)
+            let during = ProShowcase.previewID(
+                for: item.kind, current: item.premium, tried: nil,
+                isPlus: false, storefrontHidesPlus: true)
+            let renewed = ProShowcase.previewID(
+                for: item.kind, current: item.premium, tried: nil,
+                isPlus: true, storefrontHidesPlus: true)
+
+            XCTAssertEqual(before, item.premium, "\(item.kind)")
+            XCTAssertEqual(during, "", "\(item.kind)")
+            XCTAssertEqual(renewed, item.premium, "\(item.kind)")
+        }
+    }
+
+    /// Платное можно примерить без покупки там, где продаётся PRO. Смена
+    /// региона при открытом листе должна убрать уже начатую примерку.
+    func testExplicitPremiumPreviewDisappearsWhenStorefrontBecomesHidden() {
+        for item in previewCases {
+            let before = ProShowcase.previewID(
+                for: item.kind, current: item.free, tried: item.premium,
+                isPlus: false, storefrontHidesPlus: false)
+            let after = ProShowcase.previewID(
+                for: item.kind, current: item.free, tried: item.premium,
+                isPlus: false, storefrontHidesPlus: true)
+
+            XCTAssertEqual(before, item.premium, "\(item.kind)")
+            XCTAssertEqual(after, item.free,
+                           "\(item.kind): скрытая примерка не заменяет сохранённый бесплатный выбор")
+        }
+    }
+
+    func testActiveProCanPreviewAnotherPremiumVariantInHiddenStorefront() {
+        for item in previewCases {
+            XCTAssertEqual(ProShowcase.previewID(
+                for: item.kind, current: item.premium, tried: item.anotherPremium,
+                isPlus: true, storefrontHidesPlus: true), item.anotherPremium,
+                "\(item.kind): действующая подписка сильнее региона")
+        }
+    }
+
+    func testFreeSelectionReplacesPremiumPreviewWithOrWithoutEntitlement() {
+        for item in previewCases {
+            for isPlus in [false, true] {
+                XCTAssertEqual(ProShowcase.previewID(
+                    for: item.kind, current: item.premium, tried: item.free,
+                    isPlus: isPlus, storefrontHidesPlus: true), item.free,
+                    "\(item.kind), isPlus=\(isPlus)")
+            }
+        }
+    }
+
+    /// Неизвестный ID (например, из будущей версии) не должен оставлять
+    /// превью без соответствующей плитки или сохранять чужую примерку.
+    func testUnknownSavedOrTriedVariantUsesTheDefaultTile() {
+        for item in previewCases {
+            XCTAssertEqual(ProShowcase.previewID(
+                for: item.kind, current: "future_cosmetic", tried: nil,
+                isPlus: true, storefrontHidesPlus: false), "", "\(item.kind)")
+            XCTAssertEqual(ProShowcase.previewID(
+                for: item.kind, current: item.premium, tried: "future_cosmetic",
+                isPlus: true, storefrontHidesPlus: false), "", "\(item.kind)")
+        }
     }
 
     // MARK: - Числа в заголовках групп

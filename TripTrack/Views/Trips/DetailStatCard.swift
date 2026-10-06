@@ -16,21 +16,18 @@ struct DetailStatCard: View {
     let segments: [Segment]
     let label: String
     let color: Color
-    var staggerIndex: Int = 0
     @Environment(\.colorScheme) private var scheme
-    @State private var appeared = false
 
-    init(segments: [Segment], label: String, color: Color, staggerIndex: Int = 0) {
+    init(segments: [Segment], label: String, color: Color) {
         self.segments = segments
         self.label = label
         self.color = color
-        self.staggerIndex = staggerIndex
     }
 
-    init(value: String, unit: String = "", label: String, color: Color, staggerIndex: Int = 0) {
+    init(value: String, unit: String = "", label: String, color: Color) {
         self.init(
             segments: [Segment(value: value, unit: unit)],
-            label: label, color: color, staggerIndex: staggerIndex
+            label: label, color: color
         )
     }
 
@@ -64,14 +61,7 @@ struct DetailStatCard: View {
                 .fill(c.card)
                 .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
         }
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 10)
         .accessibilityElement(children: .combine)
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.35).delay(Double(staggerIndex) * 0.05)) {
-                appeared = true
-            }
-        }
     }
 
     /// «4 ч 58 мин» as a single run of text — numbers in the card's colour,

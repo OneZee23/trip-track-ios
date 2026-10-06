@@ -21,10 +21,6 @@ struct ProfileHistoryCalendar: View {
     let maxKmDay: Double
     /// How many trips the current range matches — drives the «сбросить» row.
     let filteredCount: Int
-    /// A tap on a day with zero km (0.8.0, §4а) — opens «Вписать поездку»
-    /// with that date preset instead of starting a range. `nil` keeps the
-    /// calendar exactly as it shipped before manual trips existed.
-    var onEmptyDayTap: ((Date) -> Void)?
     /// Показывать ли строку «N поездок · сбросить».
     ///
     /// На «Я» она обязательна: без неё тап может оставить историю почти
@@ -94,7 +90,6 @@ struct ProfileHistoryCalendar: View {
         .animation(.easeInOut(duration: 0.25), value: isExpanded)
         .animation(.easeInOut(duration: 0.18), value: dateFrom)
         .animation(.easeInOut(duration: 0.18), value: dateTo)
-        .accessibilityIdentifier("profile_calendar")
         // Через `onAppear`, а не своим `init`: memberwise-инициализатор с
         // `@Binding` и `@State` пришлось бы писать руками, а это восемь
         // аргументов, которые разъедутся с полями при первой же правке.
@@ -250,15 +245,8 @@ struct ProfileHistoryCalendar: View {
         let isBounced = bouncedDay.map { calendar.isDate($0, inSameDayAs: day) } == true
 
         return Button {
-            // An empty day opens «Вписать поездку» pre-dated instead of
-            // starting a range: a range over a day with nothing on it would
-            // just filter the list to nothing, with no obvious way out.
-            if km == 0, let onEmptyDayTap {
-                Haptics.tap()
-                onEmptyDayTap(day)
-            } else {
-                handleDayTap(date)
-            }
+            // Every day filters, including days without recorded distance.
+            handleDayTap(date)
         } label: {
             RoundedRectangle(cornerRadius: 8)
                 .fill(dayFill(km: km, scale: scale, isFuture: isFuture, inRange: inRange, isEndpoint: isEndpoint, c: c))
@@ -288,6 +276,10 @@ struct ProfileHistoryCalendar: View {
         }
         .buttonStyle(.plain)
         .disabled(isFuture)
+        .accessibilityLabel(date.formatted(.dateTime.day().month(.wide).year()
+            .locale(Locale(identifier: lang.language.rawValue))))
+        .accessibilityIdentifier("profile_calendar_day_\(calendar.component(.year, from: day))-\(calendar.component(.month, from: day))-\(calendar.component(.day, from: day))")
+        .accessibilityAddTraits(inRange ? .isSelected : [])
         .scaleEffect(isBounced ? 1.15 : 1)
         .animation(.spring(response: 0.25, dampingFraction: 0.5), value: bouncedDay)
     }

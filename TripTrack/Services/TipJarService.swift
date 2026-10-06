@@ -68,38 +68,112 @@ final class TipJarService: ObservableObject {
     /// слушателя незакрытая расходуемая покупка переигрывается на каждом
     /// запуске — это выглядит ровно как баг StoreKit и им не является.
     private var updatesTask: Task<Void, Never>?
+    private var storefrontTask: Task<Void, Never>?
+    private var storefrontProductsTask: Task<Void, Never>?
+    private var productRequestGeneration: UInt64 = 0
+    private var purchaseGeneration: UInt64 = 0
+    private var purchaseInFlight = false
+    private let fetchProducts: @MainActor () async throws -> [Product]
+    private let fetchStorefront: @MainActor () async -> String?
+    private let purchase: @MainActor (Product, Set<Product.PurchaseOption>) async throws -> Product.PurchaseResult
 
-    private init() {
+    init(
+        observeUpdates: Bool = true,
+        fetchProducts: @escaping @MainActor () async throws -> [Product] = {
+            try await Product.products(for: TipJarService.tipIDs)
+        },
+        fetchStorefront: @escaping @MainActor () async -> String? = {
+            await Storefront.current?.countryCode
+        },
+        purchase: @escaping @MainActor (Product, Set<Product.PurchaseOption>) async throws -> Product.PurchaseResult = {
+            try await $0.purchase(options: $1)
+        }
+    ) {
+        self.fetchProducts = fetchProducts
+        self.fetchStorefront = fetchStorefront
+        self.purchase = purchase
+        guard observeUpdates else { return }
         updatesTask = Task { [weak self] in
             for await update in Transaction.updates {
                 await self?.apply(update, source: "updates")
             }
         }
+        storefrontTask = Task { [weak self] in
+            for await storefront in Storefront.updates {
+                self?.storefrontDidChange(storefront.countryCode)
+            }
+        }
+    }
+
+    deinit {
+        updatesTask?.cancel()
+        storefrontTask?.cancel()
+        storefrontProductsTask?.cancel()
     }
 
     // MARK: - Load
 
     func load() async {
-        phase = .loading
+        guard !Task.isCancelled else { return }
+        productRequestGeneration &+= 1
+        let request = productRequestGeneration
+        let purchaseAtStart = purchaseGeneration
+        let updatesPhase = !purchaseInFlight && phase != .deferred
+        let country = await fetchStorefront()
+        guard request == productRequestGeneration, !Task.isCancelled else { return }
+        if let country, country != storefront {
+            products = []
+            storefront = country
+        }
+        await loadProducts(request: request, purchaseAtStart: purchaseAtStart, updatesPhase: updatesPhase)
+    }
+
+    /// Чаевые переживают закрытие листа. Новая витрина немедленно убирает
+    /// старые цены, а поздний ответ старого запроса не возвращает их обратно.
+    /// `nil` сохраняет известную страну: офлайн не означает смену магазина.
+    @discardableResult
+    func storefrontDidChange(_ country: String?) -> Task<Void, Never>? {
+        guard let country, country != storefront else { return nil }
+        productRequestGeneration &+= 1
+        let request = productRequestGeneration
+        let purchaseAtStart = purchaseGeneration
+        let updatesPhase = !purchaseInFlight && phase != .deferred
+        products = []
+        storefront = country
+        storefrontProductsTask?.cancel()
+        let task = Task<Void, Never> { [weak self] in
+            await self?.loadProducts(request: request, purchaseAtStart: purchaseAtStart, updatesPhase: updatesPhase)
+        }
+        storefrontProductsTask = task
+        return task
+    }
+
+    private func loadProducts(request: UInt64, purchaseAtStart: UInt64, updatesPhase: Bool) async {
+        guard request == productRequestGeneration, !Task.isCancelled else { return }
+        // Каталог может обновиться, пока открыт системный лист покупки.
+        // Его ответ не снимает блокировку кнопок и не затирает её результат.
+        if updatesPhase && purchaseAtStart == purchaseGeneration { phase = .loading }
         #if DEBUG
-        report = nil
+        if updatesPhase && purchaseAtStart == purchaseGeneration { report = nil }
         #endif
-        storefront = await Self.describeStorefront()
 
         do {
-            let found = try await Product.products(for: Self.tipIDs)
+            let found = try await fetchProducts()
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
             let ordered = Self.tipIDs.compactMap { id in found.first { $0.id == id } }
+            products = ordered
             guard !ordered.isEmpty else {
                 // Пустой массив — это РЕЗУЛЬТАТ, а не ошибка: ни один id не
                 // разрешился. В `.xcode` это значит, что схема не смотрит на
                 // `.storekit`; в песочнице — что продуктов нет, они ещё не
                 // разъехались или не в продажном состоянии.
-                phase = .failed("Продукты не найдены")
+                if updatesPhase && purchaseAtStart == purchaseGeneration {
+                    phase = .failed("Продукты не найдены")
+                }
                 tipLog.error("load: no products for \(Self.tipIDs.joined(separator: ","), privacy: .public)")
                 return
             }
-            products = ordered
-            phase = .ready
+            if updatesPhase && purchaseAtStart == purchaseGeneration { phase = .ready }
             for p in ordered {
                 tipLog.notice("""
                     load ok id=\(p.id, privacy: .public) \
@@ -109,7 +183,11 @@ final class TipJarService: ObservableObject {
                     """)
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
+            products = []
+            if updatesPhase && purchaseAtStart == purchaseGeneration {
+                phase = .failed(error.localizedDescription)
+            }
             tipLog.error("load failed: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -149,6 +227,10 @@ final class TipJarService: ObservableObject {
     }
 
     func buy(_ product: Product) async {
+        guard !purchaseInFlight else { return }
+        purchaseInFlight = true
+        defer { purchaseInFlight = false }
+        purchaseGeneration &+= 1
         phase = .purchasing
         let options = Self.purchaseOptions(accountId: TokenStore.shared.accountId)
         tipLog.notice("""
@@ -157,7 +239,7 @@ final class TipJarService: ObservableObject {
             """)
 
         do {
-            switch try await product.purchase(options: options) {
+            switch try await purchase(product, options) {
             case .success(let verification):
                 await apply(verification, source: "purchase")
 
@@ -190,6 +272,7 @@ final class TipJarService: ObservableObject {
             // Подписка едет тем же потоком, и закрывать её здесь нельзя: у неё
             // свой хозяин (`PlusStore`), которому нужна её подпись.
             guard Self.tipIDs.contains(transaction.productID) else { return }
+            purchaseGeneration &+= 1
             #if DEBUG
             report = Self.describe(transaction, verified: true)
             #endif
@@ -210,6 +293,7 @@ final class TipJarService: ObservableObject {
 
         case .unverified(let transaction, let error):
             guard Self.tipIDs.contains(transaction.productID) else { return }
+            purchaseGeneration &+= 1
             // Нарочно НЕ закрывается. Тихо закрыть непроверенную транзакцию —
             // это способ сделать настоящий сбой невидимым; оставленная
             // открытой, она вернётся и останется видна.
@@ -265,8 +349,4 @@ final class TipJarService: ObservableObject {
     }
     #endif
 
-    private static func describeStorefront() async -> String {
-        guard let sf = await Storefront.current else { return "неизвестен" }
-        return "\(sf.countryCode) (id \(sf.id))"
-    }
 }

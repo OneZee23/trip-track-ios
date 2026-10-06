@@ -7,8 +7,8 @@ private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 /// «Я» tab — 0.6.0 canon (Figma 580:122 list / 755:119 grid, 127:896 guest).
 /// Self-hosts a `NavigationStack` (ContentView mounts the tab bare) and pushes
 /// Статистика, Уровни, Достижения, «Как видят другие» + trip details (all hide
-/// the tab bar via the existing preference). Order: hero → Достижения → Гараж →
-/// История (header row, calendar filter, then the trips).
+/// the tab bar via the existing preference). History follows the hero and a
+/// compact disclosure for garage, PRO, achievements and clubs.
 ///
 /// The canon header and stat strip are now ONE object, `ProfileHeroCard` — the
 /// screen opened as four stacked greys and read as a settings page. The grey
@@ -25,6 +25,7 @@ struct ProfileView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
@@ -177,12 +178,17 @@ struct ProfileView: View {
     @State private var agg: MeAggregates?
     /// Every completed trip, newest first. `agg.recentTrips` stops at 10,
     /// which made a date filter over История meaningless.
-    @State private var allTrips: [Trip] = []
+    @State private var historyLibrary = ProfileHistoryLibrary(trips: [])
+    private var allTrips: [Trip] { historyLibrary.trips }
     /// Черновики — отдельно от `allTrips`: в мир они не вошли, и ни
     /// статистика, ни путешествия, ни календарь их не видят (спека §3.2).
     @State private var drafts: [Trip] = []
-    /// `allTrips` after the calendar range. See `refreshVisibleTrips`.
-    @State private var visibleTrips: [Trip] = []
+    /// Filtered trips, folded journey rows, grid runs and historical levels
+    /// move together. Unrelated body updates only read this prepared value.
+    @State private var preparedHistory = PreparedProfileHistory.empty
+    @State private var historyQuery = ""
+    @FocusState private var historySearchFocused: Bool
+    @State private var showsProfileSections = false
     /// Which awards are earned — the one thing `AchievementDetailView` needs
     /// that a badge id cannot carry. Resolved by the award destinations
     /// themselves (`refreshUnlockedBadges`) rather than in `loadAggregates`:
@@ -263,6 +269,7 @@ struct ProfileView: View {
             // бы предлагать объединить то, что уже объединено, — до следующей
             // записанной поездки.
             .onChange(of: journeys.journeys) { _, _ in
+                refreshVisibleTrips()
                 Task { await refreshJourneyPrompts(trips: allTrips) }
             }
             // Человек подтвердил дом — подсказка может быть готова уже сейчас.
@@ -320,7 +327,7 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
-    private var stage: some View {
+    private var stageNavigation: some View {
         let c = AppTheme.colors(for: scheme)
 
         NavigationStack(path: $mePath) {
@@ -363,43 +370,7 @@ struct ProfileView: View {
                                 .padding(.bottom, 12)
                         }
 
-                        // Достижения and История both read local CoreData —
-                        // nothing here touches a session, so both stay up for
-                        // guests. The gate is data, not auth: a guest with 40
-                        // trips must not see the strip, the sign-in card, and
-                        // then nothing.
-                        if !allTrips.isEmpty {
-                            ProfileAchievementsSection(
-                                trips: allTrips,
-                                onTapAll: { push(.achievements) },
-                                // Straight to the award, not to the list: a
-                                // tappable chip that opens a grid the user has
-                                // to find the same badge in again is a chip
-                                // that may as well not be tappable.
-                                onTapBadge: { push(.achievement($0.id)) }
-                            )
-                            // Resolved HERE, not at the award destination: the
-                            // chips open one directly, and a set that is still
-                            // empty on the destination's first frame paints an
-                            // earned badge as «Ещё не открыто» (a hidden one as
-                            // «? ? ?») before flipping. Only runs while the
-                            // section is actually on screen.
-                            .task(id: allTrips.count) { await refreshUnlockedBadges() }
-                            .padding(.bottom, 12)
-                        }
-
-                        // Above История on purpose: История is an endless
-                        // list, and anything under it is a place nobody
-                        // scrolls to — which is exactly where the Гараж spent
-                        // 0.6.0 (at the foot of a settings sheet). The chain
-                        // below is split around this call so the section keeps
-                        // its place whether the library is empty, loading, or
-                        // full.
-                        garageSection(c)
-
-                        plusSection()
-
-                        clubsSection()
+                        profileSections(c)
 
                         // Над «Историей», а не под ней: подсказка про только
                         // что законченное путешествие теряет смысл, если её
@@ -560,7 +531,8 @@ struct ProfileView: View {
                     // fix it; deferred — История's primary flow is 1 deep.
                     TripDetailView(
                         tripId: id,
-                        viewModel: TripsViewModel(tripManager: mapVM.tripManager)
+                        viewModel: TripsViewModel(tripManager: mapVM.tripManager),
+                        preview: allTrips.first(where: { $0.id == id })
                     )
                 case .journey(let id):
                     // Экран путешествия сам рисует свою шапку и прячет таб-бар.
@@ -586,6 +558,10 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    private var stageDataWatchers: some View {
+        stageNavigation
         .onAppear {
             settings.reloadGamificationState()
         }
@@ -593,6 +569,8 @@ struct ProfileView: View {
         // in `loadAggregates`, the range moves here.
         .onChange(of: dateFrom) { _, _ in refreshVisibleTrips() }
         .onChange(of: dateTo) { _, _ in refreshVisibleTrips() }
+        .onChange(of: historyQuery) { _, _ in refreshVisibleTrips() }
+        .onChange(of: lang.language) { _, _ in refreshVisibleTrips() }
         .task {
             await loadAggregates()
         }
@@ -607,6 +585,10 @@ struct ProfileView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
             Task { await loadAggregates() }
         }
+    }
+
+    private var stageRoutingWatchers: some View {
+        stageDataWatchers
         // История pushes TripDetailView, where trips get deleted or flip
         // privacy — without these the popped-back list keeps a ghost row
         // (tapping it lands on an empty detail with no back affordance).
@@ -660,6 +642,10 @@ struct ProfileView: View {
                 push(.publicProfile(accountId, nil))
             }
         }
+    }
+
+    private var stage: some View {
+        stageRoutingWatchers
         // Одноразовый флаг: без сброса КАЖДОЕ следующее открытие настроек до
         // конца сессии само прыгало бы в «Приватность».
         .sheet(isPresented: $showSettings, onDismiss: { opensPrivacyFromNotice = false }) {
@@ -1250,6 +1236,70 @@ struct ProfileView: View {
         .accessibilityIdentifier("profile_garage_empty")
     }
 
+    private var profileSectionsTitle: String {
+        var items = [AppStrings.garage(lang.language)]
+        if proStatus.showsRow { items.append("PRO") }
+        items.append(AppStrings.achievementsSection(lang.language))
+        items.append(AppStrings.clubsTitle(lang.language))
+        return items.joined(separator: " · ")
+    }
+
+    /// Rare destinations stay one tap away, above the unbounded trip list.
+    private func profileSections(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                Haptics.tap()
+                showsProfileSections.toggle()
+            } label: {
+                HStack(spacing: 12) {
+                    Text(profileSectionsTitle)
+                        .font(.interScaled(14, weight: .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: showsProfileSections ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("profile_sections_toggle")
+            .accessibilityValue(showsProfileSections
+                ? AppStrings.historySectionsExpanded(lang.language)
+                : AppStrings.historySectionsCollapsed(lang.language))
+
+            if showsProfileSections {
+                if !allTrips.isEmpty {
+                    ProfileAchievementsSection(
+                        trips: allTrips,
+                        onTapAll: { push(.achievements) },
+                        // Straight to the award, not to the list: a
+                        // tappable chip that opens a grid the user has
+                        // to find the same badge in again is a chip
+                        // that may as well not be tappable.
+                        onTapBadge: { push(.achievement($0.id)) }
+                    )
+                    // Resolved HERE, not at the award destination: the
+                    // chips open one directly, and a set that is still
+                    // empty on the destination's first frame paints an
+                    // earned badge as «Ещё не открыто» (a hidden one as
+                    // «? ? ?») before flipping. Only runs while the
+                    // section is actually on screen.
+                    .task(id: allTrips.count) { await refreshUnlockedBadges() }
+                    .padding(.bottom, 12)
+                }
+
+                garageSection(c)
+                plusSection()
+                clubsSection()
+            }
+        }
+        .padding(.bottom, 12)
+    }
+
     // MARK: - История (Figma 580:172 header · 580:122 list · 755:119 grid)
 
     /// Header row, calendar filter, then the trips themselves. Canon goes
@@ -1260,7 +1310,7 @@ struct ProfileView: View {
         // One filtered array for both consumers: the calendar prints the count,
         // the list draws the rows, and they must never disagree about what
         // "matched" means.
-        let trips = visibleTrips
+        let trips = preparedHistory.visibleTrips
 
         historyHeader(c)
 
@@ -1269,8 +1319,7 @@ struct ProfileView: View {
             dateTo: $dateTo,
             kmByDay: kmByDay,
             maxKmDay: maxKmDay,
-            filteredCount: trips.count,
-            onEmptyDayTap: ManualTripEntry.isVisible ? openManualTrip(forDay:) : nil
+            filteredCount: trips.count
         )
         .padding(.horizontal, 16)
         // Canon's 16pt gap to the first card. As padding rather than a spacer
@@ -1278,45 +1327,28 @@ struct ProfileView: View {
         // would otherwise butt straight into «Со мной».
         .padding(.bottom, 16)
 
-        // A filter matching nothing draws NOTHING here: the «здесь появятся
-        // ваши поездки» card would be a lie about a library that has trips,
-        // and the calendar's own «сбросить» row is already the way out.
         if !trips.isEmpty {
-            // Плечи путешествия схлопываются в одну карточку — и только здесь.
-            // Считается один раз на отрисовку блока: и сетке, и списку нужен
-            // один и тот же ответ о том, что спрятано.
-            let rows = historyRows
-
             switch historyMode {
             case .grid:
-                gridHistory(rows)
+                gridHistory(preparedHistory.gridRuns)
             case .list:
-                listHistory(rows, trips: trips)
+                listHistory(preparedHistory.rows)
             }
+        } else {
+            historyEmptyState(c)
         }
-    }
-
-    /// «История» с учётом путешествий. `visibleTrips` уже отфильтрован
-    /// календарём — и отрезок передаётся отдельно: по одному списку поездок
-    /// «плечи отрезал фильтр» неотличимо от «плеч не осталось».
-    private var historyRows: [HistoryRow] {
-        HistoryFolding.fold(
-            trips: visibleTrips,
-            journeys: journeys.journeys,
-            range: HistoryFolding.dayRange(from: dateFrom, to: dateTo)
-        )
     }
 
     /// Сетка рисуется кусками: подряд идущие поездки — своей решёткой,
     /// путешествие — карточкой во всю ширину между ними. Растянуть клетку
     /// `LazyVGrid` на обе колонки нечем, а две половинки путешествия — не
     /// карточка.
-    private func gridHistory(_ rows: [HistoryRow]) -> some View {
+    private func gridHistory(_ runs: [[HistoryRow]]) -> some View {
         LazyVStack(spacing: 12) {
             // Ключ — id первой строки куска, а не его номер: по номеру SwiftUI
             // считает вторую решётку той же, что была первой, и после
             // объединения плечи переезжают между кусками без анимации.
-            ForEach(HistoryFolding.runs(rows), id: \.[0].id) { run in
+            ForEach(runs, id: \.[0].id) { run in
                 if run.count == 1, case .journey(let journey, let legs) = run[0] {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
@@ -1364,14 +1396,13 @@ struct ProfileView: View {
         .padding(.bottom, 12)
     }
 
-    private func listHistory(_ rows: [HistoryRow], trips: [Trip]) -> some View {
+    private func listHistory(_ rows: [HistoryRow]) -> some View {
         // The level shown is the one held WHEN each trip was driven,
         // not today's. Same number on every card told the owner what
         // they already knew; this way the list shows them growing.
-        // Считается по ВСЕМ видимым поездкам, а не по строкам: плечо внутри
-        // путешествия — такая же поездка, и убрать её из истории уровней
-        // значило бы сдвинуть уровни у соседей.
-        let historicalLevels = TripLevelHistory.levels(for: trips)
+        // Search and calendar filters change which trips are visible, not
+        // the XP earned before them. Folded journey legs also keep their XP.
+        let historicalLevels = preparedHistory.historicalLevels
         return LazyVStack(spacing: 12) {
             ForEach(rows) { row in
                 switch row {
@@ -1418,60 +1449,112 @@ struct ProfileView: View {
     }
 
     private func historyHeader(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 8) {
-            ProfileSectionLabel(text: AppStrings.historySection(lang.language))
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 10) {
-                // «Вписать поездку» (0.8.0). На витрине, которая не продаёт
-                // платное, кнопки нет вовсе — не «есть, но с замком».
-                if ManualTripEntry.isVisible {
-                    historyAddButton(c)
-                }
-                historyModeButton(
-                    .grid,
-                    systemImage: "square.grid.2x2.fill",
-                    label: AppStrings.historyModeGrid(lang.language),
-                    identifier: "profile_history_grid",
-                    c: c
-                )
-                historyModeButton(
-                    .list,
-                    // Canon 749:125 is three PLAIN bars. `list.bullet` adds
-                    // dots, which at 16pt reads as a different control.
-                    systemImage: "line.3.horizontal",
-                    label: AppStrings.historyModeList(lang.language),
-                    identifier: "profile_history_list",
-                    c: c
-                )
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(AppStrings.historySection(lang.language))
+                    .font(.interScaled(22, weight: .bold, relativeTo: .title2))
+                    .foregroundStyle(c.text)
+                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
             }
+            if dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(c.textSecondary)
+                TextField(AppStrings.historySearch(lang.language), text: $historyQuery,
+                          prompt: Text(AppStrings.historySearch(lang.language)).foregroundStyle(c.textSecondary))
+                    .font(.interScaled(15))
+                    .foregroundStyle(c.text)
+                    .submitLabel(.search)
+                    .focused($historySearchFocused)
+                    .onSubmit { historySearchFocused = false }
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("profile_history_search")
+                if !historyQuery.isEmpty {
+                    Button { historyQuery = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(c.textSecondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppStrings.historyClearSearch(lang.language))
+                    .accessibilityIdentifier("profile_history_clear_search")
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .frame(minHeight: 48)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 14))
+            if ManualTripEntry.isVisible { historyAddButton(c) }
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
     }
 
-    /// «+» в шапке «Истории» — единственный вход в ручную поездку из «Мои».
-    /// Замок рядом с плюсом, когда «Плюса» нет: пункт виден, но честно
-    /// говорит, что за ним витрина.
+    private func historyModeControls(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 4) {
+            historyModeButton(.grid, systemImage: "square.grid.2x2.fill",
+                              label: AppStrings.historyModeGrid(lang.language),
+                              identifier: "profile_history_grid", c: c)
+            historyModeButton(.list, systemImage: "line.3.horizontal",
+                              label: AppStrings.historyModeList(lang.language),
+                              identifier: "profile_history_list", c: c)
+        }
+    }
+
     private func historyAddButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.tap()
             manualTripPreset = nil
             showManualTrip = true
         } label: {
-            Image(systemName: ManualTripEntry.isLocked ? "plus.circle" : "plus")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
-                .frame(width: 26, height: 44)
+            Label(AppStrings.manualTripEntry(lang.language), systemImage: "plus")
+                .font(.interScaled(15, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
-                .padding(.horizontal, -5)
-                .padding(.vertical, -12)
         }
         .buttonStyle(PressableCardStyle())
-        .accessibilityLabel(AppStrings.manualTripEntry(lang.language))
         .accessibilityIdentifier("profile_history_add")
+    }
+
+    private func historyEmptyState(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(historyQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 ? AppStrings.historyNoTripsInPeriod(lang.language)
+                 : AppStrings.historyNoMatches(lang.language))
+                .accessibilityIdentifier("profile_history_empty")
+                .font(.interScaled(17, weight: .semibold))
+                .foregroundStyle(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                historyQuery = ""
+                dateFrom = nil
+                dateTo = nil
+            } label: {
+                Text(AppStrings.historyClearFilters(lang.language))
+                    .font(.interScaled(15, weight: .medium))
+                    .frame(minHeight: 44)
+            }
+            .accessibilityIdentifier("profile_history_clear_filters")
+            // A date always filters. Manual creation is a separate, explicit
+            // action and keeps that chosen day through the purchase flow.
+            if ManualTripEntry.isVisible, historyQuery.isEmpty,
+               let day = dateFrom, dateTo.map({ Calendar.current.isDate(day, inSameDayAs: $0) }) ?? true {
+                Button { openManualTrip(forDay: day) } label: {
+                    Label(AppStrings.manualTripEntry(lang.language), systemImage: "plus")
+                        .font(.interScaled(15, weight: .semibold))
+                        .frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("profile_history_empty_add")
+            }
+        }
+        .tint(AppTheme.accent)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(cornerRadius: 16)
+        .padding(.horizontal, 16)
     }
 
     private func historyModeButton(
@@ -1490,45 +1573,22 @@ struct ProfileView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isActive ? AppTheme.accent : c.textSecondary)
-                // Grown to 44pt tall for the touch target, then taken back out
-                // of layout so the row keeps canon's height. The width claims
-                // only half of the 10pt gap on each side: a literal 44pt-wide
-                // target would overlap its neighbour's, and the neighbour —
-                // drawn later — would steal the taps landing on this glyph's
-                // own right edge.
-                .frame(width: 26, height: 44)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
-                .padding(.horizontal, -5)
-                .padding(.vertical, -12)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
 
-    /// `allTrips` narrowed to the calendar range, both ends inclusive and
-    /// compared on `startOfDay` so a trip that began at 23:50 still belongs to
-    /// the day the user tapped. No range → the whole list, without walking it.
-    ///
-    /// Held in state rather than computed in `body`: this view observes
-    /// `SyncQueue`, so a sync draining a hundred items republishes a hundred
-    /// times, and each pass would re-walk the entire library building a fresh
-    /// array. Recomputed only when the library or the range actually moves.
-    private static func filter(_ trips: [Trip], from: Date?, to: Date?) -> [Trip] {
-        guard let from else { return trips }
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: from)
-        // A half-set range (first tap only) is a single day, which is what the
-        // calendar itself highlights while you pick the second end.
-        let end = cal.startOfDay(for: to ?? from)
-        return trips.filter { trip in
-            let day = cal.startOfDay(for: trip.startDate)
-            return day >= start && day <= end
-        }
-    }
-
+    /// Recompute only when the library, journeys, query, language or dates
+    /// change. No count/date cache key: same-count edits must replace cards too.
     private func refreshVisibleTrips() {
-        visibleTrips = Self.filter(allTrips, from: dateFrom, to: dateTo)
+        preparedHistory = PreparedProfileHistory(
+            library: historyLibrary, journeys: journeys.journeys,
+            query: historyQuery, from: dateFrom, to: dateTo,
+            language: lang.language
+        )
     }
 
     // MARK: - Объединение в путешествие (0.6.6)
@@ -1985,21 +2045,21 @@ struct ProfileView: View {
 
     // MARK: - Data
 
-    /// Everything История needs out of the raw trip list, built in ONE pass:
-    /// the km-per-day walk touches every trip, so it belongs here — off the
-    /// main actor, once per load — and never in `body`.
+    /// Library-wide ordering, historical levels and km-per-day values are
+    /// prepared off the main actor once per load, never in `body`.
     private struct HistoryData {
-        let trips: [Trip]
+        let library: ProfileHistoryLibrary
+        var trips: [Trip] { library.trips }
         let kmByDay: [Date: Double]
         let maxKmDay: Double
 
         init(trips: [Trip], calendar: Calendar) {
-            // The repository already sorts newest-first; re-sorting costs
-            // nothing on an ordered array and keeps История right if that
-            // ever stops being true (a test double, another fetch path).
-            self.trips = trips.sorted { $0.startDate > $1.startDate }
+            // The repository already sorts newest-first. Keep this invariant
+            // even for another fetch path or a test double.
+            let sortedTrips = trips.sorted { $0.startDate > $1.startDate }
+            self.library = ProfileHistoryLibrary(trips: sortedTrips)
             var byDay: [Date: Double] = [:]
-            for trip in self.trips {
+            for trip in sortedTrips {
                 byDay[calendar.startOfDay(for: trip.startDate), default: 0] += trip.distance / 1000
             }
             self.kmByDay = byDay
@@ -2035,7 +2095,7 @@ struct ProfileView: View {
         }.value
         guard !Task.isCancelled else { return }
         agg = crunched.aggregates
-        allTrips = crunched.history.trips
+        historyLibrary = crunched.history.library
         kmByDay = crunched.history.kmByDay
         maxKmDay = crunched.history.maxKmDay
         // Every path that reloads the library lands here — a deleted trip has

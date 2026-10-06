@@ -2,6 +2,7 @@ import XCTest
 import StoreKit
 import StoreKitTest
 import UIKit
+import Combine
 @testable import TripTrack
 
 /// «Плюс» на телефоне: что считается подпиской, что показывает витрина и что
@@ -144,6 +145,148 @@ final class PlusStoreTests: XCTestCase {
         session.clearTransactions()
         session.resetToDefaultState()
         return session
+    }
+
+    /// Изолированный store не запускает глобальные слушатели, но витрина
+    /// всё равно пишет общий гейт и память страны: возвращаем их после теста.
+    private func savedStorefront() -> () -> Void {
+        let remembered = UserDefaults.standard.string(forKey: PlusAccess.storefrontKey)
+        let hidden = PlusAccess.shared.storefrontHidesPlus
+        return {
+            if let remembered {
+                UserDefaults.standard.set(remembered, forKey: PlusAccess.storefrontKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PlusAccess.storefrontKey)
+            }
+            PlusAccess.shared.storefrontHidesPlus = hidden
+        }
+    }
+
+    /// Регрессия TestFlight: новая страна уже открыла PRO, а непустой
+    /// каталог продолжал показывать цены от предыдущей витрины.
+    func testStorefrontChangeInvalidatesPricesAndReloadsTheCatalog() async throws {
+        let restore = savedStorefront()
+        let session = try makeSession()
+        defer { session.clearTransactions(); restore() }
+        let plans = try await Product.products(for: PlusStore.productIDs)
+        let yearly = try XCTUnwrap(plans.first { $0.id == PlusStore.yearlyID })
+        let monthly = try XCTUnwrap(plans.first { $0.id == PlusStore.monthlyID })
+        var result = [yearly]
+        var requests = 0
+        let store = PlusStore(fetchProducts: {
+            requests += 1
+            return result
+        }, fetchIntroEligibility: { products in
+            products.contains { $0.id == PlusStore.yearlyID }
+        })
+
+        await store.storefrontDidChange("RUS")?.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.yearlyID])
+        XCTAssertTrue(store.introEligible)
+
+        result = [monthly]
+        let reload = store.storefrontDidChange("DEU")
+        XCTAssertTrue(store.products.isEmpty, "цена прежней страны убирается сразу")
+        XCTAssertFalse(store.introEligible, "право на триал тоже надо перечитать")
+        XCTAssertFalse(PlusAccess.shared.storefrontHidesPlus)
+        await reload?.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+        XCTAssertFalse(store.introEligible)
+        XCTAssertEqual(requests, 2)
+
+        XCTAssertNil(store.storefrontDidChange("DEU"), "повтор события не перезагружает каталог")
+        XCTAssertNil(store.storefrontDidChange(nil), "молчание Apple сохраняет известную страну")
+        XCTAssertEqual(store.storefrontCountry, "DEU")
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+        XCTAssertEqual(requests, 2)
+    }
+
+    /// Запрос, начатый пейволом/холодным стартом, не принадлежит задаче
+    /// события витрины и не отменяется вместе с ней. Его поздний ответ всё
+    /// равно не должен перезаписать новый каталог.
+    func testLateProductResponseCannotReplaceTheNewStorefrontCatalog() async throws {
+        let restore = savedStorefront()
+        let session = try makeSession()
+        defer { session.clearTransactions(); restore() }
+        let plans = try await Product.products(for: PlusStore.productIDs)
+        let yearly = try XCTUnwrap(plans.first { $0.id == PlusStore.yearlyID })
+        let monthly = try XCTUnwrap(plans.first { $0.id == PlusStore.monthlyID })
+        let started = expectation(description: "old catalog request started")
+        var oldResponse: CheckedContinuation<[Product], Error>?
+        var requests = 0
+        let store = PlusStore(fetchProducts: {
+            requests += 1
+            if requests == 1 {
+                return try await withCheckedThrowingContinuation {
+                    oldResponse = $0
+                    started.fulfill()
+                }
+            }
+            return [monthly]
+        }, fetchIntroEligibility: { _ in false })
+        let oldLoad = Task { await store.loadProducts() }
+        await fulfillment(of: [started], timeout: 2)
+
+        await store.storefrontDidChange("DEU")?.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+        XCTAssertFalse(oldLoad.isCancelled, "проверяем защиту номера запроса, а не отмену")
+        oldResponse?.resume(returning: [yearly])
+        await oldLoad.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+    }
+
+    /// Второе await внутри загрузки — проверка бесплатной недели. Ответ
+    /// предыдущего аккаунта не может вернуть его продукты и обещание триала.
+    func testLateIntroEligibilityCannotRestoreThePreviousCatalogOrTrial() async throws {
+        let restore = savedStorefront()
+        let session = try makeSession()
+        defer { session.clearTransactions(); restore() }
+        let plans = try await Product.products(for: PlusStore.productIDs)
+        let yearly = try XCTUnwrap(plans.first { $0.id == PlusStore.yearlyID })
+        let monthly = try XCTUnwrap(plans.first { $0.id == PlusStore.monthlyID })
+        let started = expectation(description: "old eligibility request started")
+        var oldEligibility: CheckedContinuation<Bool, Never>?
+        var requests = 0
+        let store = PlusStore(fetchProducts: {
+            requests += 1
+            return requests == 1 ? [yearly] : [monthly]
+        }, fetchIntroEligibility: { products in
+            guard products.contains(where: { $0.id == PlusStore.yearlyID }) else { return false }
+            return await withCheckedContinuation {
+                oldEligibility = $0
+                started.fulfill()
+            }
+        })
+        let oldLoad = Task { await store.loadProducts() }
+        await fulfillment(of: [started], timeout: 2)
+
+        await store.storefrontDidChange("DEU")?.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+        XCTAssertFalse(store.introEligible)
+        oldEligibility?.resume(returning: true)
+        await oldLoad.value
+        XCTAssertEqual(store.products.map(\.id), [PlusStore.monthlyID])
+        XCTAssertFalse(store.introEligible)
+    }
+
+    func testFailedNewStorefrontRequestDoesNotBringBackOldPrices() async throws {
+        let restore = savedStorefront()
+        let session = try makeSession()
+        defer { session.clearTransactions(); restore() }
+        let plans = try await Product.products(for: PlusStore.productIDs)
+        XCTAssertFalse(plans.isEmpty)
+        var requests = 0
+        let store = PlusStore(fetchProducts: {
+            requests += 1
+            if requests > 1 { throw URLError(.notConnectedToInternet) }
+            return plans
+        }, fetchIntroEligibility: { _ in true })
+        await store.storefrontDidChange("RUS")?.value
+        XCTAssertFalse(store.products.isEmpty)
+
+        await store.storefrontDidChange("DEU")?.value
+        XCTAssertTrue(store.products.isEmpty, "ошибка не возвращает цену старой страны")
+        XCTAssertFalse(store.introEligible)
     }
 
     /// Каталог виден — иначе всё, что ниже, проверяло бы пустой список.
@@ -304,14 +447,21 @@ final class PlusStoreTests: XCTestCase {
         await PlusStore.shared.refreshAll()
         XCTAssertTrue(PlusAccess.shared.isPlus)
 
+        let lostAccess = expectation(description: "foreground refresh closes expired access")
+        let observation = PlusAccess.shared.$isPlus
+            .filter { !$0 }
+            .prefix(1)
+            .sink { _ in lostAccess.fulfill() }
+        defer { observation.cancel() }
+
         session.clearTransactions()                  // подписка кончилась
         NotificationCenter.default.post(
             name: UIApplication.didBecomeActiveNotification, object: nil)
 
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline, PlusAccess.shared.isPlus {
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // Кроме двух секунд debounce, живой StoreKit Testing на iOS 18.6
+        // иногда тратит 5–10 секунд на currentEntitlements/status. Ждём сам
+        // переход, чтобы незавершённое чтение не утекало в следующий тест.
+        await fulfillment(of: [lostAccess], timeout: 15)
         XCTAssertFalse(PlusAccess.shared.isPlus,
                        "возвращение в приложение обязано пересчитать права")
     }

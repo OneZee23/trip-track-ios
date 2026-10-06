@@ -97,6 +97,19 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(profileBackground, forKey: "com.triptrack.settings.profileBackground") }
     }
 
+    /// A local background selection also changes the public profile. Keep
+    /// that write alongside persistence so every picker sends the same update.
+    /// The callback lets tests exercise the real profile payload on an isolated
+    /// URLSession; normal calls use the cosmetics generation guard.
+    func setProfileBackground(
+        _ value: String,
+        pushCosmetics: @escaping @MainActor () -> Void = { AuthService.shared.pushPlusCosmetics() }
+    ) {
+        guard value != profileBackground else { return }
+        profileBackground = value
+        Task { @MainActor in pushCosmetics() }
+    }
+
     // Badge id pinned to the profile ("" = none) — shown prominently on the «Я» screen.
     @Published var pinnedBadgeId: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.pinnedBadgeId") ?? "" {
         didSet { UserDefaults.standard.set(pinnedBadgeId, forKey: "com.triptrack.settings.pinnedBadgeId") }

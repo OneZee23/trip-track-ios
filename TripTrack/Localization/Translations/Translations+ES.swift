@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Permite el acceso a la ubicación",
         "onboardingLocationSub": "Para grabar tus rutas se necesita acceso a la ubicación. Tus datos se quedan en el dispositivo.",
         "onboardingBackgroundTitle": "Grabación en segundo plano",
-        "onboardingBackgroundSub": "Para que los viajes sigan grabándose con el móvil en el bolsillo, el acceso a la ubicación debe estar en «Siempre» — con «Al usar la app» la grabación se corta en segundo plano. Los datos de movimiento («Movimiento y forma física») permiten detectar el inicio de un viaje sin tener el GPS encendido todo el rato, y así la batería dura más.",
+        "onboardingBackgroundSub": "El acceso a la ubicación «Siempre» ayuda a detectar viajes cuando la app no está abierta. «Movimiento y forma física» detecta movimiento sin mantener el GPS activo. Puedes permitir o rechazar cada solicitud en los avisos del sistema.",
         "onboardingBackgroundAllow": "Permitir «Siempre»",
         "onboardingNotificationsTitle": "Entérate de todo",
         "onboardingNotificationsSub": "Notificaciones sobre reacciones, seguidores y comentarios en tus viajes. Actívalas para no perderte ninguna respuesta.",

@@ -231,6 +231,9 @@ struct RouteMapView: UIViewRepresentable {
     /// I have never driven where they drove, that meant dimmed end to end.
     /// The two meanings needed separating; this is the one that says "no fog".
     var showsFog: Bool = true
+    /// Detail maps stay flat while moving between hero and fullscreen.
+    /// Terrain remains available to existing interactive map consumers.
+    var elevationStyle: MKStandardMapConfiguration.ElevationStyle = .realistic
     /// When true, disable gap-splitting. Preview polylines from the social
     /// feed are already RDP-simplified — points can be several km apart,
     /// which the 1 km gap threshold treats as discontinuities and leaves the
@@ -273,6 +276,7 @@ struct RouteMapView: UIViewRepresentable {
     /// Padding used when framing the whole route. The replay needs a wider
     /// bottom margin than the previews do — its transport controls sit there.
     var fitInsets: UIEdgeInsets?
+    var animatesFit: Bool = true
 
     /// «Эта карта всегда показывает маршрут целиком» — слот героя на экране
     /// поездки, и больше пока никто.
@@ -386,7 +390,7 @@ struct RouteMapView: UIViewRepresentable {
             // определению — значит и рельеф берётся сразу его, как и
             // поворотный запас растра у вуали.
             mapView.preferredConfiguration = MKStandardMapConfiguration(
-                elevationStyle: (isInteractive || host != nil) ? .realistic : .flat
+                elevationStyle: (isInteractive || host != nil) ? elevationStyle : .flat
             )
         }
         // Apple requires the Maps attribution to stay visible, and it is laid
@@ -400,6 +404,10 @@ struct RouteMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.adoptMap(mapView)
         if let host = mapView as? VeilHostMapView {
+            host.onLayout = { [weak coordinator, weak host] in
+                guard let coordinator, let host, host.window != nil else { return }
+                coordinator.adoptMap(host)
+            }
             host.onWindowChange = { [weak coordinator, weak host] window in
                 guard let coordinator, let host else { return }
                 if window == nil {
@@ -607,7 +615,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
         if owns {
-            context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView)
+            context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView, animated: animatesFit)
         }
         context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
@@ -895,6 +903,16 @@ struct RouteMapView: UIViewRepresentable {
         /// re-run the zoom.
         private var lastZoomTick: Int = 0
 
+        private var dashRenderers: [ObjectIdentifier: ScreenScaledDashRenderer] = [:]
+
+        private func updateDashScale(on mapView: MKMapView) {
+            guard !dashRenderers.isEmpty,
+                  let scale = ScreenScaledDashRenderer.screenZoomScale(in: mapView) else { return }
+            for renderer in dashRenderers.values {
+                renderer.updateScreenZoomScale(scale)
+            }
+        }
+
         /// Слой тумана уже заказан. Заказ один на жизнь карты: он перебирает
         /// библиотеку, и повторять его на каждый `updateUIView` (а тот приходит
         /// на каждый кадр реплея) нельзя.
@@ -1144,13 +1162,13 @@ struct RouteMapView: UIViewRepresentable {
         /// под самый верх (репорт владельца 23 сен). Поэтому заказ
         /// ЗАПОМИНАЕТСЯ, а исполняется на том кадре, где размер у карты уже
         /// свой — сразу, если он свой и так.
-        func applyFit(tick: Int, insets: UIEdgeInsets?, mapView: MKMapView) {
+        func applyFit(tick: Int, insets: UIEdgeInsets?, mapView: MKMapView, animated: Bool = true) {
             guard tick != lastFitTick else { return }
             lastFitTick = tick
             guard !overviewRect.isNull else { return }
             overviewInsets = insets ?? RouteMapView.defaultFitInsets
             fitPending = true
-            fitAnimated = true
+            fitAnimated = animated
             fitIfSized(mapView)
         }
 
@@ -1186,9 +1204,34 @@ struct RouteMapView: UIViewRepresentable {
             guard mapView.bounds.width > 1, mapView.bounds.height > 1 else { return }
             if let slot = mapView.superview, slot.bounds.size != mapView.bounds.size { return }
             fitPending = false
+            fitGeneration &+= 1
+            hasFittedRoute = true
             mapView.setVisibleMapRect(
                 RouteMapView.floored(overviewRect), edgePadding: overviewInsets,
                 animated: fitAnimated)
+        }
+
+        private var hasFittedRoute = false
+        private var fitGeneration = 0
+
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            guard fullyRendered, hasFittedRoute, !fitPending,
+                  !overviewRect.isNull, mapView.window != nil,
+                  mapView.bounds.width > 1, mapView.bounds.height > 1 else { return }
+            // This callback describes the CURRENT visible tiles. Cached
+            // tiles do not promise a new willStartRendering event per fit.
+            let generation = fitGeneration
+            let renderedRect = mapView.visibleMapRect
+            let renderedSize = mapView.bounds.size
+            // MapKit's rendering callback can overlap a representable update.
+            // Publish after that pass, and reject a torn-down/replaced map.
+            Task { @MainActor [weak self, weak mapView] in
+                guard let self, let mapView, mapView.window != nil,
+                      !self.fitPending, self.fitGeneration == generation,
+                      MKMapRectEqualToRect(renderedRect, mapView.visibleMapRect),
+                      renderedSize == mapView.bounds.size else { return }
+                self.host?.didRenderRoute(on: mapView)
+            }
         }
 
         /// The whole-route rect the map opened on, so «обзор» can return to it.
@@ -1671,6 +1714,7 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            updateDashScale(on: mapView)
             // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
             veilSeat?.settle(on: mapView)
             // Металу заказывать нечего: он и так рисует каждый кадр, ему нужен
@@ -1679,6 +1723,7 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            updateDashScale(on: mapView)
             // Ловит и жест, и программный полёт камеры (реплей ведёт её сам,
             // без `regionWillChange`): `startTracking` заводит `CADisplayLink`,
             // если его нет, и продлевает хвост, если есть.
@@ -1701,11 +1746,15 @@ struct RouteMapView: UIViewRepresentable {
                 // (обводка сплошная и превратила бы пунктир обратно в дорогу),
                 // и цвет «Плюса» его не перекрашивает.
                 if speedLine.speed < 0 {
-                    let renderer = MKPolylineRenderer(polyline: speedLine)
+                    let renderer = ScreenScaledDashRenderer(polyline: speedLine)
                     renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
                     renderer.lineCap = .butt
                     renderer.strokeColor = RouteMapView.unknownSpeedColor
                     renderer.lineDashPattern = RouteMapView.unknownSpeedDash
+                    dashRenderers[ObjectIdentifier(speedLine)] = renderer
+                    if let scale = ScreenScaledDashRenderer.screenZoomScale(in: mapView) {
+                        renderer.updateScreenZoomScale(scale)
+                    }
                     return renderer
                 }
                 let renderer = routeRenderer(for: speedLine)

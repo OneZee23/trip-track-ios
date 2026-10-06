@@ -17,6 +17,7 @@ struct ProShowcaseSheet: View {
     /// состоянии: закрыть лист крестиком, ничего не купив, не должно менять
     /// сохранённый выбор.
     let current: String
+    var vehicleID: UUID? = nil
     /// Человек выбрал вариант, доступный ему. Платный без подписки сюда НЕ
     /// приходит — он только примеряется.
     let onPick: (String) -> Void
@@ -28,6 +29,7 @@ struct ProShowcaseSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var plus = PlusAccess.shared
     @ObservedObject private var plusStore = PlusStore.shared
+    @ObservedObject private var settings = SettingsManager.shared
 
     /// Что примеряется прямо сейчас. Отдельно от `current`: примерка платного
     /// меняет превью, но не базу.
@@ -39,7 +41,7 @@ struct ProShowcaseSheet: View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
         let state = showcaseState
-        let shown = tried ?? current
+        let shown = shownID
 
         VStack(spacing: 0) {
             header(c, l)
@@ -49,8 +51,8 @@ struct ProShowcaseSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if ProShowcase.showsExpiredCard(state) {
-                        expiredCard(c, l)
+                    if ProShowcase.showsExpiredCard(state), let retainedName {
+                        expiredCard(c, l, retainedName: retainedName)
                     }
                     if kind == .routeLine {
                         // Макет рисует бесплатный вариант линии СТРОКОЙ, а не
@@ -94,18 +96,30 @@ struct ProShowcaseSheet: View {
 
     // MARK: - Состояние
 
+    private var shownID: String {
+        ProShowcase.previewID(
+            for: kind, current: current, tried: tried,
+            isPlus: plus.isPlus, storefrontHidesPlus: plus.storefrontHidesPlus)
+    }
+
     private var showcaseState: ProShowcase.State {
         ProShowcase.State(
             isPlus: plus.isPlus,
             storefrontHidesPlus: plus.storefrontHidesPlus,
             // Примерка — это выбранный ПЛАТНЫЙ вариант без подписки.
-            tryingOnPremium: isPremium(tried ?? current) && !plus.isPlus,
+            tryingOnPremium: isPremium(shownID) && !plus.isPlus,
             proHasEnded: plusStore.state == .expired,
             freeWeekAvailable: plusStore.introEligible)
     }
 
     private func isPremium(_ id: String) -> Bool {
         ProShowcase.tiles(for: kind).first { $0.id == id }?.isPremium ?? false
+    }
+
+    private var retainedName: String? {
+        guard let id = settings.retainedCosmeticID(kind, current: current,
+                                                   vehicleID: vehicleID) else { return nil }
+        return ProShowcase.tiles(for: kind).first { $0.id == id && $0.isPremium }?.name
     }
 
     // MARK: - Шапка
@@ -149,24 +163,17 @@ struct ProShowcaseSheet: View {
         case .profileBackground:
             ProShowcasePreview.profile(
                 background: ProfileBackground.from(shown),
-                frame: AvatarFrame.from(currentFrame))
+                frame: AvatarFrame.effective(id: settings.avatarFrame, isPlus: plus.isPlus))
         case .avatarFrame:
             ProShowcasePreview.profile(
-                background: ProfileBackground.from(currentBackground),
+                background: ProfileBackground.effective(
+                    id: settings.profileBackground, isPlus: plus.isPlus),
                 frame: AvatarFrame.from(shown))
         case .vehicleCard:
             ProShowcasePreview.vehicle(style: VehicleCardStyle.from(shown))
         case .routeLine:
             ProShowcasePreview.route(style: RouteLineStyle.from(shown), c)
         }
-    }
-
-    private var currentBackground: String {
-        SettingsManager.shared.profileBackground
-    }
-
-    private var currentFrame: String {
-        SettingsManager.shared.avatarFrame ?? ""
     }
 
     // MARK: - Группы
@@ -297,13 +304,13 @@ struct ProShowcaseSheet: View {
     /// Первым делом — что выбор НЕ ПОТЕРЯН: человек, увидевший свой обычный
     /// фон вместо купленного, боится, что настройку стёрли.
     private func expiredCard(
-        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language, retainedName: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(AppStrings.showcaseExpiredTitle(l, date: expiredDate(l)))
                 .font(AppType.itemValue)
                 .foregroundStyle(c.text)
-            Text(AppStrings.showcaseExpiredText(l))
+            Text(AppStrings.cosmeticRetainedChoice(l, kind: kind, name: retainedName))
                 .font(AppType.body)
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -312,6 +319,7 @@ struct ProShowcaseSheet: View {
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(AppTheme.accentBg))
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("pro_showcase_expired")
     }
 

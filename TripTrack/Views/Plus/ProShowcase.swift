@@ -1,7 +1,7 @@
 import Foundation
 
 /// Какая из четырёх витрин оформления открыта — состояния 21…27 матрицы 0.8.4.
-enum ProShowcaseKind: String, CaseIterable, Equatable, Identifiable {
+enum ProShowcaseKind: String, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
 
     case profileBackground
@@ -115,6 +115,38 @@ enum ProShowcase {
                         storefrontHidesPlus: state.storefrontHidesPlus) != .hidden
     }
 
+    /// Сохранённый выбор показывается с текущими правами, как в профиле.
+    /// Только явная примерка может показать платное без подписки, и только
+    /// там, где витрина его предлагает. Исходный ID остаётся в настройках:
+    /// открытие или закрытие листа не стирает выбор до продления PRO.
+    static func previewID(
+        for kind: ProShowcaseKind,
+        current: String,
+        tried: String?,
+        isPlus: Bool,
+        storefrontHidesPlus: Bool
+    ) -> String {
+        let offersPremium = PlusGate.allows(
+            kind.feature, isPlus: isPlus,
+            storefrontHidesPlus: storefrontHidesPlus) != .hidden
+        let visibleTry = tried.flatMap { id -> String? in
+            let premium = tiles(for: kind).first { $0.id == id }?.isPremium ?? false
+            return premium && !offersPremium ? nil : id
+        }
+        let raw = visibleTry ?? current
+        let showPremium = isPlus || (visibleTry != nil && offersPremium)
+        switch kind {
+        case .profileBackground:
+            return ProfileBackground.effective(id: raw, isPlus: showPremium).rawValue
+        case .avatarFrame:
+            return AvatarFrame.effective(id: raw, isPlus: showPremium).rawValue
+        case .vehicleCard:
+            return VehicleCardStyle.effective(id: raw, isPlus: showPremium).rawValue
+        case .routeLine:
+            return RouteLineStyle.from(raw).effective(isPlus: showPremium).rawValue
+        }
+    }
+
     /// Замок на плитке. Только у платного варианта и только без подписки.
     static func isLocked(isPremium: Bool, state: State) -> Bool {
         isPremium && !state.isPlus
@@ -132,15 +164,13 @@ enum ProShowcase {
 
     /// Что на кнопке внизу.
     ///
-    /// Порядок не переставить, он и есть правило: подписка сильнее всего,
-    /// дальше витрина (продавать нечего), дальше «было и кончилось» —
-    /// человеку с истёкшей подпиской предлагают ПРОДЛИТЬ, а не «попробовать
-    /// неделю», которой ему всё равно не дадут.
+    /// Бесплатный выбор всегда можно завершить. Продление относится только
+    /// к явной примерке платного, а не к самому факту истёкшей подписки.
     static func action(_ state: State) -> ProShowcaseAction {
         if state.isPlus { return .done }
         if state.storefrontHidesPlus { return .done }
-        if state.proHasEnded { return .renew }
         guard state.tryingOnPremium else { return .done }
+        if state.proHasEnded { return .renew }
         return state.freeWeekAvailable ? .tryFreeWeek : .getPro
     }
 }

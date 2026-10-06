@@ -70,8 +70,13 @@ final class FogMetalSeat {
     /// ГОЛУЮ карту Apple (растра у вуали нет, плиточные оверлеи сняты).
     func follow(_ seat: VeilSeat, on map: MKMapView) {
         guard let veil, seat.isAttached, !reseating,
-              Self.needsReseating(metal: veil, veil: seat.veil),
               let parent = seat.veil.superview else { return }
+        guard Self.needsReseating(metal: veil, veil: seat.veil) else {
+            // A first seat can happen at 0×0. MapKit lays out its own children,
+            // but may leave ours at that size despite their autoresizing mask.
+            if veil.frame != parent.bounds { veil.frame = parent.bounds }
+            return
+        }
         reseating = true
         defer { reseating = false }
         // Снятие делает «сядем заново» одинаковым для обоих случаев —

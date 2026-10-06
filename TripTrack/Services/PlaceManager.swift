@@ -62,6 +62,8 @@ final class PlaceManager: ObservableObject {
 
     func passes(for placeId: UUID) -> [PlacePass] { store.passes(placeId: placeId) }
 
+    func passes(for placeIds: [UUID]) -> [UUID: [PlacePass]] { store.passes(placeIds: placeIds) }
+
     func stats(for placeId: UUID) -> PlaceStats { PlaceStats.build(from: store.passes(placeId: placeId)) }
 
     /// Просто счёт, без похода за всеми проездами — им кормятся чипы «частых

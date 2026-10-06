@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Konuma izin ver",
         "onboardingLocationSub": "Rotalarını kaydetmek için konum izni gerekiyor. Verilerin cihazında kalır.",
         "onboardingBackgroundTitle": "Arka planda kayıt",
-        "onboardingBackgroundSub": "Telefon cebindeyken gezilerin kaydedilmeye devam etmesi için konum izni «Her zaman» olmalı — «Uygulamayı kullanırken» seçilirse kayıt arka planda kesilir. Hareket verileri («Hareket ve Fitness») GPS'i sürekli açık tutmadan gezinin başladığını fark etmeyi sağlar, böylece pil daha uzun gider.",
+        "onboardingBackgroundSub": "«Her Zaman» konum erişimi, uygulama açık değilken yolculukları algılamaya yardımcı olur. «Hareket ve Fitness», GPS’i sürekli çalıştırmadan hareketi algılar. Sistem pencerelerinde her isteğe izin verebilir veya reddedebilirsin.",
         "onboardingBackgroundAllow": "«Her zaman»a izin ver",
         "onboardingNotificationsTitle": "Haberin olsun",
         "onboardingNotificationsSub": "Gezilerine gelen tepkiler, takipler ve yorumlar için bildirimler. Aç ki gelen karşılığı kaçırma.",

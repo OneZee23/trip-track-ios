@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Autorisez la localisation",
         "onboardingLocationSub": "L'accès à la localisation est nécessaire pour enregistrer vos itinéraires. Vos données restent sur votre appareil.",
         "onboardingBackgroundTitle": "Enregistrement en arrière-plan",
-        "onboardingBackgroundSub": "Pour que les trajets continuent de s'enregistrer avec le téléphone dans la poche, la localisation doit être réglée sur « Toujours » — avec « Lorsque l'app est active », l'enregistrement s'arrête en arrière-plan. Les données de mouvement (« Mouvement et forme ») permettent de repérer le début d'un trajet sans laisser le GPS allumé, ce qui économise la batterie.",
+        "onboardingBackgroundSub": "L’accès à la position « Toujours » aide à détecter les trajets lorsque l’app n’est pas ouverte. « Mouvements et forme » détecte les déplacements sans laisser le GPS actif en permanence. Vous pouvez autoriser ou refuser chaque demande dans les fenêtres du système.",
         "onboardingBackgroundAllow": "Autoriser « Toujours »",
         "onboardingNotificationsTitle": "Restez au courant",
         "onboardingNotificationsSub": "Des notifications pour les réactions, les abonnements et les commentaires sur vos trajets. Activez-les pour ne rien manquer.",

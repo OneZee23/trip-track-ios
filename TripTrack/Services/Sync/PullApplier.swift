@@ -73,6 +73,16 @@ final class PullApplier {
         // CoreData performance scales linearly with save count, so a
         // pull of 50 trips drops from 50× saveContext() to 1×.
         repo.flushPendingApplies()
+        // The count and newest start date do not change when another device
+        // edits a trip or its photos. Invalidate here, even with no profile
+        // screen open, so the next cached library read sees the saved batch.
+        let tripSnapshotsChanged = !response.trips.upserted.isEmpty
+            || !response.trips.deleted.isEmpty
+            || !response.photos.upserted.isEmpty
+            || !response.photos.deleted.isEmpty
+        if tripSnapshotsChanged {
+            StatsCache.invalidate()
+        }
         // Раньше перечитывали только когда приехали НАСТРОЙКИ. Но архив и
         // продажа приезжают в записи МАШИНЫ, а настройки при этом могут не
         // прийти вовсе: чужое устройство трогает свою строку настроек только

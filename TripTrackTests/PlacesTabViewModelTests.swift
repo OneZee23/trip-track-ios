@@ -1,6 +1,7 @@
 import XCTest
 import CoreData
 import CoreLocation
+import Combine
 @testable import TripTrack
 
 @MainActor
@@ -19,20 +20,56 @@ final class PlacesTabViewModelTests: XCTestCase {
     }
     override func tearDown() { manager = nil; repo = nil; store = nil; pc = nil; super.tearDown() }
 
-    func testItemsFollowThePlacesAndTheirPasses() {
+    func testItemsFollowThePlacesAndTheirPasses() async {
         let jubga = CLLocationCoordinate2D(latitude: 44.3196, longitude: 38.7089)
         let p = store.upsertPlace(cell: Place.cell(latitude: jubga.latitude, longitude: jubga.longitude), coordinate: jubga, name: "Джубга").place
         store.replacePasses(placeId: p.id, tripId: UUID(), with: [
             PlacePass(placeId: p.id, tripId: UUID(), timestamp: Date(), elapsedFromStart: 8040, distanceFromStart: 1, course: 0)])
         manager.reload()
         let vm = PlacesTabViewModel(manager: manager, repository: repo)
-        vm.reload()
         XCTAssertEqual(vm.items.count, 1)
         XCTAssertEqual(vm.items[0].place.name, "Джубга")
         XCTAssertTrue(vm.items[0].isFirstTime)
+        let removed = expectation(description: "The mounted list follows the deletion notification")
+        let subscription = vm.$items.dropFirst().sink { items in
+            if items.isEmpty { removed.fulfill() }
+        }
+        defer { subscription.cancel() }
         manager.delete(placeId: p.id)
-        vm.reload()
+        await fulfillment(of: [removed], timeout: 1)
         XCTAssertTrue(vm.items.isEmpty)
+    }
+
+    func testInitialSnapshotKeepsEmptyPlacesStatsAndLatestComparison() {
+        func place(_ index: Int, _ name: String) -> Place {
+            let coordinate = CLLocationCoordinate2D(latitude: 44.0 + Double(index) * 0.1, longitude: 38.0)
+            return store.upsertPlace(cell: Place.cell(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                                     coordinate: coordinate, name: name).place
+        }
+        let older = place(0, "Older"), latest = place(1, "Latest")
+        let emptyZ = place(2, "Zulu"), emptyA = place(3, "Alpha")
+        let base = Date(timeIntervalSince1970: 1_760_000_000)
+        func pass(_ place: Place, _ offset: TimeInterval, _ elapsed: TimeInterval) -> PlacePass {
+            PlacePass(placeId: place.id, tripId: UUID(), timestamp: base.addingTimeInterval(offset),
+                      elapsedFromStart: elapsed, distanceFromStart: 10_000, course: 0)
+        }
+        let oldPasses = [pass(older, 20, 1200)]
+        let latestPasses = [pass(latest, 30, 1800), pass(latest, 50, 600), pass(latest, 40, 1800)]
+        for (place, passes) in [(older, oldPasses), (latest, latestPasses)] {
+            store.replacePasses(placeId: place.id, tripId: UUID(), with: passes)
+        }
+        manager.reload()
+
+        let vm = PlacesTabViewModel(manager: manager, repository: repo)
+
+        XCTAssertEqual(vm.items.map(\.id), [latest.id, older.id, emptyA.id, emptyZ.id],
+                       "Initial data is ready before onAppear, with empty places retained at the end")
+        XCTAssertEqual(vm.items.first?.stats.passCount, 3)
+        XCTAssertEqual(vm.items.first?.usual, 1800)
+        XCTAssertEqual(vm.items.last?.stats.passCount, 0)
+        XCTAssertEqual(vm.lastPass?.placeId, latest.id)
+        XCTAssertEqual(vm.lastPass?.delta, 1200)
+        XCTAssertEqual(vm.lastPass?.isFaster, true)
     }
 
     // MARK: - Подсказки (0.8.0)

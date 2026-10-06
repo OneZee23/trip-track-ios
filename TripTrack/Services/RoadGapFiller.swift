@@ -394,8 +394,11 @@ final class RoadGapFiller {
 
             let stored = PostTripTrackProcessor.liveTrackPoints(of: entity)
             let altitudes = PostTripTrackProcessor.altitudeLookup(stored)
+            let breaks = CoreDataTripRepository.recordingBreaks(of: entity)
             let gaps = TrackGapFinder
-                .gaps(in: stored.compactMap(PostTripTrackProcessor.gapPoint), includeFilled: true)
+                .gaps(in: stored.compactMap {
+                    PostTripTrackProcessor.gapPoint($0, recordingBreaks: breaks)
+                }, includeFilled: true)
                 .filter(GapFill.isFillable)
 
             var pending: [PendingGap] = []
@@ -496,10 +499,18 @@ final class RoadGapFiller {
             // них, даже после того как предыдущая дыра в этом же цикле уже
             // что-то удалила/вставила.
             let stored = PostTripTrackProcessor.liveTrackPoints(of: entity)
+            let breaks = CoreDataTripRepository.recordingBreaks(of: entity)
 
             var replaced = false
             var anySkipped = false
             for gap in resolved {
+                // A sync may have delivered pause metadata while directions
+                // were loading. Revalidate the boundary on the fresh context.
+                guard !RecordingBreaks.crosses(from: gap.fromTimestamp, to: gap.toTimestamp,
+                                                breaks: breaks) else {
+                    anySkipped = true
+                    continue
+                }
                 // ЖИВЫЕ интерполированные точки строго внутри окна дыры — а
                 // не то, что запомнила фаза 1. Проверка в ОБЕ стороны (ревью
                 // раунд 2, пункт 3): односторонняя («мои старые id ещё

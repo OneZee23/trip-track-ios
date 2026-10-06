@@ -206,7 +206,7 @@ extension Translations {
         "onboardingLocation": "Zezwól na lokalizację",
         "onboardingLocationSub": "Do nagrywania tras potrzebny jest dostęp do lokalizacji. Dane zostają na urządzeniu.",
         "onboardingBackgroundTitle": "Nagrywanie w tle",
-        "onboardingBackgroundSub": "Żeby trasy nagrywały się z telefonem w kieszeni, dostęp do lokalizacji musi być ustawiony na «Zawsze» — przy «Podczas używania» nagrywanie przerwie się w tle. Dane o ruchu («Ruch i sprawność») pozwalają wykryć początek jazdy bez ciągle włączonego GPS, dzięki czemu bateria starcza na dłużej.",
+        "onboardingBackgroundSub": "Dostęp do lokalizacji „Zawsze” pomaga wykrywać podróże, gdy aplikacja nie jest otwarta. „Ruch i sprawność” wykrywa ruch bez ciągłego korzystania z GPS. W oknach systemowych możesz zezwolić na każdy dostęp lub go odmówić.",
         "onboardingBackgroundAllow": "Zezwól na «Zawsze»",
         "onboardingNotificationsTitle": "Bądź na bieżąco",
         "onboardingNotificationsSub": "Powiadomienia o reakcjach, obserwujących i komentarzach do Twoich tras. Włącz je, żeby nie przegapić odzewu.",

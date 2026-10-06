@@ -619,13 +619,13 @@ struct JourneyDetailView: View {
                 value: "\(aggregate.calendarDays)",
                 unit: AppStrings.nounDays(l, aggregate.calendarDays),
                 label: AppStrings.journeyDurationLabel(l),
-                color: AppTheme.accent, staggerIndex: 0
+                color: AppTheme.accent
             )
             DetailStatCard(
                 value: journeyDistance(l).value,
                 unit: journeyDistance(l).unit,
                 label: AppStrings.journeyDistanceLabel(l),
-                color: AppTheme.green, staggerIndex: 1
+                color: AppTheme.green
             )
             if isSocial {
                 // S6: три плитки, не четыре. «В пути» — из точного трека
@@ -636,19 +636,19 @@ struct JourneyDetailView: View {
                     value: "\(aggregate.legCount)",
                     unit: AppStrings.nounTrips(l, aggregate.legCount),
                     label: AppStrings.journeyPublicLegsLabel(l),
-                    color: AppTheme.blue, staggerIndex: 2
+                    color: AppTheme.blue
                 )
             } else {
                 DetailStatCard(
                     value: "\(aggregate.legCount)",
                     unit: AppStrings.nounTrips(l, aggregate.legCount),
                     label: AppStrings.journeyLegsLabel(l),
-                    color: AppTheme.blue, staggerIndex: 2
+                    color: AppTheme.blue
                 )
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(aggregate.drivingSeconds, lang: l),
                     label: AppStrings.journeyDrivingLabel(l),
-                    color: AppTheme.accent, staggerIndex: 3
+                    color: AppTheme.accent
                 )
             }
         }
