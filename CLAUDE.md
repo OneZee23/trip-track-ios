@@ -39,8 +39,9 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   главный поток. `TripMapHost.map(orMake:)` сохраняет родителя до передачи.
   Хост разрешает захват только последнему слоту активной роли
   (`hero`/`fullscreen`), чтобы прежние callbacks не двигали камеру.
-  Изменение размера учитывается даже после автоматического autoresizing:
-  совпадение `map.frame == bounds` не отменяет ожидающее кадрирование.
+  Размер карты задаётся явно, только по ненулевым границам гнезда:
+  передача новому слоту не схлопывает живую карту до 0×0. Совпадение
+  `map.frame == bounds` не отменяет первое ожидающее кадрирование.
 - **Пустое окно у карты — это НЕ уход экрана.** `VeilHostMapView
   .onWindowChange` снимает с карты вуаль (два растра и `CADisplayLink` за
   кадром не живут), но НЕ отпускает сам хост. Стоявший там `release()`
@@ -66,7 +67,8 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   `-debug-foreign-trip` доступен только в DEBUG-симуляторе. Подробности и
   границы восстановления: `docs/releases/0.8.1/production-regressions.md`.
 
-**MVVM + Service Layer**, fully native (no external dependencies).
+**MVVM + Service Layer**, native SwiftUI/UIKit. Sentry is the external
+crash-reporting dependency; see `project.yml` for the pinned package.
 
 - **Models** — data structures: `Trip`, `TrackPoint`, `Vehicle`, `Badge`, `TripPhoto`
 - **ViewModels** — `@ObservableObject` with `@Published`: `MapViewModel` (recording, map state), `FeedViewModel` (trip list, filtering, pagination)
@@ -141,9 +143,10 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   Вуаль снимается при освобождении последнего представления, а не при
   `.onDisappear` при push. Раскладка — НЕ `.fullScreenCover`, а накладка
   в корне экрана: карта
-  вырастает из рамки героя одной пружиной (`MapExpansionState`, 0.38/0.9),
-  хром проявляется после 60 % её, камера вписывается на ПРИЕХАВШЕМ кадре
-  (MapKit считает подгонку по нынешним границам вида). Слот героя на это
+  появляется коротким кроссфейдом (`MapExpansionState`, 0.2 с),
+  получив конечный размер один раз. Камера вписывается без второго перелёта
+  по ненулевым границам нового гнезда. Прежнее растягивание живой карты
+  заставляло MapKit пересчитывать её на каждом кадре перехода. Слот героя на это
   время показывает снимок карты. Ведёшь сюда третью карту — веди через хост,
   вторая `MKMapView` за едущей шторкой и была «тяжёлым заходом».
 - **Снимок на карте открывается ЧЕРЕЗ карточку.** Тап по булавке показывает
@@ -2425,17 +2428,22 @@ home-privacy.md`. Коротко о том, что нельзя нарушить
 офлайн и переживает второй телефон на том же Apple ID. Сервер отвечает за то,
 что видят ДРУГИЕ люди — косметику в чужом профиле, счётчик, ленту.
 
-- **В 0.8.0 «Плюс» ВЫКЛЮЧЕН целиком — `PlusAvailability.isEnabled = false`.**
-  Решение владельца 21 сентября: монетизацию отложить, код оставить в сборке.
+- **В 0.8.4 платное включено — `PlusAvailability.isEnabled = true`.**
+  1 октября владелец подтвердил создание двух тарифов PRO и трёх чаевых в
+  App Store Connect, с ценами, метаданными и скриншотами для ревью.
+  Товары отправлены вместе с 0.8.4 и затем одобрены; покупки и возврат
+  оформления после продления проверены владельцем в Sandbox. На 6 октября
+  сборка 73 одобрена, но ожидает ручного публичного выпуска. До 0.8.4 флаг был
+  выключен, потому что товаров ещё не было.
   Единственное место, где флаг читается, — `PlusStore.hidesPlus(countryCode:
   available:)`: при `available == false` витрина считается спрятанной на ЛЮБОМ
   регионе, и `PlusGate` отдаёт `.hidden` — ни пейвола, ни замков, ни
   чаевых, ни вписанной поездки (`ManualTripEntry` ходит через тот же гейт).
-  Второй проверки флага нигде нет и быть не должно: включение в 0.8.1 — одна
-  строка. `-debug-plus` в Debug по-прежнему снимает всё, чтобы пейвол можно
-  было открыть на симуляторе. Держит `PlusAvailabilityTests
-  .testShippedBuildKeepsPlusHidden` — падает, когда флаг взведут, и это
-  нарочно: тогда его удаляют вместе с решением, а не молча правят.
+  Второй проверки флага нигде нет и быть не должно. Сторож прежнего решения
+  `PlusAvailabilityTests.testShippedBuildKeepsPlusHidden` удалён вместе с
+  включением; тесты правил глобального выключателя и витрины РФ сохранены.
+  `-debug-plus` показывает активную подписку, `-debug-pro-store` — витрину
+  без подписки. Оба флага доступны только в Debug.
 - **Один гейт на пять точек.** `PlusGate.allows(feature:isPlus:storefront:)`
   — чистая функция, `.hidden` (витрина РФ, `Storefront.current.countryCode ==
   "RUS"` — ни пейвола, ни замков, ни премиум-пунктов в списках) / `.locked`
@@ -2456,6 +2464,16 @@ home-privacy.md`. Коротко о том, что нельзя нарушить
   Правило живёт в ОДНОМ резолвере на косметику
   (`ProfileBackground.effective(id:isPlus:)` и её тройники у рамки, фона
   машины и линии), а не в проверке `isPlus` на каждом месте показа.
+  `ProfileProgressSyncTests.testExpiredCosmeticsStayStoredAndPublishedThenReturnAfterRenewal`
+  проверяет также синхронизацию во время перерыва и повторную загрузку
+  настроек: на сервер уходят исходные ID, а не временное бесплатное оформление.
+- **Превью витрины не выдаёт сохранённое платное за действующее.**
+  `ProShowcase.previewID` начинает с доступного сейчас оформления; платное
+  без подписки показывает только после явной примерки и только в продающей
+  витрине. Если регион сменился на скрытый, примерка уступает сохранённому
+  доступному варианту. Сопутствующая рамка/фон также читаются через `effective`.
+  Превью и выделение плитки используют один ID; открытие и «Готово» не
+  перезаписывают сохранённые настройки. Держит `ProShowcaseTests`.
 - **`avatarFrame`/`showPlusBadge` едут через `POST /auth/profile-update`, а
   НЕ через синк настроек.** `SettingsService.upsert` на сервере уже перестал
   быть вторым писателем в профиль (два писателя устраивали гонку и затирали
@@ -2463,6 +2481,9 @@ home-privacy.md`. Коротко о том, что нельзя нарушить
   просто молча никуда не доедут. Единственная дверь — обёртка
   `AuthService.pushPlusCosmetics()`, и любая новая правка косметики обязана
   звать её, а не `syncProfileToServer` напрямую.
+  Фон профиля выбирается через `SettingsManager.setProfileBackground` —
+  он сохраняет выбор и зовёт эту же дверь синхронизации. Простое присваивание
+  `profileBackground` сохраняет лишь локальное значение.
 - **Ручная поездка даёт километры, а не награды.** `Trip.source: TripOrigin`
   (не `TripSource` — это имя уже занято протоколом «откуда читать список
   поездок»). Одометр машины, слой открытого (`RevealedLayerStore`) и
@@ -2565,6 +2586,17 @@ home-privacy.md`. Коротко о том, что нельзя нарушить
   (первый запуск — по региону устройства, консервативно), иначе каждый
   холодный старт в РФ начинался со «платное видно»: `Storefront.current`
   отвечает асинхронно и умеет промолчать офлайн — на всю сессию.
+  При смене страны `Storefront.updates` также сбрасывает товары и право на
+  пробный период и перечитывает каталог. Поколение запроса проверяется после
+  загрузки товаров и после проверки eligibility: поздний ответ старой
+  витрины не должен вернуть прежнюю валюту. Держит `PlusStoreTests`.
+- **После покупки «Выбрать фон профиля» открывает витрину фонов.**
+  `PlusPaywallSheet` меняет содержимое того же листа; передавать `onClose`
+  вместо `onPickBackground` нельзя — так кнопка в сборке 67 только закрывала
+  успех покупки. «Позже» закрывает лист, а покупка из заполненной ручной
+  поездки возвращает к её форме. `ProPurchaseNavigationTests` проходит
+  настоящую покупку через локальный StoreKit, выбирает премиальный фон и
+  проверяет его после перезапуска; каталог включён только в тестовые бандлы.
 - **«7 дней бесплатно» обещается только тому, кто их получит.**
   `PlusStore.introEligible` = `subscription.isEligibleForIntroOffer`, и
   `PlusPaywallModel.plans` принимает его ОБЯЗАТЕЛЬНЫМ параметром без
@@ -2774,6 +2806,19 @@ unable to locate any Bluetooth Low Energy functionality». Апелляции н
   кармане это и есть смысл приложения, и проверяется она за минуту.
 
 ### Сказать спасибо — на карточке итогов (0.8.4)
+
+Названия трёх чаевых в `TipJarSheet` берутся из существующих
+`AppStrings.tipsCoffee/tipsMeal/tipsFuel` на языке приложения. ASC может
+вернуть английский `Product.displayName` даже в русском интерфейсе; он
+остаётся запасным вариантом только для неизвестного ID. Цена всегда
+`Product.displayPrice`, без самостоятельной конвертации валют.
+
+Каталог `TipJarService` обновляется при открытии листа и смене
+`Storefront.countryCode`: прежние цены убираются сразу, запоздалые ответы
+проверяют поколение запроса. Обновление каталога не меняет состояние
+незавершённой покупки, включая ожидание `transaction.finish()`, и не
+затирает её результат. `TipJarStorefrontTests` проверяет гонки запросов,
+смену страны и сохранение состояния покупки.
 
 Чаевые были одной приглушённой строкой в подвале «Я» — местом для того, кто
 специально пошёл искать, да ещё и ни с чем не рядом. Это честно и приносит
@@ -3078,9 +3123,13 @@ iPhone 15 Pro Max), оба «главный поток не отвечал дв�
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v21 — 0.8.3)
+## CoreData Schema (versioned, v22 — 0.8.4)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v20 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно), v19 — «Плюс»: `TripEntity.source` (String, `recorded`/`manual`, дефолт `recorded`), `VehicleEntity.cardStyle` (String?), `UserSettingsEntity.avatarFrame`/`showPlusBadge` (String?/Bool, дефолт `true`), v20 — «Черновик» и «Трек без дыр»: `TripEntity.confirmation` (String?, `confirmed`/`draft`, пустая колонка читается как `confirmed`), `TripEntity.roadFillState` (String?, `unchecked`/`pending`/`done`, дефолт `unchecked`), v21 — электро и гибриды: `VehicleEntity.powertrain` (String, дефолт `fuel`), `electricConsumption`/`electricityPrice`/`electricRangeKm` (Double, 0 = «не задано»), `TripEntity.energyMode` (String?, `nil` = «Авто»); всё аддитивно).
+v22 adds only optional `TripEntity.recordingBreaksJSON`. It stores explicit
+recording pause boundaries; the v21 → v22 lightweight migration is covered by
+`CoreDataV22MigrationTests`. Earlier model versions remain in the bundle.
+
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v22 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно), v19 — «Плюс»: `TripEntity.source` (String, `recorded`/`manual`, дефолт `recorded`), `VehicleEntity.cardStyle` (String?), `UserSettingsEntity.avatarFrame`/`showPlusBadge` (String?/Bool, дефолт `true`), v20 — «Черновик» и «Трек без дыр»: `TripEntity.confirmation` (String?, `confirmed`/`draft`, пустая колонка читается как `confirmed`), `TripEntity.roadFillState` (String?, `unchecked`/`pending`/`done`, дефолт `unchecked`), v21 — электро и гибриды: `VehicleEntity.powertrain` (String, дефолт `fuel`), `electricConsumption`/`electricityPrice`/`electricRangeKm` (Double, 0 = «не задано»), `TripEntity.energyMode` (String?, `nil` = «Авто»); всё аддитивно).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
@@ -3283,6 +3332,52 @@ iPhone 15 Pro Max), оба «главный поток не отвечал дв�
 с порогом ~2 м; стояло 0.0001 градуса, то есть 7–11 м, и карта срезала ровно те
 углы, ради которых точки и записывались.
 
+### Кандидат 73 и пунктир маршрута (0.8.4)
+
+- 0.8.4 (73) отправлена на App Review 5 октября в 19:07 МСК;
+  6 октября подтверждён `Pending Developer Release`. Публичная версия
+  остаётся 0.8.1, ручной выпуск сохранён. Текущий статус и проверки —
+  `docs/releases/0.8.4/candidate-73.md` и `ship-steps.md`. 70 заменена в версии;
+  публичного выпуска не было. Lock Screen pause/resume владелец на 72 не
+  проверял; городская поездка не закрывает этот сценарий.
+- `ScreenScaledDashRenderer` исправляет толщину серого пунктира между
+  уровнями zoom живой MKMapView. Только пунктир использует снимок экранного
+  масштаба, сплошные линии остаются штатными. После смены масштаба нужен
+  `setNeedsDisplay()` для всех кэшированных уровней: адресная инвалидация
+  дробного zoom пропускает растровые тайлы MapKit. Прямой CGContext-пробник
+  не воспроизводит дефект; проверять живую карту. Проверено на iOS 18.6/26.5.
+
+### Запись при помехах GPS и ручные паузы (0.8.4, build 72)
+
+- `RecordingFixContinuity` проверяет сырые координаты ДО Калмана. Отброшенный
+  скачок не меняет опорную точку. Шлюз не обещает распознавать любой GPS-спуфинг:
+  правдоподобная ложная позиция может пройти проверку.
+- `predictedLocation` — чистая проекция для экрана, без изменения состояния
+  фильтра. Частота кадров не должна менять сохранённые точки. Разрыв больше
+  десяти секунд начинает оценку заново; коррелированные повторы за долю
+  секунды не ассимилируются повторно и не сохраняются с прежним timestamp.
+- Неизвестная скорость провайдера остаётся `-1`. Максимум считает
+  `TripDistanceGate.maximumRecordedSpeed`: валидные измерения и нижняя граница
+  по правдоподобному перемещению за длинный разрыв. Известный ноль в конечной
+  точке не заменяется средней скоростью. Тот же максимум сохраняется в живой
+  записи, иначе восстановление может удалить реальную поездку как пешую.
+- Ручная пауза сразу сохраняет `recordingBreaks`, сбрасывает якоря и фильтр.
+  `RecordingBreaks` выводит индекс участка по времени; индекс точки не является
+  отдельным полем синхронизации. Все расчёты расстояния, сплита и достройки
+  должны учитывать эти участки. После ожидания `MKDirections` границы нужно
+  проверить заново в свежем контексте.
+- `recordedLocationPublisher` кормит живую линию и открытие территории только
+  принятыми точками. Возвращать туда параллельный поток сырых координат нельзя.
+- В sync отсутствие `recordingBreaks` сохраняет локальные/серверные границы,
+  `[]` явно очищает их; неподтверждённую локальную правку pull не затирает.
+  Сервер с этим полем выпускается раньше клиента. Старым поездкам границы
+  задним числом не придумываются. Плоское превью пока может соединять участки
+  визуально; старый клиент также может пересчитать скалярную статистику без
+  знания пауз. Эти ограничения не исправляются слепым пересчётом delta-pull.
+- Регрессии: `RecordingInterferenceTests`, `KalmanLocationFilterTests`,
+  `RecordingBreaksPersistenceTests`, `TripDistanceGateTests`, `PostTripFillTests`
+  и `RoadGapFillerTests`. Настоящие дорожные журналы держать вне репозитория.
+
 ### Трек без дыр (0.8.1)
 
 Плохое небо — вечерний город, тоннель, паркинг — раньше просто не писало точек:
@@ -3467,6 +3562,33 @@ git grep -nE 'ssh [a-z]+@|[0-9]{1,3}(\.[0-9]{1,3}){3}|BEGIN [A-Z ]*PRIVATE KEY'
 служебные `refs/t3/`, которые обычным пушем ветки не уходят.
 
 ## Коммиты
+
+**Законченный пакет работы фиксируется в Git вместе с документацией.**
+Перед сдачей проверять `git status` во всех затронутых репозиториях и
+рабочих копиях. Незавершённые самостоятельные изменения сохранять в
+именованной ветке с явным статусом, не смешивать с релизным кандидатом.
+Для загруженного архива фиксировать исходный commit и manifest; дальнейшие
+правки помечать отдельно от уже проверенного и отправленного кода.
+Push и успешный deploy — разные события: после push проверить удалённый
+статус, а в документации указать фактический результат и ограничения проверки.
+
+**Перетесты TestFlight — пакетами** (решение владельца 1 октября 2026).
+Переключение обычного Apple Account и Sandbox на основном телефоне дорого
+для владельца. Найденные правки сначала собираем и проверяем локально;
+не готовим новый номер/Release-архив под каждую мелочь. Следующую сборку
+готовим после согласованного набора проверок текущей. По умолчанию загрузку
+и деплой владелец выполняет сам; явные поручения ниже имеют приоритет.
+
+2 октября владелец поручил подготовить общий билд 0.8.4 (69) и самостоятельно
+отправить версию на App Review через его сессию App Store Connect.
+Это разрешение на отправку 0.8.4 уже дано; загрузка архива остаётся командой
+владельца. Недоступный канал браузера нельзя считать подтверждением отправки.
+
+После отказа 0.8.4 (69) по 5.1.1(iv) владелец отдельно разрешил агенту
+исправить поток разрешений, подготовить и самостоятельно загрузить билд 70,
+затем отправить его на повторное ревью через App Store Connect. Для этих
+действий повторное согласование не требуется. Это разрешение, а не отметка
+об успешных тестах, загрузке или отправке; результаты фиксируются отдельно.
 
 **Максимум четыре слова, одна строка, тела нет, трейлеров нет.** Строка
 `Co-Authored-By` **запрещена** — правило владельца, необсуждаемое, подтверждено
@@ -3708,9 +3830,9 @@ Rules that are easy to get wrong:
 ## Tech Constraints
 
 - iOS 17+, Swift 5.9, iPhone only
-- SwiftUI only (no UIKit views except MapKit representable)
+- SwiftUI with UIKit interop for maps, layout and presentation
 - MapKit (no third-party maps)
-- No external dependencies — 100% native frameworks
+- Native frameworks; Sentry is the external crash-reporting dependency
 - Background location enabled via Info.plist UIBackgroundModes
 
 ## Swift & SwiftUI Rules
@@ -3784,7 +3906,7 @@ Rules that are easy to get wrong:
 
 ### Dialogs — always ours, never the system's
 
-**No system modal ever ships in this app.** No `.alert`, no `.confirmationDialog`,
+**No app-authored system modal ships in this app.** No `.alert`, no `.confirmationDialog`,
 no `.actionSheet`, no `Menu` used as an action list. They drop UIKit chrome —
 system greys, system type, a plate with its own corner radius — into the middle
 of a screen built from our warm cards, and they read as borrowed from another
@@ -3792,6 +3914,15 @@ app. Two of them have already shipped broken: a `confirmationDialog` inside a
 custom navigator adapted into a floating plate that lost its own Cancel button,
 and a `Menu` on a circular nav control left a rounded-square plate behind on
 dismissal (see `NavCircleIcon`'s doc comment).
+
+This rule covers app-authored UI, not iOS privacy consent: permission requests
+must remain native. After the 5.1.1(iv) rejection of 0.8.4 (69), each
+pre-permission explanation has one neutral Continue action that proceeds to
+the system request, with no Not now, skip or swipe bypass. Users may deny
+access in the system dialog and continue; respect denial without repeated
+prompts. Request location, background location when available, Motion & Fitness
+and notifications sequentially, never on top of one another. Audio-route
+detection does not require microphone access and must not request it.
 
 Use the house components instead:
 - **Confirmations** — `AppConfirmDialog` / the `.appConfirm(...)` modifier: a
@@ -3828,3 +3959,105 @@ Rules for any confirmation you build or touch:
 - Don't use `DispatchQueue.main.async` in new code — use `@MainActor` or `MainActor.run {}`
 - Don't add `import UIKit` in SwiftUI views unless absolutely necessary for a specific API
 - Don't nest NavigationStack inside NavigationStack
+
+### iPhone UX — approved KK review, 2 Oct 2026
+
+Owner approved the review with «Офигенно, делаем». Keep the existing tabs and
+Inter visual language. For a populated Я, history/search follow the hero and a
+compact disclosure containing garage, PRO, achievements and clubs; secondary
+cards must never disappear below an unbounded history. Search is local, by trip
+name and raw/localized region, combined with the inclusive calendar range.
+Every calendar day filters; manual creation is a separate explicit action in
+an empty day. The manual CTA says «Сохранить поездку»; distance/time/date are a
+separate summary. Recording stop describes the actual save/discard outcome,
+using the same trimmed end time and trusted-point odometer as finalization.
+Dynamic Type is adopted via `interScaled` in the reviewed forms/profile/settings;
+fixed brand/map/tab typography is not changed globally. Expired PRO permits
+saving a free choice. `CosmeticRetentionStore` keeps the replaced paid choice
+locally, scoped to the account/resource; renewal restores only the exact
+recorded temporary value, never overwriting a newer remote choice. The banner
+states that this reserve is on this iPhone; backend schema is unchanged.
+When another free choice is made, carry the reserve forward only if its
+temporary value still matches the current setting. A synced premium replaces
+the reserve; a synced free value clears it. Otherwise a later local selection
+could resurrect an outdated premium even though the restoration guard passed.
+
+### iPhone UI performance — 2 Oct 2026
+
+- `ProfileHistoryLibrary` computes historical XP on the existing detached load.
+  `PreparedProfileHistory` prepares filtered trips, journey rows and grid runs
+  when the library, journeys, query, dates or language change; `body` only reads
+  that snapshot. Do not replace this with a count-only cache. `HistoryFolding.runs`
+  must append through the nested subscript: copying `last` before append makes
+  a long uninterrupted history quadratic through Array copy-on-write.
+- `PlacesTabViewModel.init` already fills the first frame and observes changes.
+  Do not add a second initial reload in `PlacesView`. List passes use one batch
+  fetch; individual-place reads remain for detail screens.
+- Photo geometry uses `TripPhotoPlacement.prepareAsync`: one immutable route
+  index, one reading per photo shared by pins and moments, outside the main actor.
+  Every full trip replacement goes through `replaceTrip(with:)` to invalidate
+  old work, including a new track with unchanged id/date/photo count. Preserve
+  EXIF priority, capture-time fallback, odometer gates and worker cancellation.
+  Start rebuilding from one SwiftUI task keyed by revision and full photo input;
+  do not also start it synchronously during trip replacement.
+- `PullApplier` invalidates `StatsCache` after trip/photo changes are saved,
+  including same-count edits; an empty pull keeps the warm cache. Invalidation
+  belongs at the data boundary, even while the profile screen is closed.
+- A veil can attach to MapKit before its parent has a nonzero size. Valid sibling
+  order does not mean valid geometry: both raster/vector and Metal veils must
+  follow parent bounds even without reseating. The trip map checks this after
+  MapKit layout; it must not rely on a later photo-state publication to become
+  visible. Repeated unchanged layouts must not start GPU ticks or redraws.
+- Initial trip detail reads use `tripDetailAsync`, materializing immutable values
+  on the repository background context. Prepare `TripReplayInput` off the main
+  actor before publishing the initial full trip; fullscreen map updates read
+  that snapshot instead of sampling the same route three times. Remote track
+  updates also refresh replay input even when social metadata is unchanged.
+  Keep the 300-point replay budget and aligned readings; full map geometry is
+  unaffected by replay sampling.
+
+### Trip detail map scope and expansion — 2 Oct 2026
+
+- Trip detail (own and foreign, hero and fullscreen) shows only the selected
+  trip. It passes `showsFog: false` and flat elevation to both presentations.
+  This replaces the earlier “world on the trip date” design described above:
+  temporal exploration also draws every earlier route, which obscures detail.
+  Atlas, recording and completion-summary exploration are unchanged.
+- Disabling history fog also removes its Metal veil's resize/draw work from
+  the expansion animation. Keep flat elevation explicit: choosing no fog must
+  not introduce realistic terrain loading during the same transition.
+- `TripMapSlotView` owns map sizing without an autoresizing mask. A new slot
+  starts at zero; preserve the map's existing viewport until valid bounds
+  arrive, then report the first usable size even if its frame already matches.
+  Never clear or recreate the shared map to expand it.
+- Coverage: `TripDetailMapScopeTests` mounts the actual detail with three trips;
+  `TripMapHostTests` covers zero-size handover; fullscreen and journey return
+  are checked visually by their UI regression tests.
+- Expansion now crossfades at a fixed fullscreen size (200 ms, 150 ms with
+  Reduce Motion). Do not animate live MapKit bounds. Fit is requested on mount
+  with `animatesFit: false`; the size gate fulfills it after the slot lays out.
+  Collapse fades over the hero snapshot, then transfers the same map back.
+  The old hero-frame/spring recipe above is superseded by this transition.
+
+### Trip detail first frame — 2 Oct 2026
+
+- Opening from history/feed passes existing trip metadata as `preview`; never
+  fetch the full CoreData track synchronously for a navigation tap. Loading and
+  loaded content share the hero height, header padding and first metric cards.
+  Keep Back available before the async read completes.
+- `TripDetailView` resolves an explicit app theme before the new hosting view
+  joins the window, and passes it to its children. Do not set presentation-wide
+  `preferredColorScheme` here. `MapSnapshotPreview` also sets explicit light
+  traits: unspecified inherited the phone's dark style outside the app window.
+- Metrics are immediately visible; `DetailStatCard` has no onAppear fade,
+  offset or stagger. Native navigation already supplies the screen's motion.
+- Live MapKit mounts after native `viewDidAppear` through `NavBarKiller`'s
+  optional callback, not a fixed sleep. A static route remains available while
+  tiles render. The host latches the first fully rendered fitted viewport;
+  callbacks for an old viewport or torn-down map cannot reveal a replacement.
+  Fullscreen/journey returns keep the same map and its ready state. Reveal is
+  180 ms opacity only, immediate with Reduce Motion. No tile callback blocks
+  metadata, Back or opening the full route.
+- `TripDetailFirstPaintTests` checks visible metric ink on the first render;
+  `TripDetailOpeningTests` covers forced-light opening, route/controls and
+  reopen. XCUI waits for idle, so inspect simctl video for push middle frames.

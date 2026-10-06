@@ -1,14 +1,19 @@
 # App Store Connect — 0.8.4
 
-Всё, что нужно вставить при выкладке билда **0.8.4 (67)**. Заметки для
+Метаданные версии **0.8.4**. На 6 октября сборка **73** одобрена Apple
+и ожидает ручного выпуска (`Pending Developer Release`); публичная версия
+остаётся **0.8.1**. Состав и проверки кандидата — в
+[candidate-73.md](candidate-73.md). Изменения после 73 отмечены отдельно
+в [post-73-reports.md](post-73-reports.md) и в этот архив не входят. Заметки для
 ревьюера — в [app-review-notes.md](../app-review-notes.md), секция «current
 submission». Товары и цены — в
 [app-store-connect-setup.md](app-store-connect-setup.md).
 
-**ЭТОТ ТЕКСТ ОБЕЩАЕТ PRO. Значит до сабмита обязаны сойтись ТРИ вещи:**
+**Условия соответствия текста и сборки PRO** (в 73 выполнены):
 
-1. Товары заведены в App Store Connect и в состоянии «Ready to Submit»
-   (шаги 1–2 в `app-store-connect-setup.md`).
+1. Товары заведены в App Store Connect, обязательные поля заполнены.
+   Они добавлены в отправку с версией и одобрены
+   (см. `app-store-connect-setup.md`).
 2. `PlusAvailability.isEnabled` переключён в `true` (шаг 4 там же) — иначе
    карточка рассказывает про экран, которого в сборке нет вовсе.
 3. Билд собран ПОСЛЕ переключения флага.
@@ -35,10 +40,13 @@ submission». Товары и цены — в
 - **Казахского в карточке нет вовсе.** В приложении он есть, в списке локалей
   между Italian и Polish пусто.
 
-**БЭКЕНД ДЕПЛОИТЬ НЕ НАДО.** Обратного порядка 0.8.3 здесь нет: миграций в
-этой версии ноль, а всё серверное для подписки (`PlusModule`, привязка
-покупки, whitelist косметики в `plus-view.ts`) стоит в проде с 0.8.0. Сабмит
-идёт обычным путём.
+**Поддержка PRO на бэкенде выпущена в `e120d3e`.** Он принимает новые `.pro.*`
+продукты наряду с прежними `.plus.*`, а IAP bundle ID отделён от audience
+Apple Login. Проверка работающего контейнера дала PASS; видимость купленного
+оформления с другого аккаунта проверена на устройстве. Миграций нет,
+клиентские исправления покупки в 69 нового деплоя не требовали.
+Позднее опубликована синхронизация `recordingBreaks` (`29e6528`) для 72/73;
+актуальная история сервера находится в его собственном `CHANGELOG.md`.
 
 **ЦЕНЫ В ТЕКСТЕ НЕТ, И ЭТО РЕШЕНИЕ.** В карточке США «19,99 €» было бы
 неправдой — там платят в долларах, и Apple показывает местную цену сама.
@@ -49,15 +57,16 @@ submission». Товары и цены — в
 
 **ПРО РЕГИОНЫ СКАЗАНО ВСЛУХ, в каждой локали.** `PlusGate` прячет PRO
 целиком на витрине РФ (ни пейвола, ни замков, ни чаевых, ни вписанной
-поездки), а платежи App Store там мертвы с 01.04.2026. Строка «PRO доступен
+поездки). Строка «PRO доступен
 не во всех регионах» стоит последней в каждом тексте — без неё карточка
 обещает человеку то, чего он у себя не найдёт.
 
 **CARPLAY НЕ УПОМИНАЕТСЯ НИГДЕ.** Экран автомобиля в этой сборке есть в коде,
 но entitlement `com.apple.developer.carplay-driving-task` Apple ещё не
 выдавала, и его нет ни в одном файле прав (см. `EntitlementsWiringTests`). То есть
-у человека из App Store CarPlay не заработает. Анонсировать его — обещать
-неработающее; он уезжает в ту версию, которая выйдет после ответа Apple.
+отдельное приложение TripTrack в CarPlay не доступно. Система может
+показывать Live Activity записи — это другой механизм, без этого entitlement.
+Самостоятельное CarPlay-приложение не анонсируется до его выпуска.
 
 Ключевые слова, подзаголовок и описание карточки не меняются — только
 «What's New». Лимиты: «What's New» — 4000, промо-текст — 170.
@@ -93,8 +102,9 @@ TIPS
 If you just want to support the work, you can leave a tip. No subscription,
 nothing to unlock, nothing expected in return.
 
-PRO starts with 7 days free; the price is shown before you pay, and you can
-cancel any time. PRO is not available in every region.
+Eligible new subscribers get a 7-day free trial on the yearly plan. The
+monthly plan has no free trial. The price is shown before you pay, and you
+can cancel any time. PRO is not available in every region.
 ```
 
 ### Russian
@@ -124,8 +134,10 @@ PRO — И TRIPTRACK ОСТАЁТСЯ БЕСПЛАТНЫМ
 Если хочется просто поддержать работу — можно оставить чаевые. Без подписки,
 без разблокировки чего-либо и без ожиданий в ответ.
 
-У PRO первые 7 дней бесплатно; цена показана до оплаты, отменить можно в
-любой момент. PRO доступен не во всех регионах.
+Новым подписчикам, которым доступно пробное предложение, первые 7 дней
+годовой подписки — бесплатно. У месячной подписки пробного периода нет.
+Цена показана до оплаты, отменить можно в любой момент.
+PRO доступен не во всех регионах.
 ```
 
 ### German
@@ -155,8 +167,9 @@ TRINKGELD
 Wenn du die Arbeit einfach unterstützen willst, kannst du Trinkgeld geben.
 Kein Abo, nichts wird freigeschaltet, nichts wird erwartet.
 
-PRO beginnt mit 7 Tagen kostenlos; der Preis steht vor dem Kauf, kündbar
-jederzeit. PRO ist nicht in allen Regionen verfügbar.
+Berechtigte Neukunden können das Jahresabo 7 Tage kostenlos testen. Das
+Monatsabo hat keinen kostenlosen Testzeitraum. Der Preis steht vor dem Kauf,
+kündbar jederzeit. PRO ist nicht in allen Regionen verfügbar.
 ```
 
 ### Spanish (Spain)
@@ -186,8 +199,10 @@ PROPINAS
 Si solo quieres apoyar el trabajo, puedes dejar una propina. Sin suscripción,
 sin desbloquear nada y sin esperar nada a cambio.
 
-PRO empieza con 7 días gratis; el precio se muestra antes de pagar y puedes
-cancelar cuando quieras. PRO no está disponible en todas las regiones.
+Los nuevos suscriptores que cumplan los requisitos tienen 7 días de prueba
+gratis con el plan anual. El plan mensual no tiene prueba gratis. El precio
+se muestra antes de pagar y puedes cancelar cuando quieras.
+PRO no está disponible en todas las regiones.
 ```
 
 ### French
@@ -217,9 +232,10 @@ POURBOIRES
 Si vous voulez simplement soutenir le travail, vous pouvez laisser un
 pourboire. Sans abonnement, sans rien débloquer et sans rien attendre en retour.
 
-PRO commence par 7 jours offerts ; le prix est indiqué avant le paiement et
-vous pouvez résilier à tout moment. PRO n'est pas disponible dans toutes les
-régions.
+Les nouveaux abonnés éligibles bénéficient de 7 jours d'essai gratuit avec
+l'abonnement annuel. L'abonnement mensuel ne comprend pas d'essai gratuit.
+Le prix est indiqué avant le paiement et vous pouvez résilier à tout moment.
+PRO n'est pas disponible dans toutes les régions.
 ```
 
 ### Italian
@@ -249,8 +265,10 @@ MANCE
 Se vuoi solo sostenere il lavoro, puoi lasciare una mancia. Senza abbonamento,
 senza sbloccare nulla e senza attese in cambio.
 
-PRO inizia con 7 giorni gratis; il prezzo è mostrato prima del pagamento e
-puoi annullare quando vuoi. PRO non è disponibile in tutte le regioni.
+I nuovi abbonati idonei ricevono 7 giorni di prova gratuita con il piano
+annuale. Il piano mensile non include una prova gratuita. Il prezzo è
+mostrato prima del pagamento e puoi annullare quando vuoi.
+PRO non è disponibile in tutte le regioni.
 ```
 
 ### Polish
@@ -279,8 +297,10 @@ NAPIWKI
 Jeśli chcesz po prostu wesprzeć pracę, możesz zostawić napiwek. Bez subskrypcji,
 bez odblokowywania czegokolwiek i bez oczekiwań w zamian.
 
-PRO zaczyna się od 7 dni bezpłatnie; cena jest pokazana przed zapłatą, a
-anulować można w każdej chwili. PRO nie jest dostępne we wszystkich regionach.
+Nowi subskrybenci spełniający warunki otrzymują 7 dni bezpłatnego okresu
+próbnego w planie rocznym. Plan miesięczny nie ma bezpłatnego okresu próbnego.
+Cena jest pokazana przed zapłatą, a anulować można w każdej chwili.
+PRO nie jest dostępne we wszystkich regionach.
 ```
 
 ### Indonesian
@@ -310,8 +330,10 @@ TIP
 Kalau kamu hanya ingin mendukung pekerjaan ini, kamu bisa memberi tip. Tanpa
 langganan, tanpa membuka apa pun, dan tanpa harapan balasan.
 
-PRO dimulai dengan 7 hari gratis; harganya ditampilkan sebelum pembayaran dan
-bisa dibatalkan kapan saja. PRO tidak tersedia di semua wilayah.
+Pelanggan baru yang memenuhi syarat mendapat uji coba gratis 7 hari untuk
+paket tahunan. Paket bulanan tidak memiliki uji coba gratis. Harganya
+ditampilkan sebelum pembayaran dan bisa dibatalkan kapan saja.
+PRO tidak tersedia di semua wilayah.
 ```
 
 ### Turkish
@@ -341,8 +363,9 @@ BAHŞİŞ
 Sadece bu işi desteklemek istiyorsan bahşiş bırakabilirsin. Abonelik yok, bir
 şeyin kilidi açılmıyor ve karşılığında bir şey beklenmiyor.
 
-PRO 7 gün ücretsiz başlar; fiyat ödemeden önce gösterilir ve dilediğin an iptal
-edebilirsin. PRO her bölgede kullanılamaz.
+Koşulları karşılayan yeni abonelere yıllık planda 7 günlük ücretsiz deneme
+sunulur. Aylık planda ücretsiz deneme yoktur. Fiyat ödemeden önce gösterilir
+ve dilediğin an iptal edebilirsin. PRO her bölgede kullanılamaz.
 ```
 
 ### Finnish — СЛОТ ФИЛИППИНСКОГО (см. выше, кладём текст на Filipino)
@@ -373,9 +396,10 @@ TIP
 Kung gusto mo lang suportahan ang gawaing ito, maaari kang mag-iwan ng tip.
 Walang subscription, walang bubuksan, at walang hinihintay kapalit.
 
-Nagsisimula ang PRO sa 7 araw na libre; makikita ang presyo bago magbayad at
-maaari kang mag-cancel anumang oras. Hindi available ang PRO sa lahat ng
-rehiyon.
+Ang mga bagong subscriber na kwalipikado ay may 7 araw na libreng pagsubok
+sa taunang plano. Walang libreng pagsubok sa buwanang plano. Makikita ang
+presyo bago magbayad at maaari kang mag-cancel anumang oras.
+Hindi available ang PRO sa lahat ng rehiyon.
 ```
 
 ### Ukrainian
@@ -405,8 +429,10 @@ PRO — І TRIPTRACK ЗАЛИШАЄТЬСЯ БЕЗКОШТОВНИМ
 Якщо хочеться просто підтримати роботу — можна залишити чайові. Без підписки,
 без розблокування чогось і без очікувань у відповідь.
 
-У PRO перші 7 днів безкоштовно; ціну показано до оплати, скасувати можна будь-
-коли. PRO доступний не в усіх регіонах.
+Нові підписники, які відповідають умовам пробної пропозиції, отримують
+перші 7 днів річної підписки безкоштовно. Місячна підписка не має пробного
+періоду. Ціну показано до оплати, скасувати можна будь-коли.
+PRO доступний не в усіх регіонах.
 ```
 
 ### Portuguese (Brazil)
@@ -436,8 +462,10 @@ GORJETAS
 Se você quiser apenas apoiar o trabalho, pode deixar uma gorjeta. Sem
 assinatura, sem desbloquear nada e sem esperar nada em troca.
 
-O PRO começa com 7 dias grátis; o preço é mostrado antes do pagamento e você
-pode cancelar quando quiser. O PRO não está disponível em todas as regiões.
+Novos assinantes elegíveis recebem 7 dias de teste grátis no plano anual.
+O plano mensal não inclui teste grátis. O preço é mostrado antes do
+pagamento e você pode cancelar quando quiser.
+O PRO não está disponível em todas as regiões.
 ```
 
 ---
@@ -455,8 +483,11 @@ pode cancelar quando quiser. O PRO não está disponível em todas as regiões.
 - **Review screenshot** у каждого тарифа — кадр пейвола. Годятся снимки из
   `TripTrackUITests/PlusShotTests` (`test_plus_row_paywall_and_tip_jar`).
 - **Subscription Terms** в описании приложения и ссылки на Privacy Policy и
-  Terms of Use — уже стоят в карточке с 0.8.0, менять не надо; проверить, что
-  ссылка на Terms открывается (Apple проверяет её у подписок отдельно).
+  Terms of Use — по прежней подготовке стоят в карточке с 0.8.0; при сабмите
+  сверить фактические поля ASC. 2 октября проверены все четыре адреса из
+  `AppConfig`: английские и русские Terms/Privacy на
+  `https://onezee23.github.io/trip-track-ios/` вернули HTTP 200 и правильные
+  заголовки страниц. Это проверка доступности страниц, не содержимого полей ASC.
 
 ## Чего в сабмите НЕТ
 
