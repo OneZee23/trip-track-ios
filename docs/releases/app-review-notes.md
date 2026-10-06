@@ -6,15 +6,25 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ## v0.8.4 (73) — recording and map fixes (current submission)
 
-**October 6 readback: build 73 is approved, Pending Developer Release.**
-The public version remains 0.8.1; manual release has not been triggered.
+**Released October 6, 2026 at 08:27:37 UTC (11:27:37 MSK).**
+After the owner's instruction, the approved version was manually released.
+App Store Connect readback confirmed **Ready for Distribution**, selected
+build **0.8.4 (73)**. This is a full release, not a phased release; availability
+is configured for 175 countries and regions, and existing ratings were kept
+(`KEEP`). The previous public version was 0.8.1. At 08:29 UTC, public Apple
+Lookup still returned 0.8.1 for US and DE; the RU request failed with URLError.
+Availability of 0.8.4 across public storefronts is not yet confirmed.
+Today's Live Activity and history-counter fixes
+are not included in build 73; no new build or test run was performed for release.
+
+Earlier on October 6, build 73 was confirmed as Pending Developer Release.
 
 **Prepared October 5, 2026.** Build 73 combines the changes in
 [candidate 72](0.8.4/candidate-72.md) with the map-dash rendering correction.
 The Release archive passed verification and uploaded at 18:57 MSK.
 **Submitted October 5, 2026 at 19:07 MSK: Waiting for Review**, submission
-`9f604caf-1bd0-49a0-ac26-1e5f1d5eb2ab`. Build 73 replaces build 70;
-manual release remains selected and no public release was triggered.
+`9f604caf-1bd0-49a0-ac26-1e5f1d5eb2ab`. Build 73 replaced build 70;
+manual release was selected, with no public release at submission time.
 The six previously approved PRO/tip items do not require resubmission;
 the new submission contains the app version only. Exact Notes and selected
 build were read back after submission. The build 70 history below remains unchanged.
