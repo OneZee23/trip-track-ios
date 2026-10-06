@@ -54,18 +54,18 @@ private struct WidgetColors {
 
     static let light = WidgetColors(
         bg: lightBg,
-        text: Color.black.opacity(0.85),
-        textSecondary: Color.black.opacity(0.45),
-        textTertiary: Color.black.opacity(0.3),
+        text: .primary,
+        textSecondary: .primary.opacity(0.65),
+        textTertiary: .primary.opacity(0.6),
         cellBg: Color.black.opacity(0.04),
         buttonBg: Color.black.opacity(0.05)
     )
 
     static let dark = WidgetColors(
         bg: darkBg,
-        text: Color.white.opacity(0.9),
-        textSecondary: Color.white.opacity(0.5),
-        textTertiary: Color.white.opacity(0.35),
+        text: .primary,
+        textSecondary: .primary.opacity(0.7),
+        textTertiary: .primary.opacity(0.65),
         cellBg: Color.white.opacity(0.08),
         buttonBg: Color.white.opacity(0.1)
     )
@@ -74,8 +74,8 @@ private struct WidgetColors {
 // MARK: - Availability helper
 
 extension WidgetConfiguration {
-    func withWatchSupport() -> some WidgetConfiguration {
-        if #available(iOSApplicationExtension 18.0, *) {
+    func withSupplementalActivitySupport() -> some WidgetConfiguration {
+        if #available(iOS 18.0, *) {
             return supplementalActivityFamilies([.small])
         } else {
             return self
@@ -98,13 +98,16 @@ struct TripTrackLiveActivity: Widget {
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TripActivityAttributes.self) { context in
-            if context.state.isFinished {
-                FinishedLockScreenView(context: context)
-                    .widgetURL(URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)"))
-            } else {
-                LiveLockScreenView(context: context)
-                    .widgetURL(URL(string: "triptrack://recording"))
+            Group {
+                if #available(iOS 18.0, *) {
+                    AdaptiveActivityView(attributes: context.attributes, state: context.state)
+                } else {
+                    LockScreenActivityView(attributes: context.attributes, state: context.state)
+                }
             }
+            .widgetURL(context.state.isFinished
+                ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
+                : URL(string: "triptrack://recording"))
         } dynamicIsland: { context in
             DynamicIsland {
                 // Figma «Расширенный (удержание)»: labelled speed on the left of
@@ -320,7 +323,7 @@ struct TripTrackLiveActivity: Widget {
                 ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
                 : URL(string: "triptrack://recording"))
         }
-        .withWatchSupport()
+        .withSupplementalActivitySupport()
     }
 
     /// One labelled number for the expanded island's flanks (Figma
@@ -371,18 +374,134 @@ struct TripTrackLiveActivity: Widget {
     }
 }
 
+// MARK: - Supplemental surfaces (CarPlay and Apple Watch)
+
+@available(iOS 18.0, *)
+private struct AdaptiveActivityView: View {
+    @Environment(\.activityFamily) private var family
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+
+    var body: some View {
+        if family == .small {
+            SmallActivityView(attributes: attributes, state: state)
+        } else {
+            LockScreenActivityView(attributes: attributes, state: state)
+        }
+    }
+}
+
+private struct LockScreenActivityView: View {
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+
+    var body: some View {
+        if state.isFinished {
+            FinishedLockScreenView(attributes: attributes, state: state)
+        } else {
+            LiveLockScreenView(attributes: attributes, state: state)
+        }
+    }
+}
+
+/// CarPlay's smallest presentation is 170×78pt; Watch starts at 152×69.5pt.
+/// These are summaries, not scaled phone controls. CarPlay doesn't execute
+/// Live Activity buttons. Phone actions remain in the medium presentation.
+private struct SmallActivityView: View {
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
+    private var status: String {
+        if state.isFinished { return LiveActivityStrings.routeSaved(state.language) }
+        return state.isPaused
+            ? LiveActivityStrings.paused(state.language)
+            : LiveActivityStrings.recording(state.language)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: state.isFinished ? "checkmark.circle.fill"
+                      : state.isPaused ? "pause.circle.fill" : "record.circle")
+                    .foregroundStyle(renderingMode == .fullColor && !isLuminanceReduced
+                                     ? accentOrange : .primary)
+                Text(status)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .font(.system(size: 12, weight: .semibold))
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ActivityElapsedText(attributes: attributes, state: state)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel(LiveActivityStrings.timeCaption(state.language))
+
+                let distance = fmtDist(state.distanceKm, unit: state.shownUnit, code: state.language)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(distance.value)
+                    Text(distance.unit)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(LiveActivityStrings.distanceCaption(state.language))
+                .accessibilityValue("\(distance.value) \(distance.unit)")
+            }
+            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // Let the receiving display own its surface. Explicit black text or a
+        // phone-colored panel can become black-on-gray on a dark dashboard.
+    }
+}
+
+private struct ActivityElapsedText: View {
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+
+    var body: some View {
+        if state.isFinished {
+            Text(state.finalDuration ?? "--:--")
+        } else if state.isPaused {
+            if let elapsed = state.elapsedAtPause {
+                let seconds = max(0, Int(elapsed))
+                Text(seconds >= 3600
+                     ? String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+                     : String(format: "%d:%02d", seconds / 60, seconds % 60))
+            } else {
+                Text("--:--")
+            }
+        } else {
+            let adjustedStart = attributes.startDate.addingTimeInterval(state.pausedDuration)
+            Text(timerInterval: adjustedStart...(.distantFuture), countsDown: false)
+        }
+    }
+}
+
 // MARK: - Live Recording Lock Screen
 
 private struct LiveLockScreenView: View {
-    let context: ActivityViewContext<TripActivityAttributes>
-    private var lng: String { context.state.language }
-    private var isPixel: Bool { VehicleAvatar.isAsset(context.attributes.vehicleAvatar) }
-    private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+    private var lng: String { state.language }
+    private var isPixel: Bool { VehicleAvatar.isAsset(attributes.vehicleAvatar) }
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    private var c: WidgetColors { .from(isDark: colorScheme == .dark) }
     /// Число и подпись берутся ОДНИМ вызовом: подпись мили склоняется по
     /// показанному числу («7,7 мили», но «12 миль»), и собрать их врозь — это
     /// однажды поставить «12» рядом с «мили».
     private var distance: LiveActivityFormat.Parts {
-        fmtDist(context.state.distanceKm, unit: context.state.shownUnit, code: lng)
+        fmtDist(state.distanceKm, unit: state.shownUnit, code: lng)
     }
 
     var body: some View {
@@ -395,30 +514,30 @@ private struct LiveLockScreenView: View {
                         .fill(accentOrange.opacity(0.1))
                         .frame(width: 36, height: 36)
                     if isPixel {
-                        Image(context.attributes.vehicleAvatar)
+                        Image(attributes.vehicleAvatar)
                             .resizable().scaledToFit()
                             .frame(width: 28, height: 28)
                     } else {
-                        Text(context.attributes.vehicleAvatar)
+                        Text(attributes.vehicleAvatar)
                             .font(.system(size: 18))
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
-                        Text(context.state.isPaused
-                             ? (LiveActivityStrings.paused(context.state.language))
-                             : (LiveActivityStrings.recording(context.state.language)))
+                        Text(state.isPaused
+                             ? (LiveActivityStrings.paused(state.language))
+                             : (LiveActivityStrings.recording(state.language)))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
-                        if !context.state.isPaused {
+                        if !state.isPaused {
                             Circle().fill(accentRed).frame(width: 6, height: 6)
                         }
                     }
                     HStack(spacing: 4) {
                         Image(systemName: "car.fill").font(.system(size: 10))
-                        Text(context.attributes.vehicleName).font(.system(size: 12, weight: .medium))
+                        Text(attributes.vehicleName).font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
@@ -467,7 +586,7 @@ private struct LiveLockScreenView: View {
                 // «this ends the recording». Red says what it does; small and
                 // left still says «not by accident».
                 Button(intent: StopTripIntent()) {
-                    Text(LiveActivityStrings.end(context.state.language))
+                    Text(LiveActivityStrings.end(state.language))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(accentRed)
                         .frame(width: 90)
@@ -485,20 +604,20 @@ private struct LiveLockScreenView: View {
                 // «Продолжить», instead of looking identical to running.
                 Button(intent: PauseTripIntent()) {
                     HStack(spacing: 6) {
-                        Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+                        Image(systemName: state.isPaused ? "play.fill" : "pause.fill")
                             .font(.system(size: 13, weight: .bold))
-                        Text(context.state.isPaused
-                             ? (LiveActivityStrings.resume(context.state.language))
-                             : (LiveActivityStrings.pause(context.state.language)))
+                        Text(state.isPaused
+                             ? (LiveActivityStrings.resume(state.language))
+                             : (LiveActivityStrings.pause(state.language)))
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(context.state.isPaused ? .white : c.text)
+                    .foregroundStyle(state.isPaused ? .white : c.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                 }
                 .buttonStyle(.plain)
                 .background(
-                    context.state.isPaused ? Color(red: 0.92, green: 0.34, blue: 0.12) : c.buttonBg,
+                    state.isPaused ? Color(red: 0.92, green: 0.34, blue: 0.12) : c.buttonBg,
                     in: RoundedRectangle(cornerRadius: 12)
                 )
 
@@ -514,8 +633,8 @@ private struct LiveLockScreenView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "flag.fill")
                             .font(.system(size: 13, weight: .bold))
-                        if context.state.checkpointCount > 0 {
-                            Text("\(context.state.checkpointCount)")
+                        if state.checkpointCount > 0 {
+                            Text("\(state.checkpointCount)")
                                 .font(.system(size: 13, weight: .heavy))
                                 .monospacedDigit()
                         }
@@ -526,13 +645,16 @@ private struct LiveLockScreenView: View {
                 }
                 .buttonStyle(.plain)
                 .background(c.buttonBg, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel(LiveActivityStrings.checkpoint(context.state.language))
-                .accessibilityValue("\(context.state.checkpointCount)")
+                .accessibilityLabel(LiveActivityStrings.checkpoint(state.language))
+                .accessibilityValue("\(state.checkpointCount)")
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 14)
+        // Tint alone lets the wallpaper change contrast. In full color keep
+        // the backing and foreground in the host's scheme, not the map's theme.
+        .background(renderingMode == .fullColor ? c.bg : Color.clear)
         .activityBackgroundTint(c.bg)
     }
 
@@ -552,12 +674,12 @@ private struct LiveLockScreenView: View {
     @ViewBuilder
     private var timerValue: some View {
         Group {
-            if context.state.isPaused, let elapsed = context.state.elapsedAtPause {
+            if state.isPaused, let elapsed = state.elapsedAtPause {
                 Text(fmtTime(elapsed))
-            } else if context.state.isPaused {
+            } else if state.isPaused {
                 Text("--:--")
             } else {
-                let adj = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
+                let adj = attributes.startDate.addingTimeInterval(state.pausedDuration)
                 Text(timerInterval: adj...(.distantFuture), countsDown: false)
             }
         }
@@ -582,9 +704,13 @@ private let gradientEnd = Color(red: 1.0, green: 0.63, blue: 0.31)
 // MARK: - Finished Lock Screen
 
 private struct FinishedLockScreenView: View {
-    let context: ActivityViewContext<TripActivityAttributes>
-    private var lng: String { context.state.language }
-    private var isPixel: Bool { VehicleAvatar.isAsset(context.attributes.vehicleAvatar) }
+    let attributes: TripActivityAttributes
+    let state: TripActivityAttributes.ContentState
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    private var usesGradient: Bool { renderingMode == .fullColor && !isLuminanceReduced }
+    private var lng: String { state.language }
+    private var isPixel: Bool { VehicleAvatar.isAsset(attributes.vehicleAvatar) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -596,11 +722,11 @@ private struct FinishedLockScreenView: View {
                         .fill(Color.white.opacity(0.2))
                         .frame(width: 44, height: 44)
                     if isPixel {
-                        Image(context.attributes.vehicleAvatar)
+                        Image(attributes.vehicleAvatar)
                             .resizable().scaledToFit()
                             .frame(width: 32, height: 32)
                     } else {
-                        Text(context.attributes.vehicleAvatar)
+                        Text(attributes.vehicleAvatar)
                             .font(.system(size: 22))
                     }
                 }
@@ -609,11 +735,11 @@ private struct FinishedLockScreenView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(LiveActivityStrings.routeSaved(lng))
                         .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(Color.black.opacity(0.8))
+                        .foregroundStyle(usesGradient ? Color.black.opacity(0.8) : .primary)
                         .lineLimit(1)
                     Text(summaryText)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.black.opacity(0.5))
+                        .foregroundStyle(usesGradient ? Color.black.opacity(0.7) : .primary.opacity(0.7))
                         .lineLimit(1)
                 }
 
@@ -630,7 +756,7 @@ private struct FinishedLockScreenView: View {
             // Row 2: Glass CTA button
             Text(LiveActivityStrings.openDiary(lng))
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.black.opacity(0.6))
+                .foregroundStyle(usesGradient ? Color.black.opacity(0.8) : .primary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
@@ -638,19 +764,18 @@ private struct FinishedLockScreenView: View {
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 14)
-        .background(
-            LinearGradient(
-                colors: [gradientStart, gradientEnd],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .activityBackgroundTint(accentOrange)
+        .background {
+            if usesGradient {
+                LinearGradient(colors: [gradientStart, gradientEnd],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }
+        .activityBackgroundTint(usesGradient ? accentOrange : nil)
     }
 
     private var summaryText: String {
-        let d = fmtDist(context.state.distanceKm,
-                        unit: context.state.shownUnit, code: lng)
-        return "\(context.attributes.vehicleName) • \(d.value) \(d.unit) • \(context.state.finalDuration ?? "--:--")"
+        let d = fmtDist(state.distanceKm,
+                        unit: state.shownUnit, code: lng)
+        return "\(attributes.vehicleName) • \(d.value) \(d.unit) • \(state.finalDuration ?? "--:--")"
     }
 }

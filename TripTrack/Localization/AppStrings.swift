@@ -5039,23 +5039,20 @@ enum AppStrings {
         }
     }
     static func repeatRouteTimes(_ lang: LanguageManager.Language, n: Int) -> String {
-        let t = "\(n) \(nounTimes(lang, n))"
         switch lang {
-        case .ru: return "Вы проехали этот маршрут уже \(t)"
-        case .en: return n == 1
-            ? "You've driven this route once"
-            : "You've driven this route \(t)"
-        case .de: return "Du bist diese Strecke schon \(t) gefahren"
-        case .es: return "Ya has hecho esta ruta \(t)"
-        case .fr: return "Vous avez déjà fait cet itinéraire \(t)"
-        case .it: return "Hai già percorso questo itinerario \(t)"
-        case .pl: return "Przejechałeś tę trasę już \(t)"
-        case .id: return "Kamu sudah melewati rute ini \(t)"
-        case .tr: return "Bu rotayı \(t) geçtin"
-        case .fil: return "\(t) mo nang nadaanan ang rutang ito"
-        case .uk: return "Ви проїхали цей маршрут уже \(t)"
-        case .kk: return "Бұл бағытты \(t) жүріп өттіңіз"
-        case .pt: return "Você já fez esta rota \(t)"
+        case .ru: return "Похожих поездок в истории: \(n)"
+        case .en: return "Similar recorded trips: \(n)"
+        case .de: return "Ähnliche aufgezeichnete Fahrten: \(n)"
+        case .es: return "Viajes similares registrados: \(n)"
+        case .fr: return "Trajets similaires enregistrés : \(n)"
+        case .it: return "Viaggi simili registrati: \(n)"
+        case .pl: return "Podobne zapisane przejazdy: \(n)"
+        case .id: return "Perjalanan serupa yang tercatat: \(n)"
+        case .tr: return "Kaydedilen benzer geziler: \(n)"
+        case .fil: return "Mga katulad na naitalang biyahe: \(n)"
+        case .uk: return "Схожих поїздок в історії: \(n)"
+        case .kk: return "Тарихтағы ұқсас сапарлар: \(n)"
+        case .pt: return "Viagens semelhantes registradas: \(n)"
         }
     }
     /// «Без авто» — shorter than noVehicle's «Без машины» (idle-HUD chip).
