@@ -1094,6 +1094,12 @@ struct TripDetailView: View {
                     isOwn = true
                     trip = local
                     buildCaches(for: local)
+                    if let hydrated = await ManualTripTrackLoader.shared.loadIfNeeded(id: tripId) {
+                        guard !Task.isCancelled else { return }
+                        trip = hydrated
+                        isPreviewRoute = false
+                        buildCaches(for: hydrated)
+                    }
                     // Fix 1: a companion's photo never gets a local CoreData
                     // row on the owner's device — `/sync/pull` deliberately
                     // excludes photos on trips the account doesn't own (by

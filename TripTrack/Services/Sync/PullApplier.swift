@@ -73,6 +73,15 @@ final class PullApplier {
         // CoreData performance scales linearly with save count, so a
         // pull of 50 trips drops from 50× saveContext() to 1×.
         repo.flushPendingApplies()
+        // A newly imported manual trip did not pass createManualTrip's local
+        // odometer update. Do it after vehicles have also arrived, otherwise a
+        // vehicle payload in this same pull would overwrite the derived sum.
+        let manualVehicleIds = response.trips.upserted
+            .filter { $0.source == .manual }.compactMap(\.vehicleId)
+        if !manualVehicleIds.isEmpty {
+            repo.recomputeOdometers(forVehicles: manualVehicleIds)
+            repo.flushPendingApplies()
+        }
         // Раньше перечитывали только когда приехали НАСТРОЙКИ. Но архив и
         // продажа приезжают в записи МАШИНЫ, а настройки при этом могут не
         // прийти вовсе: чужое устройство трогает свою строку настроек только
@@ -80,7 +89,7 @@ final class PullApplier {
         // CoreData уже знала, что машина в архиве, а список в памяти — ещё
         // нет, и запись уходила на архивную машину до конца сеанса.
         let vehiclesChanged = !response.vehicles.upserted.isEmpty
-            || !response.vehicles.deleted.isEmpty
+            || !response.vehicles.deleted.isEmpty || !manualVehicleIds.isEmpty
         if response.settings != nil || vehiclesChanged {
             SettingsManager.shared.reloadFromCoreData()
         }

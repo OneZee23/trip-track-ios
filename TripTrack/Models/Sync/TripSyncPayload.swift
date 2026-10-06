@@ -193,7 +193,16 @@ extension TripSyncPayload {
         self.conflictVersion = Int(entity.conflictVersion)
         self.lastModifiedAt = entity.lastModifiedAt ?? Date()
         self.serverCreatedAt = entity.serverCreatedAt
-        self.trackPoints = Self.wireTrack(trip.trackPoints, zone: zone)
+        // A manual trip imported as a summary has not downloaded its points
+        // yet. Editing its title/privacy must not upload [] and erase the
+        // server's full route. nil means "leave that field alone". When local
+        // points exist, home privacy still trims them; a loaded track trimmed
+        // to nothing sends the explicit empty array produced by wireTrack.
+        if trip.source == .manual, entity.serverCreatedAt != nil, trip.trackPoints.isEmpty {
+            self.trackPoints = nil
+        } else {
+            self.trackPoints = Self.wireTrack(trip.trackPoints, zone: zone)
+        }
         self.photos = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
             return TripPhotoMetadataPayload(
