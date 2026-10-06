@@ -1127,6 +1127,16 @@ struct TripDetailView: View {
                     isOwn = true
                     replaceTrip(with: local)
                     buildCaches(for: local, replay: replay)
+                    // A manual trip that arrived from the web as a summary
+                    // downloads its full route once, here, rather than in the
+                    // pull: the pull carries previews only.
+                    if let hydrated = await ManualTripTrackLoader.shared.loadIfNeeded(id: tripId),
+                       let hydratedReplay = try? await TripReplayInput.prepare(points: hydrated.trackPoints) {
+                        guard !Task.isCancelled else { return }
+                        replaceTrip(with: hydrated)
+                        isPreviewRoute = false
+                        buildCaches(for: hydrated, replay: hydratedReplay)
+                    }
                     // Fix 1: a companion's photo never gets a local CoreData
                     // row on the owner's device — `/sync/pull` deliberately
                     // excludes photos on trips the account doesn't own (by

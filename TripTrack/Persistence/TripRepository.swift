@@ -1391,7 +1391,8 @@ final class CoreDataTripRepository: TripRepository {
     }
 
     func applyRemoteTrip(_ p: TripSyncPayload) {
-        let entity = fetchEntity(id: p.id) ?? TripEntity(context: context)
+        let existing = fetchEntity(id: p.id)
+        let entity = existing ?? TripEntity(context: context)
         // `pendingDelete` belongs in this guard as much as `pendingUpload`.
         // 0.6.1 forces one full pull on every device, and on a full pull a
         // soft-deleted trip is still a live server row — without this it would
@@ -1406,10 +1407,13 @@ final class CoreDataTripRepository: TripRepository {
         // Копия правила `applyRemoteVehicle` для `dashboardUnits`: правка,
         // ещё не уехавшая, сильнее приехавшего ответа. Считается ДО
         // присваиваний, пока `syncStatus` ещё не переписан ниже.
-        let hasLocalEdits = entity.syncStatus == SyncStatus.pendingUpload.rawValue
+        // A freshly inserted CoreData row defaults to pendingUpload too, but
+        // carries no local edit. Otherwise its FIRST pull loses source=manual
+        // and makes a web-created route eligible for recorded-trip rewards.
+        let hasLocalEdits = existing != nil && entity.syncStatus == SyncStatus.pendingUpload.rawValue
         // Old servers omit this field. Never erase a recorded pause merely
         // because an older peer knows only about coordinates and timestamps.
-        if entity.id == nil || !hasLocalEdits, let breaks = p.recordingBreaks {
+        if !hasLocalEdits, let breaks = p.recordingBreaks {
             Self.setRecordingBreaks(breaks, on: entity)
         }
         entity.id = p.id
@@ -1588,6 +1592,58 @@ final class CoreDataTripRepository: TripRepository {
 
         // Save deferred to PullApplier.flushPendingApplies() — batches a
         // /sync/pull's worth of writes into a single CoreData save call.
+    }
+
+    /// A server summary exists locally but its manual track has never been
+    /// downloaded. This snapshot guards a later network response against edits,
+    /// deletion and a newer pull. No recorded/local geometry is replaced.
+    func missingManualTrack(id: UUID) -> ManualTripTrackLoader.Snapshot? {
+        guard let entity = fetchEntity(id: id),
+              entity.source == TripOrigin.manual.rawValue,
+              entity.syncStatus == SyncStatus.synced.rawValue,
+              entity.serverCreatedAt != nil, entity.endDate != nil,
+              (entity.trackPoints?.count ?? 0) == 0 else { return nil }
+        return .init(id: id, conflictVersion: Int(entity.conflictVersion),
+                     lastModifiedAt: entity.lastModifiedAt)
+    }
+
+    /// Only track points are adopted. Calling applyRemoteTrip here would also
+    /// replace photos, checkpoints and metadata from a possibly older response.
+    @discardableResult
+    func applyMissingManualTrack(_ points: [TrackPointPayload],
+                                 expected: ManualTripTrackLoader.Snapshot) -> Bool {
+        guard missingManualTrack(id: expected.id) == expected,
+              let entity = fetchEntity(id: expected.id) else { return false }
+        let wasProcessed = entity.isTrackProcessed
+        let matchedAt = entity.placesMatchedAt
+        var inserted: [TrackPointEntity] = []
+        inserted.reserveCapacity(points.count)
+        for point in points {
+            let row = TrackPointEntity(context: context)
+            row.id = point.id
+            row.latitude = point.latitude
+            row.longitude = point.longitude
+            row.altitude = point.altitude
+            row.speed = point.speed
+            row.course = point.course
+            row.horizontalAccuracy = point.horizontalAccuracy
+            row.timestamp = point.timestamp
+            row.isInterpolated = point.isInterpolated
+            row.trip = entity
+            inserted.append(row)
+        }
+        // A constructed manual route must never run through GPS reconstruction.
+        entity.isTrackProcessed = true
+        entity.placesMatchedAt = nil
+        do {
+            try context.save()
+            return true
+        } catch {
+            for point in inserted { context.delete(point) }
+            entity.isTrackProcessed = wasProcessed
+            entity.placesMatchedAt = matchedAt
+            return false
+        }
     }
 
     func applyRemoteVehicle(_ p: VehicleSyncPayload) {
