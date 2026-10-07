@@ -82,7 +82,9 @@ struct SlideToStartView: View {
             // Touching a held control has to answer immediately, wherever on
             // the track the finger lands — not only on the thumb.
             .contentShape(Rectangle())
-            .gesture(blockedTapGesture, including: isBlocked ? .all : .none)
+            // When ready, disable only this blocker. `.none` also disables
+            // the thumb's descendant drag gesture (reported on iOS 17).
+            .gesture(blockedTapGesture, including: isBlocked ? .all : .subviews)
         }
         .frame(height: trackHeight)
         // VoiceOver / Switch Control can't perform a drag gesture, and this
