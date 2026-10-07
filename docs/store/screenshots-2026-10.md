@@ -3,19 +3,20 @@
 Updated 7 October 2026. Languages: Russian and English (U.S.). Approved visual
 direction: A, light travel journal. Exports: 1320 × 2868, 8-bit RGB PNG, sRGB, no alpha.
 
-The intended series has 8 cards per language. **4 Russian and 7 English cards are ready.**
-Export count 11 means 4 RU + 7 EN, not the full series.
+**The full series is exported: 8 Russian + 8 English cards, 16 PNGs.**
+The local preview and download archive contain the same verified final images.
+The new artwork has not been uploaded to App Store Connect in this round.
 
 | Position | Feature | Russian headline | English headline | Status |
 |---|---|---|---|---|
 |01|Recorded route|Поездка прошла. Маршрут остался.|The drive ends. The route stays.|Previous export retained|
-|02|Atlas and road fog|Ваши дороги. Ваш атлас.|Your roads. Your atlas.|English exported; Russian capture pending|
-|03|Companions|Одна поездка. Общие истории.|One trip. Shared stories.|Native capture pending|
+|02|Atlas and road fog|Ваши дороги. Ваш атлас.|Your roads. Your atlas.|Both languages exported|
+|03|Companions|Одна поездка. Общие истории.|One trip. Shared stories.|Both languages exported; real invitation sheet|
 |04|Photos and notes|Вспомните, как это было.|Remember how it felt.|Previous export retained|
 |05|Trip statistics|Вся поездка. В деталях.|Every drive. Every detail.|Previous export retained|
-|06|Garage|Каждая машина. Своя история.|Every car. Its own story.|English exported with plate hidden; Russian capture pending|
-|07|Public trips and feed|Делитесь поездками.|Share your journeys.|English exported; Russian capture pending|
-|08|Levels and achievements|Больше поездок. Выше уровень.|More journeys. New milestones.|New export, not uploaded|
+|06|Garage|Каждая машина. Своя история.|Every car. Its own story.|Both languages exported with plate hidden|
+|07|Public trips and feed|Делитесь поездками.|Share your journeys.|Both languages exported|
+|08|Levels and achievements|Больше поездок. Выше уровень.|More journeys. New milestones.|Both languages exported; original pixel art|
 
 Atlas follows the first route card so discovery is visible early. Photos and
 statistics retain the approved existing artwork; their sequence positions change.
@@ -33,27 +34,35 @@ screen. It does not attribute all six badges to the featured trip. The earlier
 composition using symbols cropped from trip details is retired and excluded
 from the export package.
 
-## Checks and remaining work
+## Checks and handoff
 
 - All 16 planned headlines fit the established typography without font reduction.
 - Browser preview checked at 390 and 1440 px in both languages; no page overflow,
-  all 11 images load, 4 RU / 7 EN visible cards, gallery also works without scripts.
+  all 16 images load, 8 RU / 8 EN visible cards, gallery also works without scripts.
 - New artwork inspected at store-thumbnail size and in a grayscale/blur view.
-- All 11 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
+- All 16 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
 - Six previous exports remain byte-identical. No conversion experiment performed.
 
-The owner supplied a populated English Atlas capture; it is now card 02.
-An English vehicle profile was captured directly from the owner’s iPhone.
-Its license plate is fully covered by an opaque mask in the PNG; private
-source screenshots are excluded from the preview and downloadable archive.
-The populated English public feed is also captured and exported.
-Russian Atlas, garage and feed, plus companions in both languages remain.
-Existing loading/empty captures are unsuitable. Direct full-resolution physical
-iPhone screenshots have been verified without rebuilding the app; navigating
-the installed app remotely was unsuccessful, so capture needs owner navigation.
-The owner
-requested no builds/tests/simulator work during the two-hour call window;
-none of these are required for the completed artwork work.
+The owner supplied the English Atlas screenshot and navigated the installed app
+for direct USB captures of the Russian Atlas, both vehicle profiles, both public
+feeds and both companion invitation sheets. No app build, simulator or invitation
+was needed. The phone can be disconnected.
+
+Both vehicle exports have the plate fully covered by an opaque mask before PNG
+rasterization. Raw sources are private. The preview embeds only final PNGs and the
+ZIP contains only those 16 PNGs plus its README; every embedded and archived image
+was checked against the export hashes. Six previously approved exports remain
+byte-identical.
+
+The companion card shows the real invitation screen, with no fabricated accepted
+participants. Its copy promises invitations and photos in one trip. Code confirms
+that an accepted companion can view the private trip and add photos to its gallery;
+it does not promise simultaneous GPS recording or joint editing.
+
+The updated local preview includes all eight themes, language switching, store-size
+view, downloads and text comments. Capture status, source provenance and export
+hashes are synchronized. Next: owner review of the completed set, then check actual
+App Store Connect state before applying the new screenshots.
 
 Private screenshots, HTML compositions, SVG copies, crop provenance, archives
 and browser evidence remain outside the public repository in the local review
