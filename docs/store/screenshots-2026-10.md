@@ -3,13 +3,13 @@
 Updated 7 October 2026. Languages: Russian and English (U.S.). Approved visual
 direction: A, light travel journal. Exports: 1320 × 2868, 8-bit RGB PNG, sRGB, no alpha.
 
-The intended series has 8 cards per language. **4 cards per language are ready;
-4 still need native captures.** Export count 8 means 4 RU + 4 EN, not the full series.
+The intended series has 8 cards per language. **4 Russian and 5 English cards are ready.**
+Export count 9 means 4 RU + 5 EN, not the full series.
 
 | Position | Feature | Russian headline | English headline | Status |
 |---|---|---|---|---|
 |01|Recorded route|Поездка прошла. Маршрут остался.|The drive ends. The route stays.|Previous export retained|
-|02|Atlas and road fog|Ваши дороги. Ваш атлас.|Your roads. Your atlas.|Native capture pending|
+|02|Atlas and road fog|Ваши дороги. Ваш атлас.|Your roads. Your atlas.|English exported; Russian capture pending|
 |03|Companions|Одна поездка. Общие истории.|One trip. Shared stories.|Native capture pending|
 |04|Photos and notes|Вспомните, как это было.|Remember how it felt.|Previous export retained|
 |05|Trip statistics|Вся поездка. В деталях.|Every drive. Every detail.|Previous export retained|
@@ -37,13 +37,17 @@ from the export package.
 
 - All 16 planned headlines fit the established typography without font reduction.
 - Browser preview checked at 390 and 1440 px in both languages; no page overflow,
-  all 8 images load, 4 visible cards per language, gallery also works without scripts.
+  all 9 images load, 4 RU / 5 EN visible cards, gallery also works without scripts.
 - New artwork inspected at store-thumbnail size and in a grayscale/blur view.
-- All 8 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
+- All 9 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
 - Six previous exports remain byte-identical. No conversion experiment performed.
 
-Native capture remains for populated Atlas, companions, garage and feed in
-both languages. Existing loading/empty captures are unsuitable. The owner
+The owner supplied a populated English Atlas capture; it is now card 02.
+Russian Atlas, plus companions, garage and feed in both languages remain.
+Existing loading/empty captures are unsuitable. Direct full-resolution physical
+iPhone screenshots have been verified without rebuilding the app; navigating
+the installed app remotely was unsuccessful, so capture needs owner navigation.
+The owner
 requested no builds/tests/simulator work during the two-hour call window;
 none of these are required for the completed artwork work.
 
