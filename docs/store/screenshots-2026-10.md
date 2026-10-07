@@ -3,8 +3,8 @@
 Updated 7 October 2026. Languages: Russian and English (U.S.). Approved visual
 direction: A, light travel journal. Exports: 1320 × 2868, 8-bit RGB PNG, sRGB, no alpha.
 
-The intended series has 8 cards per language. **4 Russian and 6 English cards are ready.**
-Export count 10 means 4 RU + 6 EN, not the full series.
+The intended series has 8 cards per language. **4 Russian and 7 English cards are ready.**
+Export count 11 means 4 RU + 7 EN, not the full series.
 
 | Position | Feature | Russian headline | English headline | Status |
 |---|---|---|---|---|
@@ -14,7 +14,7 @@ Export count 10 means 4 RU + 6 EN, not the full series.
 |04|Photos and notes|Вспомните, как это было.|Remember how it felt.|Previous export retained|
 |05|Trip statistics|Вся поездка. В деталях.|Every drive. Every detail.|Previous export retained|
 |06|Garage|Каждая машина. Своя история.|Every car. Its own story.|English exported with plate hidden; Russian capture pending|
-|07|Public trips and feed|Делитесь поездками.|Share your journeys.|Native capture pending|
+|07|Public trips and feed|Делитесь поездками.|Share your journeys.|English exported; Russian capture pending|
 |08|Levels and achievements|Больше поездок. Выше уровень.|More journeys. New milestones.|New export, not uploaded|
 
 Atlas follows the first route card so discovery is visible early. Photos and
@@ -37,16 +37,17 @@ from the export package.
 
 - All 16 planned headlines fit the established typography without font reduction.
 - Browser preview checked at 390 and 1440 px in both languages; no page overflow,
-  all 10 images load, 4 RU / 6 EN visible cards, gallery also works without scripts.
+  all 11 images load, 4 RU / 7 EN visible cards, gallery also works without scripts.
 - New artwork inspected at store-thumbnail size and in a grayscale/blur view.
-- All 10 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
+- All 11 exported PNGs have the required dimensions, RGB/sRGB and no alpha.
 - Six previous exports remain byte-identical. No conversion experiment performed.
 
 The owner supplied a populated English Atlas capture; it is now card 02.
 An English vehicle profile was captured directly from the owner’s iPhone.
 Its license plate is fully covered by an opaque mask in the PNG; private
 source screenshots are excluded from the preview and downloadable archive.
-Russian Atlas and garage, plus companions and feed in both languages remain.
+The populated English public feed is also captured and exported.
+Russian Atlas, garage and feed, plus companions in both languages remain.
 Existing loading/empty captures are unsuitable. Direct full-resolution physical
 iPhone screenshots have been verified without rebuilding the app; navigating
 the installed app remotely was unsuccessful, so capture needs owner navigation.
