@@ -5,7 +5,11 @@ direction: A, light travel journal. Exports: 1320 × 2868, 8-bit RGB PNG, sRGB, 
 
 **The full series is exported: 8 Russian + 8 English cards, 16 PNGs.**
 The local preview and download archive contain the same verified final images.
-The new artwork has not been uploaded to App Store Connect in this round.
+The owner approved the complete set on 7 October. All 16 images were uploaded
+to **0.8.6 (75)** and submitted with that version: **Waiting for Review**,
+confirmed 7 October at 15:39 MSK. Release remains manual after approval.
+The already approved **0.8.5 (74)** was published separately with its previous
+three-image sets, as requested by the owner.
 
 | Position | Feature | Russian headline | English headline | Status |
 |---|---|---|---|---|
@@ -61,14 +65,20 @@ it does not promise simultaneous GPS recording or joint editing.
 
 The updated local preview includes all eight themes, language switching, store-size
 view, downloads and text comments. Capture status, source provenance and export
-hashes are synchronized. Next: owner review of the completed set, then check actual
-App Store Connect state before applying the new screenshots.
+hashes are synchronized. The complete set is approved by the owner and included
+in the submitted 0.8.6 version.
 
 Private screenshots, HTML compositions, SVG copies, crop provenance, archives
 and browser evidence remain outside the public repository in the local review
-package `2026-10-07-app-store`. No screenshots or app metadata were uploaded or
-changed in App Store Connect during this round. Read the actual ASC state before
-any later upload; this document makes no claim about the current review state.
+package `2026-10-07-app-store`. Server readback confirmed 8 RU + 8 EN images in
+positions 01–08, matching names, file sizes and 1320×2868 dimensions. All 16
+placements were active before submission. Five existing iPad images, their order
+and the ten other locale placements were preserved. All 12 What's New texts
+match the release packet; other locale attributes are unchanged.
+
+The binary change in 0.8.6 fixes the recording slider; these screenshots market
+existing product features. New screenshots reach the live store with the new
+version after Apple approval and release, not when files finish uploading.
 
 Apple reference:
 [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications).
