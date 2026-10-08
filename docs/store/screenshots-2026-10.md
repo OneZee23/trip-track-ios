@@ -1,13 +1,18 @@
 # App Store screenshot series — October 2026
 
-Updated 7 October 2026. Languages: Russian and English (U.S.). Approved visual
+Updated 8 October 2026. Languages: Russian and English (U.S.). Approved visual
 direction: A, light travel journal. Exports: 1320 × 2868, 8-bit RGB PNG, sRGB, no alpha.
 
 **The full series is exported: 8 Russian + 8 English cards, 16 PNGs.**
 The local preview and download archive contain the same verified final images.
 The owner approved the complete set on 7 October. All 16 images were uploaded
-to **0.8.6 (75)** and submitted with that version: **Waiting for Review**,
-confirmed 7 October at 15:39 MSK. Release remains manual after approval.
+to **0.8.6 (75)** and submitted with that version on 7 October at 15:39 MSK.
+Apple approval of all 16 images was verified on 8 October at 08:43:40 MSK.
+**0.8.6 (75) was released manually on 8 October at 08:44:37 MSK**;
+App Store Connect confirmed `READY_FOR_SALE` / `READY_FOR_DISTRIBUTION`.
+The full set is included in this release. At 08:45:32 MSK the Russian public
+storefront still returned 0.8.5 with its previous three images; the U.S. lookup
+failed with an SSL error. Public storefront propagation is not yet confirmed.
 The already approved **0.8.5 (74)** was published separately with its previous
 three-image sets, as requested by the owner.
 
@@ -66,7 +71,7 @@ it does not promise simultaneous GPS recording or joint editing.
 The updated local preview includes all eight themes, language switching, store-size
 view, downloads and text comments. Capture status, source provenance and export
 hashes are synchronized. The complete set is approved by the owner and included
-in the submitted 0.8.6 version.
+in the released 0.8.6 version.
 
 Private screenshots, HTML compositions, SVG copies, crop provenance, archives
 and browser evidence remain outside the public repository in the local review
@@ -77,8 +82,15 @@ and the ten other locale placements were preserved. All 12 What's New texts
 match the release packet; other locale attributes are unchanged.
 
 The binary change in 0.8.6 fixes the recording slider; these screenshots market
-existing product features. New screenshots reach the live store with the new
-version after Apple approval and release, not when files finish uploading.
+existing product features. Apple has approved the screenshots and the version
+has been released; their appearance on each public storefront can lag behind
+the release. This document confirms the release in App Store Connect, not
+completed propagation to every storefront.
+
+Private release evidence: `approved-086-assets.json`,
+`approved-086-version.json`, `released-086.json`, `release-086-network.json`,
+`released-086-75.png` and `public-086-lookup.json` in the review package's
+`asc` directory.
 
 Apple reference:
 [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications).
