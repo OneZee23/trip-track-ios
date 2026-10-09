@@ -1,7 +1,9 @@
 # 0.8.8: Me, profile and PRO
 
 Status: implemented; primary visual and interaction checks passed. Based on 0.8.7 (76).
-The 0.8.7 submission is unchanged. No 0.8.8 App Store upload or submission yet.
+Submitted as 0.8.8 (77) on 9 October 2026; Waiting for Review.
+Replaces the pending 0.8.7 submission, retaining all its changes.
+See [release evidence](candidate-77.md).
 
 ## Direction
 
@@ -74,7 +76,8 @@ accessibility overhaul of the purchase flow.
 
 - App, Live Activity and watch metadata: 0.8.8 (77).
 - Changelog updated; branch `release/0.8.8`.
-- Website RU/EN roadmap lists 0.8.8 as in development, not available.
+- Website RU/EN roadmap lists 0.8.8 as awaiting review, not available.
 - No backend change is needed for this UI revision.
-- No release archive, TestFlight upload or App Review submission for 0.8.8.
-  The StoreKit check on iOS 26 remains a release-verification item.
+- Release archive and upload succeeded; build 77 is VALID and submitted.
+  The StoreKit simulator check on iOS 26 remains unverified; this limitation
+  was disclosed before the owner approved submission.
