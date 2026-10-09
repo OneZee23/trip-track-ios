@@ -189,6 +189,7 @@ struct ProfileView: View {
     @State private var historyQuery = ""
     @FocusState private var historySearchFocused: Bool
     @State private var showsProfileSections = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Which awards are earned — the one thing `AchievementDetailView` needs
     /// that a badge id cannot carry. Resolved by the award destinations
     /// themselves (`refreshUnlockedBadges`) rather than in `loadAggregates`:
@@ -1249,7 +1250,9 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 Haptics.tap()
-                showsProfileSections.toggle()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    showsProfileSections.toggle()
+                }
             } label: {
                 HStack(spacing: 12) {
                     Text(profileSectionsTitle)
@@ -1257,14 +1260,17 @@ struct ProfileView: View {
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
-                    Image(systemName: showsProfileSections ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(showsProfileSections ? 180 : 0))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
-                .frame(minHeight: 44)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 52)
+                .background(c.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableCardStyle())
             .padding(.horizontal, 16)
             .accessibilityIdentifier("profile_sections_toggle")
             .accessibilityValue(showsProfileSections

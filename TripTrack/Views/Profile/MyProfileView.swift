@@ -34,6 +34,7 @@ struct MyProfileView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
@@ -72,15 +73,8 @@ struct MyProfileView: View {
     ]
 
     private static let avatarDiameter: CGFloat = 96
-    /// The cover reaches this far down the screen; the disc hangs off its
-    /// bottom edge.
-    ///
-    /// It has been both ways. At 132 the band was mostly empty air above the
-    /// disc — nothing lives inside it, since the name and the handle are rows
-    /// below. At 100 it read as a cropped stripe rather than as a cover. 170
-    /// is the size at which the art is the point: deep enough to be a cover,
-    /// and the first card still lands above the fold.
-    private static let bannerHeight: CGFloat = 170
+    /// A compact cover leaves room for the identity and editable fields.
+    private static let bannerHeight: CGFloat = 112
     private static let tileHeight: CGFloat = 64
     /// Canon tiles are 64×64 SQUARES. Flexible columns stretched them to 76×64
     /// dominoes on a 393pt screen; capping the width at the height keeps the
@@ -129,6 +123,7 @@ struct MyProfileView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             CustomNavBar(title: AppStrings.myProfileTitle(l))
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("my_profile_screen")
         // Keyed on the session so a sign-in while this screen is open fills the
         // counters in instead of leaving two dashes behind.
@@ -290,7 +285,7 @@ struct MyProfileView: View {
 
                     Button {
                         Haptics.tap()
-                        withAnimation(.easeInOut(duration: 0.22)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                             isEditingAvatar.toggle()
                         }
                     } label: {
@@ -332,16 +327,30 @@ struct MyProfileView: View {
                     .accessibilityIdentifier("my_profile_hero_avatar")
                 }
 
+                VStack(spacing: 4) {
+                    Text(displayName ?? AppStrings.meGuestName(l))
+                        .font(.interScaled(24, weight: .bold, relativeTo: .title2))
+                        .foregroundStyle(c.text)
+                        .multilineTextAlignment(.center)
+                    if let username {
+                        Text("@\(username)")
+                            .font(.interScaled(14, relativeTo: .subheadline))
+                            .foregroundStyle(c.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 6)
+
                 // Подпись про аватар — часть аватарной зоны, а не фона.
                 Button {
                     Haptics.tap()
-                    withAnimation(.easeInOut(duration: 0.22)) {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                         isEditingAvatar.toggle()
                     }
                 } label: {
                     Text(AppStrings.myProfileChangeAvatar(l))
-                        .font(.interScaled(12, relativeTo: .caption))
-                        .foregroundStyle(c.textSecondary)
+                        .font(.interScaled(13, weight: .medium, relativeTo: .footnote))
+                        .foregroundStyle(AppTheme.accent)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -349,6 +358,7 @@ struct MyProfileView: View {
                 .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("my_profile_avatar")
     }
 
@@ -424,8 +434,8 @@ struct MyProfileView: View {
             }
         }
         .padding(.top, 16)
-        .animation(.easeInOut(duration: 0.15), value: settings.avatarEmoji)
-        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: settings.avatarEmoji)
+        .transition(reduceMotion ? .identity : .opacity)
     }
 
     private func avatarTile(_ emoji: String, _ c: AppTheme.Colors) -> some View {
@@ -445,14 +455,12 @@ struct MyProfileView: View {
                     RoundedRectangle(cornerRadius: 14)
                         .stroke(isCurrent ? AppTheme.accent : .clear, lineWidth: 2)
                 )
-                // The 8%-accent fill barely separates from `cardAlt` in dark
-                // mode; the glow is what makes "this is the one you're
-                // wearing" survive the theme.
-                .shadow(color: isCurrent ? AppTheme.accent.opacity(0.28) : .clear, radius: 8)
+
                 .frame(maxWidth: .infinity)
                 .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
     private func select(_ emoji: String) {
@@ -467,30 +475,10 @@ struct MyProfileView: View {
 
     // MARK: - Rows
 
-    /// Three cards, not eight.
-    ///
-    /// Every row used to be its own floating plate with the same gap above and
-    /// below it, so the screen was a wall of identical white bars with nothing
-    /// to read a shape from — and it grew that way honestly: canon 1687:119
-    /// drew five, and страна, фон and превью landed on top of them. Grouping by
-    /// what the rows ARE gives the eye three blocks instead of eight bars, and
-    /// the gaps between the cards now carry meaning that the gaps between rows
-    /// never did.
-    ///
-    /// The split: who you are (and can edit), how the profile looks, what the
-    /// app has counted about you. The last card is read-only on purpose — its
-    /// rows open screens, they don't take a value.
-    ///
-    /// No group headings: the settings sheet groups its cards the same way
-    /// without labelling them, and three cards of four/two/two do not need a
-    /// caption to be legible.
-    ///
-    /// Icons are the other half of the fix. `SettingsIconRow` is the row
-    /// grammar the settings sheet already uses — same 30pt accent tile, same
-    /// 14.5-semibold label — so these two screens stop looking like they came
-    /// from different apps.
+    /// Separate personal details, appearance, and driving progress.
     private func rows(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeading(AppStrings.profileDetailsGroup(l), c)
             card(c) {
                 row(
                     icon: "person.fill",
@@ -529,6 +517,7 @@ struct MyProfileView: View {
                 )
             }
 
+            sectionHeading(AppStrings.profileAppearanceGroup(l), c).padding(.top, 12)
             card(c) {
                 // Not in canon, moved here from «Настройки».
                 //
@@ -585,6 +574,7 @@ struct MyProfileView: View {
                 }
             }
 
+            sectionHeading(AppStrings.profileProgressGroup(l), c).padding(.top, 12)
             card(c) {
                 row(
                     icon: "star.fill",
@@ -612,6 +602,14 @@ struct MyProfileView: View {
         }
     }
 
+    private func sectionHeading(_ title: String, _ c: AppTheme.Colors) -> some View {
+        Text(title)
+            .font(.interScaled(17, weight: .bold, relativeTo: .headline))
+            .foregroundStyle(c.text)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.horizontal, 4)
+    }
+
     private func card<Content: View>(
         _ c: AppTheme.Colors, @ViewBuilder content: () -> Content
     ) -> some View {
@@ -621,8 +619,9 @@ struct MyProfileView: View {
 
     private func divider(_ c: AppTheme.Colors) -> some View {
         Rectangle()
-            .fill(c.borderBright)
+            .fill(c.border)
             .frame(height: 1)
+            .padding(.leading, 58)
     }
 
     /// `isUnset` paints the value accent instead of secondary — canon 1838:226

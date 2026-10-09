@@ -24,7 +24,7 @@ final class ProPurchaseNavigationTests: XCTestCase {
         app = XCUIApplication()
         // This flag exposes the storefront but does NOT grant an entitlement.
         // Buying and unlocking premium tiles must go through real StoreKit.
-        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-debug-pro-store"]
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-selectedTabV2", "profile", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL", "-debug-pro-store"]
         app.launch()
     }
 

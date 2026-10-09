@@ -1,45 +1,12 @@
 import CoreGraphics
 
-/// Геометрия платной части — числом, а не измерением содержимого.
-///
-/// Правило проекта, купленное дважды сломанным экраном: высота листа задаётся
-/// числом или детентом, потому что `ScrollView` внутри листа отвечает «возьму
-/// сколько предложите», измерение уходит вниз и не возвращается, и лист
-/// схлопывается до одной шапки (см. «Высота листов «Атласа»» в CLAUDE.md).
-/// Отсюда же чистая структура вместо `GeometryReader`: числа обязан держать
-/// тест, а не открытый экран на телефоне — как у `AtlasSlot` и `DraftsLayout`.
-///
-/// Числа сверены с `design/pro/tokens.json → devices`. В §2 и §9 документа
-/// хендоффа и в матрице подвал записан как **184** при собственной сумме
-/// частей **192** — брать оттуда нельзя, ошибка размножилась по четырём
-/// местам. Следствие, которое эта разница меняет: у 13 mini запаса НЕТ вовсе,
-/// а не «8», как обещает матрица.
+/// Explicit detents for the contextual PRO sheets, manual map and dialogs.
+/// The storefront itself uses its content's natural size (0.8.8); estimating
+/// its scroll range from a single fixed height clipped translated/large text.
 struct ProLayout {
     let height: CGFloat
     let safeTop: CGFloat
     let safeBottom: CGFloat
-
-    /// Шапка 102 + герой 64 с промежутком 12 + набор 334 + промежутки 24.
-    static let contentAboveFooter: CGFloat = 536
-    /// 12 + тарифы 64 + 10 + кнопка 52 + 6 + условия 16 + 4 + ссылки 16 + 12.
-    static let footerParts: CGFloat = 192
-
-    /// Индикатор «домой» там, где он есть; где нет — поле 4, а не ноль:
-    /// кнопка покупки не имеет права упираться в физический край.
-    private var bottomPad: CGFloat { safeBottom > 0 ? safeBottom : 4 }
-
-    var footer: CGFloat { Self.footerParts + bottomPad }
-
-    /// Сколько остаётся шапке, герою и набору. Подвал закреплён и в это место
-    /// не входит: цена, период и условия обязаны быть видны до покупки без
-    /// прокрутки — это правило Apple, а не вкус.
-    var roomAboveFooter: CGFloat { height - safeTop - footer }
-
-    /// Гибрид (решение владельца): прокручивается только то, что не влезло.
-    var paywallScrolls: Bool { roomAboveFooter < Self.contentAboveFooter }
-
-    /// Сколько содержимого уходит под подвал. Ноль там, где влезает.
-    var hiddenBelowFold: CGFloat { max(0, Self.contentAboveFooter - roomAboveFooter) }
 
     /// 25 + превью 160 + 12 + заголовок + 4 + 20 + 16 + кнопка 52 + 8 + 44 + низ.
     ///

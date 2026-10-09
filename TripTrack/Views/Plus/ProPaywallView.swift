@@ -1,19 +1,8 @@
 import SwiftUI
 import StoreKit
 
-/// Витрина TripTrack PRO — состояния 1, 1а, 1б, 4, 5, 6, 7, 8, 10 матрицы
-/// 0.8.4.
-///
-/// Гибрид прокрутки: шапка, герой и набор едут, ПОДВАЛ ЗАКРЕПЛЁН ВСЕГДА. Цена,
-/// период, длина бесплатного периода, условия автопродления и ссылки обязаны
-/// быть видны ДО покупки и без прокрутки — это требование ревью Apple, а не
-/// вкус. Прокрутка при этом включается только там, где содержимое физически не
-/// влезло (`ProLayout.paywallScrolls`): на четырёх телефонах из пяти лишнего
-/// жеста и отскока быть не должно.
-///
-/// Домашний экран, а не `SubscriptionStoreView`: тот приносит свою типографику
-/// и свои карточки и читается посреди наших тёплых карточек как чужое
-/// приложение — ровно то, за что в этом проекте запрещены системные диалоги.
+/// Native PRO storefront. The offer stays pinned; the feature list scrolls
+/// according to its real size, including translations and Dynamic Type.
 struct ProPaywallView: View {
     /// С какой функции пришли. Не `nil` — витрина открывается СРАЗУ на
     /// странице этой функции: на замок человек нажимает посреди дела, и список
@@ -27,6 +16,7 @@ struct ProPaywallView: View {
     let onClose: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var store = PlusStore.shared
 
@@ -40,9 +30,6 @@ struct ProPaywallView: View {
     @State private var notice: PlusStore.PurchaseMessage = .none
     /// Что сказать поверх экрана о прошлой попытке — состояния 8 и 10.
     @State private var toast: ToastItem?
-    /// Число поездок для героя. Считается в `.task`, а не в `body`:
-    /// `fetchTripStats` ходит в CoreData.
-    @State private var trips: Int?
     /// Открыта ли демонстрация и на какой странице. `nil` — виден список.
     @State private var demo: PlusFeature?
     /// Снимок данных для страниц демонстрации. Один раз, до показа: маршрут
@@ -88,8 +75,8 @@ struct ProPaywallView: View {
             }
         }
         .background(c.bg)
-        .animation(.easeInOut(duration: 0.2), value: notice)
-        .animation(.easeInOut(duration: 0.2), value: phase)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: notice)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: phase)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
         // `children: .contain`, а не голый идентификатор: без него SwiftUI
@@ -145,7 +132,6 @@ struct ProPaywallView: View {
         if demoData == nil {
             let snapshot = await ProDemoData.current(lang: lang.language)
             demoData = snapshot
-            trips = snapshot.trips > 0 ? snapshot.trips : nil
             if demo == nil, let feature = feature { demo = feature }
         }
     }
@@ -164,25 +150,24 @@ struct ProPaywallView: View {
     ) -> some View {
         if let demo, let demoData {
             ProDemoPager(start: demo, data: demoData, onBack: { self.demo = nil })
-        } else if layout.paywallScrolls {
+        } else {
             ScrollView { column(c, l, phase) }
                 .scrollIndicators(.hidden)
-        } else {
-            column(c, l, phase)
+                .scrollBounceBehavior(.basedOnSize)
+                .accessibilityIdentifier("pro_features_scroll")
         }
     }
 
     private func column(
         _ c: AppTheme.Colors, _ l: LanguageManager.Language, _ phase: ProPaywallPhase
     ) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 20) {
             header(c, l)
             // Имя и аватар — из снимка, когда он приехал: у витрины не должно
             // быть второго источника того же самого.
             ProPaywallHero(name: demoData?.name ?? heroName,
                            avatarEmoji: demoData?.avatarEmoji
                                ?? SettingsManager.shared.avatarEmoji,
-                           trips: trips,
                            onTap: { openDemo(.profileBackgrounds) })
             if phase.showsFeatureSet {
                 featureGroup(AppStrings.proGroupVisible(l),
@@ -205,13 +190,13 @@ struct ProPaywallView: View {
     private func header(
         _ c: AppTheme.Colors, _ l: LanguageManager.Language
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(AppStrings.proTitle(l))
-                .font(AppType.title)
+                .font(.interScaled(30, weight: .heavy, relativeTo: .title))
                 .kerning(AppType.titleTracking)
                 .foregroundStyle(c.text)
             Text(AppStrings.proPromise(l))
-                .font(AppType.body)
+                .font(.interScaled(15, relativeTo: .subheadline))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -229,8 +214,7 @@ struct ProPaywallView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(AppType.section)
-                .tracking(AppType.sectionTracking)
+                .font(.interScaled(16, weight: .bold, relativeTo: .headline))
                 .foregroundStyle(c.text)
                 .padding(.horizontal, 2)
 
@@ -241,13 +225,11 @@ struct ProPaywallView: View {
                                   subtitle: feature.proSubtitle(l),
                                   onTap: { openDemo(feature) })
                     if index < features.count - 1 {
-                        Divider().overlay(c.border)
+                        Divider().overlay(c.border).padding(.leading, 40)
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 2)
-            .surfaceCard(cornerRadius: 16)
+            .padding(.horizontal, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -288,13 +270,6 @@ struct ProPaywallView: View {
 
     // MARK: - Подвал
 
-    private var layout: ProLayout {
-        let metrics = WindowLayoutMetrics.shared
-        return ProLayout(height: metrics.size?.height ?? 844,
-                         safeTop: metrics.safeAreaInsets?.top ?? 47,
-                         safeBottom: metrics.safeAreaInsets?.bottom ?? 34)
-    }
-
     private func footer(
         _ c: AppTheme.Colors,
         _ l: LanguageManager.Language,
@@ -317,14 +292,8 @@ struct ProPaywallView: View {
         .padding(.top, 12)
         .padding(.bottom, 12)
         .background {
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                Rectangle().fill(c.bg.opacity(0.82))
-            }
-            // Полоса стекла достаёт до физического края, а СОДЕРЖИМОЕ остаётся
-            // в безопасной зоне со своим полем 12. Снимать зону у самих строк
-            // нельзя — это уводит безопасную зону всего окна (правило «Атласа»
-            // 0.8.2).
+            c.bg
+            // The surface reaches the edge; controls stay in the safe area.
             .ignoresSafeArea(edges: .bottom)
         }
         .overlay(alignment: .top) {

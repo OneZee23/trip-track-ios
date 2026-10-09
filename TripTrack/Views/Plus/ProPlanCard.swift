@@ -1,14 +1,7 @@
 import SwiftUI
 
-/// Карточка тарифа — 64 pt, две рядом в закреплённом подвале витрины.
-///
-/// Рядом, а не столбиком: столбик добавляет подвалу ещё шестьдесят пунктов, и
-/// условия автопродления уезжают за нижний край — то, чего ревью Apple не
-/// прощает.
-///
-/// Чип выгоды («−44 %») сидит НА ВЕРХНЕЙ КРОМКЕ и потому рисуется оверлеем с
-/// отрицательным отступом: он обязан выходить за карточку, иначе внутри 64 pt
-/// на него нет места без того, чтобы сжать цену.
+/// The selected plan has both a checkmark and a tinted surface; colour alone
+/// must not be the only way to identify the current billing period.
 struct ProPlanCard: View {
     let title: String
     /// «Неделя бесплатно» акцентом или «1,67 € в месяц» серым.
@@ -29,12 +22,19 @@ struct ProPlanCard: View {
             Haptics.selection()
             onTap()
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
                     .font(.inter(16, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+                    Spacer(minLength: 0)
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(isSelected ? AppTheme.accent : c.textSecondary)
+                        .accessibilityHidden(true)
+                }
                 if let subtitle {
                     Text(subtitle)
                         .font(AppType.meta)
@@ -47,7 +47,8 @@ struct ProPlanCard: View {
             .padding(.horizontal, 12)
             .frame(height: 64)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(c.card)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? AppTheme.accentBg : c.card)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)

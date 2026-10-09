@@ -7699,8 +7699,8 @@ enum AppStrings {
     /// Обещание под заголовком. Две вещи, за которые платят, одной строкой.
     static func proPromise(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proPromise",
-           ru: "Оформление, которое видят другие, и история без единой дыры",
-           en: "A look others see, and a history without a single gap")
+           ru: "Ваш стиль. Ваша история поездок.",
+           en: "Your style. Your road diary.")
     }
     static func proGroupVisible(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proGroupVisible", ru: "Видно другим", en: "Others can see")

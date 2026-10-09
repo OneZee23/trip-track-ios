@@ -20,21 +20,18 @@ struct ProFeatureRow: View {
             onTap()
         } label: {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(AppTheme.accent.opacity(0.12))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                }
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 28, height: 32)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(AppType.itemTitle)
+                        .font(.interScaled(16, weight: .semibold, relativeTo: .body))
                         .foregroundStyle(c.text)
                     Text(subtitle)
-                        .font(AppType.meta)
+                        .font(.interScaled(13, relativeTo: .footnote))
                         .foregroundStyle(c.textSecondary)
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -44,7 +41,7 @@ struct ProFeatureRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
             .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
