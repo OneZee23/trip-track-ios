@@ -238,6 +238,7 @@ struct MyMapView: View {
             }
         }
         .onAppear {
+            ProductAnalytics.shared.atlasOpened()
             // Diagnostic (round 2, 19 сен 2026): fires once this subtree has
             // been laid out — the closest SwiftUI gets to "first frame of
             // this screen drew". Refires on every visit to the Maps tab

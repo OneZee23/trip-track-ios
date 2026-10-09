@@ -121,6 +121,10 @@ struct TripTrackApp: App {
                     .onAppear { themeManager.applyToWindows() }
             } else if hasCompletedOnboarding {
                 ContentView()
+                    .onAppear { ProductAnalytics.shared.flush() }
+                    .onReceive(CacheManager.shared.networkRestored) { _ in
+                        ProductAnalytics.shared.flush()
+                    }
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
@@ -190,6 +194,7 @@ struct TripTrackApp: App {
         // process deaths — sweep the system log into our own files there, or a
         // relaunch loses everything that was said since the last periodic one.
         .onChange(of: scenePhase) { _, phase in
+            if phase == .active { ProductAnalytics.shared.flush() }
             guard phase != .active else { return }
             Task { await LogArchive.shared.sweep() }
         }

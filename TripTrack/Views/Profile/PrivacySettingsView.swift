@@ -29,6 +29,7 @@ struct PrivacySettingsView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var plus = PlusAccess.shared
+    @ObservedObject private var usage = ProductAnalytics.shared
 
     /// Optimistic value for «Публичный профиль» while the server write is in
     /// flight; nil = mirror `auth.isPublicProfile`.
@@ -48,8 +49,28 @@ struct PrivacySettingsView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    card(c, l)
-                    footnote(c, l)
+                    if auth.isSignedIn {
+                        card(c, l)
+                        footnote(c, l)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle(AppStrings.usageTitle(l), isOn: Binding(
+                            get: { usage.enabled },
+                            set: { enabled in
+                                usage.setEnabled(enabled, hadTrips: enabled &&
+                                    CoreDataTripRepository(persistenceController: .shared).fetchTripCount() > 0)
+                            }
+                        ))
+                        .font(.inter(14.5, weight: .semibold))
+                        .tint(AppTheme.accent)
+                        .accessibilityIdentifier("settings_usage_analytics")
+                        Text(AppStrings.usageDetail(l))
+                            .font(.inter(12))
+                            .foregroundStyle(c.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .surfaceCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 24)

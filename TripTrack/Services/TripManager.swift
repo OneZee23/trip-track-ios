@@ -217,6 +217,7 @@ final class TripManager: ObservableObject {
         recordingContinuity.reset()
         rejectedRecordingFixes = 0
         locationManager.startTracking()
+        ProductAnalytics.shared.recordingStarted(id: tripId)
     }
 
     /// Backdate the active trip's start time (for auto-start recovery)
@@ -241,6 +242,7 @@ final class TripManager: ObservableObject {
 
     @discardableResult
     func stopTrip(suggestedEndDate: Date? = nil) -> Trip? {
+        let saveStartedAt = Date()
         locationManager.stopTracking()
         Task { await RawFixLog.shared.end() }
         isRecording = false
@@ -264,9 +266,15 @@ final class TripManager: ObservableObject {
         entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
-        persistenceController.save()
+        let savedLocally = persistenceController.save()
 
         let completedTrip = entity.id.flatMap { repository.fetchTripDetail(id: $0) }
+        if let id = entity.id {
+            ProductAnalytics.shared.recordingFinished(
+                id: id, saved: savedLocally,
+                eligible: completedTrip.map { !$0.isJunk } ?? false,
+                elapsed: max(0, Date().timeIntervalSince(saveStartedAt)))
+        }
 
         geocodeAndNameTrip(entity: entity)
         deleteDemoTripIfNeeded()

@@ -242,16 +242,19 @@ struct PersistenceController {
         loadStore()
     }
 
-    func save() {
+    @discardableResult
+    func save() -> Bool {
         let context = container.viewContext
-        guard context.hasChanges else { return }
+        guard context.hasChanges else { return true }
         do {
             try context.save()
+            return true
         } catch {
             // Was a `#if DEBUG print`. A Release build that says nothing about
             // a failed write is exactly why the incident was undiagnosable
             // from the user's exported log.
             persistenceLog.error("save failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

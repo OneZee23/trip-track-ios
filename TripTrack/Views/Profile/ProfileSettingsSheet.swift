@@ -93,6 +93,17 @@ struct ProfileSettingsSheet: View {
                 VStack(spacing: 4) {
                     if auth.isSignedIn {
                         accountGroup(c, l)
+                    } else {
+                        // Usage consent is local and must remain reachable
+                        // without an account or Cloud Sync.
+                        SettingsLinkRow(
+                            icon: "hand.raised.fill",
+                            title: AppStrings.privacyTitle(l),
+                            subtitle: AppStrings.usageTitle(l),
+                            action: { showPrivacy = true }
+                        )
+                        .surfaceCard(cornerRadius: 16)
+                        .accessibilityIdentifier("settings_privacy")
                     }
                     if notifications.isAdmin {
                         adminGroup(c, l)
