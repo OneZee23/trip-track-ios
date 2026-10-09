@@ -1,5 +1,13 @@
 # App Privacy для TripTrack — готовая анкета (10 сентября 2026)
 
+> **Актуализация 9 октября 2026:** при проверке 0.8.7 в ASC всё ещё была
+> опубликована «Data Not Collected». Анкета исправлена и опубликована:
+> 15 типов (включая Purchase History), 21 сочетание целей, Linked=true,
+> Tracking=false. Точное соответствие текущему PrivacyInfo проверено через
+> ASC API. Ниже сохранён исторический аудит сентября; его формулировки
+> «сейчас» и рекомендации не являются текущим статусом. Проверки релиза —
+> [`0.8.7/candidate-76.md`](0.8.7/candidate-76.md).
+
 **Вердикт:** «Data Not Collected» неверно однозначно и было неверно ещё до Sentry. Отмечать надо **14 типов данных в 7 категориях**, все — **Linked to You**, **Tracking = No** во всех. Анкету можно исправить сегодня, без сборки и без апдейта: Apple прямо разрешает («You may update your answers at any time, and you do not need to submit an app update in order to change your answers» — [app-privacy-details](https://developer.apple.com/app-store/app-privacy-details/)).
 
 ---

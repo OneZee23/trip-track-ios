@@ -24,10 +24,16 @@ final class UsagePrivacyTests: XCTestCase {
         before.name = "usage-consent-off"
         before.lifetime = .keepAlways
         add(before)
-        toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "1")
-        toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "0")
+        // iOS 26 exposes the label and switch as one accessibility frame;
+        // tap the actual control at its trailing edge, then wait for the
+        // accessibility value to catch up with the SwiftUI state update.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 2))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == '1'"), object: toggle)], timeout: 3), .completed)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == '0'"), object: toggle)], timeout: 3), .completed)
         app.terminate()
     }
 }
