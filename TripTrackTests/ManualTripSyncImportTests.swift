@@ -17,6 +17,7 @@ final class ManualTripSyncImportTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
         tripId = UUID()
         owner = UUID()
+        cloudOn = true
     }
 
     override func tearDown() {
@@ -56,9 +57,14 @@ final class ManualTripSyncImportTests: XCTestCase {
         repo.flushPendingApplies()
     }
 
+    /// Cloud Sync is explicit here: the default reads `SettingsManager.shared`,
+    /// and a test must not depend on whatever the simulator container holds.
+    private var cloudOn = true
+
     private func loader(fetch: @escaping (UUID) async throws -> TripSyncPayload,
                         afterLoad: @escaping (UUID) async -> Void = { _ in }) -> ManualTripTrackLoader {
         ManualTripTrackLoader(repository: repo, accountId: { [weak self] in self?.owner },
+                              cloudSyncEnabled: { [weak self] in self?.cloudOn ?? false },
                               fetch: fetch, afterLoad: afterLoad)
     }
 
@@ -231,4 +237,126 @@ final class ManualTripSyncImportTests: XCTestCase {
         XCTAssertNil(result)
         XCTAssertEqual(repo.fetchTripDetail(id: id)?.trackPoints.count, 0)
     }
+
+    // MARK: Cloud Sync gate
+
+    func testDoesNotAskTheServerWhenCloudSyncIsOff() async {
+        importSummary()
+        cloudOn = false
+        var asked = false
+        let result = await loader(fetch: { [self] _ in asked = true; return payload(points: points()) })
+            .loadIfNeeded(id: tripId)
+        XCTAssertNil(result)
+        XCTAssertFalse(asked)
+        XCTAssertEqual(repo.fetchEntity(id: tripId)?.trackPoints?.count, 0)
+    }
+
+    func testDropsTheReplyWhenCloudSyncIsTurnedOffDuringTheRequest() async {
+        importSummary()
+        let result = await loader(fetch: { [self] _ in
+            cloudOn = false
+            return payload(points: points())
+        }).loadIfNeeded(id: tripId)
+        XCTAssertNil(result)
+        XCTAssertEqual(repo.fetchEntity(id: tripId)?.trackPoints?.count, 0)
+    }
+
+    // MARK: Home privacy zone
+
+    func testOnlyAPublicUnloadedServerManualTripUnderAZoneMustLoadFirst() {
+        let must = { (source: TripOrigin, isPrivate: Bool, points: Bool, server: Bool, zone: Bool) in
+            ManualTripTrackLoader.mustLoadBeforeUpload(
+                source: source, isPrivate: isPrivate, hasLocalPoints: points,
+                isOnServer: server, zoneActive: zone)
+        }
+        XCTAssertTrue(must(.manual, false, false, true, true))
+        // Each condition alone lifts the requirement.
+        XCTAssertFalse(must(.recorded, false, false, true, true))
+        XCTAssertFalse(must(.manual, true, false, true, true))
+        XCTAssertFalse(must(.manual, false, true, true, true))
+        XCTAssertFalse(must(.manual, false, false, false, true))
+        XCTAssertFalse(must(.manual, false, false, true, false))
+    }
+
+    func testPublicUnloadedTripUnderAZoneDownloadsItsRouteBeforeUpload() async throws {
+        importSummary()
+        try XCTUnwrap(repo.fetchEntity(id: tripId)).isPrivate = false
+        try await loader(fetch: { [self] _ in payload(points: points()) })
+            .prepareUpload(id: tripId, zoneActive: true)
+        XCTAssertEqual(repo.fetchEntity(id: tripId)?.trackPoints?.count, 2)
+    }
+
+    func testPublicUnloadedTripUnderAZoneWaitsWhenTheRouteCannotBeLoaded() async throws {
+        importSummary()
+        try XCTUnwrap(repo.fetchEntity(id: tripId)).isPrivate = false
+        do {
+            try await loader(fetch: { _ in throw URLError(.notConnectedToInternet) })
+                .prepareUpload(id: tripId, zoneActive: true)
+            XCTFail("an untrimmed server route must not be published")
+        } catch ManualTripTrackLoader.UploadDeferred.routeNotLoaded {
+            // The queue keeps the operation and retries it.
+        }
+    }
+
+    func testPrivateOrZonelessUploadNeverWaitsForTheRoute() async throws {
+        importSummary()
+        var asked = false
+        let l = loader(fetch: { [self] _ in asked = true; return payload(points: points()) })
+        try await l.prepareUpload(id: tripId, zoneActive: true)      // private
+        try XCTUnwrap(repo.fetchEntity(id: tripId)).isPrivate = false
+        try await l.prepareUpload(id: tripId, zoneActive: false)     // no zone
+        XCTAssertFalse(asked)
+    }
+
+    /// The write runs on a background context, which reads only what is SAVED.
+    /// A saved local edit, a saved deletion mark or a saved newer pull that
+    /// lands while the route is downloading must still win.
+    func testRefusesLateResponseAfterASavedEditDeletionOrNewerPull() async throws {
+        for change in 0..<3 {
+            tripId = UUID()
+            importSummary()
+            let remote = payload(points: points())
+            let id = tripId!
+            let subject = loader(fetch: { _ in
+                let entity = self.repo.fetchEntity(id: id)!
+                switch change {
+                case 0:
+                    entity.syncStatus = SyncStatus.pendingUpload.rawValue
+                    entity.title = "Changed while fetching"
+                case 1: entity.syncStatus = SyncStatus.pendingDelete.rawValue
+                default: entity.conflictVersion = 2
+                }
+                try entity.managedObjectContext?.save()
+                return remote
+            })
+            let result = await subject.loadIfNeeded(id: id)
+            XCTAssertNil(result, "change \(change)")
+            XCTAssertEqual(repo.fetchTripDetail(id: id)?.trackPoints.count, 0, "change \(change)")
+        }
+    }
+
+    /// The background write re-checks the SAVED row itself. The loader's
+    /// main-actor guard runs earlier, so this pins the window between that
+    /// guard and the write: an edit saved there must still win.
+    func testBackgroundWriteRefusesAnEditSavedAfterTheSnapshot() async throws {
+        for change in 0..<3 {
+            tripId = UUID()
+            importSummary()
+            let snapshot = try XCTUnwrap(repo.missingManualTrack(id: tripId))
+            let entity = try XCTUnwrap(repo.fetchEntity(id: tripId))
+            switch change {
+            case 0:
+                entity.syncStatus = SyncStatus.pendingUpload.rawValue
+                entity.title = "Saved between the check and the write"
+            case 1: entity.syncStatus = SyncStatus.pendingDelete.rawValue
+            default: entity.conflictVersion = 2
+            }
+            try entity.managedObjectContext?.save()
+
+            let written = await repo.applyMissingManualTrackAsync(points(), expected: snapshot)
+            XCTAssertFalse(written, "change \(change)")
+            XCTAssertEqual(repo.fetchTripDetail(id: tripId)?.trackPoints.count, 0, "change \(change)")
+        }
+    }
 }
+

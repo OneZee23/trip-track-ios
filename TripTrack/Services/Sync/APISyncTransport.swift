@@ -144,6 +144,10 @@ final class APISyncTransport: SyncTransport {
             }
             return
         }
+        // A public web-created trip under the home privacy zone must carry its
+        // trimmed route, never `nil` over the server's full one. Throws while
+        // the route cannot be downloaded, so the queue keeps the op.
+        try await ManualTripTrackLoader.shared.prepareUpload(id: id)
         // Build the payload (decode all track points + movement-split + photo
         // metadata) on a BACKGROUND context — this was the residual main-thread
         // cost on long trips during a drain. nil = the trip vanished between the
@@ -243,6 +247,13 @@ final class APISyncTransport: SyncTransport {
             // Sync OFF must NOT go out in a batch — leave it for per-op
             // execute(), which runs the unpublish / mark-synced edge logic.
             if !SettingsManager.shared.cloudSyncEnabled && entity.isPrivate {
+                continue
+            }
+            // Same privacy gate as uploadTrip: a route that cannot be loaded
+            // yet leaves the op to per-op execute(), which keeps it queued.
+            do {
+                try await ManualTripTrackLoader.shared.prepareUpload(id: id)
+            } catch {
                 continue
             }
             guard let payload = await repo.fetchTripSyncPayloadAsync(id: id) else {

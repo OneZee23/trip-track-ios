@@ -1609,40 +1609,58 @@ final class CoreDataTripRepository: TripRepository {
 
     /// Only track points are adopted. Calling applyRemoteTrip here would also
     /// replace photos, checkpoints and metadata from a possibly older response.
-    @discardableResult
-    func applyMissingManualTrack(_ points: [TrackPointPayload],
-                                 expected: ManualTripTrackLoader.Snapshot) -> Bool {
-        guard missingManualTrack(id: expected.id) == expected,
-              let entity = fetchEntity(id: expected.id) else { return false }
-        let wasProcessed = entity.isTrackProcessed
-        let matchedAt = entity.placesMatchedAt
-        var inserted: [TrackPointEntity] = []
-        inserted.reserveCapacity(points.count)
-        for point in points {
-            let row = TrackPointEntity(context: context)
-            row.id = point.id
-            row.latitude = point.latitude
-            row.longitude = point.longitude
-            row.altitude = point.altitude
-            row.speed = point.speed
-            row.course = point.course
-            row.horizontalAccuracy = point.horizontalAccuracy
-            row.timestamp = point.timestamp
-            row.isInterpolated = point.isInterpolated
-            row.trip = entity
-            inserted.append(row)
-        }
-        // A constructed manual route must never run through GPS reconstruction.
-        entity.isTrackProcessed = true
-        entity.placesMatchedAt = nil
-        do {
-            try context.save()
-            return true
-        } catch {
-            for point in inserted { context.delete(point) }
-            entity.isTrackProcessed = wasProcessed
-            entity.placesMatchedAt = matchedAt
-            return false
+    ///
+    /// Runs on a background context: inserting and saving
+    /// up to ten thousand rows took ~260 ms on the main actor (simulator,
+    /// SQLite), a visible stall when opening the trip. The same guards run in
+    /// the SAME context right before the write, so nothing can slip between
+    /// the check and the save; `NSMergePolicy.error` makes a concurrent edit of
+    /// the row fail this save instead of being overwritten (as in
+    /// `RoadGapFiller`). The view context picks the rows up through
+    /// `automaticallyMergesChangesFromParent`.
+    func applyMissingManualTrackAsync(_ points: [TrackPointPayload],
+                                      expected: ManualTripTrackLoader.Snapshot) async -> Bool {
+        let bg = persistenceController.container.newBackgroundContext()
+        bg.mergePolicy = NSMergePolicy.error
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            bg.perform {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", expected.id as CVarArg)
+                request.fetchLimit = 1
+                guard let entity = try? bg.fetch(request).first,
+                      entity.source == TripOrigin.manual.rawValue,
+                      entity.syncStatus == SyncStatus.synced.rawValue,
+                      entity.serverCreatedAt != nil, entity.endDate != nil,
+                      (entity.trackPoints?.count ?? 0) == 0,
+                      Int(entity.conflictVersion) == expected.conflictVersion,
+                      entity.lastModifiedAt == expected.lastModifiedAt else {
+                    cont.resume(returning: false)
+                    return
+                }
+                for point in points {
+                    let row = TrackPointEntity(context: bg)
+                    row.id = point.id
+                    row.latitude = point.latitude
+                    row.longitude = point.longitude
+                    row.altitude = point.altitude
+                    row.speed = point.speed
+                    row.course = point.course
+                    row.horizontalAccuracy = point.horizontalAccuracy
+                    row.timestamp = point.timestamp
+                    row.isInterpolated = point.isInterpolated
+                    row.trip = entity
+                }
+                // A constructed manual route must never run through GPS reconstruction.
+                entity.isTrackProcessed = true
+                entity.placesMatchedAt = nil
+                do {
+                    try bg.save()
+                    cont.resume(returning: true)
+                } catch {
+                    bg.rollback()
+                    cont.resume(returning: false)
+                }
+            }
         }
     }
 
