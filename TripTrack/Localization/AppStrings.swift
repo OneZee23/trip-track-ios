@@ -4530,10 +4530,12 @@ enum AppStrings {
     }
 
     // MARK: - Discover (0.6.0)
+    /// Не «по вашим регионам»: в той же секции бывают «рядом» и «популярные»
+    /// (`SuggestionReason`), и у каждой строки своя подпись причины.
     static func suggestedByRegions(_ lang: LanguageManager.Language) -> String {
         tr(lang, "suggestedByRegions",
-           ru: "Рекомендуем · по Вашим регионам",
-           en: "Suggested · based on your regions")
+           ru: "Рекомендуем",
+           en: "Suggested")
     }
 
     /// Rationale line of a suggested-person row (Figma 117:291). The server
@@ -4670,10 +4672,13 @@ enum AppStrings {
     static func syncEnableConfirmTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncEnableConfirmTitle", ru: "Включить синхронизацию?", en: "Turn on cloud sync?")
     }
+    /// GDPR-согласие: «фото с удалёнными метаданными» было неполно — из файла
+    /// EXIF вырезается (`R2PhotoStorage`), но `capturedAt`/`exifLatitude`/
+    /// `exifLongitude` уходят полями пейлоада (кроме зоны дома).
     static func syncEnableConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncEnableConfirmBody",
-           ru: "Ваши поездки, фото (с удалёнными метаданными), автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности.",
-           en: "Your trips, photos (with metadata stripped), vehicles, and settings will be uploaded to our EU server so you can access them on your other devices. You can turn this off anytime. See our Privacy Policy for details.")
+           ru: "Ваши поездки, фото, автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Из файлов фото метаданные удаляются, но время и место съёмки сохраняются отдельно, чтобы ставить снимки на карту. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности.",
+           en: "Your trips, photos, vehicles and settings will be uploaded to our EU server so you can access them on your other devices. Metadata is stripped from photo files, but the capture time and place are kept separately to place photos on the map. You can turn this off anytime. See our Privacy Policy for details.")
     }
     static func syncEnableConfirmAction(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncEnableConfirmAction", ru: "Включить", en: "Turn on")
@@ -4976,10 +4981,13 @@ enum AppStrings {
            en: "Notify me when someone tags me as a companion")
     }
     /// Under the card. The one promise none of the three switches can break.
+    /// Принявший приглашение попутчик видит и приватную поездку
+    /// (`TripAccessService.resolveTripAccess` на сервере: роль `companion`
+    /// проверяется раньше `isPrivate`). «Не видит никто» было неправдой.
     static func privacyFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "privacyFootnote",
-           ru: "Приватную поездку не видит никто — ни на карте, ни в вашем профиле. Эти переключатели её не открывают.",
-           en: "A private trip is visible to nobody — not on the map, not on your page. None of these switches change that.")
+           ru: "Приватную поездку видите только вы и попутчики, которых вы пригласили. Эти переключатели её не открывают.",
+           en: "A private trip is seen only by you and companions you invited. None of these switches change that.")
     }
     static func settingsInbox(_ lang: LanguageManager.Language) -> String {
         tr(lang, "settingsInbox", ru: "Входящие", en: "Inbox")
@@ -5058,10 +5066,12 @@ enum AppStrings {
     static func followingCountLabel(_ lang: LanguageManager.Language, n: Int) -> String {
         "\(n) \(followingCaption(lang, n: n))"
     }
+    /// Листать дальше можно: `cappedAppend` на глубине 3 подменяет верхний
+    /// экран. Ограничен только путь назад — прежний текст обещал тупик.
     static func followDepthNote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "followDepthNote",
-           ru: "Глубина списка ограничена 3 уровнями связей",
-           en: "List depth is limited to 3 levels of connections")
+           ru: "«Назад» вернёт не дальше чем на 3 экрана",
+           en: "Back returns up to 3 screens")
     }
 
     // MARK: - Audit-fix additions (0.6.0 post-release pass)
@@ -5186,10 +5196,13 @@ enum AppStrings {
     static func hideFromFeedAlertTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "hideFromFeedAlertTitle", ru: "Точно скрыть из ленты?", en: "Hide from the feed?")
     }
+    /// Действие ставит `isPrivate = true`: при синхронизации поездка остаётся
+    /// на сервере и видна приглашённым попутчикам — «только в дневнике» было
+    /// неправдой.
     static func hideFromFeedAlertBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "hideFromFeedAlertBody",
-           ru: "Поездка останется только в вашем дневнике.",
-           en: "The trip stays in your own diary only.")
+           ru: "Её не будет в общей ленте и в вашем профиле.",
+           en: "It leaves the public feed and your profile.")
     }
     static func hideFromFeedAlertConfirm(_ lang: LanguageManager.Language) -> String {
         tr(lang, "hideFromFeedAlertConfirm", ru: "Да, скрыть", en: "Yes, hide")
@@ -5213,11 +5226,6 @@ enum AppStrings {
         tr(lang, "makePrivateConfirmTitle",
            ru: "Сделать поездку приватной?",
            en: "Make this trip private?")
-    }
-    static func makePrivateConfirmBody(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "makePrivateConfirmBody",
-           ru: "Она исчезнет из общей ленты, а реакции и комментарии к ней больше никто не увидит. Вернуть публичной можно в любой момент.",
-           en: "It leaves the public feed, and its reactions and comments go with it. You can publish it again any time.")
     }
 
     /// Header link on the detail preview → full thread.
@@ -5340,10 +5348,13 @@ enum AppStrings {
     /// Fix 2: own trip, not yet on the server — the invite row is shown
     /// disabled (not a button) with this hint instead of the ordinary
     /// `companionsEmptyHint`, because inviting isn't possible yet either.
+    /// Условие — поездка на сервере (`isOnServer`), а не публичность: приватную
+    /// поездку в облаке тоже можно делить с попутчиками. «Опубликуйте» толкало
+    /// открыть поездку всем без нужды.
     static func companionsPublishFirstHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "companionsPublishFirstHint",
-           ru: "Чтобы звать попутчиков, сначала опубликуйте поездку",
-           en: "Publish the trip first to invite companions")
+           ru: "Чтобы звать попутчиков, поездка должна быть в облаке",
+           en: "To invite companions, the trip needs to be in the cloud")
     }
     /// The OTHER reason the invite row can't act yet, and the one that used
     /// to be misreported as `companionsPublishFirstHint`: a signed-out
@@ -5761,10 +5772,13 @@ enum AppStrings {
     }
     /// Says who sees it, because pinning is the one achievement action with a
     /// consequence outside the owner's own screen.
+    /// Закрепление живёт только на этом телефоне (`SettingsManager.pinnedBadgeId`,
+    /// `UserDefaults`) и на сервер не уходит: чужой профиль показывает
+    /// серверный `recentBadges`. Прежнее «увидят все» было неправдой.
     static func achievementPinConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "achievementPinConfirmBody",
-           ru: "Оно будет первым в вашем профиле — его увидят все, кто откроет вашу страницу.",
-           en: "It goes to the top of your profile, where anyone who opens your page will see it.")
+           ru: "Оно будет первым на вашем экране «Я».",
+           en: "It goes to the top of your Me tab.")
     }
     /// Progress toward a locked badge. Pure assembly — `current`, `target` and
     /// `unit` all arrive formatted, so the separator and the unit are the
