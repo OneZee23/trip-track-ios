@@ -1194,12 +1194,27 @@ enum AppStrings {
         termsURL: String,
         privacyURL: String
     ) -> String {
-        let terms = "[\(termsOfService(lang))](\(termsURL))"
-        let privacy = "[\(privacyPolicy(lang))](\(privacyURL))"
+        // «Соглашаетесь с» / «погоджуєтесь з» требуют творительного падежа;
+        // заголовки документов стоят в именительном (`termsOfService`,
+        // `privacyPolicy` — их читают кнопки и строки настроек). Это уже
+        // чинилось (92fb6214) и сломалось при переносе строк в таблицы, когда
+        // формы у ссылок стали общими с заголовками.
+        let termsTitle: String
+        let privacyTitle: String
+        switch lang {
+        case .ru: termsTitle = "Условиями использования"; privacyTitle = "Политикой конфиденциальности"
+        case .uk: termsTitle = "Умовами використання"; privacyTitle = "Політикою конфіденційності"
+        // «akceptujesz» и «қабылдайсыз» — винительный падеж.
+        case .pl: termsTitle = "Warunki korzystania"; privacyTitle = "Politykę prywatności"
+        case .kk: termsTitle = "Пайдалану шарттарын"; privacyTitle = "Құпиялық саясатын"
+        default: termsTitle = termsOfService(lang); privacyTitle = privacyPolicy(lang)
+        }
+        let terms = "[\(termsTitle)](\(termsURL))"
+        let privacy = "[\(privacyTitle)](\(privacyURL))"
         switch lang {
         case .ru: return "Продолжая, Вы соглашаетесь с \(terms) и \(privacy)"
         case .en: return "By continuing, you accept our \(terms) and \(privacy)"
-        case .de: return "Wenn du fortfährst, akzeptierst du \(terms) und \(privacy)"
+        case .de: return "Wenn du fortfährst, akzeptierst du die \(terms) und die \(privacy)"
         case .es: return "Si continúas, aceptas los \(terms) y la \(privacy)"
         case .fr: return "En continuant, vous acceptez les \(terms) et la \(privacy)"
         case .it: return "Continuando, accetti i \(terms) e l'\(privacy)"
