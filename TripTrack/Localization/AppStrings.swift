@@ -149,13 +149,13 @@ enum AppStrings {
     /// Почему имя можно писать любое: оно личное и адреса не меняет.
     static func placeRenameHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placeRenameHint",
-           ru: "Название видишь только ты — адрес места от него не меняется.",
+           ru: "Название видите только вы — адрес места от него не меняется.",
            en: "Only you see this name — the address of the place stays as it is.")
     }
     /// То же с известным адресом: «…останется прежним: Горячий Ключ».
     static func placeRenameHintAddress(_ lang: LanguageManager.Language, address: String) -> String {
         tr(lang, "placeRenameHintAddress",
-           ru: "Название видишь только ты. Адрес останется прежним: {address}.",
+           ru: "Название видите только вы. Адрес останется прежним: {address}.",
            en: "Only you see this name. The address stays as it is: {address}.")
             .replacingOccurrences(of: "{address}", with: address)
     }
@@ -243,14 +243,14 @@ enum AppStrings {
     }
     static func placesBetaBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesBetaBody",
-           ru: "Вкладка ещё меняется: как места узнаются на проезде, что показывает их экран и какие из них приложение предлагает само. Напиши, если что-то здесь работает не так, как ждёшь.",
+           ru: "Вкладка ещё меняется: как места узнаются на проезде, что показывает их экран и какие из них приложение предлагает само. Напишите, если что-то здесь работает не так, как вы ждёте.",
            en: "This tab is still changing: how places are recognised on a pass, what their screen shows, and which ones the app suggests on its own. Write if something here does not work the way you expect.")
     }
     /// Одна фраза под заголовком пустой вкладки: чем место отличается от
     /// точки на карте. Без неё экран объяснял, ЧТО нажать, но не зачем.
     static func placesEmptyIntro(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesEmptyIntro",
-           ru: "Приложение узнаёт место на каждом проезде и считает, сколько раз ты здесь был.",
+           ru: "Приложение узнаёт место на каждом проезде и считает, сколько раз вы здесь были.",
            en: "The app recognises a place on every pass and counts how many times you have been there.")
     }
     /// Имя места в карточке-образце. Своих мест ещё нет, и показать нечего —
@@ -261,13 +261,13 @@ enum AppStrings {
     /// Заголовки трёх шагов. Описания у них прежние — `placesHowMark`,
     /// `placesHowTap`, `placesHowSuggest`.
     static func placesHowMarkTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "placesHowMarkTitle", ru: "Отметь на ходу", en: "Mark it as you drive")
+        tr(lang, "placesHowMarkTitle", ru: "Отметьте на ходу", en: "Mark it as you drive")
     }
     static func placesHowTapTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "placesHowTapTitle", ru: "Отметь точку на маршруте", en: "Tap a point on the route")
+        tr(lang, "placesHowTapTitle", ru: "Отметьте точку на маршруте", en: "Tap a point on the route")
     }
     static func placesHowSuggestTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "placesHowSuggestTitle", ru: "Или дождись подсказки", en: "Or wait for a suggestion")
+        tr(lang, "placesHowSuggestTitle", ru: "Или дождитесь подсказки", en: "Or wait for a suggestion")
     }
     static func placesHowTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesHowTitle", ru: "Как появляются места", en: "Where places come from")
@@ -362,7 +362,7 @@ enum AppStrings {
     }
     static func placesNoneYetBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "placesNoneYetBody",
-           ru: "Сохрани подсказку ниже или отметь точку в поездке.",
+           ru: "Сохраните подсказку ниже или отметьте точку в поездке.",
            en: "Save a suggestion below, or drop a checkpoint on a trip.")
     }
     /// Заголовок над списком поездок в состоянии новичка.
@@ -1214,7 +1214,7 @@ enum AppStrings {
         switch lang {
         case .ru: return "Продолжая, Вы соглашаетесь с \(terms) и \(privacy)"
         case .en: return "By continuing, you accept our \(terms) and \(privacy)"
-        case .de: return "Wenn du fortfährst, akzeptierst du die \(terms) und die \(privacy)"
+        case .de: return "Wenn Sie fortfahren, akzeptieren Sie die \(terms) und die \(privacy)"
         case .es: return "Si continúas, aceptas los \(terms) y la \(privacy)"
         case .fr: return "En continuant, vous acceptez les \(terms) et la \(privacy)"
         case .it: return "Continuando, accetti i \(terms) e l'\(privacy)"
@@ -1646,7 +1646,7 @@ enum AppStrings {
     /// это не мелочь копирайтинга, а неверный экран.
     static func mapPullHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapPullHint",
-           ru: "Потяни вверх — поездки",
+           ru: "Потяните вверх — поездки",
            en: "Pull up — trips")
     }
     // mapCitiesSection удалена в 0.7.0 вместе со списком городов на карточке
@@ -1696,7 +1696,7 @@ enum AppStrings {
         }
     }
     static func mapRoadPullHint(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapRoadPullHint", ru: "Потяни вверх — все поездки", en: "Pull up — all of them")
+        tr(lang, "mapRoadPullHint", ru: "Потяните вверх — все поездки", en: "Pull up — all of them")
     }
     /// Endpoints of the selected route. Voice-over only — on screen they are
     /// the same green-start / white-finish dots the share poster uses.
@@ -1775,8 +1775,8 @@ enum AppStrings {
             let pron = plural(lang, count,
                               one: "Sie bleibt im Feed",
                               many: "Sie bleiben im Feed")
-            head = "Du hast \(count) \(noun) im gemeinsamen Feed. \(pron) auch nach dem Abmelden, wenn du sie nicht verbirgst."
-            tail = "Private Fahrten und lokale Daten sind nicht betroffen — du kannst dich jederzeit wieder anmelden."
+            head = "Sie haben \(count) \(noun) im gemeinsamen Feed. \(pron) auch nach dem Abmelden, wenn Sie sie nicht verbergen."
+            tail = "Private Fahrten und lokale Daten sind nicht betroffen — Sie können sich jederzeit wieder anmelden."
         case .es:
             let noun = plural(lang, count, one: "viaje público", many: "viajes públicos")
             let pron = plural(lang, count,
@@ -2745,7 +2745,7 @@ enum AppStrings {
 
     /// Вопрос про дом задаётся ОДИН раз: без дома подсказок нет вовсе.
     static func homeQuestionTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "homeQuestionTitle", ru: "Это твой дом?", en: "Is this your home?")
+        tr(lang, "homeQuestionTitle", ru: "Это ваш дом?", en: "Is this your home?")
     }
     static func homeQuestionHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeQuestionHint",
@@ -3124,14 +3124,14 @@ enum AppStrings {
         tr(lang, "notifDraftStartedTitle", ru: "Пишу поездку", en: "Recording a trip")
     }
     static func notifDraftStartedBody(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "notifDraftStartedBody", ru: "В конце спрошу, твоя ли она", en: "I'll ask at the end if it's yours")
+        tr(lang, "notifDraftStartedBody", ru: "В конце спрошу, ваша ли она", en: "I'll ask at the end if it's yours")
     }
     static func notifDraftConfirmTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifDraftConfirmTitle", ru: "Поездка записана", en: "Trip recorded")
     }
     /// `{distance}` — уже напечатанное `Measure` расстояние с единицей.
     static func notifDraftConfirmBody(_ lang: LanguageManager.Language, distance: String) -> String {
-        tr(lang, "notifDraftConfirmBody", ru: "{distance}. Твоя?", en: "{distance}. Yours?")
+        tr(lang, "notifDraftConfirmBody", ru: "{distance}. Ваша?", en: "{distance}. Yours?")
             .replacingOccurrences(of: "{distance}", with: distance)
     }
     /// «Моя» — и в уведомлении, и на плашке черновика: одно слово на одно
@@ -3220,13 +3220,13 @@ enum AppStrings {
     }
 
     static func draftBannerTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "draftBannerTitle", ru: "Это твоя поездка?", en: "Is this your trip?")
+        tr(lang, "draftBannerTitle", ru: "Это ваша поездка?", en: "Is this your trip?")
     }
     /// Объясняет цену молчания: пока не подтверждена, поездки нет ни в атласе,
     /// ни в статистике (спека §3.2).
     static func draftBannerBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "draftBannerBody",
-           ru: "Её записал автотрекинг. Пока ты не подтвердишь, её нет ни в атласе, ни в статистике.",
+           ru: "Её записал автотрекинг. Пока вы не подтвердите, её нет ни в атласе, ни в статистике.",
            en: "Auto-tracking recorded it. Until you confirm, it stays out of the Atlas and your stats.")
     }
     /// Метка на экране записи (спека §3.1).
@@ -3410,7 +3410,7 @@ enum AppStrings {
         switch lang {
         case .ru: return "Продолжая, Вы соглашаетесь с \(terms)"
         case .en: return "By continuing, you agree to the \(terms)"
-        case .de: return "Wenn du fortfährst, stimmst du den \(terms) zu"
+        case .de: return "Wenn Sie fortfahren, stimmen Sie den \(terms) zu"
         case .es: return "Si continúas, aceptas las \(terms)"
         case .fr: return "En continuant, vous acceptez les \(terms)"
         case .it: return "Continuando, accetti i \(terms)"
@@ -5052,7 +5052,7 @@ enum AppStrings {
         switch lang {
         case .ru: return "Так Вас увидят в ленте и профиле. До \(max) символов."
         case .en: return "This is how you'll appear in the feed and profile. Up to \(max) characters."
-        case .de: return "So erscheinst du im Feed und im Profil. Bis zu \(max) Zeichen."
+        case .de: return "So erscheinen Sie im Feed und im Profil. Bis zu \(max) Zeichen."
         case .es: return "Así aparecerás en el feed y en el perfil. Hasta \(max) caracteres."
         case .fr: return "C'est ainsi que vous apparaîtrez dans le fil et le profil. Jusqu'à \(max) caractères."
         case .it: return "È così che comparirai nel feed e nel profilo. Fino a \(max) caratteri."
@@ -5698,7 +5698,7 @@ enum AppStrings {
     }
     static func achievementsCollectHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "achievementsCollectHint",
-           ru: "Собери коллекцию дорожных достижений",
+           ru: "Соберите коллекцию дорожных достижений",
            en: "Collect the road achievement set")
     }
     static func achievementsFilterAll(_ lang: LanguageManager.Language) -> String {
@@ -5839,9 +5839,9 @@ enum AppStrings {
         _ lang: LanguageManager.Language, emoji: String
     ) -> String {
         switch lang {
-        case .ru: return "\(emoji) — из набора, которого больше нет. Сменишь — вернуть уже не получится."
+        case .ru: return "\(emoji) — из набора, которого больше нет. Смените — вернуть уже не получится."
         case .en: return "\(emoji) is from a set that no longer exists. Change it and it is gone for good."
-        case .de: return "\(emoji) stammt aus einem Set, das es nicht mehr gibt. Wechselst du, ist es für immer weg."
+        case .de: return "\(emoji) stammt aus einem Set, das es nicht mehr gibt. Wenn Sie wechseln, ist es für immer weg."
         case .es: return "\(emoji) es de un set que ya no existe. Si lo cambias, no habrá vuelta atrás."
         case .fr: return "\(emoji) vient d'un lot qui n'existe plus. Si vous en changez, il est perdu pour de bon."
         case .it: return "\(emoji) viene da un set che non esiste più. Se lo cambi, non torna indietro."
@@ -5849,8 +5849,8 @@ enum AppStrings {
         case .id: return "\(emoji) berasal dari set yang sudah tidak ada. Kalau diganti, tidak bisa kembali."
         case .tr: return "\(emoji) artık var olmayan bir setten. Değiştirirsen bir daha geri gelmez."
         case .fil: return "Ang \(emoji) ay mula sa set na wala na. Kapag pinalitan mo, hindi na ito mababalik."
-        case .uk: return "\(emoji) — з набору, якого більше немає. Зміниш — повернути вже не вийде."
-        case .kk: return "\(emoji) — енді жоқ жинақтан. Ауыстырсаң, қайтару мүмкін болмайды."
+        case .uk: return "\(emoji) — з набору, якого більше немає. Зміните — повернути вже не вийде."
+        case .kk: return "\(emoji) — енді жоқ жинақтан. Ауыстырсаңыз, қайтару мүмкін болмайды."
         case .pt: return "\(emoji) é de um conjunto que não existe mais. Se trocar, não dá para voltar."
         }
     }
@@ -7072,13 +7072,13 @@ enum AppStrings {
     /// corruption is exactly what destroyed a real user's library.
     static func storeRecoveryTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "storeRecoveryTitle",
-           ru: "Не смогли открыть твои данные",
+           ru: "Не смогли открыть ваши данные",
            en: "We couldn't open your data")
     }
 
     static func storeRecoveryBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "storeRecoveryBody",
-           ru: "Поездки на месте — приложение просто не смогло до них добраться. Чаще всего это временно: попробуй ещё раз.",
+           ru: "Поездки на месте — приложение просто не смогло до них добраться. Чаще всего это временно: попробуйте ещё раз.",
            en: "Your trips are still there — the app just couldn't reach them. This is usually temporary: try again.")
     }
 
@@ -7108,7 +7108,7 @@ enum AppStrings {
     /// conditional is the honest form.
     static func storeRecoveryStartFreshConfirm(_ lang: LanguageManager.Language) -> String {
         tr(lang, "storeRecoveryStartFreshConfirm",
-           ru: "Приложение откроется пустым. Старый файл останется на телефоне — напиши нам, поможем достать. Если Облачная синхронизация была включена, поездки подтянутся с сервера.",
+           ru: "Приложение откроется пустым. Старый файл останется на телефоне — напишите нам, поможем достать. Если Облачная синхронизация была включена, поездки подтянутся с сервера.",
            en: "The app will start empty. The old file stays on your phone — write to us and we'll help recover it. If Cloud Sync was on, your trips will come back from the server.")
     }
 
@@ -7768,7 +7768,7 @@ enum AppStrings {
     /// Льготный период: PRO работает, а платёж не прошёл.
     static func meProGraceSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "meProGraceSub",
-           ru: "Не прошла оплата, обнови способ в App Store",
+           ru: "Не прошла оплата, обновите способ в App Store",
            en: "Payment didn't go through, update it in the App Store")
     }
 
@@ -7802,7 +7802,7 @@ enum AppStrings {
         tr(lang, "proGroupVisible", ru: "Видно другим", en: "Others can see")
     }
     static func proGroupPrivate(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "proGroupPrivate", ru: "Только тебе", en: "Only you")
+        tr(lang, "proGroupPrivate", ru: "Только вам", en: "Only you")
     }
 
     static func proFeatureBg(_ lang: LanguageManager.Language) -> String {
@@ -7826,7 +7826,7 @@ enum AppStrings {
     }
     static func proFeatureCarSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureCarSub",
-           ru: "8 фонов для твоей машины", en: "8 backgrounds for your car")
+           ru: "8 фонов для вашей машины", en: "8 backgrounds for your car")
     }
     static func proFeatureLine(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureLine", ru: "Цвет линии маршрута", en: "Route line colour")
@@ -7840,7 +7840,7 @@ enum AppStrings {
     }
     static func proFeatureManualSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFeatureManualSub",
-           ru: "Дорога, которую не записал", en: "The road that wasn\'t recorded")
+           ru: "Дорога, которую не записали", en: "The road that wasn\'t recorded")
     }
 
     /// «Год · 19,99 €». Период и цена одной строкой — так рисует макет, и
@@ -7924,14 +7924,14 @@ enum AppStrings {
     }
     static func proFailed(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proFailed",
-           ru: "Не получилось. Попробуй ещё раз", en: "Didn\'t go through. Try again")
+           ru: "Не получилось. Попробуйте ещё раз", en: "Didn\'t go through. Try again")
     }
     /// Восстановление не нашло покупок. Говорит и про второй Apple ID: это
     /// самая частая причина, и без неё человек решает, что мы потеряли оплату.
     /// Не «покупок нет»: так отвечает и бывшему подписчику с истёкшим PRO.
     static func proRestoreNone(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proRestoreNone",
-           ru: "Активной подписки на этом Apple ID нет. Если PRO на другом, войди в него в App Store",
+           ru: "Активной подписки на этом Apple ID нет. Если PRO на другом, войдите в него в App Store",
            en: "No active subscription on this Apple ID. If PRO is on another one, sign in to it in the App Store")
     }
 
@@ -7965,51 +7965,51 @@ enum AppStrings {
     /// ленте у других» обещало покупателю то, чего за деньги нет.
     static func proDemoBgText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoBgText",
-           ru: "Фон стоит за твоим именем в профиле — его видит каждый, кто откроет страницу. Выбери один, меняй когда хочешь.",
+           ru: "Фон стоит за вашим именем в профиле — его видит каждый, кто откроет страницу. Выберите один, меняйте когда хотите.",
            en: "The background sits behind your name on your profile, for anyone who opens it. Pick one, change it whenever.")
     }
     static func proDemoFrameTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoFrameTitle",
-           ru: "6 рамок вокруг твоего аватара", en: "6 frames around your avatar")
+           ru: "6 рамок вокруг вашего аватара", en: "6 frames around your avatar")
     }
     static func proDemoFrameText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoFrameText",
-           ru: "Рамка видна всюду, где видно тебя: в ленте, в профиле, в комментариях. Меняй когда хочешь.",
+           ru: "Рамка видна всюду, где видно вас: в ленте, в профиле, в комментариях. Меняйте когда хотите.",
            en: "The frame shows everywhere you do: in the feed, on your profile, in comments. Change it whenever.")
     }
     static func proDemoCarTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarTitle",
-           ru: "8 фонов для твоей машины", en: "8 backgrounds for your car")
+           ru: "8 фонов для вашей машины", en: "8 backgrounds for your car")
     }
     /// Фон машины виден в публичном гараже (`VehicleCardStyleWash`), в ленте —
     /// нет: `SocialFeedVehicle` его не несёт.
     static func proDemoCarText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarText",
-           ru: "Карточка машины стоит в твоём гараже и в публичном профиле. Выбери фон, меняй когда хочешь.",
+           ru: "Карточка машины стоит в вашем гараже и в публичном профиле. Выберите фон, меняйте когда хотите.",
            en: "Your car card shows in your garage and on your public profile. Pick a background, change it whenever.")
     }
     /// Гараж пуст — состояние 3. Последняя фраза обязательна: без неё силуэт
     /// читается поломкой, а не примером.
     static func proDemoCarTextNoVehicle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarTextNoVehicle",
-           ru: "Карточка машины стоит в твоём гараже и в публичном профиле. Пока машины нет, показываем пример.",
+           ru: "Карточка машины стоит в вашем гараже и в публичном профиле. Пока машины нет, показываем пример.",
            en: "Your car card shows in your garage and on your public profile. There's no car yet, so this is an example.")
     }
     static func proDemoCarEmptyTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "proDemoCarEmptyTitle", ru: "Твоя машина", en: "Your car")
+        tr(lang, "proDemoCarEmptyTitle", ru: "Ваша машина", en: "Your car")
     }
     static func proDemoCarEmptySub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarEmptySub",
-           ru: "появится здесь, когда добавишь её в гараж",
+           ru: "появится здесь, когда добавите её в гараж",
            en: "will show up here once you add it to the garage")
     }
     static func proDemoLineTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoLineTitle",
-           ru: "Твой маршрут одним цветом", en: "Your route in one colour")
+           ru: "Ваш маршрут одним цветом", en: "Your route in one colour")
     }
     static func proDemoLineText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoLineText",
-           ru: "Вместо градиента по скорости сплошная линия на карте каждой поездки. Видно только тебе.",
+           ru: "Вместо градиента по скорости сплошная линия на карте каждой поездки. Видно только вам.",
            en: "A solid line on every trip\'s map instead of the speed gradient. Only you see it.")
     }
     static func proDemoLineTextNoTrips(_ lang: LanguageManager.Language) -> String {
@@ -8026,7 +8026,7 @@ enum AppStrings {
     /// оплаты человек не должен.
     static func proDemoManualText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoManualText",
-           ru: "Поставь точки на карте, выбери день и машину. Поездка пойдёт в километры и на карту, без опыта и значков.",
+           ru: "Поставьте точки на карте, выберите день и машину. Поездка пойдёт в километры и на карту, без опыта и значков.",
            en: "Drop points on the map, pick a day and a car. The trip counts towards kilometres and the atlas, without XP or badges.")
     }
     /// Подпись под нарисованным превью. Обязательна: показать пример без неё
@@ -8038,7 +8038,7 @@ enum AppStrings {
     // MARK: - Куплено и контекстное предложение (0.8.4)
 
     static func proBoughtTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "proBoughtTitle", ru: "Ты в PRO", en: "You\'re in PRO")
+        tr(lang, "proBoughtTitle", ru: "Вы в PRO", en: "You\'re in PRO")
     }
     /// «Неделя бесплатно до 6 окт., потом 19,99 € в год» — обе половины
     /// обязательны: человек только что нажал «бесплатно», и когда начнутся
@@ -8099,7 +8099,7 @@ enum AppStrings {
     /// M3 — месяц с приложением.
     static func proCtxM3Title(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proCtxM3Title",
-           ru: "Твой маршрут может быть любого цвета",
+           ru: "Ваш маршрут может быть любого цвета",
            en: "Your route can be any colour")
     }
     static func proCtxM3Text(_ lang: LanguageManager.Language) -> String {
@@ -8242,7 +8242,7 @@ enum AppStrings {
     }
     static func showcaseExpiredText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "showcaseExpiredText",
-           ru: "Твой выбор сохранён и вернётся с подпиской. Пока показывается обычный фон.",
+           ru: "Ваш выбор сохранён и вернётся с подпиской. Пока показывается обычный фон.",
            en: "Your choice is saved and comes back with the subscription. The regular one shows for now.")
     }
     /// Бесплатный вариант линии маршрута — единственный, у которого есть не
@@ -8275,7 +8275,7 @@ enum AppStrings {
     /// закрывает витрину (`ProBoughtView`), и «Сохранить» жмут ещё раз.
     static func manualFailedProText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualFailedProText",
-           ru: "Продли и сохрани ещё раз — точки, время и машина на месте.",
+           ru: "Продлите и сохраните ещё раз — точки, время и машина на месте.",
            en: "Renew, then save again — points, time and car are kept.")
     }
     static func manualFailedDbTitle(_ lang: LanguageManager.Language) -> String {
@@ -8283,7 +8283,7 @@ enum AppStrings {
     }
     static func manualFailedDbText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualFailedDbText",
-           ru: "Что-то с базой. Попробуй ещё раз, набранное на месте.",
+           ru: "Что-то с базой. Попробуйте ещё раз, набранное на месте.",
            en: "Something\'s wrong with the database. Try again, everything is kept.")
     }
     /// Строка под кнопкой «Записать». Говорит ВСЛУХ и ДО записи, что
@@ -8657,7 +8657,7 @@ enum AppStrings {
     }
     /// Обещание, которое обязано быть правдой: дом никуда не уезжает.
     static func homeVisibleOnlyToYou(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "homeVisibleOnlyToYou", ru: "Виден только тебе", en: "Only you can see it")
+        tr(lang, "homeVisibleOnlyToYou", ru: "Виден только вам", en: "Only you can see it")
     }
     static func homeHiddenOnMap(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeHiddenOnMap", ru: "Скрыт на карте", en: "Hidden on the map")

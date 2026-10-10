@@ -52,4 +52,15 @@ final class HonestCopyShotTests: XCTestCase {
             NSPredicate(format: "label CONTAINS 'покидают телефон'")).firstMatch.waitForExistence(timeout: 5))
         capture("onboarding-location-ru")
     }
+
+    /// Немецкий перешёл на «Sie» (10 окт 2026) и стал длиннее — кадры
+    /// проверяют, что заголовки онбординга помещаются.
+    func testGermanFormalOnboarding() {
+        for page in 0...4 {
+            launch(page: page, lang: "de")
+            sleep(2)
+            capture("onboarding-de-\(page)")
+            app.terminate()
+        }
+    }
 }

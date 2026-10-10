@@ -1,20 +1,20 @@
 /* Location permission: when in use */
-"NSLocationWhenInUseUsageDescription" = "TripTrack nutzt deinen Standort, um deine Fahrtroute auf der Karte aufzuzeichnen, Strecke und Geschwindigkeit zu berechnen und die Fahrt in deinem Fahrtenbuch zu sichern.";
+"NSLocationWhenInUseUsageDescription" = "TripTrack nutzt Ihren Standort, um Ihre Fahrtroute auf der Karte aufzuzeichnen, Strecke und Geschwindigkeit zu berechnen und die Fahrt in Ihrem Fahrtenbuch zu sichern.";
 
 /* Location permission: always (background) */
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack nutzt deinen Standort im Hintergrund, um die Route weiter aufzuzeichnen, während die App nicht im Vordergrund oder der Bildschirm gesperrt ist.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack nutzt Ihren Standort im Hintergrund, um die Route weiter aufzuzeichnen, während die App nicht im Vordergrund oder der Bildschirm gesperrt ist.";
 
 /* Motion: auto-detect driving */
 "NSMotionUsageDescription" = "TripTrack nutzt Bewegungsdaten, um den Beginn einer Fahrt zu erkennen und die Aufnahme automatisch zu starten.";
 
 /* Bluetooth: auto-start/stop on car connection */
-"NSBluetoothAlwaysUsageDescription" = "TripTrack erkennt die Bluetooth-Verbindung zu deinem Auto, um die Aufnahme automatisch zu starten und zu beenden.";
+"NSBluetoothAlwaysUsageDescription" = "TripTrack erkennt die Bluetooth-Verbindung zu Ihrem Auto, um die Aufnahme automatisch zu starten und zu beenden.";
 
 /* Photo Library: add only — saving share-card to Photos */
-"NSPhotoLibraryAddUsageDescription" = "TripTrack sichert das Bild deiner Fahrt in Fotos, damit du es als Story oder Beitrag teilen kannst.";
+"NSPhotoLibraryAddUsageDescription" = "TripTrack sichert das Bild Ihrer Fahrt in Fotos, damit Sie es als Story oder Beitrag teilen können.";
 
 /* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
-"NSPhotoLibraryUsageDescription" = "TripTrack zeigt deine Mediathek, damit du Fotos zu einer Fahrt oder zu einem Fahrzeug in deiner Garage hinzufügen kannst. Die Fotos bleiben auf deinem Gerät, solange du die Fahrt nicht veröffentlichst, die Fahrzeugfotos nicht selbst für andere freigibst und Cloud-Sync nicht einschaltest.";
+"NSPhotoLibraryUsageDescription" = "TripTrack zeigt Ihre Mediathek, damit Sie Fotos zu einer Fahrt oder zu einem Fahrzeug in Ihrer Garage hinzufügen können. Die Fotos bleiben auf Ihrem Gerät, solange Sie die Fahrt nicht veröffentlichen, die Fahrzeugfotos nicht selbst für andere freigeben und Cloud-Sync nicht einschalten.";
 
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack nutzt das lokale Netzwerk, um sich beim Testen mit einem Entwicklungs- oder Beta-Server zu verbinden.";
