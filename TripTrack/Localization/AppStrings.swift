@@ -634,8 +634,10 @@ enum AppStrings {
            ru: "10–35 м · возможны неточности",
            en: "10–35 m · minor inaccuracies")
     }
+    /// С 0.8.1 запись принимает фиксы до 200 м (`FixGate`): трек не рвётся,
+    /// а грубеет; пропуски остаются там, где фиксов нет совсем.
     static func gpsLegendWeak(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "gpsLegendWeak", ru: "> 35 м · трек прерывается", en: "> 35 m · track breaks up")
+        tr(lang, "gpsLegendWeak", ru: "> 35 м · трек грубее, возможны пропуски", en: "> 35 m · rougher track, possible gaps")
     }
     static func weakSignalTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "weakSignalTitle", ru: "Сигнал слабый", en: "Weak signal")
@@ -700,10 +702,12 @@ enum AppStrings {
     static func recoveryTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recoveryTitle", ru: "Запись была прервана", en: "Recording was interrupted")
     }
+    /// Точки пишутся пачками (раз в 15 с), и пока приложение было закрыто,
+    /// ничего не писалось: сохранено до закрытия, а не «весь маршрут».
     static func recoveryBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recoveryBody",
-           ru: "Приложение закрылось до того, как Вы завершили поездку. Мы сохранили Ваш маршрут.",
-           en: "The app closed before you finished the trip. We saved your route.")
+           ru: "Приложение закрылось до того, как Вы завершили поездку. Маршрут сохранён до этого момента.",
+           en: "The app closed before you finished the trip. Your route is saved up to that point.")
     }
     static func recoveryChip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recoveryChip", ru: "Восстановлено", en: "Recovered")
@@ -2060,10 +2064,13 @@ enum AppStrings {
     static func publishFailed(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publishFailed", ru: "Не удалось опубликовать", en: "Couldn't publish")
     }
+    /// Не «нет связи»: карточка показывается и при ошибке сервера. И не
+    /// «повторим автоматически» без оговорки — автоповтор ограничен
+    /// (`SyncQueue.maxRetries`), поэтому кнопка рядом названа прямо.
     static func publishFailedBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publishFailedBody",
-           ru: "Нет связи с сервером. Поездка пока видна только Вам — мы повторим автоматически.",
-           en: "No connection. The trip is only visible to you for now — we'll retry automatically.")
+           ru: "Не получилось отправить. Поездка пока видна только Вам — попробуем ещё раз или нажмите «Повторить».",
+           en: "Couldn't send it. The trip is only visible to you for now — we'll try again, or tap Retry.")
     }
     static func retry(_ lang: LanguageManager.Language) -> String {
         tr(lang, "retry", ru: "Повторить", en: "Retry")
@@ -3272,8 +3279,10 @@ enum AppStrings {
     /// «Безвозвратно, везде» is a promise, and the flow behind it keeps it:
     /// the server account AND everything this device holds — see
     /// `LocalDataWipe`.
+    /// «Везде» было неправдой: `LocalDataWipe` стирает только этот телефон, на
+    /// втором с тем же аккаунтом локальные поездки остаются.
     static func deleteAccountSubtitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "deleteAccountSubtitle", ru: "Безвозвратно, везде", en: "Permanently, everywhere")
+        tr(lang, "deleteAccountSubtitle", ru: "Безвозвратно: сервер и этот телефон", en: "Permanently: server and this phone")
     }
     static func deleteAccountConfirmTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "deleteAccountConfirmTitle", ru: "Удалить аккаунт?", en: "Delete account?")
@@ -3281,10 +3290,12 @@ enum AppStrings {
     /// Names everything that goes, in the order the user would miss it.
     /// A destructive dialog that hedges is worse than none: this one has to
     /// leave nobody surprised afterwards.
+    /// Подписку ведёт Apple, а не наш сервер: удаление аккаунта отвязывает
+    /// её на сервере, но списания не останавливает (App Review 5.1.1(v)).
     static func deleteAccountConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "deleteAccountConfirmBody",
-           ru: "Аккаунт и всё, что на сервере — поездки, фото, машины, реакции и комментарии — удаляются навсегда. Поездки и фото на этом устройстве тоже будут стёрты. Вернуть это будет нельзя.",
-           en: "Your account and everything on the server — trips, photos, vehicles, reactions and comments — are deleted for good. The trips and photos on this device are erased too. There is no way back.")
+           ru: "Аккаунт и всё, что на сервере — поездки, фото, машины, реакции и комментарии — удаляются навсегда. Поездки и фото на этом устройстве тоже будут стёрты. Вернуть это будет нельзя. Подписка PRO через Apple ID сама не отменится — отмените её в настройках App Store.",
+           en: "Your account and everything on the server — trips, photos, vehicles, reactions and comments — are deleted for good. The trips and photos on this device are erased too. There is no way back. A PRO subscription through your Apple ID is not cancelled by this — cancel it in your App Store settings.")
     }
     static func deleteAccountConfirmAction(_ lang: LanguageManager.Language) -> String {
         tr(lang, "deleteAccountConfirmAction", ru: "Удалить навсегда", en: "Delete forever")
@@ -3422,10 +3433,13 @@ enum AppStrings {
            ru: "Поездки на всех устройствах",
            en: "Your trips on every device")
     }
+    /// Одного входа мало: приватные поездки уходят на сервер только при
+    /// включённой синхронизации (`AuthService.performFirstSync`), а кнопка на
+    /// карточке — только вход.
     static func syncCardBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncCardBody",
-           ru: "Войдите, чтобы открыть свою историю на других устройствах. Все поездки уже здесь.",
-           en: "Sign in to see your history on your other devices. All your trips are already here.")
+           ru: "Войдите, а потом включите синхронизацию в настройках — тогда история появится на других устройствах. Сейчас все поездки здесь.",
+           en: "Sign in, then turn on sync in settings to see your history on other devices. All your trips are here for now.")
     }
     static func syncCardLater(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncCardLater",
