@@ -2,7 +2,7 @@
 "NSLocationWhenInUseUsageDescription" = "TripTrack використовує геолокацію, щоб записувати маршрут поїздки на карті, обчислювати відстань і швидкість та зберігати поїздку в щоденнику подорожей.";
 
 /* Location permission: always (background) */
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack використовує геолокацію у фоновому режимі, щоб продовжувати запис маршруту, поки застосунок згорнутий, і не втратити жодної ділянки поїздки.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack використовує геолокацію у фоновому режимі, щоб продовжувати запис маршруту, поки застосунок згорнутий або екран заблоковано.";
 
 /* Motion: auto-detect driving */
 "NSMotionUsageDescription" = "TripTrack використовує дані руху, щоб автоматично визначити початок поїздки й увімкнути запис.";
@@ -14,7 +14,7 @@
 "NSPhotoLibraryAddUsageDescription" = "TripTrack зберігає картинку поїздки у Фото, щоб Ви могли опублікувати її в сторіс.";
 
 /* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
-"NSPhotoLibraryUsageDescription" = "TripTrack показує Вашу медіатеку, щоб Ви могли додати фотографії до поїздки або до машини в гаражі. Знімки залишаються на пристрої, доки Ви самі не опублікуєте поїздку або не відкриєте фотографії машини іншим.";
+"NSPhotoLibraryUsageDescription" = "TripTrack показує Вашу медіатеку, щоб Ви могли додати фотографії до поїздки або до машини в гаражі. Знімки залишаються на пристрої, доки Ви самі не опублікуєте поїздку, не відкриєте фотографії машини іншим або не ввімкнете хмарну синхронізацію.";
 
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack використовує локальну мережу для підключення до dev- або бета-сервера під час тестування.";

@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "Наприклад, Олег",
         "profileYourTripsWill": "Тут з'являться ваші поїздки",
         "profileRecordingStartsBy": "Запис почнеться автоматично, коли ви поїдете. Акаунт не потрібен.",
+        "profileRecordingStartsByButton": "Почніть запис кнопкою нижче. Автозапис вмикається на картці машини в гаражі. Акаунт не потрібен.",
         "profileRecordYourFirst": "Запишіть першу поїздку",
         "profileYourKilometersStreaks": "Тут будуть Ваші кілометри, серії та бейджі.",
         "statsYear": "році",

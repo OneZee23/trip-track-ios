@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "мысалы, Алекс",
         "profileYourTripsWill": "Мұнда сапарларыңыз пайда болады",
         "profileRecordingStartsBy": "Жолға шыққаныңызда жазу өздігінен басталады. Аккаунт қажет емес.",
+        "profileRecordingStartsByButton": "Жазуды төмендегі батырмамен бастаңыз. Автожазу гараждағы көлік карточкасынан қосылады. Аккаунт қажет емес.",
         "profileRecordYourFirst": "Алғашқы сапарыңызды жазыңыз",
         "profileYourKilometersStreaks": "Мұнда километрлеріңіз, серияларыңыз және белгілеріңіз болады.",
         "statsYear": "жылы",

@@ -6557,10 +6557,18 @@ enum AppStrings {
            ru: "Здесь появятся ваши поездки",
            en: "Your trips will show up here")
     }
+    /// Только при включённой автозаписи. По умолчанию она выключена, и новичок
+    /// видел обещание, которое приложение не выполнит, пока он не зайдёт в
+    /// настройки гаража; для него — `profileRecordingStartsByButton`.
     static func profileRecordingStartsBy(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileRecordingStartsBy",
            ru: "Запись начнётся автоматически, когда вы поедете. Аккаунт не нужен.",
            en: "Recording starts by itself once you drive. No account needed.")
+    }
+    static func profileRecordingStartsByButton(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileRecordingStartsByButton",
+           ru: "Начните запись кнопкой ниже. Автозапись включается на карточке машины в гараже. Аккаунт не нужен.",
+           en: "Start recording with the button below. Auto-record is turned on from a car’s card in your garage. No account needed.")
     }
     static func profileRecordYourFirst(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileRecordYourFirst",

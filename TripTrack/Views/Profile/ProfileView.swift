@@ -913,9 +913,9 @@ struct ProfileView: View {
         return trimmed
     }
 
-    /// «Здесь появятся ваши поездки» (canon). The point of the copy is the
-    /// second line: recording is automatic and needs no account — that's the
-    /// product's whole pitch, and the empty state is where it lands.
+    /// «Здесь появятся ваши поездки» (canon). The second line says how a first
+    /// trip actually starts: automatically only when auto-record is on (it is
+    /// off by default), otherwise with the button — and no account either way.
     private func noTripsCard(_ c: AppTheme.Colors) -> some View {
         let lng = lang.language
         return VStack(spacing: 12) {
@@ -933,7 +933,9 @@ struct ProfileView: View {
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
-            Text(AppStrings.profileRecordingStartsBy(lng))
+            Text(settings.autoRecordMode == .off
+                 ? AppStrings.profileRecordingStartsByButton(lng)
+                 : AppStrings.profileRecordingStartsBy(lng))
                 .font(.inter(14))
                 .lineSpacing(4)
                 .foregroundStyle(c.textSecondary)

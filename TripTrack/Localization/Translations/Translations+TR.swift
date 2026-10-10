@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "örn. Alex",
         "profileYourTripsWill": "Gezilerin burada görünecek",
         "profileRecordingStartsBy": "Sen yola çıkar çıkmaz kayıt kendiliğinden başlar. Hesap gerekmez.",
+        "profileRecordingStartsByButton": "Kaydı aşağıdaki düğmeyle başlat. Otomatik kayıt, garajdaki bir aracın kartından açılır. Hesap gerekmez.",
         "profileRecordYourFirst": "İlk gezini kaydet",
         "profileYourKilometersStreaks": "Kilometrelerin, serilerin ve rozetlerin burada olacak.",
         "statsYear": "yıl",

@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "mis. Alex",
         "profileYourTripsWill": "Perjalananmu akan muncul di sini",
         "profileRecordingStartsBy": "Perekaman mulai sendiri begitu kamu jalan. Tidak perlu akun.",
+        "profileRecordingStartsByButton": "Mulai merekam dengan tombol di bawah. Rekam otomatis dinyalakan dari kartu mobil di garasi. Tidak perlu akun.",
         "profileRecordYourFirst": "Rekam perjalanan pertamamu",
         "profileYourKilometersStreaks": "Kilometer, rentetan, dan lencanamu akan ada di sini.",
         "statsYear": "tahun",

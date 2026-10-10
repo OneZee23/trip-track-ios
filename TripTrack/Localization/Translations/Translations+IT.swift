@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "ad es., Alex",
         "profileYourTripsWill": "Qui compariranno i tuoi viaggi",
         "profileRecordingStartsBy": "La registrazione parte da sola appena guidi. Non serve un account.",
+        "profileRecordingStartsByButton": "Avvia la registrazione con il pulsante qui sotto. La registrazione automatica si attiva dalla scheda di un'auto nel garage. Non serve un account.",
         "profileRecordYourFirst": "Registra il tuo primo viaggio",
         "profileYourKilometersStreaks": "Qui ci saranno i tuoi chilometri, le serie e i distintivi.",
         "statsYear": "anno",

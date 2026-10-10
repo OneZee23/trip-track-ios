@@ -911,6 +911,7 @@ extension Translations {
         "nameEditorEGAlex": "hal. Alex",
         "profileYourTripsWill": "Lalabas dito ang mga biyahe mo",
         "profileRecordingStartsBy": "Kusang magsisimula ang pag-record pagkaandar mo. Hindi kailangan ng account.",
+        "profileRecordingStartsByButton": "Simulan ang pag-record gamit ang button sa ibaba. Binubuksan ang awtomatikong pag-record mula sa card ng sasakyan sa garahe. Hindi kailangan ng account.",
         "profileRecordYourFirst": "I-record ang unang biyahe mo",
         "profileYourKilometersStreaks": "Dito lalabas ang kilometro, sunod-sunod na araw at mga badge mo.",
         "statsYear": "taon",

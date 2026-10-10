@@ -2,7 +2,7 @@
 "NSLocationWhenInUseUsageDescription" = "TripTrack korzysta z Twojej lokalizacji, aby zapisywać przebieg trasy na mapie, liczyć dystans i prędkość oraz zapisywać trasę w dzienniku.";
 
 /* Location permission: always (background) */
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack korzysta z lokalizacji w tle, aby nagrywać trasę dalej, gdy aplikacja nie jest na wierzchu — dzięki temu żaden fragment przejazdu nie przepada.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack korzysta z lokalizacji w tle, aby nagrywać trasę dalej, gdy aplikacja nie jest na wierzchu lub ekran jest zablokowany.";
 
 /* Motion: auto-detect driving */
 "NSMotionUsageDescription" = "TripTrack korzysta z danych o ruchu, aby wykryć początek jazdy i automatycznie włączyć nagrywanie.";
@@ -14,7 +14,7 @@
 "NSPhotoLibraryAddUsageDescription" = "TripTrack zapisuje obrazek trasy w Zdjęciach, żebyś mógł udostępnić go jako relację albo post.";
 
 /* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
-"NSPhotoLibraryUsageDescription" = "TripTrack pokazuje Twoją bibliotekę zdjęć, abyś mógł dodać zdjęcia do przejazdu lub do pojazdu w garażu. Zdjęcia zostają na urządzeniu, dopóki sam nie opublikujesz przejazdu albo nie udostępnisz zdjęć pojazdu innym.";
+"NSPhotoLibraryUsageDescription" = "TripTrack pokazuje Twoją bibliotekę zdjęć, abyś mógł dodać zdjęcia do przejazdu lub do pojazdu w garażu. Zdjęcia zostają na urządzeniu, dopóki sam nie opublikujesz przejazdu, nie udostępnisz zdjęć pojazdu innym albo nie włączysz synchronizacji w chmurze.";
 
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack korzysta z sieci lokalnej, aby połączyć się z serwerem deweloperskim lub beta podczas testów.";
