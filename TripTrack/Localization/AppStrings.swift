@@ -708,7 +708,7 @@ enum AppStrings {
     /// ничего не писалось: сохранено до закрытия, а не «весь маршрут».
     static func recoveryBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recoveryBody",
-           ru: "Приложение закрылось до того, как Вы завершили поездку. Маршрут сохранён до этого момента.",
+           ru: "Приложение закрылось до того, как вы завершили поездку. Маршрут сохранён до этого момента.",
            en: "The app closed before you finished the trip. Your route is saved up to that point.")
     }
     static func recoveryChip(_ lang: LanguageManager.Language) -> String {
@@ -736,7 +736,7 @@ enum AppStrings {
     }
     static func publishFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publishFootnote",
-           ru: "Поездки приватны, пока Вы не опубликуете их сами.",
+           ru: "Поездки приватны, пока вы не опубликуете их сами.",
            en: "Trips stay private until you publish them yourself.")
     }
     /// The canon's one-line toggle hint. It replaces the two-line
@@ -1212,7 +1212,7 @@ enum AppStrings {
         let terms = "[\(termsTitle)](\(termsURL))"
         let privacy = "[\(privacyTitle)](\(privacyURL))"
         switch lang {
-        case .ru: return "Продолжая, Вы соглашаетесь с \(terms) и \(privacy)"
+        case .ru: return "Продолжая, вы соглашаетесь с \(terms) и \(privacy)"
         case .en: return "By continuing, you accept our \(terms) and \(privacy)"
         case .de: return "Wenn Sie fortfahren, akzeptieren Sie die \(terms) und die \(privacy)"
         case .es: return "Si continúas, aceptas los \(terms) y la \(privacy)"
@@ -1222,7 +1222,7 @@ enum AppStrings {
         case .id: return "Dengan melanjutkan, Anda menyetujui \(terms) dan \(privacy)"
         case .tr: return "Devam ederek \(terms) ve \(privacy) belgelerini kabul edersiniz"
         case .fil: return "Sa pagpapatuloy, tinatanggap mo ang \(terms) at \(privacy)"
-        case .uk: return "Продовжуючи, Ви погоджуєтесь з \(terms) і \(privacy)"
+        case .uk: return "Продовжуючи, ви погоджуєтесь з \(terms) і \(privacy)"
         case .kk: return "Жалғастыра отырып, сіз \(terms) және \(privacy) қабылдайсыз"
         case .pt: return "Ao continuar, você aceita os \(terms) e a \(privacy)"
         }
@@ -2086,7 +2086,7 @@ enum AppStrings {
     /// (`SyncQueue.maxRetries`), поэтому кнопка рядом названа прямо.
     static func publishFailedBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publishFailedBody",
-           ru: "Не получилось отправить. Поездка пока видна только Вам — попробуем ещё раз или нажмите «Повторить».",
+           ru: "Не получилось отправить. Поездка пока видна только вам — попробуем ещё раз или нажмите «Повторить».",
            en: "Couldn't send it. The trip is only visible to you for now — we'll try again, or tap Retry.")
     }
     static func retry(_ lang: LanguageManager.Language) -> String {
@@ -2292,7 +2292,7 @@ enum AppStrings {
     }
     static func scanHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "scanHint",
-           ru: "Убедитесь, что Вы в машине и магнитола включена",
+           ru: "Убедитесь, что вы в машине и магнитола включена",
            en: "Make sure you're in the car with the stereo on")
     }
     static func noDevicesFound(_ lang: LanguageManager.Language) -> String {
@@ -2318,7 +2318,7 @@ enum AppStrings {
     // MARK: - Auto-record Notifications
     static func notifTripStartTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStartTitle",
-           ru: "Похоже, Вы в машине",
+           ru: "Похоже, вы в машине",
            en: "Looks like you're in the car")
     }
     static func notifTripStartBody(_ lang: LanguageManager.Language, deviceName: String) -> String {
@@ -3408,7 +3408,7 @@ enum AppStrings {
     static func signInLegalMarkdown(_ lang: LanguageManager.Language, termsURL: String) -> String {
         let terms = "[\(tr(lang, "signInLegalTermsWord", ru: "условиями", en: "terms"))](\(termsURL))"
         switch lang {
-        case .ru: return "Продолжая, Вы соглашаетесь с \(terms)"
+        case .ru: return "Продолжая, вы соглашаетесь с \(terms)"
         case .en: return "By continuing, you agree to the \(terms)"
         case .de: return "Wenn Sie fortfahren, stimmen Sie den \(terms) zu"
         case .es: return "Si continúas, aceptas las \(terms)"
@@ -3418,7 +3418,7 @@ enum AppStrings {
         case .id: return "Dengan melanjutkan, Anda menyetujui \(terms)"
         case .tr: return "Devam ederek \(terms) kabul edersiniz"
         case .fil: return "Sa pagpapatuloy, sumasang-ayon ka sa \(terms)"
-        case .uk: return "Продовжуючи, Ви погоджуєтесь з \(terms)"
+        case .uk: return "Продовжуючи, ви погоджуєтесь з \(terms)"
         case .kk: return "Жалғастыра отырып, сіз \(terms) қабылдайсыз"
         case .pt: return "Ao continuar, você concorda com os \(terms)"
         }
@@ -3626,7 +3626,7 @@ enum AppStrings {
     }
     static func vehicleSoldHintOn(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleSoldHintOn",
-           ru: "Машина отмечена проданной. Верните её, если продажа не состоялась или Вы выкупили её обратно.",
+           ru: "Машина отмечена проданной. Верните её, если продажа не состоялась или вы выкупили её обратно.",
            en: "The vehicle is marked as sold. Undo it if the sale fell through or you bought it back.")
     }
     static func vehicleSellConfirmTitle(_ lang: LanguageManager.Language) -> String {
@@ -3842,7 +3842,7 @@ enum AppStrings {
     /// Почему приватная поездка тут ЕСТЬ, а в чужом гараже её не будет.
     static func vehicleTripsPrivateNote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleTripsPrivateNote",
-           ru: "Приватные поездки — с замком, и видны только Вам. В чужом гараже этой машины их нет: ни строки, ни километров, ни высоты.",
+           ru: "Приватные поездки — с замком, и видны только вам. В чужом гараже этой машины их нет: ни строки, ни километров, ни высоты.",
            en: "Private trips carry a lock and are visible only to you. In someone else's garage this vehicle has none of them — no row, no kilometres, no elevation.")
     }
     static func vehiclePhotos(_ lang: LanguageManager.Language) -> String {
@@ -4366,7 +4366,7 @@ enum AppStrings {
         }
     }
     static func activityFollowedYou(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "activityFollowedYou", ru: "подписался на Вас", en: "started following you")
+        tr(lang, "activityFollowedYou", ru: "подписался на вас", en: "started following you")
     }
     /// With the comment text when the server sent it, otherwise the trip.
     static func activityCommented(_ lang: LanguageManager.Language, text: String?, trip: String) -> String {
@@ -4543,11 +4543,11 @@ enum AppStrings {
     /// draws no line at all (see `SuggestionMatchReason`).
     static func suggestReasonSharedRegion(_ lang: LanguageManager.Language) -> String {
         tr(lang, "suggestReasonSharedRegion",
-           ru: "Ездит в Ваших краях",
+           ru: "Ездит в ваших краях",
            en: "Drives in your regions")
     }
     static func suggestReasonNearby(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "suggestReasonNearby", ru: "Рядом с Вами", en: "Near you")
+        tr(lang, "suggestReasonNearby", ru: "Рядом с вами", en: "Near you")
     }
     static func suggestReasonPopular(_ lang: LanguageManager.Language) -> String {
         tr(lang, "suggestReasonPopular", ru: "Популярный водитель", en: "Popular driver")
@@ -4677,7 +4677,7 @@ enum AppStrings {
     /// `exifLongitude` уходят полями пейлоада (кроме зоны дома).
     static func syncEnableConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncEnableConfirmBody",
-           ru: "Ваши поездки, фото, автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Из файлов фото метаданные удаляются, но время и место съёмки сохраняются отдельно, чтобы ставить снимки на карту. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности.",
+           ru: "Ваши поездки, фото, автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других ваших устройствах. Из файлов фото метаданные удаляются, но время и место съёмки сохраняются отдельно, чтобы ставить снимки на карту. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности.",
            en: "Your trips, photos, vehicles and settings will be uploaded to our EU server so you can access them on your other devices. Metadata is stripped from photo files, but the capture time and place are kept separately to place photos on the map. You can turn this off anytime. See our Privacy Policy for details.")
     }
     static func syncEnableConfirmAction(_ lang: LanguageManager.Language) -> String {
@@ -4691,7 +4691,7 @@ enum AppStrings {
     }
     static func wipeServerConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "wipeServerConfirmBody",
-           ru: "Все Ваши поездки, фотографии и гараж будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите.",
+           ru: "Все ваши поездки, фотографии и гараж будут удалены с сервера. Локальные данные сохранятся, вы останетесь в аккаунте.\n\nСинхронизация будет выключена — вы сможете включить её снова, когда захотите.",
            en: "All your trips, photos and garage will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
     }
     /// Показывается, если часть объектов удалить не удалось (сеть, сервер).
@@ -4707,7 +4707,7 @@ enum AppStrings {
     // Migrated verbatim: 3-way public-trips sign-out dialog.
     static func signOutPublishedTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signOutPublishedTitle",
-           ru: "У Вас есть публичные поездки",
+           ru: "У вас есть публичные поездки",
            en: "You have public trips")
     }
     static func signOutHidePublic(_ lang: LanguageManager.Language) -> String {
@@ -5050,7 +5050,7 @@ enum AppStrings {
     }
     static func nameHelper(_ lang: LanguageManager.Language, max: Int) -> String {
         switch lang {
-        case .ru: return "Так Вас увидят в ленте и профиле. До \(max) символов."
+        case .ru: return "Так вас увидят в ленте и профиле. До \(max) символов."
         case .en: return "This is how you'll appear in the feed and profile. Up to \(max) characters."
         case .de: return "So erscheinen Sie im Feed und im Profil. Bis zu \(max) Zeichen."
         case .es: return "Así aparecerás en el feed y en el perfil. Hasta \(max) caracteres."
@@ -5060,7 +5060,7 @@ enum AppStrings {
         case .id: return "Begini kamu akan tampil di feed dan profil. Maksimal \(max) karakter."
         case .tr: return "Akışta ve profilde böyle görüneceksin. En fazla \(max) karakter."
         case .fil: return "Ganito ka lalabas sa feed at profile. Hanggang \(max) na karakter."
-        case .uk: return "Так Вас побачать у стрічці та профілі. До \(max) символів."
+        case .uk: return "Так вас побачать у стрічці та профілі. До \(max) символів."
         case .kk: return "Таспада және профильде осылай көрінесіз. \(max) таңбаға дейін."
         case .pt: return "É assim que você vai aparecer no feed e no perfil. Até \(max) caracteres."
         }
@@ -6572,12 +6572,12 @@ enum AppStrings {
     }
     static func notificationPreferencesWhenSomeoneReacts(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesWhenSomeoneReacts",
-           ru: "Когда кто-то отреагирует на Вашу публичную поездку",
+           ru: "Когда кто-то отреагирует на вашу публичную поездку",
            en: "When someone reacts to your public trip")
     }
     static func notificationPreferencesWhenSomeoneFollows(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesWhenSomeoneFollows",
-           ru: "Когда кто-то подписывается на Ваш профиль",
+           ru: "Когда кто-то подписывается на ваш профиль",
            en: "When someone follows your profile")
     }
     static func notificationPreferencesComments(_ lang: LanguageManager.Language) -> String {
@@ -6585,7 +6585,7 @@ enum AppStrings {
     }
     static func notificationPreferencesWhenSomeoneComments(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesWhenSomeoneComments",
-           ru: "Когда кто-то комментирует Вашу публичную поездку",
+           ru: "Когда кто-то комментирует вашу публичную поездку",
            en: "When someone comments on your public trip")
     }
     static func notificationPreferencesWeeklyRecap(_ lang: LanguageManager.Language) -> String {
@@ -6593,22 +6593,22 @@ enum AppStrings {
     }
     static func notificationPreferencesEveryMondayHow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesEveryMondayHow",
-           ru: "Каждый понедельник — сколько Вы проехали за прошлую неделю",
+           ru: "Каждый понедельник — сколько вы проехали за прошлую неделю",
            en: "Every Monday — how much you drove last week")
     }
     static func notificationPreferencesWhatToNotify(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesWhatToNotify",
-           ru: "Что Вас уведомлять",
+           ru: "Что вас уведомлять",
            en: "What to notify you about")
     }
     static func notificationPreferencesPickWhatYou(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesPickWhatYou",
-           ru: "Здесь вы выбираете, о чём приходит уведомление — и в push'ах, и в ленте уведомлений внутри приложения. Системные настройки iOS остаются под Вашим контролем отдельно.",
+           ru: "Здесь вы выбираете, о чём приходит уведомление — и в push'ах, и в ленте уведомлений внутри приложения. Системные настройки iOS остаются под вашим контролем отдельно.",
            en: "Pick what you want to hear about — both in push notifications and in the in-app inbox. System-level iOS notification settings remain separate.")
     }
     static func notificationPreferencesNotificationsYouTurn(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationPreferencesNotificationsYouTurn",
-           ru: "Уведомления, которые Вы выключите, не будут приходить ни на телефон, ни в приложение. Включить обратно можно в любой момент.",
+           ru: "Уведомления, которые вы выключите, не будут приходить ни на телефон, ни в приложение. Включить обратно можно в любой момент.",
            en: "Notifications you turn off won't reach your phone OR the in-app inbox. You can turn them back on any time.")
     }
     static func notificationsInboxFollowing(_ lang: LanguageManager.Language) -> String {
@@ -6622,7 +6622,7 @@ enum AppStrings {
     }
     static func notificationsInboxWhenSomeoneReacts(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notificationsInboxWhenSomeoneReacts",
-           ru: "Когда кто-то отреагирует на Вашу поездку или подпишется — увидите здесь.",
+           ru: "Когда кто-то отреагирует на вашу поездку или подпишется — увидите здесь.",
            en: "When someone reacts to your trip or follows you, it'll show up here.")
     }
     static func nameEditorEGAlex(_ lang: LanguageManager.Language) -> String {
@@ -6653,7 +6653,7 @@ enum AppStrings {
     }
     static func profileYourKilometersStreaks(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileYourKilometersStreaks",
-           ru: "Здесь будут Ваши километры, серии и бейджи.",
+           ru: "Здесь будут ваши километры, серии и бейджи.",
            en: "Your kilometers, streaks and badges will appear here.")
     }
     static func statsYear(_ lang: LanguageManager.Language) -> String {
@@ -6821,7 +6821,7 @@ enum AppStrings {
     }
     static func tripDetailThisTripWill(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripDetailThisTripWill",
-           ru: "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной.",
+           ru: "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только вы.\n\nРеакции и комментарии не сохранятся, если вы потом снова сделаете её публичной.",
            en: "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.")
     }
     static func tripDetailMyTrip(_ lang: LanguageManager.Language) -> String {

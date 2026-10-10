@@ -11,10 +11,10 @@
 "NSBluetoothAlwaysUsageDescription" = "TripTrack определяет подключение к Bluetooth-устройству автомобиля, чтобы автоматически начать и завершить запись поездки.";
 
 /* Photo Library: add only — saving share-card to Photos */
-"NSPhotoLibraryAddUsageDescription" = "TripTrack сохраняет картинку поездки в Фото, чтобы Вы могли опубликовать её в сторис.";
+"NSPhotoLibraryAddUsageDescription" = "TripTrack сохраняет картинку поездки в Фото, чтобы вы могли опубликовать её в сторис.";
 
 /* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
-"NSPhotoLibraryUsageDescription" = "TripTrack показывает Вашу медиатеку, чтобы Вы могли добавить фотографии к поездке или к машине в гараже. Снимки остаются на устройстве, пока Вы сами не опубликуете поездку, не откроете фотографии машины другим или не включите облачную синхронизацию.";
+"NSPhotoLibraryUsageDescription" = "TripTrack показывает вашу медиатеку, чтобы вы могли добавить фотографии к поездке или к машине в гараже. Снимки остаются на устройстве, пока вы сами не опубликуете поездку, не откроете фотографии машины другим или не включите облачную синхронизацию.";
 
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack использует локальную сеть для подключения к dev- или бета-серверу при тестировании сборок.";
