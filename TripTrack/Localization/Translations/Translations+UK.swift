@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Входимо…",
         "signInErrorRetry": "Не вдалося увійти. Спробуйте ще раз.",
         "signInLegalTermsWord": "умовами",
-        "signInPromptAppleFailed": "Вхід через Apple не спрацював. Перевірте, що Ви увійшли в iCloud у налаштуваннях пристрою.",
+        "signInPromptAppleFailed": "Не вдалося увійти через Apple. Перевірте інтернет і вхід в Apple ID у налаштуваннях та спробуйте ще раз.",
         "signInFailedTitle": "Не вдалося увійти",
         "ok": "ОК",
         "guestFeedBanner": "Увійдіть, щоб підписуватися й реагувати",

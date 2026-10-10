@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Sedang masuk…",
         "signInErrorRetry": "Gagal masuk. Silakan coba lagi.",
         "signInLegalTermsWord": "ketentuan",
-        "signInPromptAppleFailed": "Masuk dengan Apple gagal. Pastikan kamu sudah masuk ke iCloud di Pengaturan perangkat.",
+        "signInPromptAppleFailed": "Gagal masuk dengan Apple. Periksa koneksi dan Apple ID di Pengaturan, lalu coba lagi.",
         "signInFailedTitle": "Gagal masuk",
         "ok": "OK",
         "guestFeedBanner": "Masuk untuk mengikuti dan bereaksi",

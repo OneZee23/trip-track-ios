@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Connexion…",
         "signInErrorRetry": "Connexion impossible. Veuillez réessayer.",
         "signInLegalTermsWord": "conditions",
-        "signInPromptAppleFailed": "La connexion avec Apple a échoué. Vérifiez que vous êtes connecté à iCloud dans les réglages de l'appareil.",
+        "signInPromptAppleFailed": "Connexion avec Apple impossible. Vérifiez votre connexion et votre identifiant Apple dans les Réglages, puis réessayez.",
         "signInFailedTitle": "Connexion impossible",
         "ok": "OK",
         "guestFeedBanner": "Connectez-vous pour suivre et réagir",

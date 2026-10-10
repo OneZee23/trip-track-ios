@@ -3408,10 +3408,13 @@ enum AppStrings {
         case .pt: return "Ao continuar, você concorda com os \(terms)"
         }
     }
+    /// Один текст на две причины: Apple отказал, или Apple одобрил, а не
+    /// принял наш сервер (`auth.lastAuthError`). Прежний «проверьте iCloud»
+    /// во втором случае винил человека в нашей ошибке.
     static func signInPromptAppleFailed(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signInPromptAppleFailed",
-           ru: "Apple-вход не сработал. Проверьте, что Вы залогинены в iCloud в настройках устройства.",
-           en: "Apple sign-in failed. Make sure you're signed into iCloud in device Settings.")
+           ru: "Не получилось войти через Apple. Проверьте интернет и вход в Apple ID в настройках и попробуйте ещё раз.",
+           en: "Couldn't sign in with Apple. Check your connection and your Apple ID in Settings, then try again.")
     }
     static func signInFailedTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signInFailedTitle", ru: "Не удалось войти", en: "Sign in failed")

@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Accesso in corso…",
         "signInErrorRetry": "Accesso non riuscito. Riprova.",
         "signInLegalTermsWord": "termini",
-        "signInPromptAppleFailed": "L'accesso con Apple non ha funzionato. Verifica di aver effettuato l'accesso a iCloud nelle impostazioni del dispositivo.",
+        "signInPromptAppleFailed": "Accesso con Apple non riuscito. Controlla la connessione e il tuo ID Apple in Impostazioni e riprova.",
         "signInFailedTitle": "Accesso non riuscito",
         "ok": "OK",
         "guestFeedBanner": "Accedi per seguire e reagire",

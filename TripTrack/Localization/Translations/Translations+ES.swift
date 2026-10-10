@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Iniciando sesión…",
         "signInErrorRetry": "No se pudo iniciar sesión. Inténtalo de nuevo.",
         "signInLegalTermsWord": "condiciones",
-        "signInPromptAppleFailed": "El inicio de sesión con Apple falló. Comprueba que tienes la sesión de iCloud iniciada en los Ajustes del dispositivo.",
+        "signInPromptAppleFailed": "No se pudo iniciar sesión con Apple. Revisa la conexión y tu ID de Apple en Ajustes e inténtalo de nuevo.",
         "signInFailedTitle": "No se pudo iniciar sesión",
         "ok": "OK",
         "guestFeedBanner": "Inicia sesión para seguir y reaccionar",

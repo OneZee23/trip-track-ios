@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Кіріп жатырмыз…",
         "signInErrorRetry": "Кіру мүмкін болмады. Қайта көріңіз.",
         "signInLegalTermsWord": "шарттарымен",
-        "signInPromptAppleFailed": "Apple арқылы кіру сәтсіз аяқталды. Құрылғы параметрлерінде iCloud-қа кіргеніңізді тексеріңіз.",
+        "signInPromptAppleFailed": "Apple арқылы кіру сәтсіз. Интернетті және баптаулардағы Apple ID-ді тексеріп, қайта байқап көріңіз.",
         "signInFailedTitle": "Кіру мүмкін болмады",
         "ok": "ОК",
         "guestFeedBanner": "Жазылу және реакция білдіру үшін кіріңіз",

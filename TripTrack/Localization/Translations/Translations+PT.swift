@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Entrando…",
         "signInErrorRetry": "Não foi possível entrar. Tente de novo.",
         "signInLegalTermsWord": "termos",
-        "signInPromptAppleFailed": "O login com a Apple não funcionou. Confira se você está conectado ao iCloud nos Ajustes do aparelho.",
+        "signInPromptAppleFailed": "Não foi possível entrar com a Apple. Verifique a conexão e seu ID Apple nos Ajustes e tente de novo.",
         "signInFailedTitle": "Não foi possível entrar",
         "ok": "OK",
         "guestFeedBanner": "Faça login para seguir e reagir",

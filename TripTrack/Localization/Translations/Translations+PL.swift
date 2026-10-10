@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Logowanie…",
         "signInErrorRetry": "Nie udało się zalogować. Spróbuj jeszcze raz.",
         "signInLegalTermsWord": "warunki",
-        "signInPromptAppleFailed": "Logowanie przez Apple nie zadziałało. Sprawdź, czy jesteś zalogowany w iCloud w ustawieniach urządzenia.",
+        "signInPromptAppleFailed": "Nie udało się zalogować przez Apple. Sprawdź internet i Apple ID w Ustawieniach, potem spróbuj ponownie.",
         "signInFailedTitle": "Nie udało się zalogować",
         "ok": "OK",
         "guestFeedBanner": "Zaloguj się, aby obserwować i reagować",

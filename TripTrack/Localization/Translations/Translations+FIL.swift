@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Nagsa-sign in…",
         "signInErrorRetry": "Hindi naka-sign in. Pakisubukan ulit.",
         "signInLegalTermsWord": "mga tuntunin",
-        "signInPromptAppleFailed": "Hindi gumana ang pag-sign in gamit ang Apple. Tiyaking naka-sign in ka sa iCloud sa Settings ng device.",
+        "signInPromptAppleFailed": "Hindi nakapag-sign in gamit ang Apple. Tingnan ang koneksyon at ang Apple ID mo sa Settings, saka subukan ulit.",
         "signInFailedTitle": "Hindi naka-sign in",
         "ok": "OK",
         "guestFeedBanner": "Mag-sign in para maka-follow at maka-react",

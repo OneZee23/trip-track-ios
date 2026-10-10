@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Anmeldung…",
         "signInErrorRetry": "Anmeldung fehlgeschlagen. Bitte versuch es nochmal.",
         "signInLegalTermsWord": "Nutzungsbedingungen",
-        "signInPromptAppleFailed": "Die Anmeldung mit Apple hat nicht funktioniert. Prüfe, ob du in den Geräteeinstellungen bei iCloud angemeldet bist.",
+        "signInPromptAppleFailed": "Anmeldung mit Apple hat nicht geklappt. Prüfe die Internetverbindung und deine Apple-ID in den Einstellungen und versuche es erneut.",
         "signInFailedTitle": "Anmeldung fehlgeschlagen",
         "ok": "OK",
         "guestFeedBanner": "Melde dich an, um zu folgen und zu reagieren",

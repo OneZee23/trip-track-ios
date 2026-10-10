@@ -433,7 +433,7 @@ extension Translations {
         "signInLoading": "Giriş yapılıyor…",
         "signInErrorRetry": "Giriş yapılamadı. Lütfen tekrar dene.",
         "signInLegalTermsWord": "koşulları",
-        "signInPromptAppleFailed": "Apple ile giriş çalışmadı. Cihaz ayarlarında iCloud'a giriş yaptığından emin ol.",
+        "signInPromptAppleFailed": "Apple ile giriş yapılamadı. Bağlantını ve Ayarlar'daki Apple Kimliğini kontrol edip yeniden dene.",
         "signInFailedTitle": "Giriş yapılamadı",
         "ok": "Tamam",
         "guestFeedBanner": "Takip etmek ve tepki vermek için giriş yap",
