@@ -817,7 +817,8 @@ struct TrackingView: View {
         )
     }
 
-    /// Amber banner: GPS fix lost mid-trip (Kalman keeps the track alive).
+    /// Amber banner: GPS fix lost mid-trip. No points are recorded meanwhile;
+    /// the Kalman prediction only draws the line on screen for a few seconds.
     private var signalLostBanner: some View {
         let amber = Color(red: 0xF5/255, green: 0xA6/255, blue: 0x23/255)
         return HStack(spacing: 10) {

@@ -354,13 +354,19 @@ struct OnboardingView: View {
 
             VStack {
                 HStack {
-                    Text(AppStrings.onboardingRecordedAuto(lang.language))
+                    // Над макетом — «Пример»: это не чья-то поездка. Над
+                    // собственной поездкой человека подписи нет вовсе: она
+                    // могла быть записана кнопкой, и «записано автоматически»
+                    // было бы неправдой (автозапись по умолчанию выключена).
+                    if realTrip == nil {
+                    Text(AppStrings.proDemoExample(lang.language))
                         .font(.inter(12.5, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72), in: Capsule())
                         .overlay(Capsule().stroke(.white.opacity(0.08), lineWidth: 1))
+                    }
                     Spacer()
                 }
                 Spacer()

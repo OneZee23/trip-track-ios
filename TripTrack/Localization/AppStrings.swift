@@ -648,10 +648,13 @@ enum AppStrings {
     static func signalLostTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signalLostTitle", ru: "Сигнал GPS потерян", en: "GPS signal lost")
     }
+    /// Без сигнала точки не пишутся; прогноз фильтра только рисует линию на
+    /// экране. Пропуск закрывает финиш (`PostTripTrackProcessor.fillOpenGaps`),
+    /// а дорогу — `RoadGapFiller`, только при сети. «Восстановим» обещало больше.
     static func signalLostHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signalLostHint",
-           ru: "Пишем по последней точке — восстановим, когда сигнал вернётся",
-           en: "Holding last point — we'll recover when the signal returns")
+           ru: "Точки сейчас не пишутся. После поездки пропуск соединим линией, при сети — по дороге",
+           en: "No points are being recorded. After the trip we'll bridge the gap, along the road when online")
     }
     static func recordingPausedPill(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recordingPausedPill", ru: "Запись на паузе", en: "Recording paused")
@@ -1006,10 +1009,13 @@ enum AppStrings {
            ru: "Публикация поездок на глобальной карте",
            en: "Publish trips on the global map")
     }
+    /// «Анонимизируется» было неправдой: сервер срезает концы
+    /// (`anonymize.util.ts`, 500 м) и огрубляет точки, но отдаёт имя автора,
+    /// аватар, уровень, название, дату, длительность и скорости.
     static func publishOnGlobeSubtitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publishOnGlobeSubtitle",
-           ru: "Только публичные поездки, маршрут анонимизируется (концы обрезаются). Приватные не показываются.",
-           en: "Public trips only, route is anonymized (endpoints trimmed). Private trips are never shown.")
+           ru: "Только публичные поездки. С каждого конца маршрута срезается по 500 м, но рядом видны ваше имя, дата и цифры поездки. Приватные не показываются.",
+           en: "Public trips only. 500 m is cut from each end of the route, but your name, the date and the trip's numbers are shown. Private trips are never shown.")
     }
     static func optYes(_ lang: LanguageManager.Language) -> String {
         tr(lang, "optYes", ru: "Да", en: "Yes")
@@ -1092,15 +1098,12 @@ enum AppStrings {
            ru: "Вот как выглядит ваша поездка",
            en: "This is what your trip looks like")
     }
+    /// Не «записываются сами»: автозапись по умолчанию выключена. И расход
+    /// не замеряется, а считается по цифрам машины (`EnergyEstimate`).
     static func onboardingValueCaption(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingValueCaption",
-           ru: "Поездки записываются сами — маршрут, скорость и расход.",
-           en: "Trips record themselves — route, speed and fuel.")
-    }
-    static func onboardingRecordedAuto(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "onboardingRecordedAuto",
-           ru: "Записано автоматически",
-           en: "Recorded automatically")
+           ru: "Маршрут, скорость и расход по данным вашей машины — в одной карточке.",
+           en: "Route, speed and fuel estimated from your car's figures — on one card.")
     }
     static func onboardingMockTripTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingMockTripTitle", ru: "Поездка · 16 мая", en: "Trip · May 16")
@@ -1121,10 +1124,12 @@ enum AppStrings {
     static func onboardingLocation(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingLocation", ru: "Разрешите геолокацию", en: "Allow location access")
     }
+    /// «Данные хранятся на устройстве» было верно лишь без публикации и без
+    /// синхронизации; теперь сказано, когда именно поездки уходят на сервер.
     static func onboardingLocationSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingLocationSub",
-           ru: "Для записи маршрутов нужен доступ к геолокации. Данные хранятся на устройстве.",
-           en: "Location access is needed to record your routes. Your data stays on your device.")
+           ru: "Для записи маршрутов нужен доступ к геолокации. Поездки покидают телефон, только если вы их публикуете или включаете синхронизацию.",
+           en: "Location access is needed to record your routes. Trips leave your phone only if you publish them or turn on sync.")
     }
     /// Shown instead of «Разрешить» when the system permission is already
     /// granted — asking again would do nothing (iOS shows the prompt once),
@@ -2224,25 +2229,33 @@ enum AppStrings {
     static func nearbyDevices(_ lang: LanguageManager.Language) -> String {
         tr(lang, "nearbyDevices", ru: "Устройства рядом", en: "Nearby devices")
     }
+    /// Автостарт идёт и по датчику движения, без магнитолы
+    /// (`AutoTripService.handleAutomotiveDetected`): человек должен знать, что
+    /// запись начнётся и в такси, и в чужой машине.
     static func autoRecordDescription(_ lang: LanguageManager.Language) -> String {
         tr(lang, "autoRecordDescription",
-           ru: "Запись начнётся автоматически при подключении к магнитоле по Bluetooth",
-           en: "Recording starts automatically when connected to the car stereo via Bluetooth")
+           ru: "Запись начнётся сама, когда телефон заметит поездку на машине или подключится к магнитоле",
+           en: "Recording starts by itself when the phone senses a drive or connects to the car stereo")
     }
+    /// С 0.8.1 «Напоминание» не ждёт нажатия: запись идёт сразу, черновиком
+    /// (`AutoTripService`, `startRecording(confirmation: .draft)`). Прежний
+    /// текст обещал уведомление с кнопкой — то есть «без меня не запишется».
     static func remindModeDescription(_ lang: LanguageManager.Language) -> String {
         tr(lang, "remindModeDescription",
-           ru: "Уведомление с кнопкой \"Начать запись\" при подключении",
-           en: "Push notification with \"Start recording\" button on connection")
+           ru: "Запись начнётся сама как черновик, а в конце спросим, ваша ли поездка",
+           en: "Records a draft by itself, then asks at the end whether the trip was yours")
     }
     static func autoModeDescription(_ lang: LanguageManager.Language) -> String {
         tr(lang, "autoModeDescription",
            ru: "Запись начинается сразу, без касания телефона",
            en: "Recording starts immediately, no phone interaction needed")
     }
+    /// Таймаут действует только на короткие поездки: от 500 м и 3 минут
+    /// поездка завершается сразу (`AutoTripPolicy.onBluetoothDisconnect`).
     static func autoStopDescription(_ lang: LanguageManager.Language) -> String {
         tr(lang, "autoStopDescription",
-           ru: "Поездка автоматически завершится через это время после отключения от магнитолы",
-           en: "Trip auto-stops this long after disconnecting from the stereo")
+           ru: "После отключения магнитолы обычная поездка завершается сразу, а совсем короткая — через это время",
+           en: "When the stereo disconnects, a normal trip ends right away and a very short one after this delay")
     }
     static func autoStopTimeout(_ lang: LanguageManager.Language) -> String {
         tr(lang, "autoStopTimeout", ru: "Автозавершение", en: "Auto-stop")
