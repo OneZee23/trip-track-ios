@@ -376,8 +376,10 @@ enum AppStrings {
     }
 
     // MARK: - Groups (coming soon, Figma 117:2265)
+    /// Не «скоро»: тизер живёт с 0.6.8, а роадмап сайта держит клубы в
+    /// «исследуем, сроков нет». Обещание срока здесь было бы единственным.
     static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "groupsComingTitle", ru: "Клубы — скоро", en: "Clubs — coming soon")
+        tr(lang, "groupsComingTitle", ru: "Клубы — в планах", en: "Clubs — planned")
     }
     static func groupsComingBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "groupsComingBody",
@@ -486,8 +488,8 @@ enum AppStrings {
     }
     static func clubComingFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "clubComingFootnote",
-           ru: "Функция появится в одном из следующих обновлений",
-           en: "This will arrive in one of the next updates")
+           ru: "Пока в планах, без сроков. Вступите — покажем, когда откроем.",
+           en: "Planned, no date yet. Join and we'll show it when it opens.")
     }
     /// Shown under the CTA to a signed-out visitor: their place in the queue
     /// is recorded, but a push needs an account to land on.
@@ -3684,7 +3686,7 @@ enum AppStrings {
     static func vehiclePhotoAskBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePhotoAskBody",
            ru: "Во дворе на снимке виден и номер, и дом. Решение меняется в любой момент — «Кого пускать» в редактировании машины.",
-           en: "A photo in your yard shows both the plate and the building. You can change this at any time — «Who can see» in the vehicle's settings.")
+           en: "A photo in your yard shows both the plate and the building. You can change this at any time — «Who gets in» in the vehicle's settings.")
     }
     static func vehiclePhotoAskShow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePhotoAskShow", ru: "Показывать", en: "Show them")
