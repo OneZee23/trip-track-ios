@@ -48,7 +48,7 @@ final class RecordingSaveCostTests: XCTestCase {
             p.timestamp = t0.addingTimeInterval(Double(i))
             switch attach {
             case .inverse: p.trip = trip
-            case .appendOrdered: trip.mutableOrderedSetValue(forKey: "trackPoints").add(p)
+            case .appendOrdered: trip.mutableSetValue(forKey: "trackPoints").add(p)
             case .inverseRefreshed: p.trip = trip
             }
         }

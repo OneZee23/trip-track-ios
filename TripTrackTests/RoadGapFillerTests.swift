@@ -84,7 +84,7 @@ final class RoadGapFillerTests: XCTestCase {
     }
 
     private func fills(_ entity: TripEntity) -> [TrackPointEntity] {
-        (entity.trackPoints?.array as? [TrackPointEntity] ?? []).filter(\.isInterpolated)
+        entity.orderedTrackPoints.filter(\.isInterpolated)
     }
 
     func testPlausibleRoadReplacesTheStraightFill() async throws {
@@ -285,7 +285,7 @@ final class RoadGapFillerTests: XCTestCase {
             .contains { $0.longitude > TrackTestKit.origin.longitude + 0.001 }, "первая дыра ушла на дорогу")
         XCTAssertTrue(fills(entity).filter { gap2Range.contains($0.timestamp ?? .distantPast) }
             .allSatisfy { abs($0.longitude - TrackTestKit.origin.longitude) < 0.0001 }, "вторая дыра осталась прямой")
-        let timestamps = (entity.trackPoints?.array as? [TrackPointEntity] ?? []).map { $0.timestamp ?? .distantPast }
+        let timestamps = entity.orderedTrackPoints.map { $0.timestamp ?? .distantPast }
         XCTAssertEqual(timestamps, timestamps.sorted(), "трек лежит по времени")
         XCTAssertNotNil(entity.previewPolyline)
 

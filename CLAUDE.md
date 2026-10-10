@@ -3123,7 +3123,17 @@ iPhone 15 Pro Max), оба «главный поток не отвечал дв�
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v22 — 0.8.4)
+## CoreData Schema (versioned, v23 — 0.8.9)
+
+v23 makes `TripEntity.trackPoints` UNORDERED and adds the `byTripTimestamp`
+index. An ordered relationship made CoreData recompute order keys on every
+save — a 2 s main-thread hang per batch on long recordings (Sentry
+APPLE-IOS-P). Read points only via `TripEntity.orderedTrackPoints`
+(timestamp, then id): `trackPoints?.array as? [TrackPointEntity]` still
+compiles on `NSSet` and silently yields nil. Covered by
+`CoreDataV23MigrationTests` and `RecordingSaveCostTests`.
+
+### Earlier: v22 — 0.8.4
 
 v22 adds only optional `TripEntity.recordingBreaksJSON`. It stores explicit
 recording pause boundaries; the v21 → v22 lightweight migration is covered by

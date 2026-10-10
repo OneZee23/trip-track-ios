@@ -81,7 +81,7 @@ final class DistanceDoorTests: XCTestCase {
         let entity = TrackTestKit.insertTrip(into: pc, points: specs)
         await PostTripTrackProcessor(persistenceController: pc).processTrip(try XCTUnwrap(entity.id))
 
-        let kept = (entity.trackPoints?.array as? [TrackPointEntity] ?? [])
+        let kept = entity.orderedTrackPoints
             .filter { !$0.isInterpolated }
             .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
         let legacy = TripDistanceGate.totalDistance(kept.map {

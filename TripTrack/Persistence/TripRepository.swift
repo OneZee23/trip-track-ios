@@ -1243,7 +1243,7 @@ final class CoreDataTripRepository: TripRepository {
 
         let points: [TrackPoint]
         if includeTrackPoints {
-            points = (entity.trackPoints?.array as? [TrackPointEntity])?.compactMap { pe in
+            points = entity.orderedTrackPoints.compactMap { pe in
                 guard let pid = pe.id, let ts = pe.timestamp else { return nil }
                 return TrackPoint(
                     id: pid, latitude: pe.latitude, longitude: pe.longitude,
@@ -1251,7 +1251,7 @@ final class CoreDataTripRepository: TripRepository {
                     horizontalAccuracy: pe.horizontalAccuracy, timestamp: ts,
                     isInterpolated: pe.isInterpolated
                 )
-            } ?? []
+            }
         } else {
             points = []
         }
@@ -1485,10 +1485,9 @@ final class CoreDataTripRepository: TripRepository {
             // `trackPoints` is an ORDERED relationship (NSOrderedSet), not
             // NSSet — casting straight to `Set<TrackPointEntity>` always
             // fails and silently skips deletion, leaving stale local points
-            // alongside the server's replacement set.
-            if let existingTPs = entity.trackPoints?.array as? [TrackPointEntity] {
-                for tp in existingTPs { context.delete(tp) }
-            }
+            // alongside the server's replacement set. Since v23 the read goes
+            // through `orderedTrackPoints`, which cannot hit that cast.
+            for tp in entity.orderedTrackPoints { context.delete(tp) }
             for pt in serverPoints {
                 let tpe = TrackPointEntity(context: context)
                 tpe.id = pt.id

@@ -56,10 +56,7 @@ final class PostTripTrackProcessor {
         guard !entity.isTrackProcessed else { return }
 
         // Load original (non-interpolated) track points sorted by timestamp
-        guard let allPoints = entity.trackPoints?.array as? [TrackPointEntity] else { return }
-        let originalPoints = allPoints
-            .filter { !$0.isInterpolated }
-            .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
+        let originalPoints = entity.orderedTrackPoints.filter { !$0.isInterpolated }
 
         guard originalPoints.count >= 2 else {
             entity.roadFillState = RoadFillState.done.rawValue
@@ -199,13 +196,12 @@ final class PostTripTrackProcessor {
                                         altitudeTo: altitudes[gap.to.timestamp] ?? 0)
             for point in fill { insert(point, into: entity, context: context) }
         }
-        sortTrackPoints(of: entity)
         return gaps.count
     }
 
     /// Точки поездки без помеченных на удаление.
     static func liveTrackPoints(of entity: TripEntity) -> [TrackPointEntity] {
-        (entity.trackPoints?.array as? [TrackPointEntity] ?? []).filter { !$0.isDeleted }
+        entity.orderedTrackPoints.filter { !$0.isDeleted }
     }
 
     static func gapPoint(_ p: TrackPointEntity) -> TrackGapFinder.Point? {
@@ -242,15 +238,6 @@ final class PostTripTrackProcessor {
         e.trip = entity
     }
 
-    /// Связь с точками ордерная, и новые точки встают в КОНЕЦ. Трек читают без
-    /// сортировки (карта, реплей, пейлоад синка с его `sortOrder`), поэтому
-    /// после вставки порядок чинится по времени.
-    static func sortTrackPoints(of entity: TripEntity) {
-        let sorted = liveTrackPoints(of: entity)
-            .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
-        entity.trackPoints = NSOrderedSet(array: sorted)
-    }
-
     // MARK: - Preview Polyline
 
     /// Превью — из ВСЕХ сохранённых точек: настоящих, грубых и достроенных. До
@@ -270,8 +257,8 @@ final class PostTripTrackProcessor {
     // MARK: - Stats Recalculation
 
     private func recalculateStats(for entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count > 1 else { return }
+        let points = entity.orderedTrackPoints
+        guard points.count > 1 else { return }
 
         let sorted = points.sorted {
             ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)

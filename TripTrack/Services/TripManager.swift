@@ -310,8 +310,8 @@ final class TripManager: ObservableObject {
     /// Only trims when the stationary tail exceeds 60 seconds — short stops at
     /// lights/parking are preserved.
     private func trimmedEndDate(for entity: TripEntity) -> Date? {
-        guard let points = (entity.trackPoints?.array as? [TrackPointEntity]),
-              points.count > 2 else { return nil }
+        let points = entity.orderedTrackPoints
+        guard points.count > 2 else { return nil }
 
         let movingThresholdMs: Double = 2.0 // ~7.2 km/h — clearly driving, not parking
         let minTailToTrim: TimeInterval = 60
@@ -490,7 +490,7 @@ final class TripManager: ObservableObject {
             // First pass: drop empty/junk orphans, collect the rest with their last point time.
             var candidates: [(entity: TripEntity, lastTimestamp: Date)] = []
             for entity in orphans {
-                let points = (entity.trackPoints?.array as? [TrackPointEntity]) ?? []
+                let points = entity.orderedTrackPoints
 
                 if points.isEmpty {
                     context.delete(entity)
@@ -990,8 +990,8 @@ final class TripManager: ObservableObject {
     }
 
     private func updateEntityStats(_ entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count > 1 else { return }
+        let points = entity.orderedTrackPoints
+        guard points.count > 1 else { return }
 
         let stats = finalRecordingStats(entity)
         entity.distance = stats.distance
@@ -1006,8 +1006,8 @@ final class TripManager: ObservableObject {
     /// Shared with the stop preview: live UI distance/maxSpeed can differ from
     /// the final trusted-point calculation, so they cannot decide the warning.
     private func finalRecordingStats(_ entity: TripEntity) -> (distance: Double, maxSpeed: Double) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count > 1 else { return (entity.distance, entity.maxSpeed) }
+        let points = entity.orderedTrackPoints
+        guard points.count > 1 else { return (entity.distance, entity.maxSpeed) }
 
         // Пятиметровым шагом, а не «каждая точка минус предыдущая». Эта функция
         // ПЕРЕЗАПИСЫВАЕТ километры, набранные во время записи, — то есть именно
@@ -1034,8 +1034,8 @@ final class TripManager: ObservableObject {
     // MARK: - Geocoding (with persistent cache)
 
     private func geocodeAndNameTrip(entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              let first = points.first, let last = points.last else { return }
+        let points = entity.orderedTrackPoints
+        guard let first = points.first, let last = points.last else { return }
 
         let startCoord = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
         let endCoord = CLLocationCoordinate2D(latitude: last.latitude, longitude: last.longitude)
@@ -1155,8 +1155,7 @@ final class TripManager: ObservableObject {
     /// Reverse-geocode only the region for an entity's first track point.
     private func geocodeRegion(for entity: TripEntity, completion: @escaping () -> Void) {
         guard !entity.isDeleted,
-              let points = entity.trackPoints?.array as? [TrackPointEntity],
-              let first = points.first else {
+              let first = entity.orderedTrackPoints.first else {
             completion()
             return
         }
@@ -1472,8 +1471,8 @@ final class TripManager: ObservableObject {
 
     /// Generate a simplified polyline (~20 points) for feed card previews.
     private func generatePreviewPolyline(for entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count >= 2 else { return }
+        let points = entity.orderedTrackPoints
+        guard points.count >= 2 else { return }
 
         let sorted = points.sorted {
             ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)

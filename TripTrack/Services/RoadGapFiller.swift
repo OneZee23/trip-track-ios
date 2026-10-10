@@ -537,7 +537,6 @@ final class RoadGapFiller {
             }
 
             if replaced {
-                PostTripTrackProcessor.sortTrackPoints(of: entity)
                 PostTripTrackProcessor.regeneratePreviewPolyline(for: entity)
                 entity.lastModifiedAt = Date()
                 if CoreDataTripRepository.flipsPendingUpload(isPrivate: entity.isPrivate,

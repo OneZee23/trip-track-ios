@@ -674,7 +674,7 @@ enum DebugMapSeed {
         request.fetchLimit = 1
         guard let trip = try? context.fetch(request).first,
               let tripId = trip.id else { return }
-        let points = (trip.trackPoints?.array as? [TrackPointEntity]) ?? []
+        let points = trip.orderedTrackPoints
         // Восемь, а не двадцать: свежая демо-поездка — городская петля в
         // 4.9 км, а точки сеются шагом 400 м. Порог в двадцать молча отменял
         // весь сид (ни одной булавки на карте, `NO_PHOTO_PIN` в UI-тесте) —
@@ -840,7 +840,7 @@ enum DebugMapSeed {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         guard let matches = try? context.fetch(request), matches.count < 3,
               let original = matches.first, let originalStart = original.startDate else { return }
-        let originalPoints = (original.trackPoints?.array as? [TrackPointEntity]) ?? []
+        let originalPoints = original.orderedTrackPoints
         guard !originalPoints.isEmpty else { return }
 
         for daysAgo in [40, 66] {

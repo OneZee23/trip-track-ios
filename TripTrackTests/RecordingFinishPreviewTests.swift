@@ -101,7 +101,7 @@ final class RecordingFinishManagerTests: XCTestCase {
             point.speed = speed
             point.horizontalAccuracy = 8
             point.trip = entity
-            entity.addToTrackPoints(point)
+            point.trip = entity
         }
         manager.isPaused = true
 

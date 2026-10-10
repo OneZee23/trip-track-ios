@@ -53,11 +53,8 @@ final class PostTripTrackProcessorTests: XCTestCase {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
-        guard let trip = try? context.fetch(request).first,
-              let points = trip.trackPoints?.array as? [TrackPointEntity] else {
-            return []
-        }
-        return points.sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
+        guard let trip = try? context.fetch(request).first else { return [] }
+        return trip.orderedTrackPoints
     }
 
     private func fetchTrip(tripId: UUID) -> TripEntity? {

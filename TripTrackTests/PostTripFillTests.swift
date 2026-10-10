@@ -27,7 +27,7 @@ final class PostTripFillTests: XCTestCase {
     }
 
     private func points(_ entity: TripEntity) -> [TrackPointEntity] {
-        entity.trackPoints?.array as? [TrackPointEntity] ?? []
+        entity.orderedTrackPoints
     }
 
     func testGapGetsAStraightFillInTimeOrder() async throws {

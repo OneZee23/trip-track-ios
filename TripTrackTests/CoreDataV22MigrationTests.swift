@@ -40,7 +40,7 @@ final class CoreDataV22MigrationTests: XCTestCase {
         XCTAssertEqual(trip.id, id)
         XCTAssertEqual(trip.distance, 1234.5)
         XCTAssertEqual(trip.trackPoints?.count, 1)
-        XCTAssertEqual((trip.trackPoints?.firstObject as? TrackPointEntity)?.id, pointID)
+        XCTAssertEqual(trip.orderedTrackPoints.first?.id, pointID)
         XCTAssertNil(trip.recordingBreaksJSON)
         CoreDataTripRepository.setRecordingBreaks([date.addingTimeInterval(30)], on: trip)
         try migrated.viewContext.save()
