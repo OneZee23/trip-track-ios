@@ -5876,10 +5876,13 @@ enum AppStrings {
     static func usernameTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "usernameTitle", ru: "Юзернейм", en: "Username")
     }
+    /// Имя, «о себе» и страна — только локально (`SettingsManager`, комментарий
+    /// «All three are LOCAL ONLY»): сервер их не принимает, уникальность не
+    /// проверяется. Прежние подсказки обещали, что их видят другие.
     static func usernameHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "usernameHint",
-           ru: "Уникальное имя для профиля и ссылок. Латиница, цифры и «.», «_». 3–20 символов.",
-           en: "Your unique handle for links and mentions. Latin letters, digits, «.» and «_». 3–20 characters.")
+           ru: "Пока хранится только на этом телефоне и другим не видно. Латиница, цифры и «.», «_». 3–20 символов.",
+           en: "Stored on this phone only for now — others can't see it. Latin letters, digits, «.» and «_». 3–20 characters.")
     }
     static func usernameFree(_ lang: LanguageManager.Language) -> String {
         tr(lang, "usernameFree", ru: "Свободно", en: "Available")
@@ -5917,8 +5920,8 @@ enum AppStrings {
     }
     static func aboutHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "aboutHint",
-           ru: "Видно всем в профиле. До 140 символов.",
-           en: "Visible to everyone on your profile. Up to 140 characters.")
+           ru: "Пока видно только вам. До 140 символов.",
+           en: "Only you can see it for now. Up to 140 characters.")
     }
 
     // MARK: - Country picker (0.6.0, Figma 675:119)
@@ -5928,8 +5931,8 @@ enum AppStrings {
     }
     static func countryHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "countryHint",
-           ru: "Необязательно — флаг виден в вашем профиле.",
-           en: "Optional — the flag shows on your profile.")
+           ru: "Необязательно. Пока флаг видите только вы.",
+           en: "Optional. For now only you can see the flag.")
     }
     static func countrySectionAll(_ lang: LanguageManager.Language) -> String {
         tr(lang, "countrySectionAll", ru: "СТРАНЫ", en: "COUNTRIES")
@@ -6129,10 +6132,13 @@ enum AppStrings {
            ru: "Другие смогут открыть вашу страницу и увидеть поездки, которые вы сделали публичными. Приватные поездки не видит никто.",
            en: "Other drivers can open your page and see the trips you made public. Nobody sees your private trips.")
     }
+    /// Выключатель гасит пять категорий (`NotificationSwitches`), а запись шлёт
+    /// свои локальные уведомления (черновик, автостарт, завершение) —
+    /// «записи это не касается, она идёт без уведомлений» было неправдой.
     static func settingsHintNotifications(_ lang: LanguageManager.Language) -> String {
         tr(lang, "settingsHintNotifications",
-           ru: "Реакции и комментарии к вашим поездкам, приглашения в попутчики. Записи это не касается — она идёт без уведомлений.",
-           en: "Reactions and comments on your trips, plus companion invites. Recording is unaffected — it runs without notifications.")
+           ru: "Реакции, комментарии, подписки, попутчики и итоги недели. Уведомления о записи поездки этим не выключаются.",
+           en: "Reactions, comments, follows, companions and the weekly recap. Trip-recording alerts aren't affected.")
     }
     static func settingsHintCompanionAdds(_ lang: LanguageManager.Language) -> String {
         tr(lang, "settingsHintCompanionAdds",
@@ -6469,9 +6475,10 @@ enum AppStrings {
            ru: "Содержит недопустимые выражения",
            en: "Contains inappropriate language")
     }
+    /// Код проверяет букву (`ContentFilter`), не слово — ru расходился с en.
     static func contentFilterMustContainAt(_ lang: LanguageManager.Language) -> String {
         tr(lang, "contentFilterMustContainAt",
-           ru: "Должно быть хотя бы одно слово",
+           ru: "Нужна хотя бы одна буква",
            en: "Must contain at least one letter")
     }
     static func contentFilterTooManyRepeated(_ lang: LanguageManager.Language) -> String {
@@ -6527,10 +6534,11 @@ enum AppStrings {
            ru: "Попробуйте сменить сеть или подождите — мы повторим автоматически.",
            en: "Try a different network or wait — we'll retry automatically.")
     }
+    /// Автоповтор ограничен (`SyncQueue.maxRetries` = 5), дальше только руками.
     static func feedAFewItems(_ lang: LanguageManager.Language) -> String {
         tr(lang, "feedAFewItems",
-           ru: "Несколько операций не загрузились на сервер. Мы повторим автоматически — также можно нажать «Повторить» в настройках синхронизации.",
-           en: "A few items didn't upload. We'll retry automatically — or tap Retry in sync settings.")
+           ru: "Несколько операций не загрузились на сервер. Мы попробуем ещё несколько раз — или нажмите «Повторить» в настройках синхронизации.",
+           en: "A few items didn't upload. We'll try a few more times — or tap Retry in sync settings.")
     }
     static func feedOfflineTripsAre(_ lang: LanguageManager.Language) -> String {
         tr(lang, "feedOfflineTripsAre",
@@ -6725,10 +6733,13 @@ enum AppStrings {
     static func publicProfileDriver(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicProfileDriver", ru: "Водитель", en: "Driver")
     }
+    /// Ноль поездок у активного аккаунта сервер отдаёт, когда владелец скрыл
+    /// счётчики (`visibility.counters`), а не когда поездки приватны: те входят
+    /// в `tripCount`. Строка может стоять и над лентой его публичных поездок.
     static func publicProfileHiddenRoadsThis(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicProfileHiddenRoadsThis",
-           ru: "Тайные дороги — водитель оставил поездки приватными",
-           en: "Hidden roads — this driver keeps their trips private")
+           ru: "Водитель скрыл счётчики профиля",
+           en: "This driver hides their profile counters")
     }
     static func publicProfileNoPublicTrips(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicProfileNoPublicTrips",
@@ -6743,10 +6754,12 @@ enum AppStrings {
     static func reactionsListCouldnTLoad(_ lang: LanguageManager.Language) -> String {
         tr(lang, "reactionsListCouldnTLoad", ru: "Не удалось загрузить", en: "Couldn't load")
     }
+    /// «Потяните вниз» было тупиком: заглушка ошибки не прокручивается,
+    /// `.refreshable` висит только на списке (`ReactionsListSheet`).
     static func reactionsListCheckYourConnection(_ lang: LanguageManager.Language) -> String {
         tr(lang, "reactionsListCheckYourConnection",
-           ru: "Проверьте соединение и потяните вниз, чтобы обновить.",
-           en: "Check your connection and pull to refresh.")
+           ru: "Проверьте соединение и откройте список заново.",
+           en: "Check your connection and open the list again.")
     }
     static func reactionsListBeTheFirst(_ lang: LanguageManager.Language) -> String {
         tr(lang, "reactionsListBeTheFirst",
@@ -6814,10 +6827,11 @@ enum AppStrings {
     static func tripDetailMyTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripDetailMyTrip", ru: "Моя поездка", en: "My trip")
     }
+    /// «Поездки с фото получают больше реакций» — утверждение без данных.
     static func tripDetailYourFirstPublic(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripDetailYourFirstPublic",
-           ru: "Первая публичная поездка! Поездки с фото получают больше реакций",
-           en: "Your first public trip! Trips with photos get more reactions")
+           ru: "Первая публичная поездка!",
+           en: "Your first public trip!")
     }
     static func unitGallonsShort(_ lang: LanguageManager.Language) -> String {
         tr(lang, "unitGallonsShort", ru: "гал", en: "gal")
@@ -7111,10 +7125,12 @@ enum AppStrings {
     static func profileMapEntryTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileMapEntryTitle", ru: "Карта", en: "Map")
     }
+    /// Карта чужого профиля рисует только публичные поездки (`is_private = false`
+    /// на сервере) — «где человек был за всё время» обещало больше.
     static func profileMapEntrySubtitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileMapEntrySubtitle",
-           ru: "где человек был за всё время",
-           en: "everywhere they have been")
+           ru: "маршруты публичных поездок",
+           en: "routes of public trips")
     }
     /// Рамка под чужой картой и в её нижнем листе.
     ///
