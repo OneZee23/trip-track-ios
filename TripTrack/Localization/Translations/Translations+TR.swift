@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Hesap",
         "signOutSubtitle": "Geziler bu cihazda kalır",
         "clearServerTitle": "Sunucudaki verileri sil",
+        "wipeServerPartial": "Verilerin bir kısmı sunucudan silinemedi. Bağlantını kontrol et ve «Sunucudaki verileri sil»e yeniden dokun.",
         "clearServerSubtitle": "Gezileri sunucudan kaldır, cihazda tut",
         "clearServerInProgress": "Siliniyor…",
         "syncEnableConfirmTitle": "Bulut eşitlemesi açılsın mı?",

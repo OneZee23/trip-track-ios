@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Cuenta",
         "signOutSubtitle": "Los viajes se quedan en este dispositivo",
         "clearServerTitle": "Borrar los datos del servidor",
+        "wipeServerPartial": "No se pudo borrar parte de los datos del servidor. Revisa la conexión y toca «Borrar los datos del servidor» otra vez.",
         "clearServerSubtitle": "Quitar los viajes del servidor y conservarlos en el dispositivo",
         "clearServerInProgress": "Borrando…",
         "syncEnableConfirmTitle": "¿Activar la sincronización en la nube?",

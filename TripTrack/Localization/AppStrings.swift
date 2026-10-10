@@ -4694,6 +4694,13 @@ enum AppStrings {
            ru: "Все Ваши поездки, фотографии и гараж будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите.",
            en: "All your trips, photos and garage will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
     }
+    /// Показывается, если часть объектов удалить не удалось (сеть, сервер).
+    /// Повтор безопасен: удалённое в выборку второго прохода не попадает.
+    static func wipeServerPartial(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "wipeServerPartial",
+           ru: "Часть данных удалить с сервера не получилось. Проверьте интернет и нажмите «Очистить данные на сервере» ещё раз.",
+           en: "Some data couldn't be removed from the server. Check your connection and tap “Clear server data” again.")
+    }
     static func wipeServerConfirmAction(_ lang: LanguageManager.Language) -> String {
         tr(lang, "wipeServerConfirmAction", ru: "Очистить", en: "Clear")
     }

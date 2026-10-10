@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Акаунт",
         "signOutSubtitle": "Поїздки залишаться на пристрої",
         "clearServerTitle": "Очистити дані на сервері",
+        "wipeServerPartial": "Частину даних не вдалося видалити з сервера. Перевірте інтернет і натисніть «Очистити дані на сервері» ще раз.",
         "clearServerSubtitle": "Видалити поїздки з сервера, залишити на пристрої",
         "clearServerInProgress": "Очищаємо…",
         "syncEnableConfirmTitle": "Увімкнути синхронізацію?",

@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Akun",
         "signOutSubtitle": "Perjalanan tetap di perangkat ini",
         "clearServerTitle": "Bersihkan data di server",
+        "wipeServerPartial": "Sebagian data gagal dihapus dari server. Periksa koneksi dan ketuk «Bersihkan data di server» sekali lagi.",
         "clearServerSubtitle": "Hapus perjalanan dari server, simpan di perangkat",
         "clearServerInProgress": "Membersihkan…",
         "syncEnableConfirmTitle": "Nyalakan sinkronisasi awan?",

@@ -26,6 +26,9 @@ struct CloudSyncView: View {
     @State private var showBlockedList = false
     @State private var showWipeServerConfirm = false
     @State private var isWipingServer = false
+    /// Сколько объектов не удалось стереть с сервера в последний проход.
+    /// `nil` — проход не запускали или он прошёл чисто.
+    @State private var wipeServerFailures: Int?
     @State private var showDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     /// Server refused the deletion — shown under the card rather than in a
@@ -63,6 +66,18 @@ struct CloudSyncView: View {
                             sectionLabel(AppStrings.sectionAccountLabel(l))
                             accountActionsCard(c: c, l: l)
 
+                            // Сбой одного объекта больше не молчит: кнопка
+                            // обещает пустой сервер, и человек должен знать,
+                            // что обещание не выполнено, и как его довыполнить.
+                            if wipeServerFailures != nil {
+                                Text(AppStrings.wipeServerPartial(l))
+                                    .font(.inter(12))
+                                    .foregroundStyle(AppTheme.red)
+                                    .padding(.top, 8)
+                                    .padding(.horizontal, 4)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("wipe_server_partial")
+                            }
                             if let deleteAccountError {
                                 Text(deleteAccountError)
                                     .font(.inter(12))
@@ -145,7 +160,8 @@ struct CloudSyncView: View {
                     AppDialogAction(AppStrings.wipeServerConfirmAction(l), kind: .destructive) {
                         Task {
                             isWipingServer = true
-                            await auth.wipeServerData()
+                            let failed = await auth.wipeServerData()
+                            wipeServerFailures = failed > 0 ? failed : nil
                             isWipingServer = false
                         }
                     }

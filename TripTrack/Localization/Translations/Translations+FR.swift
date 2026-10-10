@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Compte",
         "signOutSubtitle": "Les trajets restent sur cet appareil",
         "clearServerTitle": "Effacer les données du serveur",
+        "wipeServerPartial": "Une partie des données n'a pas pu être supprimée du serveur. Vérifiez la connexion et touchez à nouveau « Effacer les données du serveur ».",
         "clearServerSubtitle": "Retirer les trajets du serveur, les garder sur l'appareil",
         "clearServerInProgress": "Effacement…",
         "syncEnableConfirmTitle": "Activer la synchronisation cloud ?",

@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Account",
         "signOutSubtitle": "Nananatili sa device na ito ang mga biyahe",
         "clearServerTitle": "Linisin ang datos sa server",
+        "wipeServerPartial": "May datos na hindi naalis sa server. Tingnan ang koneksyon at i-tap ulit ang «Linisin ang datos sa server».",
         "clearServerSubtitle": "Alisin ang mga biyahe sa server, itago sa device",
         "clearServerInProgress": "Nililinis…",
         "syncEnableConfirmTitle": "I-on ang cloud sync?",

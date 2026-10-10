@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Konto",
         "signOutSubtitle": "Trasy zostaną na tym urządzeniu",
         "clearServerTitle": "Wyczyść dane na serwerze",
+        "wipeServerPartial": "Części danych nie udało się usunąć z serwera. Sprawdź połączenie i stuknij „Wyczyść dane na serwerze” jeszcze raz.",
         "clearServerSubtitle": "Usuń trasy z serwera, zostaw je na urządzeniu",
         "clearServerInProgress": "Czyszczenie…",
         "syncEnableConfirmTitle": "Włączyć synchronizację w chmurze?",

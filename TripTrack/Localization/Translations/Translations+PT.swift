@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Conta",
         "signOutSubtitle": "As viagens continuam neste aparelho",
         "clearServerTitle": "Limpar os dados do servidor",
+        "wipeServerPartial": "Não foi possível apagar parte dos dados do servidor. Verifique a conexão e toque em «Limpar os dados do servidor» de novo.",
         "clearServerSubtitle": "Remover as viagens do servidor e manter no aparelho",
         "clearServerInProgress": "Limpando…",
         "syncEnableConfirmTitle": "Ligar a sincronização na nuvem?",

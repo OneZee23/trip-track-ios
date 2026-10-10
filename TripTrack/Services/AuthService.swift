@@ -483,7 +483,14 @@ final class AuthService: ObservableObject {
     /// and its server bookkeeping cleared. Cloud Sync is forced OFF so
     /// the next sync run doesn't immediately re-upload them. User wants
     /// "clean slate on the server, account intact".
-    func wipeServerData() async {
+    /// Возвращает, сколько объектов удалить НЕ удалось. Каждый удаляется по
+    /// одному и независимо, и прежде сбой одного уходил только в лог: человек
+    /// видел, что кнопка отработала, и верил, что сервер пуст. Повтор безопасен
+    /// — удалённое уже снято с сервера (`serverCreatedAt = nil`) и в выборку
+    /// второго прохода не попадает.
+    @discardableResult
+    func wipeServerData() async -> Int {
+        var failures = 0
         await MainActor.run {
             SettingsManager.shared.cloudSyncEnabled = false
             SyncQueue.shared.clearAll()
@@ -491,7 +498,7 @@ final class AuthService: ObservableObject {
         let ctx = PersistenceController.shared.container.viewContext
         let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         req.predicate = NSPredicate(format: "serverCreatedAt != nil")
-        guard let entities = try? ctx.fetch(req) else { return }
+        guard let entities = try? ctx.fetch(req) else { return 1 }
         let repo: TripRepository = CoreDataTripRepository()
         for entity in entities {
             guard let id = entity.id else { continue }
@@ -503,6 +510,7 @@ final class AuthService: ObservableObject {
                 // Already gone — proceed to local cleanup.
             } catch {
                 authLog.error("wipeServerData failed for trip \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                failures += 1
                 continue
             }
             entity.isPrivate = true
@@ -526,6 +534,7 @@ final class AuthService: ObservableObject {
                     // Уже нет на сервере — цель достигнута.
                 } catch {
                     authLog.error("wipeServerData failed for journey \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                    failures += 1
                     continue
                 }
                 entity.isPrivate = true
@@ -535,14 +544,15 @@ final class AuthService: ObservableObject {
             try? ctx.save()
         }
 
-        await forgetServerDiscoveries()
+        if !(await forgetServerDiscoveries()) { failures += 1 }
 
         // Гараж тоже. Раньше «стереть мои данные с сервера» удаляло только
         // поездки, и у человека, который этой кнопкой воспользовался, на
         // сервере оставался ПУБЛИЧНЫЙ гараж: машины, их марки, пробеги и
         // фотографии продолжали показываться незнакомым людям. Кнопка обещала
         // обратное.
-        await wipeServerVehicles(ctx)
+        failures += await wipeServerVehicles(ctx)
+        return failures
     }
 
     /// Заявки о находках (0.7.0) — ОДНИМ запросом, а не циклом: у сервера нет
@@ -555,28 +565,38 @@ final class AuthService: ObservableObject {
     ///
     /// Клиент параметром — единственный способ проверить этот шаг: `APIClient`
     /// в `wipeServerData` берётся из `shared` и подменить его нечем.
-    func forgetServerDiscoveries(client: APIClient? = nil) async {
+    /// `true` — серверная копия заявок стёрта.
+    @discardableResult
+    func forgetServerDiscoveries(client: APIClient? = nil) async -> Bool {
         let api = client ?? APIClient.shared
         do {
             let _: EmptyResponse = try await api.post(
                 APIEndpoint.secretsForgetAll, body: EmptyRequest())
+            return true
         } catch {
             authLog.error("wipeServerData failed for discoveries: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 
     /// Удаляет машины (а вместе с ними, каскадом на сервере, и их снимки).
-    private func wipeServerVehicles(_ ctx: NSManagedObjectContext) async {
+    /// Возвращает число машин, которые удалить не удалось.
+    private func wipeServerVehicles(_ ctx: NSManagedObjectContext) async -> Int {
+        var failures = 0
         let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
-        guard let vehicles = try? ctx.fetch(req) else { return }
+        guard let vehicles = try? ctx.fetch(req) else { return 1 }
         struct DeleteReq: Encodable { let id: UUID }
         for vehicle in vehicles {
             guard let id = vehicle.id else { continue }
             do {
                 let _: EmptyResponse = try await APIClient.shared.post(
                     APIEndpoint.vehicleDelete, body: DeleteReq(id: id))
+            } catch APIError.vehicleNotFound {
+                // Уже нет на сервере — например, второй проход после частичного
+                // сбоя. Цель достигнута, ошибкой это не считается.
             } catch {
                 authLog.error("wipeServerData failed for vehicle \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                failures += 1
                 continue
             }
             // Машина остаётся на телефоне — стирали серверную копию, не гараж.
@@ -586,6 +606,7 @@ final class AuthService: ObservableObject {
             vehicle.syncStatus = SyncStatus.pendingUpload.rawValue
         }
         try? ctx.save()
+        return failures
     }
 
     /// Re-entrancy guard for the signout path. Without it a dead session

@@ -656,6 +656,7 @@ extension Translations {
         "sectionAccountLabel": "Аккаунт",
         "signOutSubtitle": "Сапарлар осы құрылғыда қалады",
         "clearServerTitle": "Сервердегі деректерді тазалау",
+        "wipeServerPartial": "Деректердің бір бөлігін серверден өшіру мүмкін болмады. Интернетті тексеріп, «Сервердегі деректерді тазалау» түймесін қайта басыңыз.",
         "clearServerSubtitle": "Сапарларды серверден жою, құрылғыда қалдыру",
         "clearServerInProgress": "Тазаланып жатыр…",
         "syncEnableConfirmTitle": "Бұлттық синхрондауды қосу керек пе?",
