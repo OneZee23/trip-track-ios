@@ -58,12 +58,21 @@ final class CoreDataV23MigrationTests: XCTestCase {
     /// Библиотека здесь больше живой (самая большая на сервере — 3 млн точек
     /// на ~960 поездок у всех вместе): 200 поездок × 2 000 точек.
     func testMigratingALargeLibraryIsFast() throws {
+        try measureMigration(trips: 200, perTrip: 2_000, budget: 10)
+    }
+
+    /// Самая большая библиотека на сервере на 10 окт 2026 — 1,27 млн точек у
+    /// одного человека. Этот замер решает, можно ли мигрировать на старте.
+    func testMigratingTheLargestKnownLibrary() throws {
+        try measureMigration(trips: 640, perTrip: 2_000, budget: 120)
+    }
+
+    private func measureMigration(trips: Int, perTrip: Int, budget: TimeInterval) throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("trip.sqlite")
         let start = Date(timeIntervalSince1970: 1_700_000_000)
-        let trips = 200, perTrip = 2_000
         do {
             let container = try open(model: legacyModel(), url: url)
             defer { close(container) }
@@ -94,7 +103,7 @@ final class CoreDataV23MigrationTests: XCTestCase {
         let count = try migrated.viewContext.count(for: NSFetchRequest<TrackPointEntity>(entityName: "TrackPointEntity"))
         print("CoreDataV23Migration: \(trips * perTrip) points migrated in \(String(format: "%.2f", seconds)) s")
         XCTAssertEqual(count, trips * perTrip)
-        XCTAssertLessThan(seconds, 10, "a slow first launch after the update gets killed by the system")
+        XCTAssertLessThan(seconds, budget, "a slow first launch after the update gets killed by the system")
     }
 
     func testCurrentModelRelationshipIsUnorderedAndIndexed() throws {

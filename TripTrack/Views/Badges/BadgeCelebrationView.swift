@@ -10,14 +10,34 @@ struct BadgeCelebrationView: View {
     @State private var currentIndex = 0
     @State private var appear = false
     @State private var glowPulse = false
+    /// Список, с которым экран открылся. Родитель очищает `pendingBadges`
+    /// ДО того, как закрывающая анимация `fullScreenCover` отыграла, и тело
+    /// перерисовывается уже с пустым массивом — `badges[0]` ронял
+    /// приложение (Sentry APPLE-IOS-3, 8 падений в 0.6.7–0.8.1,
+    /// `BadgeCelebrationView.swift:19`). Снимок держит последний кадр целым.
+    @State private var shown: [(badge: Badge, count: Int)] = []
 
-    private var current: (badge: Badge, count: Int) {
-        badges[currentIndex]
+    /// Что показывать: снимок, иначе живой список; индекс зажат в границы.
+    /// `nil` — показывать нечего, и тело рисует пустой фон, а не падает.
+    static func item(at index: Int, shown: [(badge: Badge, count: Int)],
+                     live: [(badge: Badge, count: Int)]) -> (badge: Badge, count: Int)? {
+        let list = shown.isEmpty ? live : shown
+        guard !list.isEmpty else { return nil }
+        return list[min(max(index, 0), list.count - 1)]
     }
 
+    private var list: [(badge: Badge, count: Int)] { shown.isEmpty ? badges : shown }
+
     var body: some View {
-        let badge = current.badge
-        let count = current.count
+        if let current = Self.item(at: currentIndex, shown: shown, live: badges) {
+            content(badge: current.badge, count: current.count)
+        } else {
+            Color.black.opacity(0.8).ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private func content(badge: Badge, count: Int) -> some View {
 
         ZStack {
             Color.black.opacity(0.8)
@@ -100,9 +120,9 @@ struct BadgeCelebrationView: View {
                 .accessibilityIdentifier("celebration_continue")
 
                 // Page indicator for multiple badges
-                if badges.count > 1 {
+                if list.count > 1 {
                     HStack(spacing: 6) {
-                        ForEach(0..<badges.count, id: \.self) { i in
+                        ForEach(0..<list.count, id: \.self) { i in
                             Circle()
                                 .fill(i == currentIndex ? Color.white : Color.white.opacity(0.3))
                                 .frame(width: 8, height: 8)
@@ -114,6 +134,7 @@ struct BadgeCelebrationView: View {
             .padding(.bottom, 48)
         }
         .onAppear {
+            if shown.isEmpty { shown = badges }
             animateIn()
         }
     }
@@ -132,7 +153,7 @@ struct BadgeCelebrationView: View {
     }
 
     private func advanceOrDismiss() {
-        if currentIndex < badges.count - 1 {
+        if currentIndex < list.count - 1 {
             withAnimation(.easeOut(duration: 0.2)) {
                 appear = false
             }
