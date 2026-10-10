@@ -128,20 +128,10 @@ final class PlusShotTests: XCTestCase {
             .matching(identifier: "plus_close").firstMatch.tap()
         usleep(1_500_000)
 
-        let support = app.buttons.matching(identifier: "profile_support_row").firstMatch
-        for _ in 0..<10 where !support.isHittable {
-            app.swipeUp()
-            usleep(300_000)
-        }
-        // Подвал «Я» со строкой поддержки: её отсутствие в пустой ветке
-        // профиля этот кадр и поймал.
-        snap("w084_support_row")
-        XCTAssertTrue(support.waitForExistence(timeout: 4), "строки «Поддержать» нет")
-        support.tap()
-        let jar = app.descendants(matching: .any).matching(identifier: "tip_jar").firstMatch
-        XCTAssertTrue(jar.waitForExistence(timeout: 6), "лист чаевых не открылся")
-        usleep(2_500_000)
-        snap("w084_tipjar")
+        // Строки «Поддержать» в «Я» больше нет: чаевые переехали в карточку
+        // автора в настройках (30 сен 2026). Вход туда и сам лист проверяет
+        // `test_support_row_sits_with_the_author`; здесь он лишь требовал бы
+        // строку, которую убрали по решению владельца.
     }
 
     /// Витрина оформления (состояния 21…23): примерка платного НЕ уводит на

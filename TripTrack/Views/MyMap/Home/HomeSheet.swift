@@ -40,7 +40,12 @@ struct HomeSheet: View {
         .appConfirm(
             isPresented: $showRemove,
             title: AppStrings.homeRemoveTitle(l),
-            message: AppStrings.homeRemoveBody(l),
+            // Переотправка бывает, только если зона включена (`activeZone`):
+            // по умолчанию она выключена, и без неё обещать «отправим заново»
+            // значило бы пугать работой, которой не будет.
+            message: manager.settings.activeZone != nil
+                ? AppStrings.homeRemoveBody(l)
+                : AppStrings.homeRemoveBodyNoZone(l),
             actions: [
                 AppDialogAction(AppStrings.homeRemove(l), kind: .destructive) {
                     manager.remove()

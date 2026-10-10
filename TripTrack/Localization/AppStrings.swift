@@ -7263,10 +7263,12 @@ enum AppStrings {
     /// Сервер этого аккаунта ещё не умеет пер-блочную видимость. Инертный
     /// тумблер без объяснения выглядит сломанным — тот же урок, что с
     /// «Публичным профилем».
+    /// Показывается при `auth.visibility == nil` — это и упавший `/auth/me`;
+    /// «обновление не дошло до сервера» маскировало сеть и не говорило, что делать.
     static func visibilityUnavailable(_ lang: LanguageManager.Language) -> String {
         tr(lang, "visibilityUnavailable",
-           ru: "Пока недоступно — обновление ещё не дошло до сервера",
-           en: "Not available yet — the server update hasn't landed")
+           ru: "Не удалось загрузить эти настройки. Проверьте связь и откройте экран заново",
+           en: "Couldn't load these settings. Check your connection and reopen this screen")
     }
     /// Подпись плашки-тизера на карточке «Статистика» в чужом профиле.
     /// Оба факта берутся из уже приехавшего профиля — ни одного лишнего
@@ -7789,10 +7791,12 @@ enum AppStrings {
         tr(lang, "proTitle", ru: "TripTrack PRO", en: "TripTrack PRO")
     }
     /// Обещание под заголовком. Две вещи, за которые платят, одной строкой.
+    /// «Ваша история поездок» подавала бесплатное как платное: история есть у
+    /// всех. Вторая платная вещь — вписанные поездки, так она и названа.
     static func proPromise(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proPromise",
-           ru: "Ваш стиль. Ваша история поездок.",
-           en: "Your style. Your road diary.")
+           ru: "Ваш стиль. И дороги, которые не записались.",
+           en: "Your style. Plus the roads you didn't record.")
     }
     static func proGroupVisible(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proGroupVisible", ru: "Видно другим", en: "Others can see")
@@ -7924,10 +7928,11 @@ enum AppStrings {
     }
     /// Восстановление не нашло покупок. Говорит и про второй Apple ID: это
     /// самая частая причина, и без неё человек решает, что мы потеряли оплату.
+    /// Не «покупок нет»: так отвечает и бывшему подписчику с истёкшим PRO.
     static func proRestoreNone(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proRestoreNone",
-           ru: "На этом Apple ID покупок нет. Если PRO на другом, войди в него в App Store",
-           en: "No purchases on this Apple ID. If PRO is on another one, sign in to it in the App Store")
+           ru: "Активной подписки на этом Apple ID нет. Если PRO на другом, войди в него в App Store",
+           en: "No active subscription on this Apple ID. If PRO is on another one, sign in to it in the App Store")
     }
 
     /// «Понятно» — общая кнопка согласия.
@@ -7955,10 +7960,13 @@ enum AppStrings {
         tr(lang, "proDemoBgTitle",
            ru: "8 фонов, которые видят все", en: "8 backgrounds everyone sees")
     }
+    /// Фон рисуется в публичном профиле (`ProfileBackgroundBanner`), но НЕ в
+    /// ленте: `SocialAuthor` несёт только `isPlus` и `avatarFrame`. Прежнее «и в
+    /// ленте у других» обещало покупателю то, чего за деньги нет.
     static func proDemoBgText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoBgText",
-           ru: "Фон стоит за твоим именем в профиле и в ленте у других. Выбери один, меняй когда хочешь.",
-           en: "The background sits behind your name on your profile and in other people\'s feeds. Pick one, change it whenever.")
+           ru: "Фон стоит за твоим именем в профиле — его видит каждый, кто откроет страницу. Выбери один, меняй когда хочешь.",
+           en: "The background sits behind your name on your profile, for anyone who opens it. Pick one, change it whenever.")
     }
     static func proDemoFrameTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoFrameTitle",
@@ -7973,17 +7981,19 @@ enum AppStrings {
         tr(lang, "proDemoCarTitle",
            ru: "8 фонов для твоей машины", en: "8 backgrounds for your car")
     }
+    /// Фон машины виден в публичном гараже (`VehicleCardStyleWash`), в ленте —
+    /// нет: `SocialFeedVehicle` его не несёт.
     static func proDemoCarText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarText",
-           ru: "Карточка машины стоит в твоём профиле и в ленте у других. Выбери фон, меняй когда хочешь.",
-           en: "Your car card sits on your profile and in other people\'s feeds. Pick a background, change it whenever.")
+           ru: "Карточка машины стоит в твоём гараже и в публичном профиле. Выбери фон, меняй когда хочешь.",
+           en: "Your car card shows in your garage and on your public profile. Pick a background, change it whenever.")
     }
     /// Гараж пуст — состояние 3. Последняя фраза обязательна: без неё силуэт
     /// читается поломкой, а не примером.
     static func proDemoCarTextNoVehicle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarTextNoVehicle",
-           ru: "Карточка машины стоит в твоём профиле и в ленте у других. Пока машины нет, показываем пример.",
-           en: "Your car card sits on your profile and in other people\'s feeds. There\'s no car yet, so this is an example.")
+           ru: "Карточка машины стоит в твоём гараже и в публичном профиле. Пока машины нет, показываем пример.",
+           en: "Your car card shows in your garage and on your public profile. There's no car yet, so this is an example.")
     }
     static func proDemoCarEmptyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarEmptyTitle", ru: "Твоя машина", en: "Your car")
@@ -8080,10 +8090,11 @@ enum AppStrings {
            ru: "Уже десять поездок. Профиль можно оформить",
            en: "Ten trips already. Your profile can have a look")
     }
+    /// Рамка видна в ленте (`SocialAuthor.avatarFrame`), фон — только в профиле.
     static func proCtxM1Text(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proCtxM1Text",
-           ru: "8 фонов и 6 рамок в PRO, их видят в ленте и в профиле",
-           en: "8 backgrounds and 6 frames in PRO, seen in the feed and on your profile")
+           ru: "8 фонов и 6 рамок в PRO: фон виден в профиле, рамка — ещё и в ленте",
+           en: "8 backgrounds and 6 frames in PRO: backgrounds show on your profile, frames in the feed too")
     }
     /// M3 — месяц с приложением.
     static func proCtxM3Title(_ lang: LanguageManager.Language) -> String {
@@ -8260,10 +8271,12 @@ enum AppStrings {
     /// «Точки, время и машина на месте» — обязательная половина: человек
     /// боится, что набранное пропадёт, и именно поэтому пейвол показывается
     /// ВТОРЫМ листом поверх, а не подменой содержимого.
+    /// После покупки поездка сама не сохраняется: «Вернуться к поездке»
+    /// закрывает витрину (`ProBoughtView`), и «Сохранить» жмут ещё раз.
     static func manualFailedProText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualFailedProText",
-           ru: "Продли, и поездка запишется. Точки, время и машина на месте.",
-           en: "Renew and the trip will save. Points, time and car are kept.")
+           ru: "Продли и сохрани ещё раз — точки, время и машина на месте.",
+           en: "Renew, then save again — points, time and car are kept.")
     }
     static func manualFailedDbTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualFailedDbTitle", ru: "Не удалось сохранить", en: "Couldn\'t save")
@@ -8358,10 +8371,12 @@ enum AppStrings {
     }
     /// Единственное обещание листа — что обещаний нет. Сказано СЛОВАМИ, и это
     /// требование Apple к донату, а не вежливость.
+    /// Чаевые видит и подписчик PRO (`TipEntry`), поэтому не «всё бесплатно»:
+    /// названо то, что бесплатно на самом деле — запись, Атлас, статистика.
     static func tipsText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tipsText",
-           ru: "Это просто спасибо. Ничего не откроется и не изменится: всё, чем вы пользуетесь, и так бесплатно.",
-           en: "It's just a thank you. Nothing unlocks or changes: everything you use is free anyway.")
+           ru: "Это просто спасибо. Чаевые ничего не открывают и не меняют — запись поездок, Атлас и статистика бесплатны и так.",
+           en: "It's just a thank you. A tip doesn't unlock or change anything — recording, Atlas and statistics are free anyway.")
     }
     /// Имена трёх уровней. Цену к ним печатает витрина Apple — своей здесь нет.
     static func tipsCoffee(_ lang: LanguageManager.Language) -> String {
@@ -8379,10 +8394,12 @@ enum AppStrings {
     }
     /// И ещё раз то же обещание, уже после списания: приложение остаётся
     /// бесплатным.
+    /// Без «приложение останется бесплатным»: при платной подписке PRO это
+    /// обещание, которое нечем подтвердить.
     static func tipsThanksText(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tipsThanksText",
-           ru: "Это очень поддерживает. Приложение останется бесплатным.",
-           en: "That means a lot. The app stays free.")
+           ru: "Это очень поддерживает. Спасибо!",
+           en: "That means a lot. Thank you!")
     }
 
     // MARK: - Косметика «Плюса» (0.8.0)
@@ -8424,8 +8441,10 @@ enum AppStrings {
     }
     /// Подпись под пикером линии: выбор локальный и на чужие
     /// глаза не попадает.
+    /// Цвет — локальная настройка (`RouteLineStyle.currentUIColor`): красит и
+    /// чужие маршруты на этом экране, а у других ваши остаются прежними.
     static func routeLinePickerFootnote(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "routeLinePickerFootnote", ru: "Цвет виден только на ваших картах. В ленте и в чужих профилях маршруты рисуются как раньше.", en: "The colour shows on your own maps only. In the feed and on other people’s profiles routes look as they always did.")
+        tr(lang, "routeLinePickerFootnote", ru: "Цвет меняется только у вас на экране, в том числе на чужих маршрутах. Другие видят ваши маршруты как обычно.", en: "The colour changes only on your screen, including on other people's routes. Others see your routes as usual.")
     }
     /// Тумблер «Значок «Плюс»» в «Приватности».
     static func privacyPlusBadgeTitle(_ lang: LanguageManager.Language) -> String {
@@ -8657,10 +8676,13 @@ enum AppStrings {
     /// Человек читает это ДО нажатия, а не после: включение заводит
     /// переотправку всех уже опубликованных поездок, и умолчать об этом
     /// значило бы сделать за него работу, о которой он не просил.
+    /// Обрезка — для отправок с этого момента. Переотправляются только
+    /// публичные (`HomePrivacyResync`); приватные, уже выгруженные облаком,
+    /// лежат на сервере целиком до первой правки — «не уезжает» обещало больше.
     static func homeZoneNote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeZoneNote",
-           ru: "Внутри круга трек не уезжает с телефона. Уже опубликованные поездки будут отправлены заново — обрезанными, а если зону выключить, то целиком.",
-           en: "Inside the circle the track never leaves your phone. Trips you have already published will be sent again — trimmed, and whole again if you turn the zone off.")
+           ru: "Внутри круга трек больше не отправляется на сервер. Уже опубликованные поездки будут отправлены заново — обрезанными, а если зону выключить, то целиком. Приватные поездки, уже загруженные синхронизацией, обрежутся при следующей правке.",
+           en: "Inside the circle the track is no longer sent to the server. Trips you've published will be sent again — trimmed, and whole if you turn the zone off. Private trips already uploaded by sync are trimmed at their next edit.")
     }
     /// Короткая подпись зоны для строки в листе вида карты: «зона 500 м».
     static func homeZoneShort(_ lang: LanguageManager.Language, radius: String) -> String {
@@ -8672,6 +8694,12 @@ enum AppStrings {
     }
     static func homeRemoveTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeRemoveTitle", ru: "Убрать дом?", en: "Remove home?")
+    }
+    /// Когда зона выключена: убирается только точка, на сервер ничего не уходит.
+    static func homeRemoveBodyNoZone(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeRemoveBodyNoZone",
+           ru: "Точка дома сотрётся с этого телефона. На сервер при этом ничего не отправится.",
+           en: "The home point is erased from this phone. Nothing is sent to the server.")
     }
     static func homeRemoveBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeRemoveBody",
