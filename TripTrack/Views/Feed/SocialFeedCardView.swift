@@ -545,6 +545,7 @@ struct SocialFeedCardView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "face.smiling")
                                 .font(.system(size: 13, weight: .medium))
+                                .accessibilityHidden(true)
                             Text(AppStrings.socialFeedReact(lang.language))
                                 .font(.inter(12, weight: .semibold))
                         }

@@ -137,6 +137,8 @@ struct TripMomentsTimeline: View {
             .foregroundStyle(c.card)
             .frame(width: nodeSize, height: nodeSize)
             .background(c.text, in: Circle())
+            // «Финиш» is written beside it; the glyph's own name is noise.
+            .accessibilityHidden(true)
     }
 
     private func cameraNode(_ c: AppTheme.Colors) -> some View {
