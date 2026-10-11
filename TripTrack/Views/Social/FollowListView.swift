@@ -29,6 +29,8 @@ struct FollowListView: View {
     @State private var users: [SocialAuthor] = []
     @State private var isLoading = false
     @State private var selectedAuthor: SocialAuthor?
+    /// Whose row is one's own — read once, not per row (`PersonName`).
+    @State private var ownId: UUID? = PersonName.ownId()
     @State private var loadError: String?
     /// Both counts of the viewed account for the segment labels — fetched
     /// from the profile endpoint (real numbers or plain labels, never fake).
@@ -248,17 +250,10 @@ struct FollowListView: View {
             }
         } label: {
             HStack(spacing: 11) {
-                Circle()
-                    .fill(c.cardAlt)
-                    .frame(width: 36, height: 36)
-                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(19)) }
+                PersonAvatar(author: user)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.inter(13.5, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    PersonName(author: user, font: .inter(13.5, weight: .bold), ownId: ownId)
                     // App-wide LVL convention (feed cards, garage, profile).
                     Text("LVL \(user.profileLevel)")
                         .font(.inter(11).monospacedDigit())

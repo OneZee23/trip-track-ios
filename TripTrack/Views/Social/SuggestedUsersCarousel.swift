@@ -15,6 +15,8 @@ struct SuggestedUsersCarousel: View {
     @State private var followed: Set<UUID> = []
     @State private var pendingFollow: Set<UUID> = []
     @State private var didLoad = false
+    /// Whose row is one's own — read once, not per row (`PersonName`).
+    @State private var ownId: UUID? = PersonName.ownId()
     @State private var signInPrompt: SignInPromptSheet.Action?
     @ObservedObject private var auth = AuthService.shared
 
@@ -25,11 +27,7 @@ struct SuggestedUsersCarousel: View {
         VStack(alignment: .leading, spacing: 10) {
             if !users.isEmpty {
                 HStack {
-                    Text(AppStrings.suggestedUsersCarouselSuggested(lng))
-                        .font(.inter(11, weight: .bold))
-                        .tracking(0.5)
-                        .foregroundStyle(c.textTertiary)
-                        .textCase(.uppercase)
+                    ProfileSectionLabel(text: AppStrings.suggestedUsersCarouselSuggested(lng))
                     Spacer()
                 }
                 .padding(.horizontal, 4)
@@ -51,16 +49,10 @@ struct SuggestedUsersCarousel: View {
 
     private func card(_ user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
-            Circle()
-                .fill(AppTheme.accentBg)
-                .frame(width: 62, height: 62)
-                .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(32)) }
+            PersonAvatar(author: user, size: 62, fill: AppTheme.accentBg)
 
             VStack(spacing: 2) {
-                Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                    .font(.inter(12, weight: .bold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
+                PersonName(author: user, font: .inter(12, weight: .bold), badgeHeight: 13, ownId: ownId)
                 Text("LVL \(user.profileLevel)")
                     .font(.inter(10, weight: .semibold).monospacedDigit())
                     .foregroundStyle(c.textTertiary)

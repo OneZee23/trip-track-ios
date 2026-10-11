@@ -110,6 +110,15 @@ enum DebugForeignTripFixture {
         ]
     }
 
+    private static func suggestedUser(_ i: Int, name: String, emoji: String, level: Int,
+                                      reason: String, km: Double) -> [String: Any] {
+        ["id": i == 0 ? authorId : "D37A4000-0000-4000-8000-00000000008\(i)",
+         "displayName": name, "avatarEmoji": emoji, "profileLevel": level,
+         "matchReason": reason, "totalKm": km,
+         // The first suggestion is the PRO traveller of the trip fixture.
+         "isPlus": i == 0, "avatarFrame": i == 0 ? "frame_gold" : NSNull()]
+    }
+
     static func response(path: String) throws -> Data {
         let payload: [String: Any]
         if path.hasSuffix(APIEndpoint.socialFeed) {
@@ -130,6 +139,18 @@ enum DebugForeignTripFixture {
             payload = ["journeys": [], "nextCursor": NSNull()]
         } else if path.hasSuffix(APIEndpoint.companionsList) {
             payload = ["items": [], "isOwnerView": false]
+        } else if path.hasSuffix(APIEndpoint.socialSuggested) {
+            // «Найти людей» for review: three suggestions with each rationale.
+            payload = ["users": [
+                suggestedUser(0, name: "Test Traveller", emoji: "🚙", level: 21, reason: "sharedRegion", km: 12_840),
+                suggestedUser(1, name: "Марина К.", emoji: "🏍️", level: 9, reason: "nearby", km: 3_120),
+                suggestedUser(2, name: "Alexander Konstantinopolsky", emoji: "🚐", level: 34, reason: "popular", km: 48_900),
+            ]]
+        } else if path.hasSuffix(APIEndpoint.socialSearch) {
+            payload = ["users": [
+                ["id": authorId, "displayName": "Test Traveller", "avatarEmoji": "🚙", "profileLevel": 21,
+                 "isPlus": true, "avatarFrame": "frame_gold"],
+            ]]
         } else {
             // Catch every other API request too: this fixture never falls
             // through to a real server, including incidental startup writes.
