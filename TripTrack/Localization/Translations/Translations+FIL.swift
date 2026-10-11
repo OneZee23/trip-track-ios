@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Hindi na-load ang usapan",
         "companionsSavedCopy": "Naka-save sa device na ito — wala sa server ang biyahe",
         "discussionArchived": "Naka-save na kopya — wala na sa server ang biyaheng ito",
+        "discussionNeedsCloud": "Para mapag-usapan ang biyahe, kailangang nasa cloud o feed ito",
         "tripPrivateTitle": "Pribado ang biyaheng ito",
         "tripPrivateBody": "Ginawa itong pribado ng may-ari — siya na lang ang nakakakita.",
         "tryAgain": "Subukan ulit",

@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Nie udało się wczytać dyskusji",
         "companionsSavedCopy": "Zapisane na tym urządzeniu — trasy nie ma na serwerze",
         "discussionArchived": "Zapisana kopia — tej trasy nie ma już na serwerze",
+        "discussionNeedsCloud": "Aby rozmawiać o przejeździe, musi być w chmurze lub na tablicy",
         "tripPrivateTitle": "Ta trasa jest prywatna",
         "tripPrivateBody": "Autor ustawił ją jako prywatną — teraz widzi ją tylko on.",
         "tryAgain": "Spróbuj ponownie",

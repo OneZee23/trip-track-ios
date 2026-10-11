@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Талқылауды жүктеу мүмкін болмады",
         "companionsSavedCopy": "Осы құрылғыда сақталған — сапар серверде жоқ",
         "discussionArchived": "Сақталған көшірме — бұл сапар енді серверде жоқ",
+        "discussionNeedsCloud": "Сапарды талқылау үшін ол бұлтта немесе таспада болуы керек",
         "tripPrivateTitle": "Сапар жабық",
         "tripPrivateBody": "Авторы оны жабық қылды — енді оны тек сол көреді.",
         "tryAgain": "Қайта көру",

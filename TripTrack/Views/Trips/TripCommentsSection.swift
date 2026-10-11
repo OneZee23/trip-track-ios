@@ -110,6 +110,14 @@ struct TripCommentsSection: View {
         return newestFirst.reversed()
     }
 
+    /// The line under a thread nobody can reply to. Pure, so the two cases
+    /// are tested without a store.
+    static func readOnlyLine(isArchived: Bool, language: LanguageManager.Language) -> String {
+        isArchived
+            ? AppStrings.discussionArchived(language)
+            : AppStrings.discussionNeedsCloud(language)
+    }
+
     private var displayCount: Int {
         guard store.hasLoadedOnce, !store.loadFailed else {
             return max(initialCount, store.comments.count)
@@ -188,10 +196,12 @@ struct TripCommentsSection: View {
                 // it opens the sheet with the keyboard already up, so writing
                 // happens in one place with the whole thread in view.
                 if store.isArchived || isReadOnly {
-                    // Nothing to reply to: the trip this conversation belongs
-                    // to is no longer on the server, and the thread survives
-                    // only because the device kept a copy of it.
-                    Text(AppStrings.discussionArchived(lang.language))
+                    // Nothing to reply to. «A saved copy» only when the device
+                    // really kept one: a trip that has never been on the
+                    // server (sync off — the default) has no copy, and the
+                    // archived line told every such owner their trip «is no
+                    // longer on the server».
+                    Text(Self.readOnlyLine(isArchived: store.isArchived, language: lang.language))
                         .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)

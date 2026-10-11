@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Não foi possível carregar a conversa",
         "companionsSavedCopy": "Salvo neste aparelho — a viagem não está no servidor",
         "discussionArchived": "Uma cópia salva — esta viagem não está mais no servidor",
+        "discussionNeedsCloud": "Para comentar a viagem, ela precisa estar na nuvem ou no feed",
         "tripPrivateTitle": "Esta viagem é privada",
         "tripPrivateBody": "O autor deixou ela privada — agora só ele consegue ver.",
         "tryAgain": "Tentar de novo",

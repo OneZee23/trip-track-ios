@@ -2120,6 +2120,15 @@ enum AppStrings {
            ru: "Сохранено на устройстве — поездка не на сервере",
            en: "Saved on this device — the trip is not on the server")
     }
+    /// Своя поездка, которой нет на сервере и чьей копии обсуждения нет на
+    /// телефоне. «Сохранённая копия» здесь была бы неправдой: поездка на
+    /// сервере не была никогда. Слова — те же, что у попутчиков на этом же
+    /// экране (`companionsPublishFirstHint`): одно условие, одна формулировка.
+    static func discussionNeedsCloud(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "discussionNeedsCloud",
+           ru: "Чтобы обсуждать поездку, она должна быть в облаке или в ленте",
+           en: "To discuss the trip, it needs to be in the cloud or in the feed")
+    }
     static func discussionArchived(_ lang: LanguageManager.Language) -> String {
         tr(lang, "discussionArchived",
            ru: "Сохранённая копия обсуждения — поездка больше не на сервере",

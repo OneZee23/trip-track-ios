@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Не вдалося завантажити обговорення",
         "companionsSavedCopy": "Збережено на пристрої — поїздки немає на сервері",
         "discussionArchived": "Збережена копія обговорення — поїздки більше немає на сервері",
+        "discussionNeedsCloud": "Щоб обговорювати поїздку, вона має бути в хмарі або у стрічці",
         "tripPrivateTitle": "Поїздка закрита",
         "tripPrivateBody": "Автор зробив її приватною — тепер її бачить лише він.",
         "tryAgain": "Спробувати знову",

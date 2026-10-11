@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Diskussion konnte nicht geladen werden",
         "companionsSavedCopy": "Auf diesem Gerät gesichert — die Fahrt liegt nicht auf dem Server",
         "discussionArchived": "Eine gesicherte Kopie — diese Fahrt liegt nicht mehr auf dem Server",
+        "discussionNeedsCloud": "Um die Fahrt zu besprechen, muss sie in der Cloud oder im Feed sein",
         "tripPrivateTitle": "Diese Fahrt ist privat",
         "tripPrivateBody": "Der Autor hat sie auf privat gestellt — jetzt sieht sie nur er selbst.",
         "tryAgain": "Nochmal versuchen",

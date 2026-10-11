@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Impossible de charger la discussion",
         "companionsSavedCopy": "Enregistré sur cet appareil — le trajet n'est pas sur le serveur",
         "discussionArchived": "Une copie enregistrée — ce trajet n'est plus sur le serveur",
+        "discussionNeedsCloud": "Pour discuter du trajet, il doit être dans le cloud ou dans le fil",
         "tripPrivateTitle": "Ce trajet est privé",
         "tripPrivateBody": "Son auteur l'a rendu privé — lui seul le voit désormais.",
         "tryAgain": "Réessayer",

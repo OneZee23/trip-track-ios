@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Sohbet yüklenemedi",
         "companionsSavedCopy": "Bu cihaza kaydedildi — gezi sunucuda değil",
         "discussionArchived": "Kaydedilmiş bir kopya — bu gezi artık sunucuda değil",
+        "discussionNeedsCloud": "Yolculuğu konuşmak için bulutta veya akışta olmalı",
         "tripPrivateTitle": "Bu gezi özel",
         "tripPrivateBody": "Sahibi özel yaptı — artık yalnızca o görebiliyor.",
         "tryAgain": "Tekrar dene",

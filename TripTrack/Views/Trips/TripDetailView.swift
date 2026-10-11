@@ -104,6 +104,12 @@ struct TripDetailView: View {
     @State private var cachedStoppedTime: TimeInterval = 0
     @State private var cachedElevationGain: Double = 0
     @State private var cachedMaxAltitude: Double = 0
+    /// Высоту приложение действительно измерило: трек не плоский (то же
+    /// условие, что прячет график) и значения не пришли пустыми. Нет —
+    /// плиток высоты нет вовсе: «+0 м» на плоском треке и у чужой поездки
+    /// старого клиента было бы обещанием измерения, которого не было (то же
+    /// правило, по которому у вписанной поездки нет «Макс.»).
+    @State private var hasElevation = false
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
@@ -1473,6 +1479,7 @@ struct TripDetailView: View {
             let altValues = elev.map(\.y)
             let flat = (altValues.max() ?? 0) - (altValues.min() ?? 0) <= 0.5
             elevationSeries = flat ? [] : elev
+            hasElevation = !flat && t.source == .recorded
             speedSeries = spd
 
             cachedDrivingTime = t.drivingTime
@@ -1491,6 +1498,7 @@ struct TripDetailView: View {
             // The poster renders the simplified polyline accent-colored;
             // charts and the moving/stops bar stay hidden (no series).
             cachedCoordinates = Trip.decodePolyline(preview)
+            hasElevation = false
             localReplayInput = TripReplayInput(coords: cachedCoordinates, speeds: [], timestamps: [])
             cachedSpeeds = []
             // Remember WHERE these coordinates came from. A preview polyline is
@@ -1535,6 +1543,12 @@ struct TripDetailView: View {
         cachedStoppedTime = Double(social.stoppedTime ?? 0)
         cachedElevationGain = social.elevation ?? 0
         cachedMaxAltitude = social.maxAltitude ?? 0
+        // `nil` — клиент старше 0.5.6 высоты не слал; вписанную рукой поездку
+        // по высоте не меряли вовсе. Набор не больше полуметра — тот же
+        // плоский трек, по которому у своей поездки прячется график.
+        hasElevation = (social.source ?? .recorded) == .recorded
+            && social.maxAltitude != nil
+            && (social.elevation ?? 0) > 0.5
     }
 
     /// Draws the screen from a copy of the feed's payload — on arrival, and
@@ -2499,7 +2513,10 @@ isOwn
                 }
             }
 
-            if (cachedDrivingTime + cachedStoppedTime) > 0 {
+            // Только у записанной поездки: вписанная едет с постоянной
+            // скоростью по построению, и «без движения 0 сек» у неё — не
+            // измерение, а арифметика (`ManualTripBuilder`).
+            if trip.source == .recorded, (cachedDrivingTime + cachedStoppedTime) > 0 {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailSectionHeader(text: AppStrings.movingAndStops(lang.language))
                     MovingStopsCard(
@@ -3603,7 +3620,7 @@ isOwn
             // with engine on" — the only honest answer to the recurring
             // "why does my fuel feel off in traffic?" question. Hidden
             // when the trip has no usable track-point data.
-            if (cachedDrivingTime + cachedStoppedTime) > 0 {
+            if trip.source == .recorded, (cachedDrivingTime + cachedStoppedTime) > 0 {
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(cachedDrivingTime, lang: l),
                     label: AppStrings.statMoving(l),
@@ -3633,18 +3650,20 @@ isOwn
                     color: AppTheme.red
                 )
             }
-            DetailStatCard(
-                value: tripElevationGain(l).value,
-                unit: tripElevationGain(l).unit,
-                label: AppStrings.elevationGain(l),
-                color: AppTheme.green
-            )
-            DetailStatCard(
-                value: tripMaxAltitude(l).value,
-                unit: tripMaxAltitude(l).unit,
-                label: AppStrings.maxAltitude(l),
-                color: AppTheme.teal
-            )
+            if hasElevation {
+                DetailStatCard(
+                    value: tripElevationGain(l).value,
+                    unit: tripElevationGain(l).unit,
+                    label: AppStrings.elevationGain(l),
+                    color: AppTheme.green
+                )
+                DetailStatCard(
+                    value: tripMaxAltitude(l).value,
+                    unit: tripMaxAltitude(l).unit,
+                    label: AppStrings.maxAltitude(l),
+                    color: AppTheme.teal
+                )
+            }
 
             // Энергия поездки (0.8.3): киловатт-часы, литры и деньги.
             // Плитка части есть, только если у части есть километры И у машины

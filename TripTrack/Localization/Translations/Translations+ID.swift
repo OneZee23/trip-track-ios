@@ -307,6 +307,7 @@ extension Translations {
         "discussionUnavailable": "Diskusi gagal dimuat",
         "companionsSavedCopy": "Tersimpan di perangkat ini — perjalanannya tidak ada di server",
         "discussionArchived": "Salinan tersimpan — perjalanan ini sudah tidak ada di server",
+        "discussionNeedsCloud": "Untuk membahas perjalanan, perjalanan harus ada di awan atau beranda",
         "tripPrivateTitle": "Perjalanan ini privat",
         "tripPrivateBody": "Pemiliknya menjadikannya privat — sekarang hanya dia yang bisa melihat.",
         "tryAgain": "Coba lagi",
