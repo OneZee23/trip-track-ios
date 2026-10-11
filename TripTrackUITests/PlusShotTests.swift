@@ -51,6 +51,11 @@ final class PlusShotTests: XCTestCase {
         app.buttons.matching(identifier: "tab_profile").firstMatch.tap()
         usleep(1_500_000)
 
+        // С кандидата 73 «Гараж · PRO · Достижения · Клубы» свёрнуты в одну
+        // строку у профиля с историей; строка PRO живёт внутри.
+        let sections = app.buttons["profile_sections_toggle"].firstMatch
+        if sections.waitForExistence(timeout: 3) { sections.tap(); usleep(600_000) }
+
         let plusRow = app.buttons.matching(identifier: "profile_plus_row").firstMatch
         XCTAssertTrue(plusRow.waitForExistence(timeout: 6), "строки PRO нет в дереве")
         // Содержимое профиля — обычный `VStack`, поэтому `.exists` истинно

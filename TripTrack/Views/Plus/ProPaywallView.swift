@@ -4,6 +4,7 @@ import StoreKit
 /// Native PRO storefront. The offer stays pinned; the feature list scrolls
 /// according to its real size, including translations and Dynamic Type.
 struct ProPaywallView: View {
+    @Environment(\.openURL) private var openURL
     /// С какой функции пришли. Не `nil` — витрина открывается СРАЗУ на
     /// странице этой функции: на замок человек нажимает посреди дела, и список
     /// из пяти строк отвечает не на его вопрос.
@@ -537,6 +538,10 @@ struct ProPaywallView: View {
                     Text(AppStrings.plusRestore(l))
                         .font(.inter(12, weight: .medium))
                         .foregroundStyle(c.textSecondary)
+                        // Required by review (3.1.2) and was 15 pt tall: the
+                        // footer is the line a finger misses most. 44 pt,
+                        // same look.
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .disabled(store.isBusy)
@@ -544,13 +549,31 @@ struct ProPaywallView: View {
 
                 Text(verbatim: "·").foregroundStyle(c.textTertiary)
             }
-            Link(AppStrings.plusTermsLink(l), destination: AppConfig.termsURL(l))
+            // Buttons that open the URL, not `Link`: a `Link` hit-tests its
+            // text and ignores the widened content shape (measured 15 pt).
+            legalLink(AppStrings.plusTermsLink(l), url: AppConfig.termsURL(l), c: c)
+                .accessibilityIdentifier("plus_terms")
             Text(verbatim: "·").foregroundStyle(c.textTertiary)
-            Link(AppStrings.plusPrivacyLink(l), destination: AppConfig.privacyPolicyURL(l))
+            legalLink(AppStrings.plusPrivacyLink(l), url: AppConfig.privacyPolicyURL(l), c: c)
+                .accessibilityIdentifier("plus_privacy")
         }
         .font(.inter(12, weight: .medium))
         .tint(c.textSecondary)
         .padding(.top, 4)
         .frame(maxWidth: .infinity)
+    }
+
+    private func legalLink(_ title: String, url: URL, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            openURL(url)
+        } label: {
+            Text(title)
+                .font(.inter(12, weight: .medium))
+                .foregroundStyle(c.textSecondary)
+                .tapTarget()
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isLink)
     }
 }
