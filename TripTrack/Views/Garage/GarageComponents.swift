@@ -145,25 +145,23 @@ struct VehicleLevelPill: View {
 
 /// Uppercased tracking section label («СТИКЕРЫ», «РАСХОД ТОПЛИВА», …).
 ///
-/// The 10pt/0.5 default is canon for in-card labels and for «РАСХОД ТОПЛИВА»
-/// (499:193), but the screen-level «Стикеры» header is drawn a step larger —
-/// 12pt/0.36 in both 119:968 and 499:158 — and rendering it at the in-card
-/// size flattened the two levels into one. Size and tracking are independent
-/// because canon does not scale one from the other.
+/// Section heading of the garage, the vehicle passport and its form.
+/// `size`/`tracking` were the 0.6.x canon's grey capitals (10pt/0.5 in cards,
+/// 12pt/0.36 on screen level); they stay as parameters so call sites compile,
+/// and no longer change the heading.
 struct GarageSectionLabel: View {
     let text: String
+    /// Kept so the 31 call sites compile unchanged; the heading is ink now.
     var color: Color?
     var size: CGFloat = 10
     var tracking: CGFloat = 0.5
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        Text(text).textCase(.uppercase)
-            .font(.inter(size, weight: .bold))
-            .tracking(tracking)
-            .foregroundStyle(color ?? c.textTertiary)
+        // The section heading of «Я» (`AppType.section`: 16/700, ink, sentence
+        // case) — owner's rule of 26 Sep 2026, applied to the garage on
+        // 11 Oct: small grey capitals made it read as a different app.
+        ProfileSectionLabel(text: text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

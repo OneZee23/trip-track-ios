@@ -899,11 +899,12 @@ struct StatsScreenView: View {
         }
     }
 
+    /// The section heading of «Я» (`AppType.section`, 16/700, ink, sentence
+    /// case) — rule of 26 Sep 2026: small grey capitals were what made a
+    /// screen read as a different app. The capitals used to live in the
+    /// translations themselves, so the words changed too.
     private func sectionLabel(_ text: String, _ c: AppTheme.Colors) -> some View {
-        Text(text)
-            .font(.inter(13, weight: .bold))
-            .tracking(0.26)
-            .foregroundStyle(c.textSecondary)
+        ProfileSectionLabel(text: text)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 2)
             .padding(.top, 6)

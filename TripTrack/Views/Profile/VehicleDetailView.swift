@@ -959,7 +959,14 @@ struct VehicleDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            GarageSectionLabel(text: label)
+            // A quantity's caption («ПРОБЕГ»), not a section heading: the
+            // one place capitals stay (`AppType.statCaption`).
+            Text(label)
+                .font(AppType.statCaption)
+                .tracking(AppType.statCaptionTracking)
+                .textCase(.uppercase)
+                .foregroundStyle(c.textTertiary)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -1201,7 +1208,7 @@ struct VehicleDetailView: View {
                     )
                     fuelDivider(c: c)
                     fuelRow(
-                        title: AppStrings.fuelPriceRow(l),
+                        title: AppStrings.electricPriceSection(l),
                         value: vehicle.electricityPrice > 0
                             ? "\(GarageFormat.fuel(vehicle.electricityPrice, lng: lng)) \(kWhPriceUnit)"
                             : "—",

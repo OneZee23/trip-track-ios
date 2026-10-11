@@ -4897,7 +4897,7 @@ enum AppStrings {
         }
     }
     static func statsRecords(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsRecords", ru: "РЕКОРДЫ", en: "RECORDS")
+        tr(lang, "statsRecords", ru: "Рекорды", en: "Records")
     }
     static func recordLongest(_ lang: LanguageManager.Language) -> String {
         tr(lang, "recordLongest", ru: "Самая длинная", en: "Longest")
@@ -6254,7 +6254,7 @@ enum AppStrings {
         }
     }
     static func statsNewPlaces(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsNewPlaces", ru: "НОВЫЕ МЕСТА", en: "NEW PLACES")
+        tr(lang, "statsNewPlaces", ru: "Новые места", en: "New places")
     }
     /// «За июнь: +2 новые дороги · первый раз в Каргополе». The second half is
     /// dropped whole — separator included — when there is no first-time place.
@@ -6321,7 +6321,7 @@ enum AppStrings {
         return "\(head): \(c) · \(r)"
     }
     static func statsHallOfFame(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsHallOfFame", ru: "ДОСКА ПОЧЕТА", en: "HALL OF FAME")
+        tr(lang, "statsHallOfFame", ru: "Доска почёта", en: "Hall of fame")
     }
     static func statsRecordLongest(_ lang: LanguageManager.Language) -> String {
         recordLongest(lang)
