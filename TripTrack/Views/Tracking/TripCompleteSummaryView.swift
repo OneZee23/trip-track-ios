@@ -115,7 +115,7 @@ struct TripCompleteSummaryView: View {
                     value: tripDistance.value,
                     unit: tripDistance.unit,
                     label: AppStrings.distance(lang.language),
-                    color: AppTheme.green,
+                    color: c.distance,
                     c: c
                 )
                 summaryStatCard(

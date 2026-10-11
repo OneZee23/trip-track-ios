@@ -3609,12 +3609,17 @@ isOwn
                 value: tripDistance(trip, l).value,
                 unit: tripDistance(trip, l).unit,
                 label: AppStrings.distance(l),
-                color: AppTheme.green
+                color: c.distance
             )
+            // Цвет — у трёх главных величин и только у них, как на финише:
+            // дистанция зелёная, средняя синяя, максимум красный. Время —
+            // чернилами («time is neutral dark, not accent», Figma 147:1190),
+            // и вторичное тоже: синее «В движении» читалось скоростью, а
+            // зелёный набор высоты — дистанцией.
             DetailStatCard(
                 segments: TripDetailFormat.durationSegments(trip.duration, lang: l),
                 label: AppStrings.duration(l),
-                color: AppTheme.accent
+                color: c.text
             )
             // Movement split surfaces "actually driving" vs "stationary
             // with engine on" — the only honest answer to the recurring
@@ -3624,12 +3629,12 @@ isOwn
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(cachedDrivingTime, lang: l),
                     label: AppStrings.statMoving(l),
-                    color: AppTheme.blue
+                    color: c.text
                 )
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(cachedStoppedTime, lang: l),
                     label: AppStrings.statStops(l),
-                    color: c.textSecondary
+                    color: c.text
                 )
             }
             DetailStatCard(
@@ -3655,13 +3660,13 @@ isOwn
                     value: tripElevationGain(l).value,
                     unit: tripElevationGain(l).unit,
                     label: AppStrings.elevationGain(l),
-                    color: AppTheme.green
+                    color: c.text
                 )
                 DetailStatCard(
                     value: tripMaxAltitude(l).value,
                     unit: tripMaxAltitude(l).unit,
                     label: AppStrings.maxAltitude(l),
-                    color: AppTheme.teal
+                    color: c.text
                 )
             }
 

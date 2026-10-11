@@ -67,8 +67,13 @@ struct DetailStatCard: View {
     /// «4 ч 58 мин» as a single run of text — numbers in the card's colour,
     /// units small and secondary.
     private func valueText(_ c: AppTheme.Colors) -> Text {
-        let big = Font.system(size: 23, weight: .heavy).monospacedDigit()
-        let small = Font.system(size: 13)
+        // Inter 24/800 — та же роль, что у плитки финиша
+        // (`TripCompleteSummaryView.summaryStatCard`). Здесь стоял системный
+        // SF Heavy 23: при переходе на Inter 26 сентября перевели подпись, а
+        // число забыли, и одна плитка на двух соседних экранах шла двумя
+        // гарнитурами.
+        let big = Font.inter(24, weight: .heavy).monospacedDigit()
+        let small = Font.inter(13, weight: .medium)
         var out = AttributedString()
         for (i, seg) in segments.enumerated() {
             if i > 0 {

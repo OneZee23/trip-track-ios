@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import UIKit
 @testable import TripTrack
 
 /// The trip screen says only what the app measured (review 11 Oct 2026).
@@ -37,5 +39,28 @@ final class TripDetailHonestyTests: XCTestCase {
         let mid = TripDetailView.heroProgress(minY: -136, posterHeight: poster, safeAreaTop: safe)
         XCTAssertEqual(mid, 0.5, accuracy: 0.001)
         XCTAssertEqual((mid * 20).rounded(), mid * 20, "quantized to 1/20")
+    }
+
+    /// Цифры дистанции читаются на белой карточке: не ниже 3 : 1 (WCAG для
+    /// крупного текста). В тёмной теме цвет прежний — там у него запас.
+    func testDistanceDigitsClearContrastOnTheCard() {
+        let light = AppTheme.colors(for: .light)
+        let ratio = Self.contrast(UIColor(light.distance), UIColor(light.card))
+        XCTAssertGreaterThanOrEqual(ratio, 3.0, "distance on a white card: \(ratio)")
+        let dark = AppTheme.colors(for: .dark)
+        XCTAssertEqual(UIColor(dark.distance), UIColor(AppTheme.green))
+    }
+
+    private static func contrast(_ a: UIColor, _ b: UIColor) -> Double {
+        func luminance(_ c: UIColor) -> Double {
+            var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, al: CGFloat = 0
+            c.getRed(&r, green: &g, blue: &bl, alpha: &al)
+            func lin(_ v: CGFloat) -> Double {
+                let v = Double(v); return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl)
+        }
+        let la = luminance(a), lb = luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }
 }

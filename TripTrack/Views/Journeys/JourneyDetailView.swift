@@ -625,7 +625,7 @@ struct JourneyDetailView: View {
                 value: journeyDistance(l).value,
                 unit: journeyDistance(l).unit,
                 label: AppStrings.journeyDistanceLabel(l),
-                color: AppTheme.green
+                color: c.distance
             )
             if isSocial {
                 // S6: три плитки, не четыре. «В пути» — из точного трека
