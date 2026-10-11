@@ -32,6 +32,11 @@ private struct SocialActionButtonModifier: ViewModifier {
     let kind: SocialActionButtonKind
     let colors: AppTheme.Colors
     let width: CGFloat?
+    /// On a profile background (the dark cover card): the settled and inert
+    /// states turn into white-on-glass, the way the cover card on «Я» draws
+    /// its secondary ink. The offer itself stays terracotta — it is the one
+    /// action on the card.
+    var onCover: Bool = false
 
     func body(content: Content) -> some View {
         content
@@ -62,16 +67,16 @@ private struct SocialActionButtonModifier: ViewModifier {
     private var fill: Color {
         switch kind {
         case .primary: return AppTheme.accent
-        case .done:    return AppTheme.accentDim
-        case .inert:   return colors.cardAlt
+        case .done:    return onCover ? .white.opacity(0.18) : AppTheme.accentDim
+        case .inert:   return onCover ? .white.opacity(0.12) : colors.cardAlt
         }
     }
 
     private var ink: Color {
         switch kind {
         case .primary: return .white
-        case .done:    return AppTheme.accent
-        case .inert:   return colors.textSecondary
+        case .done:    return onCover ? .white : AppTheme.accent
+        case .inert:   return onCover ? .white.opacity(0.85) : colors.textSecondary
         }
     }
 }
@@ -85,8 +90,9 @@ extension View {
     func socialActionButton(
         _ kind: SocialActionButtonKind,
         colors: AppTheme.Colors,
-        width: CGFloat? = nil
+        width: CGFloat? = nil,
+        onCover: Bool = false
     ) -> some View {
-        modifier(SocialActionButtonModifier(kind: kind, colors: colors, width: width))
+        modifier(SocialActionButtonModifier(kind: kind, colors: colors, width: width, onCover: onCover))
     }
 }
