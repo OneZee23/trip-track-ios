@@ -67,7 +67,8 @@ struct ProfileAchievementsSection: View {
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(c.textSecondary)
-                .contentShape(Rectangle())
+                // 16 pt of text; the finger gets 44.
+                .tapTarget()
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("profile_achievements_all")

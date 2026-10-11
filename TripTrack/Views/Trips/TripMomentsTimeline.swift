@@ -202,7 +202,7 @@ struct TripMomentsTimeline: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(AppTheme.accent.opacity(0.12), in: Capsule())
-                        .modifier(MomentChipTarget())
+                        .tapTarget()
                     }
                     .buttonStyle(PressableCardStyle())
                     .padding(.top, 4)
@@ -259,7 +259,7 @@ struct TripMomentsTimeline: View {
             .foregroundStyle(AppTheme.accent)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(AppTheme.accentBg, in: Capsule())
-            .modifier(MomentChipTarget())
+            .tapTarget()
         }
         .buttonStyle(PressableCardStyle())
         .padding(.leading, contentInset)
@@ -503,17 +503,5 @@ private struct MomentNodeAnchors: PreferenceKey {
     static let defaultValue: [Anchor<CGPoint>] = []
     static func reduce(value: inout [Anchor<CGPoint>], nextValue: () -> [Anchor<CGPoint>]) {
         value.append(contentsOf: nextValue())
-    }
-}
-
-/// A 44 pt tall target around a 25–28 pt capsule in «Моменты», without
-/// moving anything: the capsule keeps its size and place, the invisible
-/// margin above and below takes the finger (Apple's 44 pt minimum).
-private struct MomentChipTarget: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .padding(.vertical, -8)
     }
 }
