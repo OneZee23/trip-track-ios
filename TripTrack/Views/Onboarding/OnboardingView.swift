@@ -201,50 +201,60 @@ struct OnboardingView: View {
     // MARK: - Value-prop Page (mock trip card)
 
     /// Shows what a recorded trip looks like — a static mock card with a
-    /// speed-gradient route on a parchment map and a 2×3 metrics grid.
+    /// speed-gradient route on a parchment map and one row of three metrics.
     /// Answers "what do I get?" in two seconds.
+    ///
+    /// «Дальше» is pinned 56 pt above the bottom, where the other four pages
+    /// keep it. Until 0.8.9 it scrolled with the content, and the content was
+    /// 143 pt taller than an iPhone 16: every new user met the button below
+    /// the edge and the page dots on top of the caption. The card lost its
+    /// second row (maximum, fuel, altitude — dashes for a newcomer anyway),
+    /// the caption that promised fuel and the glyphs over the numbers, which
+    /// the app's own trip tiles never had. The story now fits an iPhone 16
+    /// without scrolling; a shorter screen (SE) scrolls it above the button.
     private var valuePropPage: some View {
         let c = AppTheme.colors(for: scheme)
-        // ScrollView + basedOnSize: static on tall phones, scrolls only where
-        // the ~700pt content stack exceeds the screen (667pt SE class).
-        return ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                // A drawn album of maps rather than the system photo glyph:
-                // this page answers «what do I get?», and the answer is the
-                // artefact, not an icon standing for one.
-                onboardingHero("onboard_memory")
-                    .padding(.top, 56)
-
-                Text(AppStrings.onboardingValueTitle(lang.language))
-                    .accessibilityIdentifier("onboarding_page_1")
-                    .font(.inter(24, weight: .heavy))
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    // 49, like every other hero page: at 24 this title sat
-                    // 25pt higher than its neighbours (y≈183 vs the canon
-                    // y=208), so the headline jumped on every swipe.
-                    .padding(.top, 36)
-
-                mockTripCard(c)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 20)
-                    .task { loadRealTrip() }
-
-                bodyText(AppStrings.onboardingValueCaption(lang.language), c, size: 14)
-                    .padding(.top, 16)
-
-                primaryButton(AppStrings.onboardingContinue(lang.language)) {
-                    Haptics.tap()
-                    withAnimation { currentPage = 2 }
-                }
-                .accessibilityIdentifier("onboarding_continue_value")
-                .padding(.horizontal, 32)
-                .padding(.top, 24)
-                .padding(.bottom, 56)
+        return VStack(spacing: 0) {
+            ViewThatFits(in: .vertical) {
+                valueStory(c)
+                ScrollView(showsIndicators: false) { valueStory(c) }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            primaryButton(AppStrings.onboardingContinue(lang.language)) {
+                Haptics.tap()
+                withAnimation { currentPage = 2 }
+            }
+            .accessibilityIdentifier("onboarding_continue_value")
+            .padding(.horizontal, 32)
+            .padding(.top, 8)
+            .padding(.bottom, 56)
         }
-        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func valueStory(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            // A drawn album of maps rather than the system photo glyph:
+            // this page answers «what do I get?», and the answer is the
+            // artefact, not an icon standing for one.
+            onboardingHero("onboard_memory")
+                .padding(.top, 56)
+
+            Text(AppStrings.onboardingValueTitle(lang.language))
+                .accessibilityIdentifier("onboarding_page_1")
+                .font(.inter(24, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                // Same y as the next page's title (351 on an iPhone 16),
+                // so the headline does not jump on the swipe.
+                .padding(.top, 36)
+
+            mockTripCard(c)
+                .padding(.horizontal, 28)
+                .padding(.top, 20)
+                .task { loadRealTrip() }
+        }
     }
 
     /// Static "what your recorded trip looks like" card. Pure SwiftUI —
@@ -393,14 +403,6 @@ struct OnboardingView: View {
         return "\(prefix) · \(df.string(from: realTrip.startDate))"
     }
 
-    /// Разделитель — общий на приложение (`AppStrings.decimalSeparator`), а не
-    /// записанный руками в подставных значениях карточки: иначе настоящее
-    /// число и подставное разошлись бы типографикой посреди онбординга.
-    private static func number(_ value: Double, decimals: Int, lng: LanguageManager.Language) -> String {
-        let s = String(format: "%.\(decimals)f", value)
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
-    }
-
     private func mockEndpointDot(_ color: Color) -> some View {
         Circle()
             .fill(color)
@@ -408,76 +410,41 @@ struct OnboardingView: View {
             .overlay(Circle().stroke(.white, lineWidth: 2))
     }
 
-    /// White card bottom: trip title + 2×3 metrics grid with hairline
-    /// dividers. Values are static mock data (RU uses decimal comma).
+    /// White card bottom: trip title + one row of three metrics with hairline
+    /// dividers. A real trip shows its own numbers, a first launch the sample.
     private func mockStatsArea(lng: LanguageManager.Language) -> some View {
         let l = lang.language
         // Канонические 82 и 150 км/ч демо-карточки — в СИ. Делит на 3.6 ровно
         // одно место в проекте (`DistanceUnit`), и это оно; своя копия здесь
         // была бы второй арифметикой на экране, который видят первым.
         let demoAvgMS = DistanceUnit.km.metresPerSecond(fromSpeed: 82)
-        let demoMaxMS = DistanceUnit.km.metresPerSecond(fromSpeed: 150)
         // Real numbers whenever there's a real trip behind the card; the
         // canned set only fills in for a first-ever launch, where there is
         // genuinely nothing to show.
-        let metrics: [(icon: String, value: String, unit: String, color: Color, label: String)] =
+        let metrics: [(value: String, unit: String, color: Color, label: String)] =
             realTrip.map { trip in
-                // Расход считается по КИЛОМЕТРАМ, а показывается пересчитанным
-                // (`ConsumptionUnit`): «л/100» — это литры на сотню того, в чём
-                // человек меряет дорогу, и подставленные сюда мили дали бы
-                // +60 % без единой ошибки компилятора.
-                let fuel = trip.distance > 0
-                    ? trip.fuelUsed / (trip.distance / 1000) * 100
-                    : 0
                 let distance = Measure.distanceParts(
                     metres: trip.distance, unit: distanceUnit, lang: lng, style: .adaptive)
                 let avg = Measure.speedParts(
                     ms: trip.averageSpeed, unit: distanceUnit, lang: lng)
-                let max = Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lng)
-                let elevation = Measure.elevationParts(
-                    metres: trip.elevation, unit: distanceUnit, lang: lng)
-                // «0.0 л/100» и «0 м» у настоящей поездки — не измерение, а
-                // отсутствие: расход не задан у машины, высоты нет в треке.
-                // Пустое значение — прочерк, как правило «Макс.» у вписанной
-                // поездки (0.8.9, экран поездки).
-                let dash = "—"
                 return [
-                    ("point.topleft.down.curvedto.point.bottomright.up",
-                     distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
-                    ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
-                    ("gauge", avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-                    ("bolt.fill", max.value, max.unit, AppTheme.red, AppStrings.onboardingStatMax(l)),
-                    ("drop", fuel > 0 ? Self.number(fuel, decimals: 1, lng: lng) : dash,
-                     fuel > 0 ? AppStrings.unitLPer100(l) : "", AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-                    ("mountain.2", trip.elevation > 0.5 ? elevation.value : dash,
-                     trip.elevation > 0.5 ? elevation.unit : "",
-                     AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
+                    (distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
+                    (trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
+                    (avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
                 ]
             } ?? [
-            // Канонические числа демо-карточки — 246 км, 82 и 150 км/ч,
-            // 340 м — записаны в СИ и проходят через тот же `Measure`, включая
-            // высоту (с 0.6.7 она тоже следует настройке). Первый запуск —
+            // Канонические числа демо-карточки — 246 км и 82 км/ч — записаны
+            // в СИ и проходят через тот же `Measure`. Первый запуск —
             // единственный экран, который человек видит ДО того, как у него
             // появится хоть одна поездка, и мильная карточка с подписью «км»
             // была бы первым, что приложение о себе соврало.
-            ("point.topleft.down.curvedto.point.bottomright.up",
-             Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).value,
+            (Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).value,
              Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).unit,
              AppTheme.green, AppStrings.distance(l)),
-            ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
-            ("gauge",
-             Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).value,
+            ("2:59", "", AppTheme.accent, AppStrings.duration(l)),
+            (Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).value,
              Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).unit,
              AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-            ("bolt.fill",
-             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).value,
-             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).unit,
-             AppTheme.red, AppStrings.onboardingStatMax(l)),
-            ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-            ("mountain.2",
-             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).value,
-             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).unit,
-             AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
         ]
         let hairline = Color.black.opacity(0.05)
 
@@ -488,34 +455,23 @@ struct OnboardingView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
-            VStack(spacing: 0) {
-                mockMetricsRow(Array(metrics[0..<3]), hairline: hairline)
-                hairline.frame(height: 1)
-                    .padding(.horizontal, 13)
-                mockMetricsRow(Array(metrics[3..<6]), hairline: hairline)
-            }
-            .padding(.bottom, 6)
+            mockMetricsRow(metrics, hairline: hairline)
+                .padding(.bottom, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
     }
 
     private func mockMetricsRow(
-        _ row: [(icon: String, value: String, unit: String, color: Color, label: String)],
+        _ row: [(value: String, unit: String, color: Color, label: String)],
         hairline: Color
     ) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(row.enumerated()), id: \.offset) { index, m in
                 if index > 0 {
-                    hairline.frame(width: 1, height: 46)
+                    hairline.frame(width: 1, height: 30)
                 }
                 VStack(spacing: 3) {
-                    Image(systemName: m.icon)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
-                        // The label under the number names it; the glyph's own
-                        // name («mountain.2») was spoken first.
-                        .accessibilityHidden(true)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(m.value)
                             .font(.inter(17, weight: .heavy).monospacedDigit())

@@ -764,9 +764,6 @@ enum AppStrings {
     static func kmh(_ lang: LanguageManager.Language) -> String {
         tr(lang, "kmh", ru: "км/ч", en: "km/h")
     }
-    static func unitLPer100(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "unitLPer100", ru: "л/100", en: "l/100")
-    }
     static func unitMeters(_ lang: LanguageManager.Language) -> String {
         tr(lang, "unitMeters", ru: "м", en: "m")
     }
@@ -1104,28 +1101,12 @@ enum AppStrings {
            ru: "Вот как выглядит ваша поездка",
            en: "This is what your trip looks like")
     }
-    /// Не «записываются сами»: автозапись по умолчанию выключена. И расход
-    /// не замеряется, а считается по цифрам машины (`EnergyEstimate`).
-    static func onboardingValueCaption(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "onboardingValueCaption",
-           ru: "Маршрут, скорость и расход по данным вашей машины — в одной карточке.",
-           en: "Route, speed and fuel estimated from your car's figures — on one card.")
-    }
     static func onboardingMockTripTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingMockTripTitle", ru: "Поездка · 16 мая", en: "Trip · May 16")
     }
-    // Short uppercase stat labels for the mock trip card's 2×3 metrics grid.
+    // Short uppercase stat label on the onboarding sample card.
     static func onboardingStatAvg(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingStatAvg", ru: "Средняя", en: "Avg")
-    }
-    static func onboardingStatMax(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "onboardingStatMax", ru: "Макс", en: "Max")
-    }
-    static func onboardingStatFuel(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "onboardingStatFuel", ru: "Расход", en: "Fuel")
-    }
-    static func onboardingStatAltitude(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "onboardingStatAltitude", ru: "Высота", en: "Elev")
     }
     static func onboardingLocation(_ lang: LanguageManager.Language) -> String {
         tr(lang, "onboardingLocation", ru: "Разрешите геолокацию", en: "Allow location access")
