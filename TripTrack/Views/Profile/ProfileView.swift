@@ -155,6 +155,11 @@ struct ProfileView: View {
     /// Открытая витрина оформления. Одна переменная на все виды: четыре
     /// `@State`-флага рядом умели бы показать два листа сразу.
     @State private var showcase: ProShowcaseKind?
+    /// «Ваш PRO» (0.8.9) и то, что открыть, когда он закроется: витрину или
+    /// лист ручной поездки. Два листа подряд UIKit не даёт, поэтому следующий
+    /// ждёт `onDismiss`.
+    @State private var showProManage = false
+    @State private var afterProManage: ProManageSheet.Destination?
     /// Лист «Вписать поездку» (0.8.0). Гейт решает, что покажется в нём —
     /// форма или пейвол (`manualTripHost`).
     @State private var showManualTrip = false
@@ -1067,7 +1072,9 @@ struct ProfileView: View {
                 // этого строка висела без имени, а теперь их в разделе две —
                 // подписка и чаевые, и это разные сделки.
                 ProfileSectionLabel(text: AppStrings.meProSection(lang.language))
-                PlusRow(status: status) { showPaywall = true }
+                PlusRow(status: status,
+                        onOpenPaywall: { showPaywall = true },
+                        onOpenManage: { showProManage = true })
             }
         }
         .padding(.horizontal, 16)
@@ -1079,6 +1086,22 @@ struct ProfileView: View {
         // правило «диалог вешать в корне экрана» их не касается.
         .sheet(isPresented: $showPaywall) {
             PlusPaywallSheet().environmentObject(lang)
+        }
+        .sheet(isPresented: $showProManage, onDismiss: openAfterProManage) {
+            ProManageSheet(status: status) { afterProManage = $0 }
+                .environmentObject(lang)
+        }
+    }
+
+    /// Лист «Ваш PRO» закрылся — открыть то, что в нём выбрали.
+    private func openAfterProManage() {
+        guard let next = afterProManage else { return }
+        afterProManage = nil
+        switch next {
+        case .showcase(let kind): showcase = kind
+        case .manualTrip:
+            manualTripPreset = nil
+            showManualTrip = true
         }
     }
 

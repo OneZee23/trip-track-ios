@@ -7793,6 +7793,82 @@ enum AppStrings {
            ru: "Ждём подтверждения покупки", en: "Waiting for purchase approval")
     }
 
+    // MARK: - «Ваш PRO» (0.8.9)
+    //
+    // Экран подписчика между строкой PRO на «Я» и системным листом Apple.
+    // Цена приходит подстановкой — печатает её витрина Apple, валюты в
+    // строках нет (правило 0.8.0). Строки не обещают списания, которого не
+    // будет: отменившему продление — «работает до», без цены.
+
+    static func proManageTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageTitle", ru: "Ваш PRO", en: "Your PRO")
+    }
+    /// Пробный период, продлится. Обе половины обязательны: когда начнётся
+    /// списание и сколько — человек должен прочитать здесь.
+    static func proManageTrialRenews(
+        _ lang: LanguageManager.Language, date: String, price: String, yearly: Bool
+    ) -> String {
+        (yearly
+            ? tr(lang, "proManageTrialRenewsYear",
+                 ru: "Пробный период до {date}, потом {price} в год",
+                 en: "Free trial until {date}, then {price} a year")
+            : tr(lang, "proManageTrialRenewsMonth",
+                 ru: "Пробный период до {date}, потом {price} в месяц",
+                 en: "Free trial until {date}, then {price} a month"))
+            .replacingOccurrences(of: "{date}", with: date)
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    /// Оплаченный период, продлится.
+    static func proManageRenews(
+        _ lang: LanguageManager.Language, date: String, price: String, yearly: Bool
+    ) -> String {
+        (yearly
+            ? tr(lang, "proManageRenewsYear",
+                 ru: "Продлится {date} · {price} в год",
+                 en: "Renews {date} · {price} a year")
+            : tr(lang, "proManageRenewsMonth",
+                 ru: "Продлится {date} · {price} в месяц",
+                 en: "Renews {date} · {price} a month"))
+            .replacingOccurrences(of: "{date}", with: date)
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    /// Продление отключено: человек уже отменил, PRO доживает период.
+    static func proManageEndsOn(_ lang: LanguageManager.Language, date: String) -> String {
+        tr(lang, "proManageEndsOn",
+           ru: "Продление отключено. PRO работает до {date}",
+           en: "Renewal is off. PRO works until {date}")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+    /// Дата есть, а про продление Apple не сказала — без обещаний.
+    static func proManageUntil(_ lang: LanguageManager.Language, date: String) -> String {
+        tr(lang, "proManageUntil", ru: "PRO до {date}", en: "PRO until {date}")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+    static func proManageIncluded(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageIncluded", ru: "Что у вас включено", en: "What you have")
+    }
+    /// Подпись у вписанной поездки: выбора у неё нет, есть только «можно».
+    static func proManageManualOn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageManualOn", ru: "Доступно в «Истории»", en: "Available in History")
+    }
+    /// Фон карточки машины выбирают в форме самой машины — строка на экране
+    /// подписки не нажимается и говорит, где он живёт.
+    static func proManageVehicleCardWhere(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageVehicleCardWhere",
+           ru: "В гараже, у каждой машины свой", en: "In the garage, one per car")
+    }
+    /// Строка-дверь к системному листу. Отмена, смена тарифа, возврат — там.
+    static func proManageAppStore(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageAppStore",
+           ru: "Управлять подпиской в App Store", en: "Manage subscription in the App Store")
+    }
+    /// Под строкой App Store — чтобы ищущий отмену знал, что она там.
+    static func proManageAppStoreHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proManageAppStoreHint",
+           ru: "Сменить тариф или отменить подписку можно там же",
+           en: "Change the plan or cancel the subscription there")
+    }
+
     // MARK: - Витрина PRO (0.8.4)
     //
     // Копия из макетов владельца от 29 сентября (`TripTrack-PRO-handoff`,

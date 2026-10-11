@@ -9,10 +9,12 @@ import StoreKit
 /// строка знала три состояния и разбирала их внутри `body`; состояний восемь,
 /// два из них про витрину, и проверить такое открытым экраном нельзя.
 ///
-/// Отмена подписки живёт у Apple, и своего экрана для неё не существует:
-/// `.manageSubscription` открывает системный лист. Это единственная законная
-/// системная презентация в приложении (запрет в «Dialogs» — про диалоги,
-/// которые мы могли бы нарисовать сами).
+/// Отмена подписки живёт у Apple, и своего экрана для неё не существует. С
+/// 0.8.9 `.manageSubscription` открывает «Ваш PRO» (`ProManageSheet`) — что
+/// включено и когда следующее списание, — а системный лист Apple открывается
+/// строкой на нём. Это единственная законная системная презентация в
+/// приложении (запрет в «Dialogs» — про диалоги, которые мы могли бы
+/// нарисовать сами).
 struct PlusRow: View {
     /// Что сейчас с подпиской. Приходит СНАРУЖИ и здесь не считается: пока
     /// строка считала статус сама, на вопрос «видно ли платное» отвечали два
@@ -21,6 +23,8 @@ struct PlusRow: View {
     let status: ProStatus
     /// Открыть пейвол. Зовётся только там, где платное продаётся.
     let onOpenPaywall: () -> Void
+    /// Открыть «Ваш PRO». Зовётся только у подписчика.
+    let onOpenManage: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
@@ -33,7 +37,7 @@ struct PlusRow: View {
             Haptics.tap()
             switch status.destination {
             case .paywall:            onOpenPaywall()
-            case .manageSubscription: Self.openManageSubscriptions()
+            case .manageSubscription: onOpenManage()
             case .nothing, .none:     break
             }
         } label: {

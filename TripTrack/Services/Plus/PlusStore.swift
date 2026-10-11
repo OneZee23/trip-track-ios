@@ -107,6 +107,18 @@ final class PlusStore: ObservableObject {
     @Published private(set) var state: State = .none
     /// До какого числа «Плюс». `nil` — не куплено или Apple не сказала.
     @Published private(set) var expiresAt: Date?
+    /// Тариф действующего права (`yearlyID`/`monthlyID`). `nil` — права нет.
+    ///
+    /// Нужен экрану «Ваш PRO»: «потом 24,99 € в год» у месячного — это чужая
+    /// цена, а сумма следующего списания обязана быть его суммой.
+    @Published private(set) var currentProductID: String?
+    /// Продлится ли подписка сама. `nil` — Apple не сказала.
+    ///
+    /// `false` — человек уже отменил продление: PRO работает до конца периода,
+    /// и экран не имеет права обещать ему следующее списание, которого не
+    /// будет. Молчание (`nil`) — не «отменил»: строка о продлении тогда просто
+    /// не печатается.
+    @Published private(set) var willAutoRenew: Bool?
 
     /// Последняя дата окончания, которую Apple когда-либо называла.
     ///
@@ -416,6 +428,7 @@ final class PlusStore: ObservableObject {
         var entitled = false
         var isTrial = false
         var expires: Date?
+        var productID: String?
 
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else {
@@ -427,7 +440,12 @@ final class PlusStore: ObservableObject {
             if let revoked = transaction.revocationDate, revoked <= Date() { continue }
 
             entitled = true
-            isTrial = Self.isIntroductory(transaction)
+            // Тариф и триал — у той строки, что кончается ПОЗЖЕ: она и есть
+            // действующая, по той же причине, по которой дата берётся поздняя.
+            if productID == nil || Self.endsLater(transaction.expirationDate, than: expires) {
+                isTrial = Self.isIntroductory(transaction)
+                productID = transaction.productID
+            }
             // Самая ПОЗДНЯЯ дата, а не последняя в перечислении: порядок
             // `currentEntitlements` Apple не обещает, а строк в группе у
             // человека, переехавшего с месячного на годовой, две — и «Плюс до
@@ -438,10 +456,11 @@ final class PlusStore: ObservableObject {
                 key: String(transaction.id), jws: result.jwsRepresentation)
         }
 
-        let renewal = await renewalSummary()
+        let renewalRead = await renewalStatus()
+        let renewal = renewalRead?.summary
         let resolved = Self.resolve(entitled: entitled, isTrial: isTrial, renewal: renewal)
 
-        // **Пустая витрина не гасит «Плюс».** `renewalSummary` начинается с
+        // **Пустая витрина не гасит «Плюс».** `renewalStatus` начинается с
         // `products`, а в самолёте `loadProducts` кидает и оставляет их
         // пустыми: у человека в `billingRetry` (где `currentEntitlements`
         // права уже не отдаёт) состояние сложилось бы в `.none` — то есть
@@ -453,6 +472,8 @@ final class PlusStore: ObservableObject {
         }
 
         expiresAt = expires
+        currentProductID = productID
+        willAutoRenew = renewalRead?.willAutoRenew
         // Запоминаем, пока Apple ещё называет дату: при `.expired` она уже
         // молчит, а показать окончание надо именно тогда.
         if let expires { lastKnownExpiry = expires }
@@ -474,6 +495,14 @@ final class PlusStore: ObservableObject {
             """)
     }
 
+    /// Кончается ли строка строго позже уже найденной. Без даты не позже —
+    /// дата у подписки есть всегда, и строка без неё не может быть «главнее».
+    nonisolated static func endsLater(_ candidate: Date?, than current: Date?) -> Bool {
+        guard let candidate else { return false }
+        guard let current else { return true }
+        return candidate > current
+    }
+
     /// Поздняя из двух дат; `nil` не считается датой вовсе.
     nonisolated static func later(_ a: Date?, _ b: Date?) -> Date? {
         switch (a, b) {
@@ -493,10 +522,29 @@ final class PlusStore: ObservableObject {
         return transaction.offerType == .introductory
     }
 
-    private func renewalSummary() async -> RenewalSummary? {
+    /// Статус группы одним запросом: пересказ и «продлится ли сама».
+    ///
+    /// `willAutoRenew` берётся у той строки группы, что сейчас живая
+    /// (`subscribed`/грейс): у переехавшего с месячного на годовой их две, и
+    /// отменённая старая не должна сказать «продление отключено» про новую.
+    private func renewalStatus() async -> (summary: RenewalSummary?, willAutoRenew: Bool?)? {
         guard let subscription = products.compactMap(\.subscription).first else { return nil }
         guard let statuses = try? await subscription.status else { return nil }
-        return Self.summarize(statuses.map(\.state))
+        let live = statuses.filter {
+            $0.state == .subscribed || $0.state == .inGracePeriod || $0.state == .inBillingRetryPeriod
+        }
+        let renews: [Bool] = live.compactMap {
+            guard case .verified(let info) = $0.renewalInfo else { return nil }
+            return info.willAutoRenew
+        }
+        return (Self.summarize(statuses.map(\.state)), Self.autoRenews(renews))
+    }
+
+    /// Продлится ли подписка, если живых строк несколько. Хоть одна
+    /// продлевается — продлевается: PRO не кончится. Ни одной проверенной —
+    /// `nil`, а не «нет»: молчание Apple не означает отмену.
+    nonisolated static func autoRenews(_ live: [Bool]) -> Bool? {
+        live.isEmpty ? nil : live.contains(true)
     }
 
     // MARK: - Покупка
