@@ -39,6 +39,7 @@ struct TripMomentsTimeline: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -95,18 +96,29 @@ struct TripMomentsTimeline: View {
         .surfaceCard()
     }
 
-    private static let nodeSize: CGFloat = 28
+    /// Сетка ленты растёт вместе с текстом (крупный шрифт системы, 0.8.9):
+    /// колонка времени и узел — `@ScaledMetric` от тех же 13 пт, что и
+    /// время, иначе «08:42» в крупном размере вылезала бы из своих 40 pt, а
+    /// чип места и скобка отрезка съезжали бы с колонки содержимого.
+    @ScaledMetric(relativeTo: .footnote) private var scaledNode: CGFloat = 28
+    /// Узел растёт, но не больше 40 pt: на самом крупном размере он съедал
+    /// треть ширины, и имени отметки оставалось место на одну букву.
+    private var nodeSize: CGFloat { min(scaledNode, 40) }
     private static let horizontalPadding: CGFloat = 14
     /// Колонка времени слева от рельса: «08:42» в 13 пт умещается в 40.
-    private static let timeWidth: CGFloat = 40
+    @ScaledMetric(relativeTo: .footnote) private var scaledTime: CGFloat = 40
+    /// «23:58» на accessibility2 занимает ~70 pt: потолок под него, а не
+    /// под узел — время резалось до «23:…».
+    private var timeWidth: CGFloat { min(scaledTime, 76) }
     /// Равен шагу стека в строке — так рельс и коннектор считают одно и то же.
     private static let timeSpacing: CGFloat = 12
     private static let rowPadding: CGFloat = 8
     /// Левый край колонки содержимого строки: поле карточки + колонка времени
     /// + узел + два интервала `nodeRow`. По нему выравнивается всё, что стоит
     /// ПОД строкой, — чип места и скобка отрезка.
-    private static let contentInset: CGFloat =
-        horizontalPadding + timeWidth + nodeSize + 2 * timeSpacing
+    private var contentInset: CGFloat {
+        Self.horizontalPadding + timeWidth + nodeSize + 2 * Self.timeSpacing
+    }
 
     // MARK: - Узлы
 
@@ -123,7 +135,7 @@ struct TripMomentsTimeline: View {
         Image(systemName: "flag.checkered")
             .font(.system(size: 12, weight: .bold))
             .foregroundStyle(c.card)
-            .frame(width: Self.nodeSize, height: Self.nodeSize)
+            .frame(width: nodeSize, height: nodeSize)
             .background(c.text, in: Circle())
     }
 
@@ -131,7 +143,7 @@ struct TripMomentsTimeline: View {
         Image(systemName: "camera.fill")
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(c.textSecondary)
-            .frame(width: Self.nodeSize, height: Self.nodeSize)
+            .frame(width: nodeSize, height: nodeSize)
             .background(c.card, in: Circle())
             .overlay(Circle().strokeBorder(c.border, lineWidth: 1.5))
     }
@@ -141,7 +153,7 @@ struct TripMomentsTimeline: View {
             .font(.inter(13, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(.white)
-            .frame(width: Self.nodeSize, height: Self.nodeSize)
+            .frame(width: nodeSize, height: nodeSize)
             .background(AppTheme.accent, in: Circle())
     }
 
@@ -184,7 +196,7 @@ struct TripMomentsTimeline: View {
                             Image(systemName: "mappin.and.ellipse")
                                 .font(.system(size: 11, weight: .bold))
                             Text(AppStrings.momentNamePlace(language))
-                                .font(.inter(13, weight: .semibold))
+                                .font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
                         }
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 10)
@@ -239,7 +251,9 @@ struct TripMomentsTimeline: View {
                 Image(systemName: "mappin.and.ellipse").font(.system(size: 11, weight: .semibold))
                 // Inter, like every other line of this card; SF stayed here
                 // after the 26 Sep move to one typeface.
-                Text(chip.text(language)).font(.inter(12, weight: .semibold)).lineLimit(1)
+                Text(chip.text(language)).font(.interScaled(12, weight: .semibold, relativeTo: .caption))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                    .multilineTextAlignment(.leading)
                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
             }
             .foregroundStyle(AppTheme.accent)
@@ -248,7 +262,7 @@ struct TripMomentsTimeline: View {
             .modifier(MomentChipTarget())
         }
         .buttonStyle(PressableCardStyle())
-        .padding(.leading, Self.contentInset)
+        .padding(.leading, contentInset)
         // Правое поле — как у `nodeRow`: без него длинный перевод («Здесь N
         // раз · обычно 1 ч 20 мин» на de/pl) дотягивал бы капсулу до края карточки.
         .padding(.trailing, Self.horizontalPadding)
@@ -325,7 +339,7 @@ struct TripMomentsTimeline: View {
             .buttonStyle(PressableCardStyle())
             .disabled(onSelectSegment == nil)
             // Левый отступ — колонка содержимого строки, как у чипа места.
-            .padding(.leading, Self.contentInset)
+            .padding(.leading, contentInset)
             .padding(.trailing, Self.horizontalPadding)
             .padding(.top, 2)
             .padding(.bottom, 4)
@@ -345,12 +359,12 @@ struct TripMomentsTimeline: View {
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(time.map { Self.timeFormatter.string(from: $0) } ?? "")
-                .font(.inter(13, weight: .semibold))
+                .font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
                 .monospacedDigit()
                 .foregroundStyle(c.textSecondary)
-                .frame(width: Self.timeWidth, height: Self.nodeSize, alignment: .trailing)
+                .frame(width: timeWidth, height: nodeSize, alignment: .trailing)
             node()
-                .frame(width: Self.nodeSize, height: Self.nodeSize)
+                .frame(width: nodeSize, height: nodeSize)
                 .anchorPreference(key: MomentNodeAnchors.self, value: .center) { [$0] }
             VStack(alignment: .leading, spacing: 4) {
                 content()
@@ -367,7 +381,7 @@ struct TripMomentsTimeline: View {
             // Имя ограничено сорока знаками в редакторе; две строки вмещают
             // его целиком на любом телефоне, дальше — многоточие.
             Text(title)
-                .font(.inter(15, weight: .semibold))
+                .font(.interScaled(15, weight: .semibold, relativeTo: .subheadline))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -379,7 +393,7 @@ struct TripMomentsTimeline: View {
                     .foregroundStyle(c.textTertiary)
             }
         }
-        .frame(minHeight: Self.nodeSize)
+        .frame(minHeight: nodeSize)
     }
 
     /// Отрезок между соседними узлами — короткой строкой на самой линии:
@@ -398,9 +412,9 @@ struct TripMomentsTimeline: View {
         let dm = next.1 - prev.1
         if index > 0, dt > 0 || dm > 0, !isSpannedBySegment(before: index, in: checkpoints) {
             HStack(spacing: 12) {
-                Color.clear.frame(width: Self.timeWidth + Self.timeSpacing + Self.nodeSize, height: 1)
+                Color.clear.frame(width: timeWidth + Self.timeSpacing + nodeSize, height: 1)
                 Text("+" + reading(time: max(0, dt), metres: max(0, dm)))
-                    .font(.inter(12, weight: .semibold))
+                    .font(.interScaled(12, weight: .semibold, relativeTo: .caption))
                     .monospacedDigit()
                     .foregroundStyle(c.textTertiary)
                 Spacer(minLength: 0)
@@ -457,17 +471,26 @@ struct TripMomentsTimeline: View {
         .fixedSize()
     }
 
+    /// «От старта 1 ч 14 мин · 75 км». На обычном размере — одной строкой;
+    /// на крупном системном тексте подпись встаёт НАД значением (правило
+    /// 0.8.8 для пар «подпись — значение»): в одну строку они делили бы
+    /// сотню точек пополам и резали обе половины многоточием.
+    @ViewBuilder
     private func measure(label: String, value: String, c: AppTheme.Colors) -> some View {
-        HStack(spacing: 5) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 5))
+        layout {
             Text(label)
-                .font(.inter(11, weight: .semibold))
+                .font(.interScaled(11, weight: .semibold, relativeTo: .caption2))
                 .foregroundStyle(c.textTertiary)
             Text(value)
-                .font(.inter(12, weight: .bold))
+                .font(.interScaled(12, weight: .bold, relativeTo: .caption))
                 .monospacedDigit()
                 .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .lineLimit(1)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
     }
 
     private func reading(time: TimeInterval, metres: Double) -> String {

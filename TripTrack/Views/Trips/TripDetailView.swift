@@ -178,6 +178,7 @@ struct TripDetailView: View {
     /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
     /// it lands here (see `heroScrolled`).
     @State private var heroProgress: Double = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Bumped by pull-to-refresh; the comments section reloads on change.
     @State private var refreshToken = 0
     /// Fix 3: confirmation for a companion leaving someone else's trip.
@@ -349,7 +350,14 @@ struct TripDetailView: View {
     /// attached here is gone; the dark filler above the map (the reason
     /// bounce was suppressed) does that job on its own.
     private func detailScroll(trip: Trip, c: AppTheme.Colors) -> some View {
-        ScrollView { scrollContent(trip: trip, c: c) }
+        ScrollView {
+            scrollContent(trip: trip, c: c)
+                // Grows with Dynamic Type up to accessibility2. Beyond it the
+                // two-column tiles and the moments' time/node/content grid
+                // leave a one-word column on a 393 pt phone — measured on the
+                // largest size, review 11 Oct 2026.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        }
             .coordinateSpace(name: "detailScroll")
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
@@ -2415,11 +2423,13 @@ isOwn
 
             Text(heading)
                 .accessibilityIdentifier("detail_title")
-                .font(.inter(26, weight: .bold))
+                .font(.interScaled(26, weight: .bold, relativeTo: .title))
                 .tracking(-0.52)
                 .foregroundStyle(c.text)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
+                // Grows with Dynamic Type and wraps, instead of shrinking back
+                // to the size the person asked the system to enlarge.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
                 .multilineTextAlignment(.leading)
         }
     }

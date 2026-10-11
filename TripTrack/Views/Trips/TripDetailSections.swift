@@ -212,8 +212,9 @@ struct DetailSectionHeader: View {
 
     var body: some View {
         Text(text)
-            .font(.inter(17, weight: .bold))
+            .font(.interScaled(17, weight: .bold, relativeTo: .headline))
             .foregroundStyle(AppTheme.colors(for: scheme).text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -824,7 +825,7 @@ struct DetailDescriptionCard: View {
 
         HStack(alignment: .top, spacing: 10) {
             Text(text)
-                .font(.inter(13.5))
+                .font(.interScaled(13.5, relativeTo: .subheadline))
                 .lineSpacing(4.5)
                 .foregroundStyle(bodyColor)
                 .multilineTextAlignment(.leading)
@@ -859,15 +860,15 @@ struct TripAchievementsGrid: View {
     let language: LanguageManager.Language
     let onTap: (Badge) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
+        // Three across on a normal size; two on accessibility sizes, where a
+        // third of the width split «Марафонец» mid-word.
+        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10)
-            ],
+            columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: count),
             spacing: 10
         ) {
             ForEach(badges) { badge in
@@ -878,12 +879,17 @@ struct TripAchievementsGrid: View {
                     VStack(spacing: 8) {
                         BadgeArt(badge: badge, side: 56)
                         Text(badge.title(language))
-                            .font(.inter(11, weight: .semibold))
+                            .font(.interScaled(11, weight: .semibold, relativeTo: .caption2))
                             .foregroundStyle(c.text)
                             .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.85)
-                            .frame(height: 28, alignment: .top)
+                            .lineLimit(3)
+                            // A long word («Марафонец») shrinks a little
+                            // before it is split mid-word.
+                            .minimumScaleFactor(0.7)
+                            .allowsTightening(true)
+                            // Two lines on a normal size, as before; the box
+                            // grows with Dynamic Type instead of clipping.
+                            .frame(minHeight: 28, alignment: .top)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
