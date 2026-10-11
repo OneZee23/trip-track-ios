@@ -113,6 +113,11 @@ struct VehicleEditFormView: View {
     private let editedVehicle: Vehicle?
 
     private static let avatarColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+    /// Placeholder of the year field: a plausible year, never one from the
+    /// future. Digits only — no thousands separator in any language.
+    private static var yearExample: String {
+        String(Calendar.current.component(.year, from: Date()) - 5)
+    }
 
     init(mode: Mode) {
         self.mode = mode
@@ -521,7 +526,11 @@ struct VehicleEditFormView: View {
                     .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 8)
-                TextField(AppStrings.vehicleNotSet(l), text: $yearText)
+                // An example year, not «Не указано»: the field is 72 pt wide
+                // for four digits, and the word was cut to «Не указ…» (in
+                // German «Nicht angegeben» even shorter). A number in the
+                // place of a number also says what goes here (0.8.9).
+                TextField(Self.yearExample, text: $yearText)
                     .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .tint(AppTheme.accent)
@@ -537,6 +546,7 @@ struct VehicleEditFormView: View {
             .padding(.horizontal, 12)
             .frame(height: 44)
             .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .contain)
 
             // Одна строка, а не многострочный редактор: форма поля и есть
             // обещание объёма. Дай текстовое полотно — получишь бортжурнал,

@@ -777,7 +777,7 @@ enum AppStrings {
     //
     // Строки написаны здесь inline-переключателем на тринадцать языков, а не
     // через `tr` с одиннадцатью таблицами, по той же причине, по которой так
-    // устроены `nounTrips` и `mapSeeAll`: это не одна строка на язык, а форма,
+    // устроен `nounTrips`: это не одна строка на язык, а форма,
     // которую выбирает число. Таблица «ключ → строка» такое не выражает.
 
     /// «км» / «mi» / «миль» — подпись у показанного расстояния.
@@ -1634,25 +1634,6 @@ enum AppStrings {
     // региона: колец покрытия и процентов на «Атласе» больше нет.
     static func mapTripsSection(_ lang: LanguageManager.Language, count: Int) -> String {
         "\(tr(lang, "mapTripsSectionHead", ru: "ПОЕЗДКИ ЗДЕСЬ", en: "TRIPS HERE")) · \(count)"
-    }
-    /// Section-header action. Short on purpose — it sits beside the heading,
-    /// not on a line of its own at the bottom of the list.
-    static func mapSeeAll(_ lang: LanguageManager.Language, count: Int) -> String {
-        switch lang {
-        case .ru: return "Все \(count)"
-        case .en: return "All \(count)"
-        case .de: return "Alle \(count)"
-        case .es: return "Ver los \(count)"
-        case .fr: return "Les \(count)"
-        case .it: return "Tutti e \(count)"
-        case .pl: return "Wszystkie \(count)"
-        case .id: return "Semua \(count)"
-        case .tr: return "Tümü \(count)"
-        case .fil: return "Lahat ng \(count)"
-        case .uk: return "Усі \(count)"
-        case .kk: return "Барлығы \(count)"
-        case .pt: return "Todas as \(count)"
-        }
     }
     static func mapOpenTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapOpenTrip", ru: "Открыть поездку", en: "Open trip")

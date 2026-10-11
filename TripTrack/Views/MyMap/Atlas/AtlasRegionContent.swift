@@ -136,7 +136,10 @@ struct AtlasRegionContent: View {
                         showsAllTrips = true
                     } label: {
                         HStack(spacing: 3) {
-                            Text(AppStrings.mapSeeAll(lang.language, count: trips.count))
+                            // «Все», not «Все 51»: the count already stands
+                            // in the heading beside it, and two «51» in one
+                            // line ask to be compared (0.8.9).
+                            Text(AppStrings.all(lang.language))
                                 .font(AppType.meta)
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .semibold))
