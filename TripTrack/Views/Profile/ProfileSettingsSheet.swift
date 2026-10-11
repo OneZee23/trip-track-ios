@@ -563,9 +563,13 @@ struct ProfileSettingsSheet: View {
                         .underline()
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(minHeight: 44)
+                        // `.frame(minHeight: 44)` stood here and measured
+                        // 13 pt in the accessibility tree: the button
+                        // hit-tests its label's content shape, not the frame.
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("settings_privacy_policy")
 
                 Button {
                     Haptics.tap()
@@ -577,9 +581,13 @@ struct ProfileSettingsSheet: View {
                         .underline()
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(minHeight: 44)
+                        // `.frame(minHeight: 44)` stood here and measured
+                        // 13 pt in the accessibility tree: the button
+                        // hit-tests its label's content shape, not the frame.
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("settings_terms")
             }
 
             // Атрибуция OpenStreetMap. Обязательство ODbL: имена объектов в
@@ -597,7 +605,7 @@ struct ProfileSettingsSheet: View {
                     .underline()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(minHeight: 44)
+                    .tapTarget()
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("settings_osm_attribution")
