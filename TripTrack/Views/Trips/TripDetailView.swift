@@ -170,7 +170,7 @@ struct TripDetailView: View {
     @State private var checkpointPhotoLinks: [UUID: [TripPhoto]] = [:]
     /// 0 while the map fills the hero, 1 once it has scrolled away — drives
     /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
-    /// it lands here (see `DetailScrollOffsetKey`'s handler).
+    /// it lands here (see `heroScrolled`).
     @State private var heroProgress: Double = 0
     /// Bumped by pull-to-refresh; the comments section reloads on change.
     @State private var refreshToken = 0
@@ -362,17 +362,19 @@ struct TripDetailView: View {
             heroSection(trip: trip)
                 .frame(height: posterHeight)
                 // How far the map has scrolled away, for the top bar's
-                // glass→toolbar morph. Read from a `Color.clear` in the
-                // BACKGROUND, never from inside the map's own subtree: this
-                // fires on every frame of a scroll, and the map is an
-                // `MKMapView` with a display link running.
-                .background {
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: DetailScrollOffsetKey.self,
-                            value: geo.frame(in: .named("detailScroll")).minY
-                        )
-                    }
+                // glass→toolbar morph. `onGeometryChange`, not a preference
+                // from a `GeometryReader` background: inside this ScrollView
+                // (refreshable + ScrollViewReader) the preference was
+                // delivered once, at 0, and never again while scrolling — the
+                // bar stayed transparent and the text ran under the buttons
+                // and the clock (review 11 Oct 2026, filmed on a real swipe).
+                // The closure only reads the frame; quantizing happens in
+                // `heroScrolled`, so the MKMapView body is not re-rendered
+                // per scrolled point.
+                .onGeometryChange(for: CGFloat.self) { geo in
+                    geo.frame(in: .named("detailScroll")).minY
+                } action: { minY in
+                    heroScrolled(minY)
                 }
 
             infoPanel(trip: trip, c: c)
@@ -384,6 +386,24 @@ struct TripDetailView: View {
                 .frame(height: posterHeight + 1000)
                 .offset(y: -1000)
         }
+    }
+
+    /// The hero's top edge in scroll coordinates → the top bar's 0…1 morph.
+    /// Quantized before it reaches state: at full precision every scrolled
+    /// point re-renders a body that hosts an MKMapView.
+    private func heroScrolled(_ minY: CGFloat) {
+        let stepped = Self.heroProgress(
+            minY: minY, posterHeight: posterHeight, safeAreaTop: safeAreaTop)
+        if stepped != heroProgress { heroProgress = stepped }
+    }
+
+    /// Pure, so the bar's thresholds are tested without a ScrollView.
+    nonisolated static func heroProgress(
+        minY: CGFloat, posterHeight: CGFloat, safeAreaTop: CGFloat
+    ) -> Double {
+        let span = max(1, posterHeight - safeAreaTop - 52)
+        let raw = min(max(-minY / span, 0), 1)
+        return (Double(raw) * 20).rounded() / 20
     }
 
     /// Pull-to-refresh: re-ask the server for everything on this screen that
@@ -1028,14 +1048,6 @@ struct TripDetailView: View {
                 // Loading skeleton
                 loadingSkeleton(c)
             }
-        }
-        .onPreferenceChange(DetailScrollOffsetKey.self) { minY in
-            // Quantized before it reaches state: at full precision every
-            // scrolled point re-renders a body that hosts an MKMapView.
-            let span = max(1, posterHeight - safeAreaTop - 52)
-            let raw = min(max(-minY / span, 0), 1)
-            let stepped = (raw * 20).rounded() / 20
-            if stepped != heroProgress { heroProgress = stepped }
         }
         // Дымка под статус-бар — НИЖЕ шапки: кружки «Назад» и «…» должны
         // остаться чёткими, приглушается карта под ними. Когда экран прокручен,
@@ -4130,15 +4142,6 @@ private struct TripDetailJourneyDestination: ViewModifier {
     }
 }
 
-/// How far the hero has scrolled, published from a `Color.clear` behind the
-/// map (never from inside the map's own subtree — this fires on every frame
-/// of a scroll, and the hero hosts an `MKMapView` with a display link).
-struct DetailScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
 
 /// Identifiable wrapper so the reactors peek can be presented with
 /// `.sheet(item:)` off a plain emoji string.
