@@ -104,4 +104,30 @@ final class PlaceStatsTests: XCTestCase {
         XCTAssertEqual(stats.directions[1].latestTripId, c)
         XCTAssertNil(PlaceStats.build(from: [], now: now).medianElapsed)
     }
+
+    /// Одно число — не «обычно» (0.8.9). Правило одно на список, чип отметки и
+    /// экран места; до 0.8.9 экран места его не знал и печатал «Обычно
+    /// занимает … 1 проезд» рядом с «Первый раз здесь».
+    func testUsualNeedsMoreThanOnePass() {
+        XCTAssertFalse(PlaceStats.build(from: [], now: now).hasUsual)
+        let one = PlaceStats.build(from: [pass(daysAgo: 1, course: 0, elapsed: hms(1, 8))], now: now)
+        XCTAssertTrue(one.isFirstTime)
+        XCTAssertFalse(one.hasUsual, "один проезд — «Первый раз здесь», а не «обычно»")
+        let two = PlaceStats.build(from: [pass(daysAgo: 1, course: 0, elapsed: hms(1, 8)),
+                                          pass(daysAgo: 3, course: 2, elapsed: hms(1, 12))], now: now)
+        XCTAssertTrue(two.hasUsual)
+        XCTAssertFalse(two.isFirstTime)
+    }
+
+    /// The place screen asks the same rule, not «are there directions» — one
+    /// pass HAS a direction, and that is how «обычно» reached the first visit.
+    func testPlaceScreenAsksTheSharedRule() throws {
+        let url = UnitGuard.repoRoot().appendingPathComponent("TripTrack/Views/Places/PlaceDetailView.swift")
+        let source = try String(contentsOf: url, encoding: .utf8)
+        guard let start = source.range(of: "private func usualCard("),
+              let end = source.range(of: "private func directionRow(", range: start.upperBound..<source.endIndex)
+        else { return XCTFail("usualCard moved; point this test at it") }
+        XCTAssertTrue(source[start.upperBound..<end.lowerBound].contains("hasUsual"),
+                      "«Обычно занимает» на экране места обязан спрашивать PlaceStats.hasUsual")
+    }
 }

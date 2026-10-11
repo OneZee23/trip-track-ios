@@ -9,7 +9,7 @@ struct PlaceChip: Equatable {
 
     static func build(placeId: UUID, stats: PlaceStats) -> PlaceChip {
         PlaceChip(placeId: placeId, count: stats.passCount,
-                  usual: stats.passCount > 1 ? (stats.directions.first?.median ?? stats.medianElapsed) : nil)
+                  usual: stats.hasUsual ? (stats.directions.first?.median ?? stats.medianElapsed) : nil)
     }
 
     /// «Здесь 11 раз · обычно 2:14» / «Первый раз здесь». Модель, а не вью —

@@ -334,7 +334,11 @@ struct PlaceDetailView: View {
 
     @ViewBuilder
     private func usualCard(_ l: LanguageManager.Language) -> some View {
-        if !model.stats.directions.isEmpty {
+        // Одно число — не «обычно»: с одним проездом рядом уже стоит
+        // «Первый раз здесь» (`PlaceStats.hasUsual`, то же правило у списка).
+        if !model.stats.hasUsual {
+            EmptyView()
+        } else if !model.stats.directions.isEmpty {
             paperCard {
                 cardHeader(AppStrings.placeUsuallyTitle(l), caption: AppStrings.placeUsuallyCaption(l))
                 ForEach(Array(model.stats.directions.enumerated()), id: \.offset) { index, direction in
