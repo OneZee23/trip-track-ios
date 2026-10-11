@@ -107,7 +107,7 @@ struct VehiclePlateChip: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Text(plate)
-            .font(.system(size: size, weight: .semibold))
+            .font(.inter(size, weight: .semibold))
             .tracking(0.3)
             .foregroundStyle(c.text)
             .lineLimit(1)
@@ -161,7 +161,7 @@ struct GarageSectionLabel: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Text(text).textCase(.uppercase)
-            .font(.system(size: size, weight: .bold))
+            .font(.inter(size, weight: .bold))
             .tracking(tracking)
             .foregroundStyle(color ?? c.textTertiary)
     }

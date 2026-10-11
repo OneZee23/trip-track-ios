@@ -1329,7 +1329,7 @@ struct VehicleEditFormView: View {
                 // подписать чужое число чужим объяснением. Поле ручного
                 // пробега стоит отдельной строкой ниже.
                 Text(trackedOdometer(vehicle, l).value)
-                    .font(.system(size: 22, weight: .heavy).monospacedDigit())
+                    .font(.inter(22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(c.text)
                 Text(trackedOdometer(vehicle, l).unit)
                     .font(.inter(13, weight: .medium))

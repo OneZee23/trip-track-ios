@@ -318,7 +318,7 @@ struct StoryShareSheet: View {
             action()
         } label: {
             Text(title)
-                .font(.system(size: compact ? 12 : 13, weight: isOn ? .bold : .semibold))
+                .font(.inter(compact ? 12 : 13, weight: isOn ? .bold : .semibold))
                 .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
                 .padding(.horizontal, compact ? 12 : 14)
                 .padding(.vertical, compact ? 7 : 9)

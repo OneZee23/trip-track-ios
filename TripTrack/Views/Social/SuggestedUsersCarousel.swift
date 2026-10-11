@@ -62,7 +62,7 @@ struct SuggestedUsersCarousel: View {
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Text("LVL \(user.profileLevel)")
-                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                    .font(.inter(10, weight: .semibold).monospacedDigit())
                     .foregroundStyle(c.textTertiary)
             }
 

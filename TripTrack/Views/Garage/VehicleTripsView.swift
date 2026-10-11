@@ -101,7 +101,7 @@ struct VehicleTripsView: View {
                     sort = s
                 } label: {
                     Text(title(s, l))
-                        .font(.system(size: 12, weight: sort == s ? .semibold : .medium))
+                        .font(.inter(12, weight: sort == s ? .semibold : .medium))
                         .foregroundStyle(sort == s ? c.text : c.textSecondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)

@@ -164,7 +164,7 @@ struct FollowListView: View {
             Task { await load() }
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: isActive ? .bold : .semibold).monospacedDigit())
+                .font(.inter(13, weight: isActive ? .bold : .semibold).monospacedDigit())
                 .foregroundStyle(isActive ? c.text : c.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -261,7 +261,7 @@ struct FollowListView: View {
                         .truncationMode(.tail)
                     // App-wide LVL convention (feed cards, garage, profile).
                     Text("LVL \(user.profileLevel)")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(.inter(11).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 // Claim leftover space — without this short names left a gap

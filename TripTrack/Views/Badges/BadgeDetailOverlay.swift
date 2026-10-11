@@ -82,7 +82,7 @@ struct BadgeDetailOverlay: View {
                     HStack(spacing: 5) {
                         Image(systemName: "lock.fill")
                         Text(AppStrings.badgeDetailLocked(lng))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.inter(13, weight: .semibold))
                     }
                     .foregroundStyle(c.textTertiary)
                     .padding(.horizontal, 14)

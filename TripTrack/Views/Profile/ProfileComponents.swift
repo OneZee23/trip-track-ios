@@ -75,7 +75,7 @@ struct ProfileStatsStrip: View {
     private func column(value: String, label: String, c: AppTheme.Colors) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                .font(.inter(17, weight: .heavy).monospacedDigit())
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

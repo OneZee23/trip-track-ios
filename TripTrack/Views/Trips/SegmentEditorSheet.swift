@@ -86,7 +86,7 @@ struct SegmentEditorSheet: View {
                     }
                 if name.count >= Self.maxNameLength - 10 {
                     Text("\(name.count)/\(Self.maxNameLength)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.inter(11, weight: .medium).monospacedDigit())
                         .foregroundStyle(name.count >= Self.maxNameLength ? AppTheme.red : c.textTertiary)
                         .padding(.trailing, 4)
                 }

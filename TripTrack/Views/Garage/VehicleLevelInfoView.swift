@@ -159,7 +159,7 @@ struct VehicleLevelInfoView: View {
             VehicleLevelPill(level: sample, size: 10)
             Spacer(minLength: 8)
             Text(range)
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .font(.inter(12, weight: .medium).monospacedDigit())
                 .foregroundStyle(c.textSecondary)
         }
         .padding(.horizontal, 14)

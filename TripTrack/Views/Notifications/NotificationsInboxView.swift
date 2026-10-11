@@ -206,7 +206,7 @@ struct NotificationsInboxView: View {
             // + accent label. The peach fill we had made the selected chip
             // read as a warning badge next to the plain ones.
             Text(filter.title(lang.language))
-                .font(.system(size: 12.5, weight: isOn ? .bold : .semibold))
+                .font(.inter(12.5, weight: isOn ? .bold : .semibold))
                 .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)

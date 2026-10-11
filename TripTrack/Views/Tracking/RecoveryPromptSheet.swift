@@ -58,7 +58,7 @@ struct RecoveryPromptSheet: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 13))
                 Text("\(AppStrings.recoveryChip(lang.language)) · \(recoveredDistance) · \(mapVM.recoveryDuration)")
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.inter(13, weight: .semibold).monospacedDigit())
             }
             .foregroundStyle(AppTheme.accent)
             .padding(.horizontal, 14)

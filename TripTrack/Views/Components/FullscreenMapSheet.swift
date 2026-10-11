@@ -463,7 +463,7 @@ struct FullscreenMapSheet: View {
     private var timecodePill: some View {
         let c = AppTheme.colors(for: scheme)
         return Text(readoutText)
-            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+            .font(.inter(12, weight: .semibold).monospacedDigit())
             .foregroundStyle(c.text)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -507,7 +507,7 @@ struct FullscreenMapSheet: View {
                 let speed = Measure.speedParts(
                     ms: engine.currentSpeedMS, unit: distanceUnit, lang: language)
                 Text(speed.value)
-                    .font(.system(size: 15, weight: .heavy).monospacedDigit())
+                    .font(.inter(15, weight: .heavy).monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
                 Text(speed.unit)
                     .font(.inter(10, weight: .medium))
@@ -616,7 +616,7 @@ struct FullscreenMapSheet: View {
             engine.cycleRate()
         } label: {
             Text(Self.rateLabel(engine.rate, language))
-                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                .font(.inter(12, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.textSecondary)
                 .frame(width: 40, height: 40)
                 .contentShape(Rectangle())

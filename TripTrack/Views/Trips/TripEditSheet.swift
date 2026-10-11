@@ -97,7 +97,7 @@ struct TripEditSheet: View {
                             // «75 / 500» (canon 117:503) — quiet until it starts
                             // to matter.
                             Text("\(notes.count) / \(Self.notesLimit)")
-                                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                                .font(.inter(11, weight: .medium).monospacedDigit())
                                 .foregroundStyle(
                                     notes.count > Self.notesLimit - 40 ? AppTheme.accent : c.textTertiary
                                 )

@@ -295,7 +295,7 @@ struct DiscoverView: View {
                     // mileage, so this stays the bare "LVL n" it was (no
                     // fabricated data).
                     Text(levelLine(user.profileLevel, totalKm: totalKm))
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .font(.inter(11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 // Claim leftover horizontal space — without this the follow

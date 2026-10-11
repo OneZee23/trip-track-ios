@@ -239,7 +239,7 @@ struct SharePosterView: View {
     private func caption(s: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8 * s) {
             Text(data.title)
-                .font(.system(size: 19 * s, weight: .heavy))
+                .font(.inter(19 * s, weight: .heavy))
                 .tracking(-0.4 * s)
                 .foregroundStyle(.white)
                 .lineLimit(2)
@@ -284,12 +284,12 @@ struct SharePosterView: View {
             // bare «142» against the edge. `lineLimit(1)` alone stops the
             // wrapping, and scaling now does what it was always meant to.
             Text(value)
-                .font(.system(size: 17 * s, weight: .heavy).monospacedDigit())
+                .font(.inter(17 * s, weight: .heavy).monospacedDigit())
                 .tracking(-0.3 * s)
                 .foregroundStyle(.white)
             if let unit {
                 Text(unit)
-                    .font(.system(size: 9 * s, weight: .bold))
+                    .font(.inter(9 * s, weight: .bold))
                     .foregroundStyle(.white.opacity(0.7))
             }
         }

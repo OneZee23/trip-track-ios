@@ -3363,7 +3363,7 @@ isOwn
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(entry.user.profileLevel)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.inter(11, weight: .medium).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer()

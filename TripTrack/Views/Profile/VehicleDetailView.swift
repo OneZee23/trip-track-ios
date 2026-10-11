@@ -949,7 +949,7 @@ struct VehicleDetailView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 22, weight: .heavy).monospacedDigit())
+                    .font(.inter(22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(valueColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)

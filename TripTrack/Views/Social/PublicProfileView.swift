@@ -1089,7 +1089,7 @@ struct PublicProfileView: View {
             // caption. `minimumScaleFactor` rather than a smaller size: only
             // «2 430» in a third of a 360pt phone ever needs to give way.
             Text(value)
-                .font(.system(size: 22, weight: .heavy).monospacedDigit())
+                .font(.inter(22, weight: .heavy).monospacedDigit())
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)

@@ -352,7 +352,7 @@ struct StatsScreenView: View {
             range = value
         } label: {
             Text(title)
-                .font(.system(size: 13, weight: isOn ? .semibold : .medium))
+                .font(.inter(13, weight: isOn ? .semibold : .medium))
                 .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -378,7 +378,7 @@ struct StatsScreenView: View {
                 if let next = step(-1, agg, calendar: cal) { anchor = next }
             }
             Text(periodLabel(l, calendar: cal))
-                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                .font(.inter(15, weight: .semibold).monospacedDigit())
                 .foregroundStyle(c.text)
                 // FIXED, not minimum: at `minWidth` the label grew for a long
                 // month and shoved both chevrons outward, so the arrows moved
@@ -475,7 +475,7 @@ struct StatsScreenView: View {
     ) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: size, weight: .heavy).monospacedDigit())
+                .font(.inter(size, weight: .heavy).monospacedDigit())
                 .foregroundStyle(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -572,7 +572,7 @@ struct StatsScreenView: View {
                             .opacity(km > 0 ? 1 : 0.35)
                             .frame(height: h)
                         Text(labels[i])
-                            .font(.system(size: 10, weight: isOn ? .heavy : .semibold))
+                            .font(.inter(10, weight: isOn ? .heavy : .semibold))
                             .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
@@ -837,7 +837,7 @@ struct StatsScreenView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(row.value)
-                .font(.system(size: 15, weight: .heavy).monospacedDigit())
+                .font(.inter(15, weight: .heavy).monospacedDigit())
                 .foregroundStyle(AppTheme.accent)
                 .lineLimit(1)
 

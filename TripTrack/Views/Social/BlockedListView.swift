@@ -110,7 +110,7 @@ struct BlockedListView: View {
                         .foregroundStyle(c.textTertiary)
                 } else {
                     Text("LVL \(user.profileLevel)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .font(.inter(11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
             }
