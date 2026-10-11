@@ -336,10 +336,7 @@ struct SyncStatusSheetView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).textCase(.uppercase)
-                .font(.inter(11, weight: .bold).monospacedDigit())
-                .tracking(0.5)
-                .foregroundStyle(c.textTertiary)
+            ProfileSectionLabel(text: title)
                 .padding(.leading, 4)
             content()
         }

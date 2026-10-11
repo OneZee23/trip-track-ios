@@ -1706,15 +1706,12 @@ struct PublicProfileView: View {
         return parts.joined(separator: ". ")
     }
 
-    /// Canon page header (580:490) — the 11pt uppercase tertiary label every
-    /// other social screen already uses. Note the achievements CARD titles
-    /// itself differently, in 16 heavy inside its own surface (1667:208).
+    /// The house section heading, the same as «Достижения» and «Находки» on
+    /// this screen (0.8.9). Until then the trips heading was 11 pt grey
+    /// capitals next to two headings in the house style — one screen, two
+    /// looks for one role.
     private func sectionHeader(_ title: String, c: AppTheme.Colors) -> some View {
-        Text(title)
-            .font(.inter(11, weight: .semibold))
-            .tracking(0.44)
-            .textCase(.uppercase)
-            .foregroundStyle(c.textTertiary)
+        ProfileSectionLabel(text: title)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

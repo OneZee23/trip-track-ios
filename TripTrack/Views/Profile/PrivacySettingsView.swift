@@ -193,11 +193,7 @@ struct PrivacySettingsView: View {
                 // четыре независимых переключателя, а не как одна ось «что
                 // видно внутри открытого профиля».
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(AppStrings.visibilityTitle(l))
-                        .font(.inter(11, weight: .bold))
-                        .kerning(0.22)
-                        .foregroundStyle(c.textTertiary)
-                        .textCase(.uppercase)
+                    ProfileSectionLabel(text: AppStrings.visibilityTitle(l))
                     Text(AppStrings.visibilityIntro(l))
                         .font(.inter(11.5))
                         .foregroundStyle(c.textSecondary)
