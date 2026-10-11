@@ -491,7 +491,7 @@ extension Translations {
         "vehiclePhotoAskKeep": "Les garder pour moi",
         "vehiclePlateHint": "Une plaque suffit à retrouver le nom et l'adresse du propriétaire — désactivé par défaut.",
         "vehiclePrivacyFooter": "Ce que vous désactivez disparaît entièrement pour les autres, sans mention « masqué ». Vos trajets restent publiés — simplement sans dire avec quoi.",
-        "publicGarageEntrySubtitle": "Les véhicules qu'il a ouverts et où ils sont allés",
+        "publicGarageEntrySubtitle": "Les véhicules partagés et où ils sont allés",
         "publicGarageEmpty": "Rien ici pour l'instant. Ses trajets et sa carte sont toujours là.",
         "publicVehicleUnavailable": "Ce véhicule n'est pas disponible.",
         "journeyUnavailable": "Ce voyage n'est pas disponible.",

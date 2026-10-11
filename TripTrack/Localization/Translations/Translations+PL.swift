@@ -491,7 +491,7 @@ extension Translations {
         "vehiclePhotoAskKeep": "Zostaw dla siebie",
         "vehiclePlateHint": "Po tablicy można ustalić imię i adres właściciela — dlatego domyślnie wyłączone.",
         "vehiclePrivacyFooter": "To, co wyłączone, znika u innych całkowicie, bez plakietki «ukryte». Przejazdy nadal się publikują — po prostu bez informacji, czym zostały odbyte.",
-        "publicGarageEntrySubtitle": "Pojazdy, które udostępnił, i gdzie były",
+        "publicGarageEntrySubtitle": "Udostępnione pojazdy i gdzie były",
         "publicGarageEmpty": "Tu jeszcze pusto. Przejazdy i mapa są tam, gdzie były.",
         "publicVehicleUnavailable": "Ten pojazd jest niedostępny.",
         "journeyUnavailable": "Ta podróż jest niedostępna.",

@@ -164,6 +164,14 @@ struct PublicProfileView: View {
         pushPath.wrappedValue.cappedAppend(.publicStats(accountId, resolvedDisplayName))
     }
 
+    /// Есть ли у человека публичные маршруты. Счётчик сервера — первым:
+    /// превью приходят только у последних поездок, а публичная поездка
+    /// может быть и без превью.
+    private var hasPublicRoutes: Bool {
+        if let count = profile?.stats.publicTripCount { return count > 0 }
+        return !(profile?.recentTrips ?? []).isEmpty
+    }
+
     private func openMap() {
         guard let pushPath else { return }
         pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName))
@@ -383,7 +391,13 @@ struct PublicProfileView: View {
                                 statsEntryCard(c, lng: lng)
                                     .padding(.horizontal, 16)
                             }
-                            if visibility.map, canOpenHub {
+                            // Карта — только когда на ней есть что показать.
+                            // Без публичных поездок карточка была серым
+                            // прямоугольником со значком, открывала пустую
+                            // карту, а ниже то же самое уже говорит «Пока нет
+                            // публичных поездок». Правило путешествий ниже:
+                            // пустая карточка-хаб — ложное обещание.
+                            if visibility.map, canOpenHub, hasPublicRoutes {
                                 mapEntryCard(c, lng: lng)
                                     .padding(.horizontal, 16)
                             }

@@ -491,7 +491,7 @@ extension Translations {
         "vehiclePhotoAskKeep": "Залишити при собі",
         "vehiclePlateHint": "За номером знаходять ім'я та адресу власника — тому вимкнено за замовчуванням.",
         "vehiclePrivacyFooter": "Вимкнене зникає в інших цілком, без плашки «приховано». Ваші поїздки при цьому публікуються як завжди — просто без згадки, на чому вони зроблені.",
-        "publicGarageEntrySubtitle": "Машини, які він відкрив, і де вони побували",
+        "publicGarageEntrySubtitle": "Відкриті машини і де вони побували",
         "publicGarageEmpty": "Тут поки порожньо. Поїздки й карта — на місці.",
         "publicVehicleUnavailable": "Ця машина недоступна.",
         "journeyUnavailable": "Ця подорож недоступна.",

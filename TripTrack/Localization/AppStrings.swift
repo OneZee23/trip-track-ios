@@ -3733,10 +3733,11 @@ enum AppStrings {
            en: "What you switch off disappears for other people entirely, with no «hidden» placeholder. Your trips still publish as usual — just without saying what they were made in.")
     }
     /// Пустой гараж и полностью скрытый гараж говорят ОДНО И ТО ЖЕ. Разные
-    /// формулировки выдали бы, что человек что-то прячет.
+    /// формулировки выдали бы, что человек что-то прячет. Без местоимения
+    /// (0.8.9): «он открыл» приписывало пол каждому владельцу профиля.
     static func publicGarageEntrySubtitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicGarageEntrySubtitle",
-           ru: "Машины, которые он открыл, и где они побывали",
+           ru: "Открытые машины и где они побывали",
            en: "The vehicles they opened up, and where those have been")
     }
     static func publicGarageEmpty(_ lang: LanguageManager.Language) -> String {

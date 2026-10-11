@@ -491,7 +491,7 @@ extension Translations {
         "vehiclePhotoAskKeep": "Für mich behalten",
         "vehiclePlateHint": "Über das Kennzeichen findet man Namen und Adresse — deshalb standardmäßig aus.",
         "vehiclePrivacyFooter": "Was Sie ausschalten, verschwindet für andere vollständig, ohne «versteckt»-Platzhalter. Ihre Fahrten werden weiterhin veröffentlicht — nur ohne zu sagen, womit sie gemacht wurden.",
-        "publicGarageEntrySubtitle": "Die Fahrzeuge, die er geöffnet hat, und wo sie waren",
+        "publicGarageEntrySubtitle": "Freigegebene Fahrzeuge und wo sie waren",
         "publicGarageEmpty": "Hier ist noch nichts. Fahrten und Karte sind, wo sie waren.",
         "publicVehicleUnavailable": "Dieses Fahrzeug ist nicht verfügbar.",
         "journeyUnavailable": "Diese Reise ist nicht verfügbar.",
