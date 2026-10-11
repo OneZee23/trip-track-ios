@@ -56,6 +56,13 @@ final class ApplyDraftDecisionsTests: XCTestCase {
     }
 
     override func tearDown() {
+        // Четыре теста здесь начинают запись и не кончают её. Без остановки
+        // GPS симулятора продолжал слать фиксы, и `TripManager` писал точку в
+        // поездку, строку которой ниже уже удалили: «Illegal attempt to
+        // establish a relationship 'trip' between objects in different
+        // contexts» ронял процесс в СЛЕДУЮЩЕМ тесте — раз на несколько полных
+        // прогонов, и каждый раз выглядело как поломка чужого класса.
+        if vm?.tripManager.isRecording == true { _ = vm?.tripManager.stopTrip() }
         let ctx = PersistenceController.shared.container.viewContext
         for id in insertedTripIds {
             let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
