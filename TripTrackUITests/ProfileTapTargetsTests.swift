@@ -44,4 +44,23 @@ final class ProfileTapTargetsTests: XCTestCase {
                       || !app.buttons["profile_calendar_month"].firstMatch.exists,
                       "The month view must open")
     }
+
+    /// The search card is 48 pt; the field inside it is a 20 pt line. A tap on
+    /// the magnifier — left of the field — must focus it too.
+    func testSearchCardFocusesTheFieldFromItsEdge() {
+        let field = app.textFields["profile_history_search"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        let window = app.windows.firstMatch
+        // Small, slow drags: a full swipeUp flings the field past the screen.
+        for _ in 0..<10 where !field.isHittable || field.frame.minY > window.frame.height - 200 {
+            let from = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -220)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        XCTAssertTrue(field.isHittable)
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: -22, dy: 0)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3),
+                      "A tap on the magnifier must bring up the keyboard")
+    }
 }

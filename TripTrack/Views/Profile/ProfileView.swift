@@ -1492,6 +1492,11 @@ struct ProfileView: View {
             .padding(.trailing, 8)
             .frame(minHeight: 48)
             .background(c.card, in: RoundedRectangle(cornerRadius: 14))
+            // The whole 48 pt card focuses the field, not only its 20 pt line
+            // of text: a tap on the magnifier or the card's edge used to do
+            // nothing.
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .onTapGesture { historySearchFocused = true }
             if ManualTripEntry.isVisible { historyAddButton(c) }
         }
         .padding(.horizontal, 16)
