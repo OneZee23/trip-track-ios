@@ -3879,6 +3879,11 @@ isOwn
                     .foregroundStyle(AppTheme.accent)
             }
         }
+        // Same 44 pt target as the owner's «+».
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .padding(.trailing, -12)
+        .padding(.vertical, -12)
         .disabled(companionPhotoUpload.isUploading)
         .accessibilityIdentifier("detail_add_photo")
         .accessibilityLabel(AppStrings.addPhotos(lang.language))
@@ -3937,7 +3942,14 @@ isOwn
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 20))
                         .foregroundStyle(AppTheme.accent)
+                        // The glyph stays 20 pt; the target is 44 (it was
+                        // 23 × 23 — half a finger). The negative trailing
+                        // padding keeps the glyph on the card's right edge.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .padding(.trailing, -12)
+                .padding(.vertical, -12)
                 .accessibilityIdentifier("detail_add_photo")
                 .accessibilityLabel(AppStrings.addPhotos(lang.language))
             }
@@ -3977,21 +3989,31 @@ isOwn
                     }
                 }
             } else {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Image(systemName: "camera")
-                            .font(.system(size: 24))
-                            .foregroundStyle(c.textTertiary)
-                        Text(AppStrings.addPhotos(lang.language))
-                            .font(.inter(12))
-                            .foregroundStyle(c.textTertiary)
+                // A button, not `.onTapGesture`: the tap has to answer under
+                // the finger (press feedback), and VoiceOver has to call it a
+                // button.
+                Button {
+                    Haptics.tap()
+                    showPhotoPicker = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Image(systemName: "camera")
+                                .font(.system(size: 24))
+                                .foregroundStyle(c.textTertiary)
+                            Text(AppStrings.addPhotos(lang.language))
+                                .font(.inter(12))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(.vertical, 20)
+                    .surfaceCard(cornerRadius: 12)
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .padding(.vertical, 20)
-                .surfaceCard(cornerRadius: 12)
-                .onTapGesture { showPhotoPicker = true }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("detail_add_photo_card")
             }
         }
     }

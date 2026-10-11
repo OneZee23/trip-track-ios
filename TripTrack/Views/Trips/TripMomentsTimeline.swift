@@ -190,6 +190,7 @@ struct TripMomentsTimeline: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(AppTheme.accent.opacity(0.12), in: Capsule())
+                        .modifier(MomentChipTarget())
                     }
                     .buttonStyle(PressableCardStyle())
                     .padding(.top, 4)
@@ -236,14 +237,17 @@ struct TripMomentsTimeline: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "mappin.and.ellipse").font(.system(size: 11, weight: .semibold))
-                Text(chip.text(language)).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                // Inter, like every other line of this card; SF stayed here
+                // after the 26 Sep move to one typeface.
+                Text(chip.text(language)).font(.inter(12, weight: .semibold)).lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
             }
             .foregroundStyle(AppTheme.accent)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(AppTheme.accentBg, in: Capsule())
+            .modifier(MomentChipTarget())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
         .padding(.leading, Self.contentInset)
         // Правое поле — как у `nodeRow`: без него длинный перевод («Здесь N
         // раз · обычно 1 ч 20 мин» на de/pl) дотягивал бы капсулу до края карточки.
@@ -476,5 +480,17 @@ private struct MomentNodeAnchors: PreferenceKey {
     static let defaultValue: [Anchor<CGPoint>] = []
     static func reduce(value: inout [Anchor<CGPoint>], nextValue: () -> [Anchor<CGPoint>]) {
         value.append(contentsOf: nextValue())
+    }
+}
+
+/// A 44 pt tall target around a 25–28 pt capsule in «Моменты», without
+/// moving anything: the capsule keeps its size and place, the invisible
+/// margin above and below takes the finger (Apple's 44 pt minimum).
+private struct MomentChipTarget: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .padding(.vertical, -8)
     }
 }
