@@ -2980,49 +2980,20 @@ isOwn
                 // empty card on this screen. It used to be a lone sentence
                 // centred in an otherwise empty card, which reads as
                 // something that failed to arrive rather than as a state.
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(c.cardAlt).frame(width: 36, height: 36)
-                        Image(systemName: "heart")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
+                //
+                // The button keeps its whole label: it is the card's one
+                // action. When the line and the button do not fit side by
+                // side (German, large text), the button moves under the line
+                // instead of being cut to «Поставить…».
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        emptyReactionsLine(c)
+                        Spacer(minLength: 8)
+                        firstReactionButton
                     }
-                    Text(AppStrings.noReactionsYet(lang.language))
-                        .font(.inter(14.5))
-                        .foregroundStyle(c.textSecondary)
-                        .lineLimit(2)
-
-                    Spacer(minLength: 8)
-
-                    // Somebody has to be first, and on someone else's trip that
-                    // is the whole point of the section. Without this the «+»
-                    // only existed once a reaction was already there — you
-                    // could join a crowd but never start one.
-                    if !isOwn {
-                        Button {
-                            Haptics.tap()
-                            guard auth.isSignedIn else { signInPrompt = .react; return }
-                            showReactionPicker = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 12, weight: .bold))
-                                // The command, not a slogan: «Будьте первым,
-                                // кто отреагирует» wrapped to three lines beside
-                                // «Пока никто не отреагировал», which already
-                                // says nobody has. Same words as the «+» in the
-                                // reactions row.
-                                Text(AppStrings.addReaction(lang.language))
-                                    .lineLimit(1)
-                                    .font(.inter(13, weight: .semibold))
-                            }
-                            .foregroundStyle(AppTheme.accent)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("reaction_add_first")
+                    VStack(alignment: .leading, spacing: 10) {
+                        emptyReactionsLine(c)
+                        firstReactionButton
                     }
                 }
                 .padding(.horizontal, 14)
@@ -3030,6 +3001,58 @@ isOwn
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .surfaceCard(cornerRadius: 14)
             }
+        }
+    }
+
+    private func emptyReactionsLine(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                Image(systemName: "heart")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            Text(AppStrings.noReactionsYet(lang.language))
+                .font(.inter(14.5))
+                .foregroundStyle(c.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Somebody has to be first, and on someone else's trip that is the whole
+    /// point of the section. Without this the «+» only existed once a
+    /// reaction was already there — you could join a crowd but never start
+    /// one. Nothing on our own trip: we do not react to ourselves.
+    @ViewBuilder
+    private var firstReactionButton: some View {
+        if !isOwn {
+            Button {
+                Haptics.tap()
+                guard auth.isSignedIn else { signInPrompt = .react; return }
+                showReactionPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
+                    // The command, not a slogan: «Будьте первым, кто
+                    // отреагирует» wrapped to three lines beside «Пока никто
+                    // не отреагировал», which already says nobody has. Same
+                    // words as the «+» in the reactions row.
+                    Text(AppStrings.addReaction(lang.language))
+                        .font(.inter(13, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .foregroundStyle(AppTheme.accent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("reaction_add_first")
         }
     }
 
