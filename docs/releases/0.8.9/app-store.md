@@ -109,13 +109,16 @@ Revisamos todas as telas para que os textos digam exatamente o que o app faz —
 
 ## Review Notes
 
-TripTrack 0.8.9 (78) is a reliability and wording update. No new SDK, permission, background mode or in-app purchase.
+TripTrack 0.8.9 (78) replaces the pending 0.8.8 (77) submission and includes all its changes. It is a reliability, wording and interface update. No new SDK, permission, background mode or in-app purchase.
 
 WHAT CHANGED
 1. Long recordings: saving track points and uploading a long trip used to block the main thread for seconds (seen in our crash reports). The local database model was updated (lightweight migration); no user data is changed.
 2. Website trips: a PRO subscriber can add a missed trip on trip-track.app. The app now imports such trips correctly as hand-entered — they never earn XP or badges. This web feature is not yet enabled for users.
 3. Copy: in-app text was checked against actual behaviour in all 13 languages and now uses the formal address. Permission descriptions were made more precise: the photo-library text mentions that photos are uploaded when Cloud Sync is on, and the background-location text no longer promises that no part of a trip can be lost. The account-deletion confirmation now states that an Apple subscription must be cancelled separately in the App Store.
 4. A crash on the new-badge celebration screen is fixed.
+5. Subscription management: for an active PRO subscriber, the TripTrack PRO row on the Me tab now opens a "Your PRO" screen first — the current renewal date and price (or "Renewal is off, PRO works until …" if auto-renew is disabled), the features included, and a "Manage subscription in the App Store" row. That row opens Apple's standard subscription sheet (AppStore.showManageSubscriptions); it is visible without scrolling at every text size and is captioned "Change the plan or cancel the subscription there". Cancelling therefore still takes two taps. No retention offer, survey or extra confirmation is shown.
+6. Interface polish: PRO badges and avatar frames are shown consistently in people lists, small controls take a full-size tap, map labels no longer overlap the status bar, and section headings use one style.
 
 HOW TO CHECK
 No account is required. Record or open a trip; open Me → settings gear → Privacy to see the unchanged optional usage counters (off by default). Account deletion is under Me → settings gear → Account & sync → Delete account (requires sign-in).
+To see "Your PRO": buy PRO in the sandbox (Me → TripTrack PRO), close the purchase screen, then tap the TripTrack PRO row again. "Manage subscription in the App Store" is at the bottom of that screen.
