@@ -850,9 +850,10 @@ struct DetailDescriptionCard: View {
 
 // MARK: - Trip achievements
 
-/// «Достижения поездки» — 3-up cards: tinted icon circle + badge name.
-/// Figma shows emoji; badges in the app are SF-symbol + color, so the
-/// cards use the badge's own icon/tint (consistent with the badge system).
+/// «Достижения поездки» — 3-up cards: the badge's engraving + its name.
+/// One drawing for every badge since 0.8.2 (`BadgeArt`), with no plate under
+/// it: the card is already the plate, and a tinted disc behind the engraving
+/// would be a badge inside a badge.
 struct TripAchievementsGrid: View {
     let badges: [Badge]
     let language: LanguageManager.Language
@@ -875,14 +876,7 @@ struct TripAchievementsGrid: View {
                     onTap(badge)
                 } label: {
                     VStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(badge.color.opacity(0.14))
-                                .frame(width: 40, height: 40)
-                            Image(systemName: badge.icon)
-                                .font(.system(size: 18))
-                                .foregroundStyle(badge.color)
-                        }
+                        BadgeArt(badge: badge, side: 56)
                         Text(badge.title(language))
                             .font(.inter(11, weight: .semibold))
                             .foregroundStyle(c.text)

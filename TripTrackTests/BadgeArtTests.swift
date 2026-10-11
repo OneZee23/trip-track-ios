@@ -105,6 +105,23 @@ final class BadgeArtTests: XCTestCase {
         return spots.map { CGFloat(pixels[($1 * side + $0) * 4 + 3]) / 255 }
     }
 
+    /// Значок рисуется гравюрой ВЕЗДЕ. В 0.8.2 переехали полка, оверлей и
+    /// празднование, а экран поездки, финиш и чужой профиль остались на
+    /// `Image(systemName: badge.icon)` в цветном круге до 0.8.9 — и видно это
+    /// было только на устройстве. Сторож читает исходники экранов.
+    func testNoScreenDrawsABadgeAsASymbol() throws {
+        let views = UnitGuard.repoRoot().appendingPathComponent("TripTrack/Views")
+        let files = FileManager.default.enumerator(at: views, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
+        var offenders: [String] = []
+        for file in files {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            if text.contains("systemName: badge.icon") { offenders.append(file.lastPathComponent) }
+        }
+        XCTAssertFalse(files.isEmpty, "исходники экранов не нашлись")
+        XCTAssertTrue(offenders.isEmpty, "значок символом вместо BadgeArt: \(offenders)")
+    }
+
     private static func components(of colour: UIColor) -> (r: CGFloat, g: CGFloat, b: CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         colour.getRed(&r, green: &g, blue: &b, alpha: &a)

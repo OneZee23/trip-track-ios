@@ -680,8 +680,9 @@ struct TripCompleteSummaryView: View {
                 }
             }
 
-            // New badges — Figma: 46pt tinted circle + the badge NAME below
-            // (repeat count folds into the name row when applicable).
+            // New badges — the engraving (`BadgeArt`, 0.8.2) + the badge NAME
+            // below. No tinted disc: since 0.8.2 the disc is drawn into the
+            // badge itself, and ours under it made a badge inside a badge.
             if !data.newBadges.isEmpty {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(data.newBadges.prefix(4)) { badge in
@@ -694,16 +695,7 @@ struct TripCompleteSummaryView: View {
                             selectedBadge = badge
                         } label: {
                             VStack(spacing: 4) {
-                                ZStack {
-                                    Circle()
-                                        .fill(badge.color.opacity(0.15))
-                                        .frame(width: 46, height: 46)
-                                        .shadow(color: badge.color.opacity(0.3), radius: 6)
-
-                                    Image(systemName: badge.icon)
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(badge.color)
-                                }
+                                BadgeArt(badge: badge, side: 52)
 
                                 // Name only, as the canon draws it. The «×5»
                                 // that used to hang off it was the lifetime

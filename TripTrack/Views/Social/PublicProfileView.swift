@@ -1454,7 +1454,10 @@ struct PublicProfileView: View {
                                 Haptics.tap()
                                 selectedBadge = badge
                             } label: {
-                                badgeChip(badge, iconSize: 15)
+                                // Same tile as the strip on «Я» (0.8.2): the
+                                // engraving on its rarity fill. The SF glyph
+                                // in a disc predates the drawn badges.
+                                BadgeTile(badge: badge)
                             }
                             .buttonStyle(.plain)
                             .frame(maxWidth: .infinity)
@@ -1547,7 +1550,8 @@ struct PublicProfileView: View {
             selectedBadge = badge
         } label: {
             HStack(spacing: 10) {
-                badgeChip(badge, iconSize: 16)
+                // Featured — no tile, as on «Я»: the row is its own plate.
+                BadgeArt(badge: badge, side: 40)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
@@ -1581,21 +1585,6 @@ struct PublicProfileView: View {
             parts.append(Badge.unlockShareText(percent, lang.language) + "%")
         }
         return parts.joined(separator: " · ")
-    }
-
-    /// The 30pt rarity disc (canon 1667:213). Two colours only — the glyph
-    /// takes the tier's ink, not `badge.color`, so a green glyph never lands
-    /// inside a purple ring.
-    private func badgeChip(_ badge: Badge, iconSize: CGFloat) -> some View {
-        let rarity = badge.displayRarity
-        return ZStack {
-            Circle().fill(rarity.chipTint)
-            Circle().strokeBorder(rarity.chipRing, lineWidth: 1.5)
-            Image(systemName: badge.icon)
-                .font(.system(size: iconSize))
-                .foregroundStyle(rarity.chipText)
-        }
-        .frame(width: 30, height: 30)
     }
 
     // MARK: - Находки (0.7.0)
