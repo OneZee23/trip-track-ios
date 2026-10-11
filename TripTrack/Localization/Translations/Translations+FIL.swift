@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Kusang magsisimula ang pag-record pagkaandar ninyo. Hindi kailangan ng account.",
         "profileRecordingStartsByButton": "Simulan po ang pag-record gamit ang button sa ibaba. Binubuksan ang awtomatikong pag-record mula sa card ng sasakyan sa garahe. Hindi kailangan ng account.",
         "profileRecordYourFirst": "I-record ang inyong unang biyahe",
-        "profileYourKilometersStreaks": "Dito lalabas ang inyong kilometro, sunod-sunod na araw at mga badge.",
+        "profileYourKilometersStreaks": "Dito lalabas ang inyong mga biyahe, layo at mga tagumpay.",
         "statsYear": "taon",
         "syncStatusMarkerOff": "Off",
         "syncStatusMarkerSynced": "Tapos",

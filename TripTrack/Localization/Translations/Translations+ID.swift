@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Perekaman mulai sendiri begitu Anda jalan. Tidak perlu akun.",
         "profileRecordingStartsByButton": "Mulai merekam dengan tombol di bawah. Rekam otomatis dinyalakan dari kartu mobil di garasi. Tidak perlu akun.",
         "profileRecordYourFirst": "Rekam perjalanan pertama Anda",
-        "profileYourKilometersStreaks": "Kilometer, rentetan, dan lencana Anda akan ada di sini.",
+        "profileYourKilometersStreaks": "Perjalanan, jarak, dan pencapaian Anda akan muncul di sini.",
         "statsYear": "tahun",
         "syncStatusMarkerOff": "Mati",
         "syncStatusMarkerSynced": "Selesai",

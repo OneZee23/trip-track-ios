@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Nagrywanie ruszy samo, gdy tylko auto ruszy. Konto nie jest potrzebne.",
         "profileRecordingStartsByButton": "Nagrywanie zaczyna się przyciskiem poniżej. Nagrywanie automatyczne można włączyć na karcie auta w garażu. Konto nie jest potrzebne.",
         "profileRecordYourFirst": "Nagraj pierwszą trasę",
-        "profileYourKilometersStreaks": "Tu będą kilometry, serie i odznaki.",
+        "profileYourKilometersStreaks": "Tu pojawią się przejazdy, przebyta droga i osiągnięcia.",
         "statsYear": "roku",
         "syncStatusMarkerOff": "Wył.",
         "syncStatusMarkerSynced": "Gotowe",

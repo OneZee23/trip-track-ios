@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Запис почнеться автоматично, коли ви поїдете. Акаунт не потрібен.",
         "profileRecordingStartsByButton": "Почніть запис кнопкою нижче. Автозапис вмикається на картці машини в гаражі. Акаунт не потрібен.",
         "profileRecordYourFirst": "Запишіть першу поїздку",
-        "profileYourKilometersStreaks": "Тут будуть ваші кілометри, серії та бейджі.",
+        "profileYourKilometersStreaks": "Тут будуть ваші поїздки, пробіг і досягнення.",
         "statsYear": "році",
         "syncStatusMarkerOff": "Вимк.",
         "syncStatusMarkerSynced": "Готово",

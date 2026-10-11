@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "La registrazione parte da sola appena guida. Non serve un account.",
         "profileRecordingStartsByButton": "Avvii la registrazione con il pulsante qui sotto. La registrazione automatica si attiva dalla scheda di un'auto nel garage. Non serve un account.",
         "profileRecordYourFirst": "Registri il Suo primo viaggio",
-        "profileYourKilometersStreaks": "Qui ci saranno i Suoi chilometri, le serie e i distintivi.",
+        "profileYourKilometersStreaks": "Qui compariranno i Suoi viaggi, la distanza e i traguardi.",
         "statsYear": "anno",
         "syncStatusMarkerOff": "No",
         "syncStatusMarkerSynced": "Fatto",

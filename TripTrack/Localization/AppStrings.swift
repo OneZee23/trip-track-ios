@@ -6662,10 +6662,14 @@ enum AppStrings {
            ru: "Запишите первую поездку",
            en: "Record your first trip")
     }
+    /// Что новичок увидит после первой поездки — словами самого экрана.
+    /// Было «километры, серии и бейджи»: «бейджи» нигде больше в приложении
+    /// нет (раздел зовётся «Достижения»), «серии» новичку на этом экране не
+    /// показаны вовсе, а «километры» врали на телефоне с милями.
     static func profileYourKilometersStreaks(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileYourKilometersStreaks",
-           ru: "Здесь будут ваши километры, серии и бейджи.",
-           en: "Your kilometers, streaks and badges will appear here.")
+           ru: "Здесь будут ваши поездки, пробег и достижения.",
+           en: "Your trips, distance and achievements will appear here.")
     }
     static func statsYear(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsYear", ru: "году", en: "year")

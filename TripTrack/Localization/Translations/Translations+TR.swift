@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Siz yola çıkar çıkmaz kayıt kendiliğinden başlar. Hesap gerekmez.",
         "profileRecordingStartsByButton": "Kaydı aşağıdaki düğmeyle başlatın. Otomatik kayıt, garajdaki bir aracın kartından açılır. Hesap gerekmez.",
         "profileRecordYourFirst": "İlk gezinizi kaydedin",
-        "profileYourKilometersStreaks": "Kilometreleriniz, serileriniz ve rozetleriniz burada olacak.",
+        "profileYourKilometersStreaks": "Yolculuklarınız, mesafeniz ve başarımlarınız burada görünecek.",
         "statsYear": "yıl",
         "syncStatusMarkerOff": "Kapalı",
         "syncStatusMarkerSynced": "Tamam",

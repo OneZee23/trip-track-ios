@@ -913,7 +913,7 @@ extension Translations {
         "profileRecordingStartsBy": "Die Aufnahme startet von selbst, sobald Sie losfahren. Ein Account ist nicht nötig.",
         "profileRecordingStartsByButton": "Starten Sie die Aufnahme mit dem Button unten. Die Auto-Aufnahme schalten Sie auf der Karte eines Autos in der Garage ein. Ein Account ist nicht nötig.",
         "profileRecordYourFirst": "Zeichnen Sie Ihre erste Fahrt auf",
-        "profileYourKilometersStreaks": "Hier stehen Ihre Kilometer, Serien und Abzeichen.",
+        "profileYourKilometersStreaks": "Hier erscheinen Ihre Fahrten, Ihre Strecke und Ihre Erfolge.",
         "statsYear": "Jahr",
         "syncStatusMarkerOff": "Aus",
         "syncStatusMarkerSynced": "Fertig",
