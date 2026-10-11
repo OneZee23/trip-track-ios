@@ -1311,7 +1311,11 @@ final class MapViewModel: ObservableObject {
     /// глазами и это честно.
     func debugShowSummaryForLastTrip() {
         guard ProcessInfo.processInfo.arguments.contains("-debug-trip-summary") else { return }
-        guard let trip = tripManager.fetchTrips(limit: 1, offset: 0).first else { return }
+        guard let listed = tripManager.fetchTrips(limit: 1, offset: 0).first else { return }
+        // The list fetch carries no track points, and the summary draws its
+        // hero map only from them: without the full read the debug sheet
+        // showed a finish screen with no map, which no real finish has.
+        let trip = tripManager.tripDetail(id: listed.id) ?? listed
         lastCompletionData = nil
         lastCompletedTrip = trip
     }
