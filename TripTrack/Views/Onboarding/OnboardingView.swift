@@ -436,15 +436,21 @@ struct OnboardingView: View {
                 let max = Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lng)
                 let elevation = Measure.elevationParts(
                     metres: trip.elevation, unit: distanceUnit, lang: lng)
+                // «0.0 л/100» и «0 м» у настоящей поездки — не измерение, а
+                // отсутствие: расход не задан у машины, высоты нет в треке.
+                // Пустое значение — прочерк, как правило «Макс.» у вписанной
+                // поездки (0.8.9, экран поездки).
+                let dash = "—"
                 return [
                     ("point.topleft.down.curvedto.point.bottomright.up",
                      distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
                     ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
                     ("gauge", avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
                     ("bolt.fill", max.value, max.unit, AppTheme.red, AppStrings.onboardingStatMax(l)),
-                    ("drop", Self.number(fuel, decimals: 1, lng: lng),
-                     AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-                    ("mountain.2", elevation.value, elevation.unit,
+                    ("drop", fuel > 0 ? Self.number(fuel, decimals: 1, lng: lng) : dash,
+                     fuel > 0 ? AppStrings.unitLPer100(l) : "", AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
+                    ("mountain.2", trip.elevation > 0.5 ? elevation.value : dash,
+                     trip.elevation > 0.5 ? elevation.unit : "",
                      AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
                 ]
             } ?? [
@@ -507,6 +513,9 @@ struct OnboardingView: View {
                     Image(systemName: m.icon)
                         .font(.system(size: 14))
                         .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
+                        // The label under the number names it; the glyph's own
+                        // name («mountain.2») was spoken first.
+                        .accessibilityHidden(true)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(m.value)
                             .font(.inter(17, weight: .heavy).monospacedDigit())
