@@ -38,6 +38,9 @@ struct ProfileDraftsRow: View {
                         .font(.system(size: 17))
                         .foregroundStyle(AppTheme.accent)
                 }
+                // Decoration: «4 поездки» beside it is the row. VoiceOver
+                // read «Ящик входящих заполнен».
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(AppStrings.formattedCount(count, lang: l)) \(AppStrings.nounTrips(l, count))")

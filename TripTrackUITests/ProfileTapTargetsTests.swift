@@ -63,4 +63,17 @@ final class ProfileTapTargetsTests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3),
                       "A tap on the magnifier must bring up the keyboard")
     }
+
+    /// VoiceOver reads what the eye reads. Asset paths and SF Symbol names
+    /// («Badges/early_tester», «photo.on.rectangle», «Ящик входящих заполнен»)
+    /// were spoken on «Я» until 0.8.9.
+    func testNoAssetOrSymbolNamesReachVoiceOver() {
+        let toggle = app.buttons["profile_sections_toggle"].firstMatch
+        if toggle.waitForExistence(timeout: 5) { toggle.tap() }
+        sleep(1)
+        let tree = app.debugDescription
+        for leak in ["Badges/", "photo.on.rectangle", "text.alignleft", "Ящик Входящих"] {
+            XCTAssertFalse(tree.contains(leak), "VoiceOver would read «\(leak)»")
+        }
+    }
 }

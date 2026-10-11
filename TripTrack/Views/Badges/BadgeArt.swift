@@ -41,6 +41,9 @@ struct BadgeArt: View {
             // узнаётся на полке заранее.
             .saturation(state == .locked ? 0 : 1)
             .opacity(state == .locked ? 0.35 : 1)
+            // The badge's name, not its file: VoiceOver read
+            // «Badges/early_tester» off the asset.
+            .accessibilityLabel(badge.title(LanguageManager.currentLanguage))
     }
 }
 

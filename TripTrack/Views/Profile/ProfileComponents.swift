@@ -234,6 +234,10 @@ struct SettingsIconRow<Trailing: View>: View {
                 }
             }
             .frame(width: 30, height: 30)
+            // Decoration: the title beside it says what the row is. Without
+            // this VoiceOver read the symbol's own name first — «Выровнять по
+            // левому краю», «photo.on.rectangle».
+            .accessibilityHidden(true)
 
             if dynamicTypeSize.isAccessibilitySize && stacksTrailingAtAccessibilitySize {
                 VStack(alignment: .leading, spacing: 6) {
