@@ -744,6 +744,10 @@ struct FeedView: View {
                     in: RoundedRectangle(cornerRadius: 8)
                 )
                 .shadow(color: active ? Color.black.opacity(0.03) : Color.clear, radius: 2, y: 1)
+                // The whole half takes the tap. Without it the inactive pill
+                // — clear fill — caught taps only on the letters of its word,
+                // a 66 × 16 pt target inside a 178 × 32 pt half (0.8.9).
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         // The active segment is only signalled by fill/color — expose it to

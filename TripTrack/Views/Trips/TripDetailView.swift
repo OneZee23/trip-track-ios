@@ -3592,6 +3592,9 @@ isOwn
                         .padding(.vertical, 6)
                         .background(
                             Capsule().fill(selected ? AppTheme.accent : Color.clear))
+                        // Clear capsule: without a shape only the word took
+                        // the tap (the feed switcher's bug, 0.8.9).
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("trip_energy_mode_\(mode.rawValue)")
