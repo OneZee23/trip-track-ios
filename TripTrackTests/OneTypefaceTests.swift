@@ -1,4 +1,5 @@
 import XCTest
+@testable import TripTrack
 
 /// One typeface — Inter — for every word on screen (decision 26 Sep 2026).
 ///
@@ -45,5 +46,40 @@ final class OneTypefaceTests: XCTestCase {
             }
         }
         XCTAssertTrue(offenders.isEmpty, "Text in the system face instead of Inter: \(offenders)")
+    }
+
+    /// The same rule for UIKit text drawn on maps (0.8.9): checkpoint cards,
+    /// region names, seal and hint chips were the last words in the system
+    /// face, invisible to the check above, which reads SwiftUI `Text` only.
+    /// `UIFont.inter` is the door; the system face is allowed only as the
+    /// fallback inside the two font helpers themselves.
+    func testNoUIKitTextIsSetInTheSystemFace() throws {
+        let views = UnitGuard.repoRoot().appendingPathComponent("TripTrack/Views")
+        let files = FileManager.default.enumerator(at: views, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
+        // Fallbacks for a missing bundled file — the only legal system face.
+        let helpers: Set<String> = ["AppFont.swift", "AtlasSharePoster.swift"]
+        let systemFace = try NSRegularExpression(
+            pattern: #"\.(systemFont|monospacedDigitSystemFont|boldSystemFont)\(ofSize:"#)
+        var offenders: [String] = []
+        for file in files where !helpers.contains(file.lastPathComponent) {
+            let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
+            for (i, line) in lines.enumerated()
+            where systemFace.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
+                && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
+                offenders.append("\(file.lastPathComponent):\(i + 1)")
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, "UIKit text in the system face instead of Inter: \(offenders)")
+    }
+
+    /// `UIFont.inter` really resolves to the bundled face — a typo in the
+    /// file name would silently fall back to the system face everywhere.
+    func testUIKitInterResolvesToTheBundledFace() {
+        for weight: UIFont.Weight in [.regular, .medium, .semibold, .bold, .heavy] {
+            let font = UIFont.inter(12, weight: weight)
+            XCTAssertTrue(font.fontName.hasPrefix("Inter"), "\(weight): \(font.fontName)")
+        }
+        XCTAssertTrue(UIFont.inter(12, weight: .semibold, monospacedDigits: true).fontName.hasPrefix("Inter"))
     }
 }

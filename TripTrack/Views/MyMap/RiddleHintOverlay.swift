@@ -300,7 +300,7 @@ final class RiddleHintView: MKAnnotationView {
 
         chip.frame = bounds
         chip.textAlignment = .center
-        chip.font = .systemFont(ofSize: 13, weight: .heavy)
+        chip.font = .inter(13, weight: .heavy)
         chip.layer.cornerRadius = Self.badgeSide / 2
         chip.layer.borderWidth = 1
         chip.layer.masksToBounds = true

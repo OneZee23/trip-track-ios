@@ -37,17 +37,41 @@ extension Font {
     }
 
     private static func interName(for weight: Font.Weight) -> String {
-        if weight == .heavy || weight == .black {
-            return "Inter-ExtraBold"
-        } else if weight == .bold {
-            return "Inter-Bold"
-        } else if weight == .semibold {
-            return "Inter-SemiBold"
-        } else if weight == .medium {
-            return "Inter-Medium"
-        } else {
-            return "Inter-Regular"
-        }
+        InterFace.name(heavy: weight == .heavy || weight == .black, bold: weight == .bold,
+                       semibold: weight == .semibold, medium: weight == .medium)
+    }
+}
+
+/// The weight → file table, ONE for SwiftUI and UIKit: two copies would drift
+/// the day one of them gains a weight.
+enum InterFace {
+    static func name(heavy: Bool, bold: Bool, semibold: Bool, medium: Bool) -> String {
+        if heavy { return "Inter-ExtraBold" }
+        if bold { return "Inter-Bold" }
+        if semibold { return "Inter-SemiBold" }
+        if medium { return "Inter-Medium" }
+        return "Inter-Regular"
+    }
+}
+
+/// Inter for the UIKit text drawn ON maps — checkpoint cards, region names,
+/// seal and hint chips (0.8.9). They were the last text in the system face:
+/// `OneTypefaceTests` reads SwiftUI `Text` and never saw a `UILabel`.
+/// Falls back to the system face only if the bundled file is missing.
+extension UIFont {
+    static func inter(_ size: CGFloat, weight: UIFont.Weight = .regular,
+                      monospacedDigits: Bool = false) -> UIFont {
+        let name = InterFace.name(heavy: weight == .heavy || weight == .black, bold: weight == .bold,
+                                  semibold: weight == .semibold, medium: weight == .medium)
+        let base = UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: weight)
+        guard monospacedDigits else { return base }
+        // Inter's tabular figures (`tnum`): times and distances that change
+        // in place keep their width instead of jittering.
+        let tabular = base.fontDescriptor.addingAttributes([
+            .featureSettings: [[UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+                                UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector]]
+        ])
+        return UIFont(descriptor: tabular, size: size)
     }
 }
 

@@ -1361,7 +1361,7 @@ struct RouteMapView: UIViewRepresentable {
                     cg.fillEllipse(in: badge)
                     markerAccent.setFill()
                     cg.fillEllipse(in: badge.insetBy(dx: 2, dy: 2))
-                    draw("\(number)", font: .systemFont(ofSize: 12, weight: .heavy),
+                    draw("\(number)", font: .inter(12, weight: .heavy),
                          color: .white, centeredIn: badge)
                 }
             }
@@ -1392,7 +1392,7 @@ struct RouteMapView: UIViewRepresentable {
                 } else {
                     markerAccent.setFill()
                     ctx.cgContext.fillEllipse(in: inner)
-                    draw("\(m.number)", font: .systemFont(ofSize: 14, weight: .heavy),
+                    draw("\(m.number)", font: .inter(14, weight: .heavy),
                          color: .white, centeredIn: inner)
                 }
             }
@@ -1403,8 +1403,8 @@ struct RouteMapView: UIViewRepresentable {
         /// Размеры подобраны под ролик с экрана: имя 13 pt, время 12 pt, всё
         /// на белом с тенью — читается и на светлой карте, и на тёмной, не зумя.
         private static func labelledMarker(_ m: CheckpointMarker) -> UIImage {
-            let nameFont = UIFont.systemFont(ofSize: 13, weight: .heavy)
-            let readingFont = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+            let nameFont = UIFont.inter(13, weight: .heavy)
+            let readingFont = UIFont.inter(12, weight: .semibold, monospacedDigits: true)
             let title = (m.name?.isEmpty == false) ? m.name! : "#\(m.number)"
 
             let thumb: CGFloat = 44
@@ -1450,14 +1450,14 @@ struct RouteMapView: UIViewRepresentable {
                 } else {
                     markerAccent.setFill()
                     thumbPath.fill()
-                    draw("\(m.number)", font: .systemFont(ofSize: 18, weight: .heavy),
+                    draw("\(m.number)", font: .inter(18, weight: .heavy),
                          color: .white, centeredIn: thumbRect)
                 }
 
                 // «+2» на уголке снимка — есть ещё кадры, посмотри.
                 if m.image != nil, m.photoCount > 1 {
                     let chipText = "+\(m.photoCount - 1)"
-                    let chipFont = UIFont.systemFont(ofSize: 10, weight: .heavy)
+                    let chipFont = UIFont.inter(10, weight: .heavy)
                     let w = ceil((chipText as NSString).size(withAttributes: [.font: chipFont]).width) + 8
                     let chip = CGRect(x: thumbRect.maxX - w + 3, y: thumbRect.maxY - 14 + 3, width: w, height: 14)
                     UIColor.white.setFill()

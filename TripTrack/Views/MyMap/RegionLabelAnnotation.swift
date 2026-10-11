@@ -153,9 +153,9 @@ final class RegionLabelView: MKAnnotationView {
         // а `accessibilityLabel` ниже просто не читается никогда.
         isAccessibilityElement = true
 
-        nameLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        nameLabel.font = .inter(11, weight: .semibold)
         nameLabel.textAlignment = .center
-        kmLabel.font = .systemFont(ofSize: 9, weight: .medium)
+        kmLabel.font = .inter(9, weight: .medium)
         kmLabel.textAlignment = .center
 
         for label in [nameLabel, kmLabel] {

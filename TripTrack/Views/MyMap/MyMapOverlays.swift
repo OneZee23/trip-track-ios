@@ -240,7 +240,7 @@ final class TripClusterView: MKAnnotationView {
 
         label.frame = bounds
         label.textAlignment = .center
-        label.font = .systemFont(ofSize: 13, weight: .heavy)
+        label.font = .inter(13, weight: .heavy)
         label.textColor = MyMapPalette.accent
         addSubview(label)
         configure()

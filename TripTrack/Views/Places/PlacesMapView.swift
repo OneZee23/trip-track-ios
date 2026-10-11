@@ -282,10 +282,10 @@ final class PlacePinView: MKAnnotationView {
         labelBox.layer.shadowRadius = 4
         labelBox.layer.shadowOffset = CGSize(width: 0, height: 2)
         labelBox.isHidden = true
-        label.font = UIFont(name: "Inter-Medium", size: 12) ?? .systemFont(ofSize: 12, weight: .medium)
+        label.font = .inter(12, weight: .medium)
         label.textColor = UIColor(AtlasTheme.ink)
         label.textAlignment = .center
-        detailLabel.font = UIFont(name: "Inter-Regular", size: 12) ?? .systemFont(ofSize: 12)
+        detailLabel.font = .inter(12)
         detailLabel.textColor = UIColor(AtlasTheme.secondary)
         detailLabel.textAlignment = .center
         detailLabel.isHidden = true
