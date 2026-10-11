@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let pl2: [String: String] = [
-        "beFirstToReact": "Miejsce na pierwszą reakcję",
         "commentPlaceholder": "Napisz w dyskusji…",
         "discussionSeeAllPillHead": "Cała dyskusja",
         "writeFirstMessage": "Napisz pierwszą wiadomość…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Usunąć zdjęcie?",
         "delete": "Usuń",
         "deleteTrip": "Usunąć trasę?",
+        "deleteTripAction": "Usuń trasę",
         "cancel": "Anuluj",
         "noResults": "Nic nie znaleziono",
         "tryOtherFilters": "Warto spróbować innych filtrów",

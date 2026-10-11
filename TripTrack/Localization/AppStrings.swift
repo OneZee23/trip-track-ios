@@ -1991,11 +1991,6 @@ enum AppStrings {
     static func noReactionsYet(_ lang: LanguageManager.Language) -> String {
         tr(lang, "noReactionsYet", ru: "Пока никто не отреагировал", en: "No reactions yet")
     }
-    static func beFirstToReact(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "beFirstToReact",
-           ru: "Будьте первым, кто отреагирует",
-           en: "Be the first to react")
-    }
     // levelShort deleted — the app-wide LVL convention is the hardcoded
     // "LVL n" pixel-font tag; the last caller migrated to it.
 
@@ -2161,6 +2156,12 @@ enum AppStrings {
     }
     static func delete(_ lang: LanguageManager.Language) -> String {
         tr(lang, "delete", ru: "Удалить", en: "Delete")
+    }
+    /// Пункт меню «…» — команда. Вопрос «Удалить поездку?» задаёт диалог,
+    /// который этот пункт открывает; до 0.8.9 оба брали `deleteTrip`, и меню
+    /// спрашивало само.
+    static func deleteTripAction(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "deleteTripAction", ru: "Удалить поездку", en: "Delete trip")
     }
     static func deleteTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "deleteTrip", ru: "Удалить поездку?", en: "Delete trip?")

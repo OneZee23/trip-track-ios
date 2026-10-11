@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let kk2: [String: String] = [
-        "beFirstToReact": "Бірінші болып реакция білдіріңіз",
         "commentPlaceholder": "Талқылауға жазу…",
         "discussionSeeAllPillHead": "Бүкіл талқылау",
         "writeFirstMessage": "Бірінші хабарламаны жазыңыз…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Фотоны жою керек пе?",
         "delete": "Жою",
         "deleteTrip": "Сапарды жою керек пе?",
+        "deleteTripAction": "Сапарды жою",
         "cancel": "Бас тарту",
         "noResults": "Ештеңе табылмады",
         "tryOtherFilters": "Басқа сүзгілерді көріңіз",

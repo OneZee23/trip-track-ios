@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let de2: [String: String] = [
-        "beFirstToReact": "Sei die erste Reaktion",
         "commentPlaceholder": "In die Diskussion schreiben…",
         "discussionSeeAllPillHead": "Ganze Diskussion",
         "writeFirstMessage": "Erste Nachricht schreiben…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Foto löschen?",
         "delete": "Löschen",
         "deleteTrip": "Fahrt löschen?",
+        "deleteTripAction": "Fahrt löschen",
         "cancel": "Abbrechen",
         "noResults": "Nichts gefunden",
         "tryOtherFilters": "Andere Filter ausprobieren",

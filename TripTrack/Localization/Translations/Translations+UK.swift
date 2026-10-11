@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let uk2: [String: String] = [
-        "beFirstToReact": "Будьте першим, хто відреагує",
         "commentPlaceholder": "Написати в обговорення…",
         "discussionSeeAllPillHead": "Усе обговорення",
         "writeFirstMessage": "Написати перше повідомлення…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Видалити фото?",
         "delete": "Видалити",
         "deleteTrip": "Видалити поїздку?",
+        "deleteTripAction": "Видалити поїздку",
         "cancel": "Скасувати",
         "noResults": "Нічого не знайдено",
         "tryOtherFilters": "Спробуйте інші фільтри",

@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let id2: [String: String] = [
-        "beFirstToReact": "Jadilah yang pertama bereaksi",
         "commentPlaceholder": "Tulis di diskusi…",
         "discussionSeeAllPillHead": "Seluruh diskusi",
         "writeFirstMessage": "Tulis pesan pertama…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Hapus foto?",
         "delete": "Hapus",
         "deleteTrip": "Hapus perjalanan?",
+        "deleteTripAction": "Hapus perjalanan",
         "cancel": "Batal",
         "noResults": "Tidak ada hasil",
         "tryOtherFilters": "Coba filter lain",

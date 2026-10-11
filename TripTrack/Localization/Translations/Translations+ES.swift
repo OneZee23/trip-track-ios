@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let es2: [String: String] = [
-        "beFirstToReact": "Sea el primero en reaccionar",
         "commentPlaceholder": "Escriba en la conversación…",
         "discussionSeeAllPillHead": "Toda la conversación",
         "writeFirstMessage": "Escriba el primer mensaje…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "¿Eliminar la foto?",
         "delete": "Eliminar",
         "deleteTrip": "¿Eliminar el viaje?",
+        "deleteTripAction": "Eliminar el viaje",
         "cancel": "Cancelar",
         "noResults": "Sin resultados",
         "tryOtherFilters": "Pruebe con otros filtros",

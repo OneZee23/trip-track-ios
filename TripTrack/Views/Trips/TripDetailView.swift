@@ -590,7 +590,7 @@ struct TripDetailView: View {
         // ENDS on «delete» reads as if that were the conclusion of looking
         // back at a trip.
         items.append(.init(
-            title: AppStrings.deleteTrip(lang.language),
+            title: AppStrings.deleteTripAction(lang.language),
             systemImage: "trash",
             isDestructive: true,
             accessibilityId: "detail_action_delete"
@@ -2997,7 +2997,13 @@ isOwn
                             HStack(spacing: 6) {
                                 Image(systemName: "plus")
                                     .font(.system(size: 12, weight: .bold))
-                                Text(AppStrings.beFirstToReact(lang.language))
+                                // The command, not a slogan: «Будьте первым,
+                                // кто отреагирует» wrapped to three lines beside
+                                // «Пока никто не отреагировал», which already
+                                // says nobody has. Same words as the «+» in the
+                                // reactions row.
+                                Text(AppStrings.addReaction(lang.language))
+                                    .lineLimit(1)
                                     .font(.inter(13, weight: .semibold))
                             }
                             .foregroundStyle(AppTheme.accent)

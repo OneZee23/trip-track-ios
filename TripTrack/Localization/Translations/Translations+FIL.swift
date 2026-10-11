@@ -282,7 +282,6 @@ extension Translations {
     ]
 
     private static let fil2: [String: String] = [
-        "beFirstToReact": "Maging una sa pag-react",
         "commentPlaceholder": "Sumulat sa usapan…",
         "discussionSeeAllPillHead": "Buong usapan",
         "writeFirstMessage": "Isulat ang unang mensahe…",
@@ -317,6 +316,7 @@ extension Translations {
         "deletePhoto": "Burahin ang larawan?",
         "delete": "Burahin",
         "deleteTrip": "Burahin ang biyahe?",
+        "deleteTripAction": "Burahin ang biyahe",
         "cancel": "Kanselahin",
         "noResults": "Walang nahanap",
         "tryOtherFilters": "Subukan ang ibang filter",
