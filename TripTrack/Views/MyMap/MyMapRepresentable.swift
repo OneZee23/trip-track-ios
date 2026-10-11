@@ -1135,6 +1135,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 let frame = labelFrame(of: view, at: label.coordinate, on: map)
                 view.visible = RegionLabelLOD.level(bboxMinSidePt: side)
                     && !RegionLabelLOD.yieldsToUserDot(labelFrame: frame, userDotCentre: dot)
+                    && !RegionLabelLOD.yieldsToStatusBar(labelFrame: frame,
+                                                         safeTop: map.safeAreaInsets.top)
             }
 
         }

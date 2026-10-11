@@ -50,4 +50,17 @@ enum RegionLabelLOD {
             width: userDotClearancePt * 2, height: userDotClearancePt * 2)
         return labelFrame.intersects(dot)
     }
+
+    /// Уступает ли подпись строке состояния (0.8.9).
+    ///
+    /// Карта «Атласа» лежит под часами, и подпись стоит в географическом
+    /// центре региона — у соседнего края он легко оказывается наверху экрана:
+    /// «РОСТОВСКАЯ ОБЛАСТЬ · 68 км» легла поверх часов, Wi-Fi и батареи (снято
+    /// на экране региона 11 октября). Подпись прячется, пока хоть часть её
+    /// выше нижнего края безопасной зоны, и возвращается сама, когда карту
+    /// сдвинули: правило считается на каждом кадре, как и соседнее.
+    static func yieldsToStatusBar(labelFrame: CGRect, safeTop: CGFloat) -> Bool {
+        guard safeTop > 0, labelFrame.width > 0, labelFrame.height > 0 else { return false }
+        return labelFrame.minY < safeTop
+    }
 }
