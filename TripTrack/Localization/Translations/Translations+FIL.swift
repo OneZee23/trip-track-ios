@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Nakopya",
         "sharedTripLinkCopy": "Kopyahin",
         "storyShareSaved": "Na-save",
-        "suggestedUsersCarouselSuggested": "Mungkahi",
         "tripDetailMakeTripPrivate": "Gawing pribado ang biyahe?",
         "tripDetailThisTripWill": "Mawawala ang biyaheng ito sa panlahatang feed at sa profile ng iba. Kayo lang ang makakakita.\n\nHindi mapapanatili ang mga reaksyon at komento kung gagawin ninyo itong pampubliko ulit mamaya.",
         "tripDetailMyTrip": "Biyahe ko",

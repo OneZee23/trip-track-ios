@@ -6788,9 +6788,6 @@ enum AppStrings {
     static func storyShareSaved(_ lang: LanguageManager.Language) -> String {
         tr(lang, "storyShareSaved", ru: "Сохранено", en: "Saved")
     }
-    static func suggestedUsersCarouselSuggested(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "suggestedUsersCarouselSuggested", ru: "Рекомендуем подписаться", en: "Suggested")
-    }
     static func tripDetailMakeTripPrivate(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripDetailMakeTripPrivate",
            ru: "Сделать поездку приватной?",

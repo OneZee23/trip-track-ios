@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Disalin",
         "sharedTripLinkCopy": "Salin",
         "storyShareSaved": "Tersimpan",
-        "suggestedUsersCarouselSuggested": "Disarankan",
         "tripDetailMakeTripPrivate": "Jadikan perjalanan privat?",
         "tripDetailThisTripWill": "Perjalanan ini akan hilang dari beranda bersama dan dari profil orang lain. Hanya Anda yang akan melihatnya.\n\nReaksi dan komentar tidak akan tersimpan kalau nanti Anda menjadikannya publik lagi.",
         "tripDetailMyTrip": "Perjalanan saya",

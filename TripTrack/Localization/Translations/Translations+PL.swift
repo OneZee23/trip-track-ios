@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Skopiowano",
         "sharedTripLinkCopy": "Kopiuj",
         "storyShareSaved": "Zapisano",
-        "suggestedUsersCarouselSuggested": "Polecani",
         "tripDetailMakeTripPrivate": "Ustawić trasę jako prywatną?",
         "tripDetailThisTripWill": "Ta trasa zniknie ze wspólnej tablicy i z profili innych osób. Nikt inny nie będzie jej widział.\n\nReakcje i komentarze nie zostaną zachowane po ponownej publikacji.",
         "tripDetailMyTrip": "Moja trasa",

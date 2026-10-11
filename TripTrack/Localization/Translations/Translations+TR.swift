@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Kopyalandı",
         "sharedTripLinkCopy": "Kopyala",
         "storyShareSaved": "Kaydedildi",
-        "suggestedUsersCarouselSuggested": "Önerilenler",
         "tripDetailMakeTripPrivate": "Gezi özel yapılsın mı?",
         "tripDetailThisTripWill": "Bu gezi ortak akıştan ve başkalarının profillerinden kaybolacak. Yalnızca siz göreceksiniz.\n\nDaha sonra tekrar herkese açık yaparsanız tepkiler ve yorumlar korunmaz.",
         "tripDetailMyTrip": "Gezim",

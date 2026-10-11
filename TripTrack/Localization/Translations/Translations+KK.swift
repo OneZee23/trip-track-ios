@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Көшірілді",
         "sharedTripLinkCopy": "Көшіру",
         "storyShareSaved": "Сақталды",
-        "suggestedUsersCarouselSuggested": "Жазылуға ұсынамыз",
         "tripDetailMakeTripPrivate": "Сапарды жабық қылу керек пе?",
         "tripDetailThisTripWill": "Бұл сапар ортақ таспадан және басқалардың профильдерінен жоғалады. Оны тек сіз көресіз.\n\nКейін қайта ашық қылсаңыз, реакциялар мен пікірлер сақталмайды.",
         "tripDetailMyTrip": "Менің сапарым",

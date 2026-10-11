@@ -949,7 +949,6 @@ extension Translations {
         "sharedTripLinkCopied": "Copiado",
         "sharedTripLinkCopy": "Copiar",
         "storyShareSaved": "Salvo",
-        "suggestedUsersCarouselSuggested": "Sugestões",
         "tripDetailMakeTripPrivate": "Tornar a viagem privada?",
         "tripDetailThisTripWill": "Esta viagem vai sumir do feed comum e dos perfis das outras pessoas. Só você vai ver.\n\nAs reações e os comentários não serão preservados se depois você torná-la pública de novo.",
         "tripDetailMyTrip": "Minha viagem",
