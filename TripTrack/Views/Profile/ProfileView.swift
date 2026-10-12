@@ -444,6 +444,21 @@ struct ProfileView: View {
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
+            // The page colour under the status bar. This tab has no header of
+            // its own — the hero card is the top — so the scroll ran straight
+            // under the clock: «Гараж · Достижения · Клубы», the calendar and
+            // trip maps sat behind the time and the battery, and in the dark
+            // theme a light trip map ate the white glyphs (iPhone SE and 16 Pro
+            // review, 12 Oct 2026). The neighbours never did this because
+            // their `CustomNavBar` comes in through `safeAreaInset` and covers
+            // the strip itself. A zero-height inset with a backdrop that runs
+            // up into the safe area does the same without moving the hero.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(c.bg.ignoresSafeArea(edges: .top))
+                    .accessibilityHidden(true)
+            }
             .toast(item: $toastItem)
             .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
             .toolbar(.hidden, for: .navigationBar)
