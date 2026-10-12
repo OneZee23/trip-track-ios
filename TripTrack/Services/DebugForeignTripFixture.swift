@@ -37,6 +37,60 @@ enum DebugForeignTripFixture {
         return Trip.encodePolyline(coordinates).base64EncodedString()
     }()
 
+    /// The author's public map, offline (12 Oct 2026). `-debug-foreign-map`
+    /// picks the library: `france` (default) — two long drives through France,
+    /// a country the region atlas does not split into regions, the case behind
+    /// «0 регионов»; `heavy` — hundreds of long drives across Russia, the
+    /// library that made the map hang on a real phone.
+    static var mapVariant: String {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-debug-foreign-map"), i + 1 < args.count else { return "france" }
+        return args[i + 1]
+    }
+
+    private static func publicTrips() -> [[String: Any]] {
+        let iso = ISO8601DateFormatter()
+        func trip(_ index: Int, from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+                  points: Int, wiggle: Double, km: Double, region: String) -> [String: Any] {
+            let coordinates = (0..<points).map { i in
+                let p = Double(i) / Double(points - 1)
+                return CLLocationCoordinate2D(
+                    latitude: from.latitude + (to.latitude - from.latitude) * p + sin(p * 40 + Double(index)) * wiggle,
+                    longitude: from.longitude + (to.longitude - from.longitude) * p + cos(p * 33 + Double(index)) * wiggle)
+            }
+            let start = Date(timeIntervalSince1970: 1_790_000_000 - Double(index) * 86_400)
+            return [
+                "id": String(format: "D37A2001-0000-4000-8000-%012d", index),
+                "startDate": iso.string(from: start),
+                "endDate": iso.string(from: start.addingTimeInterval(km * 40)),
+                "distance": km * 1000,
+                "duration": Int(km * 40),
+                "region": region,
+                "previewPolyline": Trip.encodePolyline(coordinates).base64EncodedString(),
+            ]
+        }
+        if mapVariant == "heavy" {
+            // A library like the heaviest real one: ~600 long drives criss-
+            // crossing European Russia, 1 500 preview points each.
+            return (0..<600).map { i in
+                let a = Double(i)
+                let from = CLLocationCoordinate2D(latitude: 45 + (a * 7).truncatingRemainder(dividingBy: 15),
+                                                  longitude: 30 + (a * 11).truncatingRemainder(dividingBy: 30))
+                let to = CLLocationCoordinate2D(latitude: 45 + (a * 13).truncatingRemainder(dividingBy: 15),
+                                                longitude: 30 + (a * 5).truncatingRemainder(dividingBy: 30))
+                return trip(i, from: from, to: to, points: 1500, wiggle: 0.05, km: 400 + a, region: "Russia")
+            }
+        }
+        return [
+            trip(0, from: CLLocationCoordinate2D(latitude: 43.4, longitude: 1.0),
+                 to: CLLocationCoordinate2D(latitude: 50.65, longitude: 3.1),
+                 points: 2400, wiggle: 0.03, km: 896.3, region: "Occitanie"),
+            trip(1, from: CLLocationCoordinate2D(latitude: 50.6, longitude: 3.0),
+                 to: CLLocationCoordinate2D(latitude: 45.8, longitude: 1.3),
+                 points: 2400, wiggle: 0.03, km: 945.7, region: "Hauts-de-France"),
+        ]
+    }
+
     private static func trip(refreshed: Bool) -> [String: Any] {
         [
             "id": "D37A1000-0000-4000-8000-000000000081",
@@ -135,6 +189,8 @@ enum DebugForeignTripFixture {
             payload = profile()
         } else if path.contains("/garage"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["vehicles": profileVariant == "new" ? [] : [garageVehicle()]]
+        } else if path.hasSuffix("/trips"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            payload = ["trips": publicTrips(), "nextCursor": NSNull()]
         } else if path.contains("/journeys"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["journeys": [], "nextCursor": NSNull()]
         } else if path.hasSuffix(APIEndpoint.companionsList) {
