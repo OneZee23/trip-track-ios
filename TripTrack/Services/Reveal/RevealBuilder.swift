@@ -72,13 +72,23 @@ enum RevealBuilder {
         guard coords.count >= 2 else { return [:] }
 
         // MARK: Ход по линии
+        //
+        // Тайл — НОМЕРОМ, а строка geohash-5 — один раз на тайл (0.9.0). До
+        // этого строку собирали на каждую ячейку (≈14 тыс. на 400 км) и ею же
+        // ключевали три словаря: на тяжёлой чужой карте (600 длинных поездок)
+        // этот цикл и был минутами загрузки. Номер и строка одного тайла
+        // совпадают взаимно однозначно — проверено на 2,8 млн пройденных точек
+        // (12 окт 2026), поэтому наружу уходят те же ключи, что и раньше.
         var points: [CLLocationCoordinate2D] = []
         var cells: [RevealGrid.Cell] = []
-        var tiles: [String] = []
+        var tiles: [RevealGrid.TileIndex] = []
+        var tileKeys: [RevealGrid.TileIndex: String] = [:]
         RevealGrid.walkCells(coords) { cell, point in
             points.append(point)
             cells.append(cell)
-            tiles.append(RevealGrid.tileKey(for: point))
+            let tile = RevealGrid.tileIndex(for: point)
+            tiles.append(tile)
+            if tileKeys[tile] == nil { tileKeys[tile] = RevealGrid.tileKey(for: point) }
         }
         guard points.count >= 2 else { return [:] }
 
@@ -97,25 +107,25 @@ enum RevealBuilder {
         // `selfClaimGapCells`). Второй дедуп специально для жилки завёл бы
         // второй источник геометрии, а вся 0.7.0 держится на том, что у дыры и
         // у линии источник один.
-        var claimedCache: [String: Set<RevealGrid.Cell>] = [:]
-        var mine: [String: [RevealGrid.Cell: Int]] = [:]
+        var claimedCache: [RevealGrid.TileIndex: Set<RevealGrid.Cell>] = [:]
+        var mine: [RevealGrid.TileIndex: [RevealGrid.Cell: Int]] = [:]
         var fresh = [Bool](repeating: false, count: points.count)
         var paint = [Bool](repeating: false, count: points.count)
-        var patches: [String: TilePatch] = [:]
+        var byTile: [RevealGrid.TileIndex: TilePatch] = [:]
 
         for i in 0..<points.count {
-            let key = tiles[i]
-            if claimedCache[key] == nil { claimedCache[key] = claimed(key) }
-            let already = claimedCache[key] ?? []
+            let tile = tiles[i]
+            if claimedCache[tile] == nil { claimedCache[tile] = claimed(tileKeys[tile] ?? "") }
+            let already = claimedCache[tile] ?? []
             guard !already.contains(cells[i]) else { continue }
-            // Доступ по месту (`default:` + `_modify`): `patches[key]` отдавал
+            // Доступ по месту (`default:` + `_modify`): `byTile[tile]` отдавал
             // бы КОПИЮ множества на каждую ячейку, и вставка била бы по CoW —
             // внутри тайла это квадрат от числа ячеек.
-            fresh[i] = patches[key, default: TilePatch()].cells.insert(cells[i]).inserted
+            fresh[i] = byTile[tile, default: TilePatch()].cells.insert(cells[i]).inserted
             guard fresh[i] else { continue }
             paint[i] = !neighbourClaimed(
-                of: cells[i], at: i, claimed: already, mine: mine[key] ?? [:])
-            mine[key, default: [:]][cells[i]] = i
+                of: cells[i], at: i, claimed: already, mine: mine[tile] ?? [:])
+            mine[tile, default: [:]][cells[i]] = i
         }
 
         // MARK: Какие шаги рисуются
@@ -139,13 +149,13 @@ enum RevealBuilder {
 
         // MARK: Прогоны — по тайлам, с разрывами
         var run: [CLLocationCoordinate2D] = []
-        var runTile = ""
+        var runTile: RevealGrid.TileIndex?
         func flush() {
-            defer { run = []; runTile = "" }
-            guard run.count > 1, !runTile.isEmpty else { return }
+            defer { run = []; runTile = nil }
+            guard run.count > 1, let tile = runTile else { return }
             let thinned = tileLine(run, stepDegrees: runStepDegrees)
             guard thinned.count > 1 else { return }
-            patches[runTile, default: TilePatch()].runs.append(thinned)
+            byTile[tile, default: TilePatch()].runs.append(thinned)
         }
 
         for i in 0..<steps {
@@ -162,7 +172,15 @@ enum RevealBuilder {
         }
         flush()
 
-        return patches.filter { !$0.value.isEmpty }
+        // Merged, not assigned: should two indices ever name one geohash, the
+        // old string-keyed code pooled them, and so does this.
+        var patches: [String: TilePatch] = [:]
+        for (tile, patch) in byTile where !patch.isEmpty {
+            guard let key = tileKeys[tile] else { continue }
+            patches[key, default: TilePatch()].cells.formUnion(patch.cells)
+            patches[key, default: TilePatch()].runs.append(contentsOf: patch.runs)
+        }
+        return patches
     }
 
     /// Занят ли хоть один из восьми соседей ячейки — прежними поездками или
