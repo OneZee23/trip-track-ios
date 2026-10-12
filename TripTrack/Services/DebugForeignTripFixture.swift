@@ -108,7 +108,11 @@ enum DebugForeignTripFixture {
             "maxSpeed": 28, "drivingTime": 13500, "stoppedTime": 900,
             "isPrivate": false, "previewPolyline": preview,
             "photoCount": 0, "reactionCount": 0, "reactionBreakdown": [],
-            "badgeIds": [], "commentCount": 0
+            "badgeIds": [], "commentCount": 0,
+            // The car the trip was driven in — the same one the garage holds,
+            // with its id, so the chip opens its page (0.9.0).
+            "vehicle": ["id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+                        "avatarEmoji": "🚙", "avatarStyle": NSNull()]
         ]
     }
 
@@ -187,6 +191,8 @@ enum DebugForeignTripFixture {
             payload = ["comments": []]
         } else if path.hasSuffix("/profile"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = profile()
+        } else if path.contains("/vehicles/"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            return try JSONSerialization.data(withJSONObject: ["status": "ok", "payload": garageVehicle()])
         } else if path.contains("/garage"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["vehicles": profileVariant == "new" ? [] : [garageVehicle()]]
         } else if path.hasSuffix("/trips"), path.contains(authorId.lowercased()) || path.contains(authorId) {

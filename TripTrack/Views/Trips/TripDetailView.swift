@@ -2685,26 +2685,52 @@ isOwn
     private func vehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
         if !isOwn {
             // Someone else's car is a name and an avatar the server rendered,
-            // not a row in our garage — and it is not ours to reassign.
+            // not a row in our garage — and it is not ours to reassign. Since
+            // 0.9.0 it opens the car's own page, like ours does (owner,
+            // 12 Oct 2026: «нажимать на чужую машину и переходить к ней»). It
+            // needs the car's id, which older servers don't send, and a stack
+            // to push onto; without either it stays a plain label — a chevron
+            // on a chip that opens nothing would be a lie.
             if let v = liveSocial?.vehicle {
-                DetailChipSurface {
-                    // A pixel avatar is an asset name, not a glyph — drawn as
-                    // text it reads «pixel_car_white».
-                    if let asset = v.avatarAssetName {
-                        Image(asset)
-                            .resizable()
-                            .interpolation(.none)
-                            .scaledToFit()
-                            .frame(width: 14, height: 14)
-                    } else {
-                        Text(v.avatarEmoji).font(.inter(12))
+                if let vehicleId = v.id, let owner = liveSocial?.author, let pushPath {
+                    Button {
+                        Haptics.tap()
+                        pushPath.wrappedValue.cappedAppend(
+                            .publicVehicle(owner.id, vehicleId, owner.displayName))
+                    } label: {
+                        DetailChipSurface {
+                            foreignVehicleLabel(v)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .opacity(0.5)
+                        }
                     }
-                    Text(v.name).lineLimit(1)
+                    .buttonStyle(.plain)
+                    .accessibilityHint(AppStrings.garage(lang.language))
+                    .accessibilityIdentifier("detail_foreign_vehicle")
+                } else {
+                    DetailChipSurface { foreignVehicleLabel(v) }
                 }
             }
         } else {
             ownVehicleChip(trip: trip, c: c)
         }
+    }
+
+    /// The car's avatar and name, as the server sent them. A pixel avatar is
+    /// an asset name, not a glyph — drawn as text it reads «pixel_car_white».
+    @ViewBuilder
+    private func foreignVehicleLabel(_ v: SocialFeedVehicle) -> some View {
+        if let asset = v.avatarAssetName {
+            Image(asset)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 14, height: 14)
+        } else {
+            Text(v.avatarEmoji).font(.inter(12))
+        }
+        Text(v.name).lineLimit(1)
     }
 
     /// Какая это была машина — и вход в её паспорт (0.6.4).
