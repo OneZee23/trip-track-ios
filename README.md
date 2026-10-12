@@ -1,3 +1,26 @@
+# TripTrack — road trip diary for iPhone
+
+**TripTrack — Road Journal** is a free iPhone app that keeps a diary of your car
+trips. It records each drive with GPS — in the background, from the Lock Screen,
+or automatically when your car's Bluetooth stereo connects — and keeps the route,
+speed, distance, photos, notes and stops. The **Atlas** is a fog of war map: the
+world starts under fog and clears along the roads you have actually driven.
+
+- Free: recording, trip history, photos, statistics, the Atlas, places, journeys
+  and a garage of vehicles with their own odometer, fuel or electric use and costs.
+- Optional **TripTrack PRO** subscription: profile and car card styles, avatar
+  frames, route colours and manually added trips. Not offered on the Russian
+  App Store storefront.
+- No account needed to record. Sign in with Apple adds cloud sync, public
+  profiles and a web viewer for your synced trips at
+  [trip-track.app](https://trip-track.app).
+- iPhone, iOS 17 or later. 13 languages. No Android version yet.
+
+[App Store](https://apps.apple.com/us/app/triptrack-road-journal/id6760650361) ·
+[Website](https://trip-track.app) · [Changelog](CHANGELOG.md)
+
+---
+
 # TripTrack — автодневник поездок для iPhone
 
 TripTrack сохраняет поездки, маршруты, фотографии и статистику. Начните запись,
@@ -8,21 +31,10 @@ TripTrack сохраняет поездки, маршруты, фотограф�
 
 ## Статус
 
-**8 октября 2026 выпущена 0.8.6 (75)**: в 08:44:37 МСК App Store Connect
-подтвердил `Ready for Distribution`. Выпуск ручной, без поэтапного обновления;
-доступность настроена для 175 стран и регионов, прежние оценки сохранены (`KEEP`).
-Изменения, подготовленные под номерами 0.8.2 и 0.8.3, включены в 0.8.4.
-
-Ниже описаны возможности текущей ветки и выпущенной 0.8.6.
-[0.8.5 (74)](docs/releases/0.8.5/candidate-74.md) с исправлениями Live Activity
-и счётчика похожих поездок одобрена Apple и выпущена вручную.
-[0.8.6 (75)](docs/releases/0.8.6/candidate-75.md) выпущена с исправлением
-слайдера запуска записи и полным набором из восьми карточек App Store
-на русском и английском. Все 16 изображений одобрены Apple. В 08:45 МСК
-российская публичная витрина ещё возвращала 0.8.5 и прежние три карточки;
-распространение обновления по витринам пока не подтверждено.
-Порядок выпуска и подтверждения проверок — в
-[документации релиза](docs/releases/0.8.4/ship-steps.md).
+В App Store — **0.8.6 (75)**, выпущена 8 октября 2026. **0.8.9 (78)** отправлена
+на проверку Apple 11 октября и заменила заявку 0.8.8, включая все её изменения;
+выпуск ручной. Состав и проверки —
+[документ кандидата](docs/releases/0.8.9/candidate-78.md).
 
 ## Возможности
 
@@ -32,8 +44,8 @@ TripTrack сохраняет поездки, маршруты, фотограф�
 - **История и детали.** Поиск, календарь, фильтры, маршрут с цветом по скорости,
   полноэкранная карта и воспроизведение поездки. Название, заметки, фотографии
   и отметки помогают вспомнить, что было по дороге.
-- **Атлас и места.** Посещённые территории, города и регионы; виды «Туман»,
-  «Ночь» и «Клетки», фильтры по времени, сохранённые места и история посещений.
+- **Атлас и места.** Открытые дороги и регионы с датой первого въезда; виды
+  «Туман», «Ночь» и «Клетки», постер атласа, сохранённые места и история посещений.
 - **Гараж.** Несколько машин, одометр, расход и расчёт стоимости поездок.
   Поддерживаются топливные, электрические и гибридные автомобили.
 - **Профиль.** Уровни, достижения, коллекция дорог и оформление.
@@ -69,7 +81,7 @@ Français, Italiano, Polski, Türkçe, Bahasa Indonesia, Українська, P
 | Интерфейс | SwiftUI, UIKit для карт и переходов |
 | Карты и атлас | MapKit, Metal |
 | Запись | Core Location, Core Motion |
-| Локальные данные | Core Data, схема v22 в 0.8.4 (73) |
+| Локальные данные | Core Data, схема v23 в 0.8.9 (78) |
 | Аккаунт и синхронизация | Sign in with Apple, HTTP API, локальная очередь изменений |
 | Подписка и чаевые | StoreKit 2 |
 | Виджеты записи | ActivityKit, WidgetKit, App Intents |
