@@ -1352,6 +1352,54 @@ final class TripManager: ObservableObject {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    // MARK: - Ремонт вписанных поездок (0.9.0)
+
+    /// Вписанная поездка сохранялась без отметки «трек обработан» (до 0.9.0),
+    /// и запуск принимал её за запись GPS: точки маршрута Apple лежат дальше
+    /// порога дыры, и между ними вставали прямые достройки — на экране
+    /// поездки это серый пунктир вместо маршрута. Убираем ровно их: точки
+    /// `isInterpolated` у вписанной поездки появиться иначе не могли.
+    /// Километры не трогаем — достроенные точки в них не входили
+    /// (`TripDistanceGate.countsForDistance`). Латч ставится только после
+    /// удачного сохранения.
+    func repairManualTripFills() {
+        let key = "didRepairManualTripFills"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "source == %@", TripOrigin.manual.rawValue)
+        let trips = (try? context.fetch(request)) ?? []
+        var repaired: [UUID] = []
+        for trip in trips {
+            let fills = trip.orderedTrackPoints.filter(\.isInterpolated)
+            trip.isTrackProcessed = true
+            trip.roadFillState = RoadFillState.done.rawValue
+            guard !fills.isEmpty else { continue }
+            fills.forEach(context.delete)
+            context.processPendingChanges()
+            PostTripTrackProcessor.regeneratePreviewPolyline(for: trip)
+            trip.lastModifiedAt = Date()
+            if CoreDataTripRepository.flipsPendingUpload(
+                isPrivate: trip.isPrivate,
+                cloudSyncEnabled: SettingsManager.shared.cloudSyncEnabled) {
+                trip.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
+            if let id = trip.id { repaired.append(id) }
+        }
+        do {
+            if context.hasChanges { try context.save() }
+            UserDefaults.standard.set(true, forKey: key)
+        } catch {
+            context.rollback()
+            return
+        }
+        Task { @MainActor in
+            for id in repaired {
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+            }
+        }
+    }
+
     // MARK: - Region Migration
 
     /// Re-geocode region field for trips missing region data
@@ -1637,6 +1685,13 @@ final class TripManager: ObservableObject {
         entity.isTransfer = trip.isTransfer
         entity.isPrivate = trip.isPrivate
         entity.source = trip.source.rawValue
+        // Построенная линия — не запись GPS: чистить выбросы, достраивать
+        // «дыры» и пересчитывать километры в ней нечего (`ManualTripAftermath`).
+        // Без отметки `processUnprocessedTrips` на следующем запуске принимал
+        // её за запись — и редкие точки дальней трассы становились серым
+        // пунктиром достройки. Пул ставит ту же отметку (`applyRemoteTrip`).
+        entity.isTrackProcessed = true
+        entity.roadFillState = RoadFillState.done.rawValue
         entity.fuelCurrency = FuelCurrency.current
         entity.userId = SettingsManager.shared.localUserId
         entity.lastModifiedAt = Date()

@@ -158,3 +158,115 @@ final class ManualTripDesignTests: XCTestCase {
         XCTAssertEqual(line, "420 км · 5 ч 30 мин · вчера 09:00")
     }
 }
+
+/// Редизайн 13 окт 2026: подсказки под строкой «Откуда → Куда», старт,
+/// который не встречает красным на верном вводе, и заголовок, который лист
+/// показывает и сохраняет одним и тем же.
+@MainActor
+final class ManualTripSheetRulesTests: XCTestCase {
+    private let krasnodar = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753)
+    private let dzhubga = CLLocationCoordinate2D(latitude: 44.3196, longitude: 38.7089)
+
+    private func point(_ name: String, _ c: CLLocationCoordinate2D, locality: String? = nil) -> ManualTripPoint {
+        ManualTripPoint(name: name, coordinate: c, locality: locality)
+    }
+
+    func testSuggestionsGoHomeThenPlacesThenRecent() {
+        let items = ManualTripSuggestions.build(
+            home: point("Дом", krasnodar),
+            places: [point("Дача", CLLocationCoordinate2D(latitude: 45.2, longitude: 39.1))],
+            recent: [.init(name: "Джубга", coordinate: dzhubga, detail: "вчера")])
+        XCTAssertEqual(items.map(\.kind), [.home, .place, .recent])
+        XCTAssertEqual(items.last?.detail, "вчера")
+    }
+
+    /// Двор, из которого выезжали трижды, — одна строка, а не три.
+    func testOneSpotIsSuggestedOnce() {
+        let nearHome = CLLocationCoordinate2D(latitude: krasnodar.latitude + 0.0005, longitude: krasnodar.longitude)
+        let items = ManualTripSuggestions.build(
+            home: point("Дом", krasnodar), places: [],
+            recent: [.init(name: "Краснодар", coordinate: nearHome, detail: nil),
+                     .init(name: "Краснодар", coordinate: nearHome, detail: nil)])
+        XCTAssertEqual(items.count, 1)
+    }
+
+    /// В «Куда» не предлагают то, что уже стоит в «Откуда».
+    func testTheOtherEndIsNotSuggestedAgain() {
+        let items = ManualTripSuggestions.build(
+            home: point("Дом", krasnodar), places: [],
+            recent: [.init(name: "Джубга", coordinate: dzhubga, detail: nil)],
+            excluding: krasnodar)
+        XCTAssertEqual(items.map(\.point.name), ["Джубга"])
+    }
+
+    func testSuggestionsStopAtTheLimit() {
+        let recent = (0..<9).map { i in
+            ManualTripSuggestions.RecentEnd(
+                name: "Город \(i)",
+                coordinate: CLLocationCoordinate2D(latitude: 40 + Double(i), longitude: 40), detail: nil)
+        }
+        XCTAssertEqual(ManualTripSuggestions.build(home: nil, places: [], recent: recent).count,
+                       ManualTripSuggestions.limit)
+    }
+
+    /// Прежнее умолчание «час назад» при маршруте на три часа встречало
+    /// красным «Поездка ещё не закончилась».
+    func testUntouchedStartLetsALongTripEndBeforeNow() {
+        let now = Date()
+        let start = ManualTripDateDefaults.untouchedStart(
+            current: now.addingTimeInterval(-3600), duration: 3 * 3600, now: now)
+        XCTAssertTrue(ManualTripBuilder.hasEnded(startDate: start, duration: 3 * 3600, now: now))
+    }
+
+    /// Короткий маршрут не тащит выезд вперёд.
+    func testUntouchedStartOnlyMovesBack() {
+        let now = Date()
+        let current = now.addingTimeInterval(-3600)
+        XCTAssertEqual(ManualTripDateDefaults.untouchedStart(current: current, duration: 600, now: now), current)
+    }
+
+    /// Заголовок — населённые пункты концов, как у записанной поездки.
+    func testTitleUsesLocalities() {
+        let model = ManualTripModel()
+        model.from = point("ул. Красная, 120", krasnodar, locality: "Краснодар")
+        model.to = point("Пляж", dzhubga, locality: "Джубга")
+        XCTAssertEqual(model.displayTitle, "Краснодар → Джубга")
+    }
+
+    func testTitleFallsBackToThePointName() {
+        let model = ManualTripModel()
+        model.from = point("Дом", krasnodar)
+        model.to = point("Джубга", dzhubga, locality: "Джубга")
+        XCTAssertEqual(model.displayTitle, "Дом → Джубга")
+    }
+
+    /// Круг по городу — одно имя, без стрелки между одинаковыми словами.
+    func testARoundTripIsOneName() {
+        let model = ManualTripModel()
+        model.from = point("Дом", krasnodar, locality: "Краснодар")
+        model.to = point("Магазин", krasnodar, locality: "Краснодар")
+        XCTAssertEqual(model.displayTitle, "Краснодар")
+    }
+
+    func testATypedTitleWins() {
+        let model = ManualTripModel()
+        model.from = point("Дом", krasnodar, locality: "Краснодар")
+        model.to = point("Пляж", dzhubga, locality: "Джубга")
+        model.title = "  К морю "
+        XCTAssertEqual(model.displayTitle, "К морю")
+    }
+
+    /// Машина по умолчанию — активная: «без транспорта» отнимал одометр.
+    func testTheActiveVehicleIsPreselected() {
+        let id = UUID()
+        XCTAssertEqual(ManualTripModel(vehicleId: id).vehicleId, id)
+        XCTAssertEqual(ManualTripModel(preset: .forDay(Date()), defaultVehicleId: id).vehicleId, id)
+    }
+
+    /// Обратная дорога несёт свою машину, и она сильнее активной.
+    func testAPresetVehicleBeatsTheActiveOne() {
+        let own = UUID()
+        let preset = ManualTripPreset(vehicleId: own)
+        XCTAssertEqual(ManualTripModel(preset: preset, defaultVehicleId: UUID()).vehicleId, own)
+    }
+}

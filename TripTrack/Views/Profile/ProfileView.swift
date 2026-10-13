@@ -167,9 +167,11 @@ struct ProfileView: View {
     /// приветствия), дата — у пустого дня календаря, зеркало точек/машины —
     /// у «Добавить обратную дорогу». Ставится ДО `showManualTrip = true`.
     @State private var manualTripPreset: ManualTripPreset?
-    /// Тост после успешной записи (§4в) — «Открыть поездку» /
-    /// «Добавить обратную дорогу», наш `AppConfirmDialog`, не системный алерт.
-    @State private var manualTripResult: ManualTripCreationResult?
+    /// Только что вписанная поездка — подсвечена в «Истории», пока висит
+    /// тост «Поездка добавлена · Обратно» (редизайн 13 окт 2026). Диалог
+    /// поверх «Я» больше не встаёт: поездка уже видна в списке, а «Открыть»
+    /// — это тап по ней самой.
+    @State private var highlightedManualTrip: UUID?
     /// The three field editors behind «Мой профиль». The hub only reports the
     /// tap; presenting them here keeps every editor on one host, which is what
     /// keeps them all on one host — a
@@ -260,13 +262,8 @@ struct ProfileView: View {
                 preset: manualTripPreset,
                 onCreated: { result in
                     Task { await loadAggregates() }
-                    manualTripResult = result
+                    manualTripCreated(result)
                 }
-            )
-            .appConfirm(
-                item: $manualTripResult,
-                title: { _ in AppStrings.manualTripSuccessMessage(lang.language) },
-                actions: manualTripResultActions
             )
             // Путешествия меняются и без перезагрузки библиотеки: пул с
             // другого телефона, стирание данных, удаление обёртки с её экрана.
@@ -299,27 +296,24 @@ struct ProfileView: View {
         showManualTrip = true
     }
 
-    /// «Открыть поездку» / «Добавить обратную дорогу» на тосте после записи —
-    /// в этом порядке, безопасное (открыть) ближе к большому пальцу.
-    private func manualTripResultActions(_ result: ManualTripCreationResult) -> [AppDialogAction] {
-        [
-            AppDialogAction(
-                AppStrings.manualTripSuccessOpen(lang.language),
-                kind: .primary, identifier: "manual_trip_toast_open"
-            ) {
-                push(.trip(result.tripId))
-            },
-            AppDialogAction(
-                AppStrings.manualTripSuccessReturn(lang.language),
-                kind: .plain, identifier: "manual_trip_toast_return"
-            ) {
-                manualTripPreset = .returnTrip(
-                    from: result.from, to: result.to,
-                    vehicleId: result.vehicleId, firstTripEnd: result.endDate
-                )
-                showManualTrip = true
-            }
-        ]
+    /// Поездка вписана: подсветить её в «Истории» и предложить обратную
+    /// дорогу тостом. Открыть поездку — тап по ней самой, она уже в списке.
+    private func manualTripCreated(_ result: ManualTripCreationResult) {
+        highlightedManualTrip = result.tripId
+        var toast = ToastItem(type: .undo, message: AppStrings.manualTripSuccessMessage(lang.language))
+        toast.undoLabel = AppStrings.manualTripReturnShort(lang.language)
+        toast.undoAction = {
+            manualTripPreset = .returnTrip(
+                from: result.from, to: result.to,
+                vehicleId: result.vehicleId, firstTripEnd: result.endDate
+            )
+            showManualTrip = true
+        }
+        toastItem = toast
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            if highlightedManualTrip == result.tripId { highlightedManualTrip = nil }
+        }
     }
 
     /// Вынесено из цепочки `stage`: `body` этого экрана уже упирался в предел
@@ -1414,6 +1408,7 @@ struct ProfileView: View {
                                     pressResponse: .hold,
                                     onTap: { openTrip(trip) }
                                 )
+                                .overlay { justAddedRing(trip.id) }
                                 // `simultaneousGesture`, а не `.onLongPressGesture`:
                                 // карточка — `Button`, и он забирает касание
                                 // раньше, чем сработает жест сверху. Вместе с
@@ -1466,6 +1461,7 @@ struct ProfileView: View {
                         pressResponse: .hold,
                         onTap: { openTrip(trip) }
                     )
+                    .overlay { justAddedRing(trip.id) }
                     // См. комментарий у плитки выше: кнопка съедает
                     // `.onLongPressGesture`, `simultaneousGesture` — нет, а
                     // длительность приходит от стиля карточки.
@@ -1504,6 +1500,7 @@ struct ProfileView: View {
                     .font(.interScaled(22, weight: .bold, relativeTo: .title2))
                     .foregroundStyle(c.text)
                 Spacer(minLength: 0)
+                if ManualTripEntry.isVisible { historyAddButton(c) }
                 if !dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
             }
             if dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
@@ -1538,7 +1535,6 @@ struct ProfileView: View {
             // nothing.
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .onTapGesture { historySearchFocused = true }
-            if ManualTripEntry.isVisible { historyAddButton(c) }
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
@@ -1556,21 +1552,35 @@ struct ProfileView: View {
         }
     }
 
+    /// «+» в шапке «Истории», рядом с видом списка (редизайн 13 окт 2026):
+    /// поездку добавляют туда же, где её потом и увидят. Прежняя красная
+    /// ссылка под поиском спорила с главным действием экрана за цвет.
     private func historyAddButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.tap()
             manualTripPreset = nil
             showManualTrip = true
         } label: {
-            Label(AppStrings.manualTripEntry(lang.language), systemImage: "plus")
-                .font(.interScaled(15, weight: .semibold))
-                .foregroundStyle(AppTheme.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 44, alignment: .leading)
+            Image(systemName: ManualTripEntry.isLocked ? "lock" : "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(c.text)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(PressableCardStyle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(AppStrings.manualTripEntry(lang.language))
         .accessibilityIdentifier("profile_history_add")
+    }
+
+    /// Рамка вокруг только что вписанной поездки — пока висит тост.
+    @ViewBuilder
+    private func justAddedRing(_ id: UUID) -> some View {
+        if highlightedManualTrip == id {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(AppTheme.accent.opacity(0.55), lineWidth: 2)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
     }
 
     private func historyEmptyState(_ c: AppTheme.Colors) -> some View {

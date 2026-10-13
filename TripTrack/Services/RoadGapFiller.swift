@@ -238,8 +238,8 @@ final class RoadGapFiller {
             let request = NSFetchRequest<NSManagedObjectID>(entityName: "TripEntity")
             request.resultType = .managedObjectIDResultType
             request.predicate = NSPredicate(
-                format: "(roadFillState == nil OR roadFillState == %@) AND endDate != nil AND isTrackProcessed == YES AND syncStatus != %d",
-                RoadFillState.unchecked.rawValue, SyncStatus.pendingDelete.rawValue)
+                format: "(roadFillState == nil OR roadFillState == %@) AND endDate != nil AND isTrackProcessed == YES AND syncStatus != %d AND (source == nil OR source != %@)",
+                RoadFillState.unchecked.rawValue, SyncStatus.pendingDelete.rawValue, TripOrigin.manual.rawValue)
             let ids = (try? context.fetch(request)) ?? []
             var changed: [UUID] = []
             for objectID in ids {

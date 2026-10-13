@@ -77,6 +77,10 @@ struct PublicMapView: View {
 
     // MARK: - Шапка
 
+    /// Над картой — только «назад» (13 окт 2026, вариант A). Плашка с именем
+    /// и подписью терракотой повторяла шторку под ней: имя дважды,
+    /// «публичные» трижды, а подпись цветом действия не нажималась. Имя
+    /// теперь — первая строка шторки, как «Атлас» у своей карты.
     private func header(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
             // Домовая кнопка, а не своя: она предпочитает `\.previewPop`
@@ -86,33 +90,10 @@ struct PublicMapView: View {
             NavBackButton()
                 .accessibilityLabel(AppStrings.back(l))
                 .accessibilityIdentifier("public_map_back")
-
             Spacer(minLength: 0)
-            titlePill(c, l)
-            Spacer(minLength: 0)
-
-            // Балансир под кнопку, чтобы пилюля стояла по центру.
-            Color.clear.frame(width: 44, height: 44)
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)
-    }
-
-    private func titlePill(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        VStack(spacing: 1) {
-            Text(ownerName ?? AppStrings.profileMapEntryTitle(l))
-                .font(.inter(13, weight: .semibold))
-                .foregroundStyle(c.text)
-            // Рамка обязательна: счётчики профиля считаются по ВСЕМ поездкам,
-            // а карта рисует только публичные. Без подписи расхождение между
-            // «47 поездок» в профиле и дюжиной маршрутов здесь читается как баг.
-            Text(AppStrings.publicRoutesCaption(l))
-                .font(.inter(10, weight: .medium))
-                .foregroundStyle(AppTheme.accent)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(c.glass, in: Capsule())
     }
 
     // MARK: - Нижний лист
@@ -126,6 +107,12 @@ struct PublicMapView: View {
     /// home indicator.
     private func summary(_ l: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
+            // Первая строка шторки — чья это карта, как «Атлас» у своей
+            // (`AtlasSheetTitleRow`, эррата 1). Без известного имени — «Карта».
+            AtlasSheetTitleRow(title: ownerTitle(l)) { EmptyView() }
+                .padding(.horizontal, -AtlasTheme.sideInset)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("public_map_title")
             if vm.isLoading {
                 // Иначе сводка утверждает «0 маршрутов · 0 км · 0 регионов» про
                 // другого человека всё время загрузки — то есть врёт точными
@@ -157,49 +144,31 @@ struct PublicMapView: View {
                     .foregroundStyle(AtlasTheme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                // Вне блока с именем: неизвестное имя не повод молчать о том,
-                // что числа под ним занижены.
+                // Вне итога: неизвестное имя не повод молчать о том, что
+                // числа под ним занижены.
                 if vm.remoteFailed {
                     Text(AppStrings.publicDataPartial(l))
-                        .font(.inter(11, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                AtlasStatRow {
-                    AtlasStatTile(value: String(vm.exploration.trips.count),
-                                  label: AppStrings.publicRoutesCaption(l))
-                    AtlasStatTile(
-                        value: Measure.distanceValue(km: vm.exploration.totalKm, unit: distanceUnit, lang: l),
-                        label: Measure.distanceParts(km: vm.exploration.totalKm, unit: distanceUnit, lang: l).unit)
-                    // Регионы атлас знает в двадцати странах (`MapRegions.json`).
-                    // Французский водитель с 1 842 км получал здесь «0 регионов»
-                    // — утверждение о другом человеке, которое неправда. Ноль при
-                    // непустых маршрутах — не число, а «мы не умеем считать там».
-                    if !Self.hidesRegions(regions: vm.exploration.regions.count,
-                                          trips: vm.exploration.trips.count) {
-                        AtlasStatTile(value: String(vm.exploration.regions.count),
-                                      label: AppStrings.statsRegions(l))
-                    }
-                }
-                // Только когда имя известно: с пустой подстановкой фраза
-                // разваливается в «Здесь только те поездки, которые  сделал
-                // публичными». Подпись под заголовком всё равно сказала главное.
-                // Строка, а не плашка: серая коробка внутри листа была третьим
-                // уровнем фона на одном крае (kk-look: одно средство на край).
-                if let name = ownerName?.trimmingCharacters(in: .whitespaces),
-                   !name.isEmpty {
-                    Text(AppStrings.publicRoutesExplainer(l, name: name))
-                        .font(.inter(12))
+                        .font(AppType.meta)
                         .foregroundStyle(AtlasTheme.secondary)
-                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                // Одна карточка на три числа, как итог своего «Атласа»
+                // (`AtlasStatTrio`): это один итог, прочитанный с трёх сторон.
+                AtlasStatTrio(columns: summaryColumns(l))
+                // Одна строка вместо подписи в плашке и абзаца с именем: имя
+                // уже стоит заголовком, а «публичные» — единственное, что
+                // отличает эти числа от счётчиков профиля.
+                Text(AppStrings.publicMapOnlyPublic(l))
+                    .font(AppType.meta)
+                    .foregroundStyle(AtlasTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("public_map_only_public")
             }
         }
         .padding(.horizontal, AtlasTheme.sideInset)
-        .padding(.top, 18)
+        .padding(.top, 4)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
         // Down to the physical bottom: the map is full-bleed, so a sheet that
@@ -215,6 +184,30 @@ struct PublicMapView: View {
             .fill(AtlasTheme.background)
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    private func ownerTitle(_ l: LanguageManager.Language) -> String {
+        let name = ownerName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return name.isEmpty ? AppStrings.profileMapEntryTitle(l) : name
+    }
+
+    private func summaryColumns(_ l: LanguageManager.Language) -> [AtlasStatTrio.Column] {
+        let trips = vm.exploration.trips.count
+        let distance = Measure.distanceParts(km: vm.exploration.totalKm, unit: distanceUnit, lang: l)
+        var columns: [AtlasStatTrio.Column] = [
+            .init(id: "trips", value: "\(trips)", unit: nil,
+                  caption: AppStrings.tripsGenitive(l, count: trips)),
+            .init(id: "km", value: distance.value, unit: distance.unit,
+                  caption: AppStrings.atlasTotalShort(l))
+        ]
+        // Ноль при непустых маршрутах — не число, а «мы не умеем считать
+        // там»: утверждение о другом человеке, которое было бы неправдой.
+        let regions = vm.exploration.regions.count
+        if !Self.hidesRegions(regions: regions, trips: trips) {
+            columns.append(.init(id: "regions", value: "\(regions)", unit: nil,
+                                 caption: AppStrings.nounRegions(l, regions)))
+        }
+        return columns
     }
 
     /// «0 регионов» при непустых маршрутах — не ноль, а страна, которой нет в

@@ -54,6 +54,15 @@ final class PostTripTrackProcessor {
 
         // Skip if already processed
         guard !entity.isTrackProcessed else { return }
+        // Построенная линия — не запись GPS: в ней нет ни выбросов, ни дыр
+        // (`ManualTripAftermath`). Точки маршрута Apple лежат дальше порога
+        // дыры, и достройка рисовала бы между ними серый пунктир.
+        guard entity.source != TripOrigin.manual.rawValue else {
+            entity.roadFillState = RoadFillState.done.rawValue
+            entity.isTrackProcessed = true
+            persistenceController.save()
+            return
+        }
 
         // Load original (non-interpolated) track points sorted by timestamp
         let originalPoints = entity.orderedTrackPoints.filter { !$0.isInterpolated }

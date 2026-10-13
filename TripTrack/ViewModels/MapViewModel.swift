@@ -390,6 +390,9 @@ final class MapViewModel: ObservableObject {
             // Regenerate preview polylines with correct timestamp sorting (one-time)
             tripManager.migrateRegeneratePreviewPolylines()
 
+            // Вписанные поездки до 0.9.0 получили прямые достройки — снять.
+            tripManager.repairManualTripFills()
+
             // Process any trips that weren't post-processed (e.g., app killed before completion)
             let processor = PostTripTrackProcessor()
             await processor.processUnprocessedTrips()

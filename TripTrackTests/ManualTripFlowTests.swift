@@ -84,6 +84,46 @@ final class ManualTripFlowTests: XCTestCase {
                         "превью — то, из чего «Атлас» берёт открытое; без него поездка не откроет ничего")
     }
 
+    /// Обработчик трека для записи GPS: на вписанной поездке он искал бы
+    /// выбросы и достраивал «дыры» между редкими точками дальней трассы.
+    func testAManualTripIsNeverReprocessedAsARecording() throws {
+        let saved = try XCTUnwrap(manager.createManualTrip(built(), namesFromGeocoder: false))
+        let e = try entity(saved.id)
+        XCTAssertTrue(e.isTrackProcessed, "запуск переобработал бы её как запись")
+        XCTAssertEqual(e.roadFillState, RoadFillState.done.rawValue)
+    }
+
+    /// До 0.9.0 запуск достраивал вписанной поездке прямые между точками
+    /// маршрута — ремонт снимает ровно их и не трогает километры.
+    func testRepairDropsStraightFillsFromManualTrips() throws {
+        let saved = try XCTUnwrap(manager.createManualTrip(built(), namesFromGeocoder: false))
+        let e = try entity(saved.id)
+        let distance = e.distance
+        let realCount = e.orderedTrackPoints.count
+        let context = pc.container.viewContext
+        let first = try XCTUnwrap(e.orderedTrackPoints.first)
+        let fill = TrackPointEntity(context: context)
+        fill.id = UUID()
+        fill.latitude = first.latitude
+        fill.longitude = first.longitude
+        fill.timestamp = first.timestamp?.addingTimeInterval(1)
+        fill.isInterpolated = true
+        fill.speed = -1
+        fill.horizontalAccuracy = -1
+        fill.trip = e
+        e.isTrackProcessed = false
+        try context.save()
+        UserDefaults.standard.removeObject(forKey: "didRepairManualTripFills")
+        defer { UserDefaults.standard.removeObject(forKey: "didRepairManualTripFills") }
+
+        manager.repairManualTripFills()
+
+        XCTAssertEqual(e.orderedTrackPoints.count, realCount)
+        XCTAssertFalse(e.orderedTrackPoints.contains(where: \.isInterpolated))
+        XCTAssertTrue(e.isTrackProcessed)
+        XCTAssertEqual(e.distance, distance)
+    }
+
     func testTheSavedDistanceIsTheBuiltOne() throws {
         let trip = built()
         let saved = try XCTUnwrap(manager.createManualTrip(trip, namesFromGeocoder: false))
