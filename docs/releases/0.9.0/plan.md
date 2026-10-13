@@ -11,7 +11,7 @@
 | «Я»: подложка под строкой состояния при прокрутке | `2fa986ad` | `MeStatusBarBackdropTests` |
 | Низ чужой карты: лист и плитки «Атласа» до низа экрана, без ложного «0 регионов» | `06e16add` | `PublicMapSummaryTests` (обе темы) |
 | Чужая машина на экране чужой поездки открывает свою страницу | `bb5e9cfc` | `ForeignVehicleChipTests`, `SocialFeedVehicleDecodingTests` |
-| «Я»: тёмная карточка профиля (вариант A) | `c130a7d7` | `ProfileDesignTests`, кадры |
+| «Я»: светлая карточка профиля (вариант C); тёмная — только с выбранным фоном | — | `MeHeroBackgroundTests` (красный на варианте A) |
 
 Сервер для машины: `trip-track-backend` ветка `feat/feed-vehicle-id`
 (`cdce9be`) — `id` и `avatarStyle` машины в элементе ленты, только у машины,

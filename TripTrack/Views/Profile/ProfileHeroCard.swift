@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Identity and trip totals on «Me». Chosen covers keep their own artwork.
+/// Identity and trip totals on «Me». A chosen profile background is shown
+/// here as others see it; without one the card is light.
 ///
-/// The default is the dark ink card with one warm glow (owner, 12 Oct 2026,
-/// variant A of three: «серовато как-то, надо чуть выделеннее»). 0.8.8 had
-/// made it a white card that followed the theme, and on the warm grey page
-/// it lost its one strong contrast: the screen's hero read like every card
-/// under it. Ink rather than the accent, so it doesn't compete with the
-/// terracotta Record button in the bar; the glow in the corner is also the
-/// one hint on this screen that the card can carry colour.
+/// The default is a warm tint with an accent edge (owner, 13 Oct 2026,
+/// variant C). Variant A, a dark card with a glow, shipped in 0.9.0 (79) and
+/// was rolled back the next day: «Me» gave everyone a striking cover without
+/// choosing one, so the profile background setting (eleven free, eight PRO)
+/// looked like it did nothing. Only a chosen background darkens this card, so
+/// what people see here is what others see on their profile.
 struct ProfileHeroCard: View {
     let background: ProfileBackground
     let avatarEmoji: String
@@ -32,15 +32,17 @@ struct ProfileHeroCard: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var plus = PlusAccess.shared
 
-    /// A chosen cover, or the dark default: either way the card is dark, and
-    /// the type on it is white.
+    /// The background as others see it; `nil` for the light default. An
+    /// expired PRO falls back here too (`effective`), never to a dark card.
     private var chosenCover: ProfileBackground? {
         let effective = background.effective(isPlus: plus.isPlus)
         return effective == .none ? nil : effective
     }
-    private var ink: Color { .white }
-    private var secondaryInk: Color { .white.opacity(0.85) }
-    private var rule: Color { .white.opacity(0.22) }
+    private var hasCover: Bool { chosenCover != nil }
+    private var colors: AppTheme.Colors { AppTheme.colors(for: scheme) }
+    private var ink: Color { hasCover ? .white : colors.text }
+    private var secondaryInk: Color { hasCover ? .white.opacity(0.85) : colors.textSecondary }
+    private var rule: Color { hasCover ? .white.opacity(0.22) : AppTheme.accent.opacity(0.18) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -60,36 +62,18 @@ struct ProfileHeroCard: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        // In the dark theme the page is near-black: without an edge the card's
-        // dark corner dissolves into it.
         .overlay {
-            if scheme == .dark {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(hasCover ? .clear : AppTheme.accent.opacity(0.22), lineWidth: 1)
         }
     }
 
-    /// Ink with one warm glow — the pre-0.8.8 default, kept to the numbers it
-    /// had: the dark theme starts a stop lighter, because the light-theme
-    /// gradient bottoms out at 0.09, which IS the dark page.
+    /// The card with a warm accent tint: set apart from the white cards under
+    /// it, but still lighter than any paid cover.
     private var defaultBackdrop: some View {
         ZStack {
-            LinearGradient(
-                colors: scheme == .dark
-                    ? [Color(red: 0.26, green: 0.27, blue: 0.32),
-                       Color(red: 0.15, green: 0.15, blue: 0.18)]
-                    : [Color(red: 0.20, green: 0.21, blue: 0.25),
-                       Color(red: 0.09, green: 0.09, blue: 0.11)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            RadialGradient(
-                colors: [AppTheme.accent.opacity(0.55), .clear],
-                center: UnitPoint(x: 0.88, y: 0.02),
-                startRadius: 4,
-                endRadius: 250
-            )
+            colors.card
+            AppTheme.accent.opacity(scheme == .dark ? 0.16 : 0.08)
         }
     }
 
@@ -103,7 +87,7 @@ struct ProfileHeroCard: View {
                     Text(avatarEmoji)
                         .font(.inter(32))
                         .frame(width: 60, height: 60)
-                        .background(.white.opacity(0.16), in: Circle())
+                        .background(hasCover ? .white.opacity(0.16) : colors.cardAlt, in: Circle())
                         .avatarFrame(
                             AvatarFrame.effective(id: settings.avatarFrame, isPlus: plus.isPlus),
                             lineWidth: 3)
@@ -165,7 +149,7 @@ struct ProfileHeroCard: View {
                 HStack(spacing: 5) {
                     Text("LVL \(level)")
                         .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(hasCover ? .white : AppTheme.accent)
                     Text(rankTitle)
                         .font(.interScaled(12, weight: .medium, relativeTo: .caption))
                         .foregroundStyle(secondaryInk)
