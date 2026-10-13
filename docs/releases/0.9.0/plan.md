@@ -36,11 +36,13 @@ production API, Sentry, фоновый режим только `location`, мо�
 после сборки совпали с манифестом. Полный `TripTrackTests` на этом коде —
 2921 тест, 0 падений (12 окт, 20:25).
 
-**Не загружен.** `exportArchive` в 21:01 МСК: «Failed to Use Accounts» — в
-Xcode → Settings → Accounts нет ни одного аккаунта. В тот же день в 16:25 и
-17:07 с этого Mac загружался TeachTrack, то есть вход пропал позже. Загрузка
-— после входа владельца: `bash ~/Desktop/TripTrack-ASC/upload-090-79.sh`.
-Тексты «Что проверить» готовы там же, в `build-79-verification/`.
+Первая попытка `exportArchive` 12 окт в 21:01 МСК не прошла: «Failed to Use
+Accounts» — в Xcode → Settings → Accounts не было ни одного аккаунта (в тот
+же день в 16:25 и 17:07 с этого Mac ещё загружался TeachTrack). Владелец
+вошёл заново; **загрузка прошла 13 окт в 09:32 МСК** (`Upload succeeded`,
+`~/Desktop/TripTrack-ASC/upload-090-79.sh`). Предупреждение о dSYM
+`Sentry.framework` — то же, что у 77 и 78, на сборку не влияет. Тексты «Что
+проверить» — в `build-79-verification/`.
 
 ## В работе: тяжёлая чужая карта
 
