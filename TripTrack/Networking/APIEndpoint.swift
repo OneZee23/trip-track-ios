@@ -46,6 +46,23 @@ enum APIEndpoint {
     /// данных, одни усечённые хеши. `version` пустой не шлём вовсе: пустая
     /// строка на сервере значит «версии нет», и лишний параметр только сбивал
     /// бы с толку в логах.
+    /// Удалённая конфигурация (0.9.0): флаги, минимальная версия, объявления.
+    /// Публичная, без тела; `version` — то, что телефон уже знает.
+    static func appConfig(version: String?) -> String {
+        guard let version, !version.isEmpty else { return "/app/config" }
+        let escaped = version.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics) ?? version
+        return "/app/config?version=\(escaped)"
+    }
+    /// Каталог по имени (0.9.0): `riddles`, `vehicles`. Тот же JSON, что
+    /// лежит в бандле, — сервер отдаёт его целиком с хешем версии.
+    static func remoteCatalog(_ name: String, version: String?) -> String {
+        let base = "/app/catalog/\(name)"
+        guard let version, !version.isEmpty else { return base }
+        let escaped = version.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics) ?? version
+        return "\(base)?version=\(escaped)"
+    }
     static func secretsCatalog(version: String?) -> String {
         guard let version, !version.isEmpty else { return "/secrets/catalog" }
         let escaped = version.addingPercentEncoding(

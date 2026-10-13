@@ -27,5 +27,10 @@ enum RiddleHints {
     /// часу» — хвост, не обнулённый между тестами).
     static var isEnabledOverride: Bool?
 
-    static var isActive: Bool { isEnabledOverride ?? isEnabled }
+    /// Порядок: тест → сервер (0.9.0, `RemoteConfigStore`, флаг
+    /// «riddleHints») → вшитое значение. Без сети и без кэша — вшитое, то есть
+    /// поведение до 0.9.0.
+    static var isActive: Bool {
+        isEnabledOverride ?? RemoteConfigStore.shared.flag("riddleHints") ?? isEnabled
+    }
 }

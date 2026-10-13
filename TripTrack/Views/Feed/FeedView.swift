@@ -768,6 +768,9 @@ struct FeedView: View {
                 // «Лента»→switcher and switcher→cards visibly uneven.
                 LazyVStack(spacing: 12) {
                     connectivityBanner(c)
+                    // Обновление и объявления с сервера (0.9.0) — одна
+                    // карточка обновления на всё приложение живёт здесь.
+                    RemoteNoticeStack(placement: .feed, showsUpdate: true)
                     socialFeedContent(c, store: socialFeed, isFollowing: false)
                 }
                 .id("feedTopAll")

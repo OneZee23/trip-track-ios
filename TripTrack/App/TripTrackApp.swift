@@ -194,7 +194,16 @@ struct TripTrackApp: App {
         // process deaths — sweep the system log into our own files there, or a
         // relaunch loses everything that was said since the last periodic one.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { ProductAnalytics.shared.flush() }
+            if phase == .active {
+                ProductAnalytics.shared.flush()
+                // Удалённая конфигурация (0.9.0) — на каждом возврате, но не
+                // чаще `RemoteConfigStore.refreshInterval`; вне главного
+                // актёра, как каталог секретов.
+                Task.detached(priority: .utility) {
+                    await RemoteConfigStore.shared.refreshIfNeeded()
+                    await RemoteCatalogs.refreshIfNeeded()
+                }
+            }
             guard phase != .active else { return }
             Task { await LogArchive.shared.sweep() }
         }

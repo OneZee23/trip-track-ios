@@ -49,6 +49,13 @@ enum VehicleCatalog {
     static let makes: [Make] = load()
 
     private static func load() -> [Make] {
+        // Свежий каталог с сервера (0.9.0) — раньше бандла, если разобрался
+        // и не пустой; иначе бандл, как до 0.9.0.
+        if let remote = RemoteCatalogs.fileURL(for: .vehicles),
+           let data = try? Data(contentsOf: remote),
+           let file = try? JSONDecoder().decode(File.self, from: data), !file.makes.isEmpty {
+            return file.makes
+        }
         guard let url = Bundle.main.url(forResource: "VehicleCatalog", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let file = try? JSONDecoder().decode(File.self, from: data)

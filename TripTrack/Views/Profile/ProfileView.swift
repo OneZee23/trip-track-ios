@@ -341,6 +341,9 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     hero()
 
+                    // Объявления с сервера для «Я» (0.9.0); пусто — ничего.
+                    RemoteNoticeStack(placement: .me, outerPadding: EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
+
                     if mapVM.cachedTripCount == 0 {
                         // First-launch welcome — zeros read as broken, so the
                         // strip/achievements/history stay hidden until ≥1 trip.
