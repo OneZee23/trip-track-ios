@@ -74,6 +74,15 @@
   (`…NeverReprocessedAsARecording`, `…RepairDropsStraightFills…`),
   `ManualTripShotTests`, `PublicMapSummaryTests`, `PublicMapRegionsTileTests`.
 
+## Сборка 83 для TestFlight
+
+Владелец 13 окт: «Конечно собери сборку». Исходник `cdcd60fa` (ветка
+`work/0.9.0`, запушена), архив проверен `verify.py`: 0.9.0 (83), подпись,
+dSYM, продовый API, Sentry, отладочные флаги вырезаны, исходники не менялись
+во время сборки. Загружена 13 окт в 22:40 МСК. «Что тестировать» —
+`~/Desktop/TripTrack-ASC/build-83-verification/testflight-notes-*.txt`;
+текст для 82 так и не вписан и уже не нужен — 83 его включает.
+
 ## Сборка 79 для TestFlight
 
 Владелец 12 окт: «поставь мне в TestFlight 0.9.0, я проверю всё, как
