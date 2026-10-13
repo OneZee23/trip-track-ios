@@ -39,8 +39,9 @@ enum DebugForeignTripFixture {
 
     /// The author's public map, offline (12 Oct 2026). `-debug-foreign-map`
     /// picks the library: `france` (default) — two long drives through France,
-    /// a country the region atlas does not split into regions, the case behind
-    /// «0 регионов»; `heavy` — hundreds of long drives across Russia (a stress
+    /// the case behind «0 регионов» while the atlas split twenty countries (the
+    /// world atlas of 13 Oct splits France too; the rule now lives in
+    /// `PublicMapRegionsTileTests`); `heavy` — hundreds of long drives across Russia (a stress
     /// load, nine times the points of any real map); `real` — the shape of the
     /// heaviest real public map, the one that ran a phone hot on 13 Oct.
     static var mapVariant: String {

@@ -8,7 +8,9 @@ import XCTest
 ///
 /// Офлайн-фикстура `-debug-foreign-trip`: чужая поездка в ленте → автор →
 /// «Карта». `-debug-foreign-map france` (по умолчанию) — две длинные поездки
-/// по Франции.
+/// по Франции. С 13 окт атлас делит на регионы весь мир, Францию тоже, и путь
+/// «ноль скрыт» эта фикстура больше не проходит: само правило держит
+/// `PublicMapRegionsTileTests`, а здесь — что ноль не доехал до сводки.
 final class PublicMapSummaryTests: XCTestCase {
     func testSummaryReachesTheBottomAndDoesNotInventZeroRegions() throws {
         try check(theme: "light")
@@ -47,9 +49,9 @@ final class PublicMapSummaryTests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
 
-        // Ни одного «0 регионов»: ноль при маршрутах — не число.
-        XCTAssertFalse(app.staticTexts["регионов"].exists,
-                       "zero regions shown for a country the atlas does not split")
+        // Ни одного нуля в сводке: ноль при маршрутах — не число.
+        XCTAssertFalse(summary.staticTexts["0"].exists,
+                       "a zero is shown in another person's summary")
 
         // Под листом — его же цвет до физического низа, а не карта: самый
         // нижний ряд пикселей окна равен цвету листа над полоской «Домой».
