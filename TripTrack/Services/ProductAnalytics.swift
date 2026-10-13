@@ -20,6 +20,13 @@ struct ProductAnalyticsSnapshot: Codable, Equatable {
     var slowSaves = 0
     var firstSaveDay: String?
     var secondSaveDay: String?
+    /// PRO funnel (0.9.0): offer opened, Buy tapped, purchase confirmed.
+    /// Counts only — which feature or screen is not recorded. Optional so a
+    /// snapshot saved by 0.8.x still decodes; the server takes them as
+    /// optional too and must ship first, because it rejects unknown keys.
+    var proOffers: Int?
+    var proBuyTaps: Int?
+    var proPurchases: Int?
 }
 
 /// Mutated on the main queue, like TripManager and the settings UI. State is
@@ -103,6 +110,20 @@ final class ProductAnalytics: ObservableObject {
 
     func atlasOpened() {
         update { $0.atlasOpens = min(1_000_000, $0.atlasOpens + 1) }
+    }
+
+    func proOfferShown() {
+        update { $0.proOffers = min(1_000_000, ($0.proOffers ?? 0) + 1) }
+    }
+
+    /// Never above the offers counted: the server rejects a funnel that
+    /// narrows the wrong way, and a Buy tap only exists on a shown offer.
+    func proBuyTapped() {
+        update { $0.proBuyTaps = min($0.proOffers ?? 0, ($0.proBuyTaps ?? 0) + 1) }
+    }
+
+    func proPurchased() {
+        update { $0.proPurchases = min($0.proBuyTaps ?? 0, ($0.proPurchases ?? 0) + 1) }
     }
 
     private func update(_ change: (inout ProductAnalyticsSnapshot) -> Void) {
