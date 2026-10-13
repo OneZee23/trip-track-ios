@@ -352,7 +352,7 @@ struct StatsScreenView: View {
             range = value
         } label: {
             Text(title)
-                .font(.system(size: 13, weight: isOn ? .semibold : .medium))
+                .font(.inter(13, weight: isOn ? .semibold : .medium))
                 .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -378,7 +378,7 @@ struct StatsScreenView: View {
                 if let next = step(-1, agg, calendar: cal) { anchor = next }
             }
             Text(periodLabel(l, calendar: cal))
-                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                .font(.inter(15, weight: .semibold).monospacedDigit())
                 .foregroundStyle(c.text)
                 // FIXED, not minimum: at `minWidth` the label grew for a long
                 // month and shoved both chevrons outward, so the arrows moved
@@ -475,7 +475,7 @@ struct StatsScreenView: View {
     ) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: size, weight: .heavy).monospacedDigit())
+                .font(.inter(size, weight: .heavy).monospacedDigit())
                 .foregroundStyle(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -572,7 +572,7 @@ struct StatsScreenView: View {
                             .opacity(km > 0 ? 1 : 0.35)
                             .frame(height: h)
                         Text(labels[i])
-                            .font(.system(size: 10, weight: isOn ? .heavy : .semibold))
+                            .font(.inter(10, weight: isOn ? .heavy : .semibold))
                             .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
@@ -837,7 +837,7 @@ struct StatsScreenView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(row.value)
-                .font(.system(size: 15, weight: .heavy).monospacedDigit())
+                .font(.inter(15, weight: .heavy).monospacedDigit())
                 .foregroundStyle(AppTheme.accent)
                 .lineLimit(1)
 
@@ -899,11 +899,12 @@ struct StatsScreenView: View {
         }
     }
 
+    /// The section heading of «Я» (`AppType.section`, 16/700, ink, sentence
+    /// case) — rule of 26 Sep 2026: small grey capitals were what made a
+    /// screen read as a different app. The capitals used to live in the
+    /// translations themselves, so the words changed too.
     private func sectionLabel(_ text: String, _ c: AppTheme.Colors) -> some View {
-        Text(text)
-            .font(.inter(13, weight: .bold))
-            .tracking(0.26)
-            .foregroundStyle(c.textSecondary)
+        ProfileSectionLabel(text: text)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 2)
             .padding(.top, 6)

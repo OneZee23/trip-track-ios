@@ -94,8 +94,12 @@ final class PlusStore: ObservableObject {
         }
     }
 
-    static let yearlyID = "com.onezee.TripTrack.plus.yearly"
-    static let monthlyID = "com.onezee.TripTrack.plus.monthly"
+    // 0.8.4: подписка называется PRO. Идентификатор продукта в App Store
+    // Connect ПЕРЕИМЕНОВАТЬ НЕЛЬЗЯ — только завести новый и похоронить
+    // старый, — поэтому имя выбрано ДО того, как продукты заведены, и
+    // менять его после первой продажи будет уже нечем.
+    static let yearlyID = "com.onezee.TripTrack.pro.yearly"
+    static let monthlyID = "com.onezee.TripTrack.pro.monthly"
     /// Порядок значим: годовой первый и в пейволе, и в выборке продуктов.
     static let productIDs = [yearlyID, monthlyID]
 
@@ -103,8 +107,58 @@ final class PlusStore: ObservableObject {
     @Published private(set) var state: State = .none
     /// До какого числа «Плюс». `nil` — не куплено или Apple не сказала.
     @Published private(set) var expiresAt: Date?
+    /// Тариф действующего права (`yearlyID`/`monthlyID`). `nil` — права нет.
+    ///
+    /// Нужен экрану «Ваш PRO»: «потом 24,99 € в год» у месячного — это чужая
+    /// цена, а сумма следующего списания обязана быть его суммой.
+    @Published private(set) var currentProductID: String?
+    /// Продлится ли подписка сама. `nil` — Apple не сказала.
+    ///
+    /// `false` — человек уже отменил продление: PRO работает до конца периода,
+    /// и экран не имеет права обещать ему следующее списание, которого не
+    /// будет. Молчание (`nil`) — не «отменил»: строка о продлении тогда просто
+    /// не печатается.
+    @Published private(set) var willAutoRenew: Bool?
+
+    /// Последняя дата окончания, которую Apple когда-либо называла.
+    ///
+    /// Нужна ровно для строки «PRO закончился {date}». `expiresAt` приходит из
+    /// `currentEntitlements`, а тот при `.expired` и `.grace` права УЖЕ НЕ
+    /// ОТДАЁТ — то есть в момент, когда дату надо показать, живого значения
+    /// нет, и строка выходила бы «PRO закончился» с пустым хвостом. Дату мы
+    /// знали, пока подписка работала: запоминаем её тогда.
+    ///
+    /// Переживает перезапуск: окончание человек видит на следующем запуске, а
+    /// не в ту же секунду.
+    private(set) var lastKnownExpiry: Date? {
+        get { Self.defaults.object(forKey: Self.lastExpiryKey) as? Date }
+        set { Self.defaults.set(newValue, forKey: Self.lastExpiryKey) }
+    }
+
+    private static let lastExpiryKey = "plus.lastKnownExpiry.v1"
+    private static var defaults: UserDefaults { .standard }
+
+    /// Дата для показа: живая, а если Apple молчит — запомненная.
+    var displayExpiry: Date? { expiresAt ?? lastKnownExpiry }
+
+    #if DEBUG
+    /// Шов для теста: `UserDefaults` переживает прогоны, и без сброса
+    /// проверка «дата запомнилась» проходила бы вакуумно на значении,
+    /// оставленном соседним прогоном.
+    static func forgetLastKnownExpiryForTesting() {
+        defaults.removeObject(forKey: lastExpiryKey)
+    }
+    #endif
     /// Идёт покупка или восстановление — кнопки на пейволе выключены.
     @Published private(set) var isBusy = false
+    /// Покупка ждёт одобрения (Ask To Buy) — состояние 16 строки PRO.
+    ///
+    /// Только в ПАМЯТИ и только этой сессии, и это решение, а не недоделка:
+    /// StoreKit не даёт запроса «есть ли висящий запрос на одобрение», а
+    /// сохранённый флаг показывал бы «ждём подтверждения» вечно тому, кому
+    /// родитель отказал (отказ не создаёт транзакции и не приходит никак).
+    /// После перезапуска строка честно падает на настоящее право.
+    @Published private(set) var awaitingApproval = false
     /// Двухбуквенно-трёхбуквенный код витрины (`RUS`, `GEO`, `USA`).
     @Published private(set) var storefrontCountry: String?
     /// Даст ли Apple вводное предложение ЭТОМУ Apple ID.
@@ -123,6 +177,10 @@ final class PlusStore: ObservableObject {
 
     private var updatesTask: Task<Void, Never>?
     private var storefrontTask: Task<Void, Never>?
+    private var storefrontProductsTask: Task<Void, Never>?
+    private var productRequestGeneration: UInt64 = 0
+    private let fetchProducts: @MainActor () async throws -> [Product]
+    private let fetchIntroEligibility: @MainActor ([Product]) async -> Bool
     private var recheckTask: Task<Void, Never>?
     private var foregroundObserver: NSObjectProtocol?
     private var foregroundTask: Task<Void, Never>?
@@ -156,9 +214,36 @@ final class PlusStore: ObservableObject {
     nonisolated static var isDebugPlus: Bool {
         ProcessInfo.processInfo.arguments.contains("-debug-plus")
     }
+
+    /// Витрина ПРОДАЁТ, но подписки НЕТ — то есть человек, который может
+    /// купить.
+    ///
+    /// Отдельный флаг от `-debug-plus`, и это не дубль. Тот делает подписчика,
+    /// а у подписчика продающих состояний не бывает вовсе: строка на «Я» ведёт
+    /// в управление подпиской App Store, замков нет, примерять нечего. То
+    /// есть состояния 1, 2, 4, 5, 12, 21, 23 — ровно те, на которые смотрит
+    /// ревью Apple, — снять с `-debug-plus` НЕЛЬЗЯ ни одно.
+    ///
+    /// А без флагов их не снять тоже: `PlusAvailability.isEnabled == false`
+    /// (товаров в App Store Connect ещё нет), и витрина считается спрятанной
+    /// для всех. Отсюда второй флаг: он открывает витрину и НЕ выдаёт права.
+    nonisolated static var isDebugStorefront: Bool {
+        ProcessInfo.processInfo.arguments.contains("-debug-pro-store")
+    }
     #endif
 
-    private init() {}
+    init(
+        fetchProducts: @escaping @MainActor () async throws -> [Product] = {
+            try await Product.products(for: PlusStore.productIDs)
+        },
+        fetchIntroEligibility: @escaping @MainActor ([Product]) async -> Bool = { products in
+            guard let subscription = products.compactMap(\.subscription).first else { return false }
+            return await subscription.isEligibleForIntroOffer
+        }
+    ) {
+        self.fetchProducts = fetchProducts
+        self.fetchIntroEligibility = fetchIntroEligibility
+    }
 
     // MARK: - Чистые правила
 
@@ -182,7 +267,7 @@ final class PlusStore: ObservableObject {
         // `-debug-plus` показывает платное на симуляторе и при выключенном
         // «Плюсе»: иначе пейвол и косметику нельзя было бы ни собрать, ни
         // снять на снимок до 0.8.1.
-        if isDebugPlus { return false }
+        if isDebugPlus || isDebugStorefront { return false }
         #endif
         // Выключенный «Плюс» — это витрина без платного для ВСЕХ, см.
         // `PlusAvailability`.
@@ -234,7 +319,7 @@ final class PlusStore: ObservableObject {
         }
         storefrontTask = Task { [weak self] in
             for await storefront in Storefront.updates {
-                self?.applyStorefront(storefront.countryCode)
+                self?.storefrontDidChange(storefront.countryCode)
             }
         }
         // Вход в аккаунт — момент, когда накопленную привязку наконец есть
@@ -300,29 +385,40 @@ final class PlusStore: ObservableObject {
     }
 
     func loadProducts() async {
+        guard !Task.isCancelled else { return }
+        productRequestGeneration &+= 1
+        let request = productRequestGeneration
+        let country = storefrontCountry ?? "unknown"
         do {
-            let found = try await Product.products(for: Self.productIDs)
+            let found = try await fetchProducts()
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
             // Пустой ответ — это РЕЗУЛЬТАТ, а не ошибка: витрина без
             // соглашения о платных приложениях, продукт ещё не разъехался по
             // серверам Apple, схема без `.storekit`. Пейвол в этом случае
             // показывает «цены не загрузились», а не пустые карточки.
-            products = Self.productIDs.compactMap { id in found.first { $0.id == id } }
-            await refreshIntroEligibility()
-            plusLog.notice("products loaded: \(self.products.count, privacy: .public)")
+            let ordered = Self.productIDs.compactMap { id in found.first { $0.id == id } }
+            // Право на вводное предложение тоже относится к текущему
+            // аккаунту: за этим await витрина может успеть смениться ещё раз.
+            let eligible = await fetchIntroEligibility(ordered)
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
+            products = ordered
+            introEligible = eligible
+            plusLog.notice("products loaded: \(self.products.count, privacy: .public) storefront=\(country, privacy: .public)")
+            for product in ordered {
+                plusLog.notice("""
+                    product id=\(product.id, privacy: .public) \
+                    currency=\(product.priceFormatStyle.currencyCode, privacy: .public) \
+                    displayPrice=\(product.displayPrice, privacy: .public)
+                    """)
+            }
+            let missing = Self.productIDs.filter { id in !ordered.contains { $0.id == id } }
+            if !missing.isEmpty {
+                plusLog.notice("products missing: \(missing.joined(separator: ","), privacy: .public)")
+            }
         } catch {
+            guard request == productRequestGeneration, !Task.isCancelled else { return }
             plusLog.error("products failed: \(error.localizedDescription, privacy: .public)")
         }
-    }
-
-    /// Право на вводное предложение — у ГРУППЫ, а не у продукта: Apple даёт
-    /// бесплатную неделю один раз на группу подписок, и спрашивать её у
-    /// каждого тарифа отдельно бессмысленно.
-    private func refreshIntroEligibility() async {
-        guard let subscription = products.compactMap(\.subscription).first else {
-            introEligible = false
-            return
-        }
-        introEligible = await subscription.isEligibleForIntroOffer
     }
 
     // MARK: - Права
@@ -332,6 +428,7 @@ final class PlusStore: ObservableObject {
         var entitled = false
         var isTrial = false
         var expires: Date?
+        var productID: String?
 
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else {
@@ -343,7 +440,12 @@ final class PlusStore: ObservableObject {
             if let revoked = transaction.revocationDate, revoked <= Date() { continue }
 
             entitled = true
-            isTrial = Self.isIntroductory(transaction)
+            // Тариф и триал — у той строки, что кончается ПОЗЖЕ: она и есть
+            // действующая, по той же причине, по которой дата берётся поздняя.
+            if productID == nil || Self.endsLater(transaction.expirationDate, than: expires) {
+                isTrial = Self.isIntroductory(transaction)
+                productID = transaction.productID
+            }
             // Самая ПОЗДНЯЯ дата, а не последняя в перечислении: порядок
             // `currentEntitlements` Apple не обещает, а строк в группе у
             // человека, переехавшего с месячного на годовой, две — и «Плюс до
@@ -354,10 +456,11 @@ final class PlusStore: ObservableObject {
                 key: String(transaction.id), jws: result.jwsRepresentation)
         }
 
-        let renewal = await renewalSummary()
+        let renewalRead = await renewalStatus()
+        let renewal = renewalRead?.summary
         let resolved = Self.resolve(entitled: entitled, isTrial: isTrial, renewal: renewal)
 
-        // **Пустая витрина не гасит «Плюс».** `renewalSummary` начинается с
+        // **Пустая витрина не гасит «Плюс».** `renewalStatus` начинается с
         // `products`, а в самолёте `loadProducts` кидает и оставляет их
         // пустыми: у человека в `billingRetry` (где `currentEntitlements`
         // права уже не отдаёт) состояние сложилось бы в `.none` — то есть
@@ -369,6 +472,11 @@ final class PlusStore: ObservableObject {
         }
 
         expiresAt = expires
+        currentProductID = productID
+        willAutoRenew = renewalRead?.willAutoRenew
+        // Запоминаем, пока Apple ещё называет дату: при `.expired` она уже
+        // молчит, а показать окончание надо именно тогда.
+        if let expires { lastKnownExpiry = expires }
         state = resolved
         #if DEBUG
         // Флаг снимков платного держится ЗДЕСЬ, а не в `PlusAccess.init`:
@@ -377,10 +485,22 @@ final class PlusStore: ObservableObject {
         if Self.isDebugPlus { state = .active }
         #endif
         PlusAccess.shared.isPlus = isPlus
+        SettingsManager.shared.restoreRetainedCosmetics(isPlus: isPlus)
+        // Право приехало — ждать больше нечего. Одобренный Ask To Buy доезжает
+        // через `Transaction.updates` и попадает сюда же.
+        if isPlus { awaitingApproval = false }
         plusLog.notice("""
             state=\(self.state.rawValue, privacy: .public) \
             entitled=\(entitled, privacy: .public) trial=\(isTrial, privacy: .public)
             """)
+    }
+
+    /// Кончается ли строка строго позже уже найденной. Без даты не позже —
+    /// дата у подписки есть всегда, и строка без неё не может быть «главнее».
+    nonisolated static func endsLater(_ candidate: Date?, than current: Date?) -> Bool {
+        guard let candidate else { return false }
+        guard let current else { return true }
+        return candidate > current
     }
 
     /// Поздняя из двух дат; `nil` не считается датой вовсе.
@@ -402,10 +522,29 @@ final class PlusStore: ObservableObject {
         return transaction.offerType == .introductory
     }
 
-    private func renewalSummary() async -> RenewalSummary? {
+    /// Статус группы одним запросом: пересказ и «продлится ли сама».
+    ///
+    /// `willAutoRenew` берётся у той строки группы, что сейчас живая
+    /// (`subscribed`/грейс): у переехавшего с месячного на годовой их две, и
+    /// отменённая старая не должна сказать «продление отключено» про новую.
+    private func renewalStatus() async -> (summary: RenewalSummary?, willAutoRenew: Bool?)? {
         guard let subscription = products.compactMap(\.subscription).first else { return nil }
         guard let statuses = try? await subscription.status else { return nil }
-        return Self.summarize(statuses.map(\.state))
+        let live = statuses.filter {
+            $0.state == .subscribed || $0.state == .inGracePeriod || $0.state == .inBillingRetryPeriod
+        }
+        let renews: [Bool] = live.compactMap {
+            guard case .verified(let info) = $0.renewalInfo else { return nil }
+            return info.willAutoRenew
+        }
+        return (Self.summarize(statuses.map(\.state)), Self.autoRenews(renews))
+    }
+
+    /// Продлится ли подписка, если живых строк несколько. Хоть одна
+    /// продлевается — продлевается: PRO не кончится. Ни одной проверенной —
+    /// `nil`, а не «нет»: молчание Apple не означает отмену.
+    nonisolated static func autoRenews(_ live: [Bool]) -> Bool? {
+        live.isEmpty ? nil : live.contains(true)
     }
 
     // MARK: - Покупка
@@ -438,6 +577,7 @@ final class PlusStore: ObservableObject {
             case .pending:
                 // Ask To Buy: вердикт приедет в `Transaction.updates`.
                 plusLog.notice("purchase pending")
+                awaitingApproval = true
                 return .pending
             @unknown default:
                 return .failed(PurchaseError.unknownResult)
@@ -531,19 +671,44 @@ final class PlusStore: ObservableObject {
         applyStorefront(await Storefront.current?.countryCode)
     }
 
+    /// Смена страны меняет и каталог. Иначе PRO уже виден на новой витрине,
+    /// а пейвол продолжает продавать объекты Product с ценами прежней.
+    /// Задачу можно дождаться; слушатель остаётся свободен для следующей
+    /// смены страны, даже если запрос к StoreKit ещё не закончен.
+    @discardableResult
+    func storefrontDidChange(_ code: String?) -> Task<Void, Never>? {
+        guard applyStorefront(code) else { return nil }
+        storefrontProductsTask?.cancel()
+        let task = Task<Void, Never> { [weak self] in
+            await self?.loadProducts()
+        }
+        storefrontProductsTask = task
+        return task
+    }
+
     /// `nil` — это «не знаю», а НЕ «витрина сменилась на разрешающую».
     /// `Storefront.current` умеет промолчать офлайн, и сброс на этом молчании
     /// открывал бы платное на витрине, которая его не продаёт, — на всю
     /// сессию. Поэтому известное значение переживает молчание и запоминается
     /// до следующего запуска.
-    private func applyStorefront(_ code: String?) {
+    @discardableResult
+    private func applyStorefront(_ code: String?) -> Bool {
         guard let code else {
             plusLog.notice("storefront unknown — keeping last known")
-            return
+            return false
+        }
+        let changed = storefrontCountry != code
+        if changed {
+            // Стираем старую цену ДО открытия витрины. Номер запроса
+            // защищает и от ответов, которые пережили отмену задачи.
+            productRequestGeneration &+= 1
+            products = []
+            introEligible = false
         }
         storefrontCountry = code
         UserDefaults.standard.set(code, forKey: PlusAccess.storefrontKey)
         PlusAccess.shared.storefrontHidesPlus = Self.hidesPlus(countryCode: code)
         plusLog.notice("storefront=\(code, privacy: .public)")
+        return changed
     }
 }

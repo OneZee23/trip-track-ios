@@ -232,6 +232,32 @@ enum Measure {
         number(unit.elevation(fromMetres: metres), style: .grouped, unit: unit, lang: lang).text
     }
 
+    // MARK: - Радиус
+
+    /// «500 м» / «1 640 ft» — радиус приватной зоны у дома (0.8.2).
+    ///
+    /// Своя функция, а не `elevation`, хотя печатают они сегодня одинаково.
+    /// Урок 0.6.7 записан в CLAUDE.md буквой: высоту печатала функция про
+    /// ПРОБЕГ, и конверсия, вставленная в неё «заодно», увезла бы метры в
+    /// мили молча, без единой ошибки компилятора. Функция формата, названная
+    /// по одной величине, но зовомая для двух, — это уже баг, просто ещё не
+    /// сработавший.
+    ///
+    /// Шаги радиуса хранятся В МЕТРАХ и не переводятся (200/500/1000 — это
+    /// контракт `HomeSettings.Radius` и ключ в `UserDefaults`); переводится
+    /// только показ, и круглыми в футах числа быть не обязаны — настоящая
+    /// обратная связь здесь круг на карте, а не цифра.
+    static func radius(
+        metres: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language
+    ) -> String {
+        let shown = number(unit.elevation(fromMetres: metres), style: .grouped, unit: unit, lang: lang)
+        let symbol = AppStrings.unitElevationShort(
+            lang, unit: unit, value: shown.value, fractionDigits: shown.fractionDigits)
+        return "\(shown.text) \(symbol)"
+    }
+
     // MARK: - Числа
 
     /// Напечатанное число вместе с тем, что о нём нужно знать подписи: каким

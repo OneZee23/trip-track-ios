@@ -44,8 +44,16 @@ final class BluetoothDetector: NSObject, ObservableObject {
             return
         }
         btLog.notice("[bt.start_monitor]")
+        // ВОССТАНОВЛЕНИЯ СОСТОЯНИЯ ЗДЕСЬ БОЛЬШЕ НЕТ, и это не оптимизация.
+        //
+        // `CBCentralManagerOptionRestoreIdentifierKey` работает только вместе
+        // с фоновым режимом `bluetooth-central`, а он снят 30 сентября 2026
+        // после отказа ревью 2.5.4 (см. комментарий в `Info.plist`). Оставить
+        // ключ значило бы просить у системы то, на что у приложения нет права.
+        //
+        // Потери нет: BLE-сканирование живёт на переднем плане — лист выбора
+        // магнитолы, — а машину ловит аудио-маршрут, которому фон не нужен.
         centralManager = CBCentralManager(delegate: self, queue: nil, options: [
-            CBCentralManagerOptionRestoreIdentifierKey: "com.onezee.TripTrack.bluetooth",
             CBCentralManagerOptionShowPowerAlertKey: false
         ])
     }
@@ -223,15 +231,11 @@ extension BluetoothDetector: CBCentralManagerDelegate {
         }
     }
 
-    // MARK: - State Restoration
+    // MARK: - Восстановления состояния НЕТ
 
-    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        let peripherals = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]) ?? []
-        btLog.notice("[bt.willRestoreState] restored_peripherals=\(peripherals.count, privacy: .public)")
-        for peripheral in peripherals {
-            btLog.notice("[bt.willRestoreState.peripheral] name=\"\(peripheral.name ?? "<nil>", privacy: .public)\" uuid=\(peripheral.identifier.uuidString, privacy: .public)")
-            monitoredPeripherals[peripheral.identifier] = peripheral
-            peripheral.delegate = nil
-        }
-    }
+    // `centralManager(_:willRestoreState:)` удалён вместе с фоновым режимом
+    // `bluetooth-central` (отказ ревью 2.5.4 по 0.8.2, 30 сентября 2026).
+    // Система зовёт его только у приложения с этим режимом, то есть здесь он
+    // не мог бы сработать ни разу — а оставленный, обещал бы читающему
+    // возможность, которой у приложения больше нет.
 }

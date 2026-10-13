@@ -18,6 +18,9 @@ struct TripDetailView: View {
     /// through `Trip(social:)`. A trip of our own ignores it and reads the
     /// local record, which has the full track the server does not send.
     var social: SocialFeedTrip?
+    /// Metadata already visible in the history card, with no synchronous
+    /// full-track read on a tap. It is replaced by the authoritative load.
+    var preview: Trip? = nil
     /// The server's copy of someone else's trip as of the last pull-to-refresh.
     /// `social` is what we arrived holding and cannot be written back to (it is
     /// the caller's value); this is where a re-read lands.
@@ -39,6 +42,7 @@ struct TripDetailView: View {
     /// serves the points; this is where they land.
     @State private var remoteTrack: [SocialTrackPoint] = []
     @State private var trip: Trip?
+    @State private var openingTransitionFinished = false
     /// Photos of someone else's trip live on the server, not in Documents.
     @State private var remotePhotos: [SocialTripPhoto] = []
     /// Ours to edit, delete, publish and photograph. Decided at load: a trip
@@ -85,14 +89,9 @@ struct TripDetailView: View {
     @State private var toastItem: ToastItem?
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
-    /// Per-trackpoint timestamps for time-driven route playback (the
-    /// car lingers in traffic, zips on the highway). Empty when the
-    /// trip only has a preview polyline — playback falls back to a
-    /// uniform-speed crawl in that case.
-    @State private var cachedTimestamps: [Date] = []
-    /// Downsampled (≤300 pts) coords/speeds/timestamps for the poster hero
-    /// canvas + playback. The canvas repaints at display-link rate during
-    /// «Прожить заново», so it must never chew through raw 10k-point tracks.
+    /// Shape selection happens on data load, never during map expansion.
+    @State private var localReplayInput = TripReplayInput.empty
+    @State private var remoteReplayInput = TripReplayInput.empty
     /// Downsampled (≤200 pts) chart series — empty when the trip carries
     /// no full trackPoints (sync-pulled preview-only trips) so the chart
     /// sections hide themselves.
@@ -105,6 +104,12 @@ struct TripDetailView: View {
     @State private var cachedStoppedTime: TimeInterval = 0
     @State private var cachedElevationGain: Double = 0
     @State private var cachedMaxAltitude: Double = 0
+    /// Высоту приложение действительно измерило: трек не плоский (то же
+    /// условие, что прячет график) и значения не пришли пустыми. Нет —
+    /// плиток высоты нет вовсе: «+0 м» на плоском треке и у чужой поездки
+    /// старого клиента было бы обещанием измерения, которого не было (то же
+    /// правило, по которому у вписанной поездки нет «Макс.»).
+    @State private var hasElevation = false
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
@@ -117,6 +122,23 @@ struct TripDetailView: View {
     /// «Вы ехали этот отрезок 3 раза» — по проездам обоих мест отрезка.
     /// Ключ — id отрезка; считается на загрузке, как `placeChips`, не в `body`.
     @State private var segmentHistory: [UUID: [TimeInterval]] = [:]
+    /// Раскладка энергии этой поездки (0.8.3).
+    ///
+    /// Живёт в состоянии, а не считается в `body`: гибриду нужны СОСЕДНИЕ
+    /// поездки того же дня (запас хода тратится по дню), а это запрос в базу —
+    /// в `body`, который перерисовывается на каждый кадр, ему не место. Тот же
+    /// приём, что у `placeChips` и `segmentHistory`.
+    @State private var energyEstimate: EnergyEstimate?
+    /// Выбранный режим энергии — СВОИМ состоянием экрана, а не полем внутри
+    /// `trip`.
+    ///
+    /// Так же, как заголовок и описание, которые экран правит своими
+    /// `@State`-строками: `trip` тут снимок загрузки, и правка поля внутри
+    /// него до экрана не доезжает — проверено кадром (зонд показывал
+    /// `b:auto-a:auto` сразу после присваивания). Из базы значение приходит
+    /// один раз, на загрузке; дальше выбором командует экран, а базу
+    /// обновляет `setEnergyMode`.
+    @State private var energyMode: TripEnergyMode = .auto
     /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
     @State private var showJourneyComposer = false
     /// Открытое путешествие этой поездки — пушится в тот же стек.
@@ -128,6 +150,13 @@ struct TripDetailView: View {
     /// Отметки с подписью и миниатюрой прикреплённого снимка — для карты.
     @State private var checkpointMarkers: [CheckpointMarker] = []
     @State private var pinsTask: Task<Void, Never>?
+    /// Invalidates photo work when a refreshed trip replaces the route under
+    /// the same id. Comparing whole tracks after every thumbnail would be O(n).
+    @State private var photoGeometryRevision = 0
+    private struct PhotoPinsInputKey: Equatable {
+        let geometryRevision: Int
+        let photos: [TripPhoto]?
+    }
     /// Лента «Моменты» — отметки и стопки снимков по порядку дороги.
     @State private var tripMoments: [TripMoment] = []
     /// Чипы мест у отметок (0.6.8) — ключ id отметки; только у своих поездок:
@@ -147,8 +176,9 @@ struct TripDetailView: View {
     @State private var checkpointPhotoLinks: [UUID: [TripPhoto]] = [:]
     /// 0 while the map fills the hero, 1 once it has scrolled away — drives
     /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
-    /// it lands here (see `DetailScrollOffsetKey`'s handler).
+    /// it lands here (see `heroScrolled`).
     @State private var heroProgress: Double = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Bumped by pull-to-refresh; the comments section reloads on change.
     @State private var refreshToken = 0
     /// Fix 3: confirmation for a companion leaving someone else's trip.
@@ -190,10 +220,6 @@ struct TripDetailView: View {
     /// два её представления, а не две карты: см. `TripMapHost`.
     @StateObject private var mapHost = TripMapHost()
     @State private var mapExpansion: MapExpansionState = .collapsed
-    /// Рамка карты-героя в координатах окна, снятая в момент раскрытия.
-    /// Считается с самой `MKMapView`, а не через `preference`: та
-    /// пересчитывалась бы на каждый кадр прокрутки ради числа, нужного раз.
-    @State private var heroMapFrame: CGRect = .zero
     /// Безопасная зона окна, снятая в момент раскрытия.
     ///
     /// Спрашивать её у ключевого окна на каждом проходе `body` нельзя: на
@@ -201,8 +227,7 @@ struct TripDetailView: View {
     /// 44 pt вверх и подсказка легла на кнопку закрытия. Окно карты в этот
     /// момент известно точно и больше не меняется.
     @State private var mapWindowSafeArea: UIEdgeInsets = .zero
-    /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумается
-    /// ровно дважды на раскрытие: когда кадр приехал и когда вернулся.
+    /// Requests a fit at the first valid fullscreen/hero size on transfer.
     @State private var mapFitTick = 0
     /// Drives the «Прожить заново» CTA on the poster. Owned via
     /// `@StateObject` so the timer survives view re-renders and is
@@ -227,7 +252,7 @@ struct TripDetailView: View {
     /// routes guests here instead of letting them post into USER_NOT_AUTH.
     @State private var signInPrompt: SignInPromptSheet.Action?
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorScheme) private var inheritedScheme
     /// Человек попросил меньше движения — раскрытие карты становится
     /// кроссфейдом на месте. Читается из окружения, а не у `UIAccessibility`:
     /// так перерисовка приходит вместе с переключением настройки.
@@ -237,6 +262,17 @@ struct TripDetailView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var themeManager: ThemeManager
     @ObservedObject private var settings = SettingsManager.shared
+
+    /// A new navigation destination can initially inherit the phone's style
+    /// before joining the overridden window. Honor the saved app theme from
+    /// its first frame, including the loading state and all child views.
+    private var scheme: ColorScheme { themeManager.preferredColorScheme ?? inheritedScheme }
+
+    private var openingPreview: Trip? {
+        if let preview, preview.id == tripId { return preview }
+        if let social, social.id == tripId { return Trip(social: social) }
+        return nil
+    }
 
     /// Poster hero: 380pt of canvas below the status bar (Figma 360×380),
     /// with the navy canvas extending up under the status bar + scrim.
@@ -314,7 +350,14 @@ struct TripDetailView: View {
     /// attached here is gone; the dark filler above the map (the reason
     /// bounce was suppressed) does that job on its own.
     private func detailScroll(trip: Trip, c: AppTheme.Colors) -> some View {
-        ScrollView { scrollContent(trip: trip, c: c) }
+        ScrollView {
+            scrollContent(trip: trip, c: c)
+                // Grows with Dynamic Type up to accessibility2. Beyond it the
+                // two-column tiles and the moments' time/node/content grid
+                // leave a one-word column on a 393 pt phone — measured on the
+                // largest size, review 11 Oct 2026.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        }
             .coordinateSpace(name: "detailScroll")
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
@@ -333,17 +376,19 @@ struct TripDetailView: View {
             heroSection(trip: trip)
                 .frame(height: posterHeight)
                 // How far the map has scrolled away, for the top bar's
-                // glass→toolbar morph. Read from a `Color.clear` in the
-                // BACKGROUND, never from inside the map's own subtree: this
-                // fires on every frame of a scroll, and the map is an
-                // `MKMapView` with a display link running.
-                .background {
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: DetailScrollOffsetKey.self,
-                            value: geo.frame(in: .named("detailScroll")).minY
-                        )
-                    }
+                // glass→toolbar morph. `onGeometryChange`, not a preference
+                // from a `GeometryReader` background: inside this ScrollView
+                // (refreshable + ScrollViewReader) the preference was
+                // delivered once, at 0, and never again while scrolling — the
+                // bar stayed transparent and the text ran under the buttons
+                // and the clock (review 11 Oct 2026, filmed on a real swipe).
+                // The closure only reads the frame; quantizing happens in
+                // `heroScrolled`, so the MKMapView body is not re-rendered
+                // per scrolled point.
+                .onGeometryChange(for: CGFloat.self) { geo in
+                    geo.frame(in: .named("detailScroll")).minY
+                } action: { minY in
+                    heroScrolled(minY)
                 }
 
             infoPanel(trip: trip, c: c)
@@ -355,6 +400,24 @@ struct TripDetailView: View {
                 .frame(height: posterHeight + 1000)
                 .offset(y: -1000)
         }
+    }
+
+    /// The hero's top edge in scroll coordinates → the top bar's 0…1 morph.
+    /// Quantized before it reaches state: at full precision every scrolled
+    /// point re-renders a body that hosts an MKMapView.
+    private func heroScrolled(_ minY: CGFloat) {
+        let stepped = Self.heroProgress(
+            minY: minY, posterHeight: posterHeight, safeAreaTop: safeAreaTop)
+        if stepped != heroProgress { heroProgress = stepped }
+    }
+
+    /// Pure, so the bar's thresholds are tested without a ScrollView.
+    nonisolated static func heroProgress(
+        minY: CGFloat, posterHeight: CGFloat, safeAreaTop: CGFloat
+    ) -> Double {
+        let span = max(1, posterHeight - safeAreaTop - 52)
+        let raw = min(max(-minY / span, 0), 1)
+        return (Double(raw) * 20).rounded() / 20
     }
 
     /// Pull-to-refresh: re-ask the server for everything on this screen that
@@ -535,7 +598,7 @@ struct TripDetailView: View {
         // ENDS on «delete» reads as if that were the conclusion of looking
         // back at a trip.
         items.append(.init(
-            title: AppStrings.deleteTrip(lang.language),
+            title: AppStrings.deleteTripAction(lang.language),
             systemImage: "trash",
             isDestructive: true,
             accessibilityId: "detail_action_delete"
@@ -857,6 +920,7 @@ struct TripDetailView: View {
         // выглядела бы мёртвой кнопкой. Ставишь сюда третий слой — ставь его
         // после этой строки и подумай, кто кого закрывает.
         .overlay { photoViewerLayer() }
+        .environment(\.colorScheme, scheme)
     }
 
     /// Просмотрщик снимков — слой поверх всего, включая раскрытую карту.
@@ -989,6 +1053,7 @@ struct TripDetailView: View {
             } else if let trip {
                 ScrollViewReader { proxy in
                 detailScroll(trip: trip, c: c)
+                .accessibilityIdentifier("detail_content")
                 .task { await scrollToCommentsIfRequested(proxy) }
                 .onChange(of: momentScrollTarget) { _, id in jumpToMoment(id, proxy: proxy) }
                 }
@@ -997,14 +1062,6 @@ struct TripDetailView: View {
                 // Loading skeleton
                 loadingSkeleton(c)
             }
-        }
-        .onPreferenceChange(DetailScrollOffsetKey.self) { minY in
-            // Quantized before it reaches state: at full precision every
-            // scrolled point re-renders a body that hosts an MKMapView.
-            let span = max(1, posterHeight - safeAreaTop - 52)
-            let raw = min(max(-minY / span, 0), 1)
-            let stepped = (raw * 20).rounded() / 20
-            if stepped != heroProgress { heroProgress = stepped }
         }
         // Дымка под статус-бар — НИЖЕ шапки: кружки «Назад» и «…» должны
         // остаться чёткими, приглушается карта под ними. Когда экран прокручен,
@@ -1033,13 +1090,26 @@ struct TripDetailView: View {
                             items: isOwn ? ownerActions(trip: trip) : companionActions())
                     }
                 )
+            } else if !accessDenied, !showLoadError {
+                MapChromeButton(systemImage: "chevron.left",
+                                accessibilityLabelText: AppStrings.back(lang.language)) {
+                    dismiss()
+                }
+                .accessibilityIdentifier("detail_loading_back")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 16)
+                .padding(.top, safeAreaTop + 8)
             }
         }
         .background(c.bg)
         // Tap anywhere to put the keyboard away; sending a comment
         // deliberately does NOT — that call stays the user's.
         .dismissesKeyboardOnTapAnywhere()
-        .background(NavBarKiller())
+        .background(NavBarKiller(onDidAppear: {
+            // Native push completion, not an arbitrary timer. Delay only the
+            // expensive live map; metadata and the route preview draw now.
+            openingTransitionFinished = true
+        }))
         // `.container` (not the default all-regions) — the keyboard inset
         // must survive so the comments composer rises above the keyboard.
         .ignoresSafeArea(.container)
@@ -1073,10 +1143,26 @@ struct TripDetailView: View {
         )
         .task(id: tripId) {
             if trip == nil {
-                if let local = viewModel.tripDetail(id: tripId) {
+                // Reading tens of thousands of CoreData points must not hold
+                // the navigation transition on the main actor.
+                let local = await viewModel.tripDetailAsync(id: tripId)
+                guard !Task.isCancelled else { return }
+                if let local {
+                    guard let replay = try? await TripReplayInput.prepare(points: local.trackPoints),
+                          !Task.isCancelled else { return }
                     isOwn = true
-                    trip = local
-                    buildCaches(for: local)
+                    replaceTrip(with: local)
+                    buildCaches(for: local, replay: replay)
+                    // A manual trip that arrived from the web as a summary
+                    // downloads its full route once, here, rather than in the
+                    // pull: the pull carries previews only.
+                    if let hydrated = await ManualTripTrackLoader.shared.loadIfNeeded(id: tripId),
+                       let hydratedReplay = try? await TripReplayInput.prepare(points: hydrated.trackPoints) {
+                        guard !Task.isCancelled else { return }
+                        replaceTrip(with: hydrated)
+                        isPreviewRoute = false
+                        buildCaches(for: hydrated, replay: hydratedReplay)
+                    }
                     // Fix 1: a companion's photo never gets a local CoreData
                     // row on the owner's device — `/sync/pull` deliberately
                     // excludes photos on trips the account doesn't own (by
@@ -1133,6 +1219,11 @@ struct TripDetailView: View {
         .onChange(of: trip?.isPrivate) { _, _ in
             Task { await loadReactions() }
         }
+        // Режим приезжает из базы ОДИН раз — вместе с поездкой. Дальше им
+        // командует экран (см. `energyMode`).
+        .onChange(of: trip?.energyMode, initial: true) { _, mode in
+            energyMode = mode ?? .auto
+        }
         .sheet(isPresented: $showPhotoPicker) {
             TripPhotoPicker { images in
                 pickedImages = images
@@ -1147,8 +1238,13 @@ struct TripDetailView: View {
 
     private var tripDetailBody: some View {
         tripDetailStage
-        .onChange(of: pickedImages) { handlePickedPhotos($0) }
-        .task(id: trip?.photos.count) { restartPinsRebuild() }
+        .onChange(of: pickedImages) { _, picked in handlePickedPhotos(picked) }
+        // One start after mount/update, including same-count replacements and
+        // corrected EXIF. Starting from onChange(initial:) duplicated the
+        // replacement's rebuild during the map's first render phase.
+        .task(id: PhotoPinsInputKey(geometryRevision: photoGeometryRevision, photos: trip?.photos)) {
+            restartPinsRebuild()
+        }
         // Имя отметки дозревает из геокодера уже после того, как она встала
         // на карту, — без этого маркер до выхода с экрана звался бы «#1».
         .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged)) { note in
@@ -1165,7 +1261,7 @@ struct TripDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .draftTripResolved)) { note in
             guard let id = note.object as? UUID, id == tripId else { return }
             if let local = viewModel.tripDetail(id: tripId) {
-                trip = local
+                replaceTrip(with: local)
             } else {
                 dismiss()
             }
@@ -1358,15 +1454,25 @@ struct TripDetailView: View {
 
     // MARK: - Caches
 
+    /// A full re-read may carry new route points even if its id, dates and
+    /// photos are unchanged. Every replacement invalidates pending photo work;
+    /// checking a revision after an await avoids comparing thousands of points.
+    private func replaceTrip(with updated: Trip) {
+        photoGeometryRevision &+= 1
+        pinsTask?.cancel()
+        trip = updated
+        // The keyed task schedules the next rebuild after the view updates.
+    }
+
     /// One-pass derivation of everything the body must not recompute per
     /// frame: full coords for the fullscreen map, downsampled poster/
     /// playback series, chart series and the movement/altitude stats.
-    private func buildCaches(for t: Trip) {
+    private func buildCaches(for t: Trip, replay: TripReplayInput? = nil) {
         let pts = t.trackPoints
         if pts.count > 1 {
+            localReplayInput = replay ?? TripReplayInput(points: pts)
             cachedCoordinates = pts.map(\.coordinate)
             cachedSpeeds = pts.map(\.speed)
-            cachedTimestamps = pts.map(\.timestamp)
 
             // Графики — не по всем точкам (спека §2.4). Скорость: грубые точки
             // да (доплер честен и при плохой позиции), достроенные нет — у них
@@ -1381,6 +1487,7 @@ struct TripDetailView: View {
             let altValues = elev.map(\.y)
             let flat = (altValues.max() ?? 0) - (altValues.min() ?? 0) <= 0.5
             elevationSeries = flat ? [] : elev
+            hasElevation = !flat && t.source == .recorded
             speedSeries = spd
 
             cachedDrivingTime = t.drivingTime
@@ -1399,6 +1506,8 @@ struct TripDetailView: View {
             // The poster renders the simplified polyline accent-colored;
             // charts and the moving/stops bar stay hidden (no series).
             cachedCoordinates = Trip.decodePolyline(preview)
+            hasElevation = false
+            localReplayInput = TripReplayInput(coords: cachedCoordinates, speeds: [], timestamps: [])
             cachedSpeeds = []
             // Remember WHERE these coordinates came from. A preview polyline is
             // RDP-simplified, so on a motorway its points sit kilometres apart —
@@ -1431,67 +1540,10 @@ struct TripDetailView: View {
         }
     }
 
-    /// Numbers a remote trip carries as fields rather than as track points.
-    ///
-    /// `buildCaches` derives these by walking the track; the server sends the
-    /// answers instead. Without this the movement split, the elevation gain and
-    /// the peak altitude simply vanished from someone else's trip — the four
-    /// tiles the canon puts between «время» and «топливо».
-    /// The replay canvas is documented as taking at most ~300 points and it
-    /// repaints at display-link rate; the raw track of a long drive is tens of
-    /// thousands. Computed here rather than inline in the presentation, which
-    /// the type-checker could not chew through.
-    private var replayInput: (
-        coords: [CLLocationCoordinate2D],
-        speeds: [Double],
-        timestamps: [Date]
-    ) {
-        // Someone else's trip has no local track at all, so its playable
-        // series is whatever the server sent. Already sampled there; sampled
-        // again here only if a future server ever raises its own cap.
-        if !remoteTrack.isEmpty {
-            return Self.downsampledForReplay(
-                coords: remoteTrack.map {
-                    CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-                },
-                speeds: remoteTrack.map(\.speed),
-                timestamps: remoteTrack.map(\.t)
-            )
-        }
-        return Self.downsampledForReplay(
-            coords: cachedCoordinates,
-            speeds: cachedSpeeds,
-            timestamps: cachedTimestamps
-        )
-    }
-
-    /// Путевые точки реплея — index-aligned across all three arrays.
-    ///
-    /// Потолок остаётся прежним, меняется то, на ЧТО он тратится. Раньше это
-    /// была каждая N-я точка, и пока запись шла по расстоянию, равномерность
-    /// по счёту примерно совпадала с равномерностью по карте. С 0.6.5 точки
-    /// идут по времени, и «каждая N-я» стала «каждые N секунд»: на часовой
-    /// поездке — одна точка в двенадцать секунд. Разворот в три приёма
-    /// занимает секунд двадцать, то есть две точки, — и реплей проезжал двор
-    /// по прямой, сколько бы точек мы ни записали.
-    ///
-    /// Теперь бюджет раздаётся по значимости формы: прямая берёт одну точку на
-    /// любую длину, а на серию манёвров уходит столько, сколько там углов.
-    /// Потолок не поднят намеренно — след реплея пересобирается на каждой
-    /// путевой точке, и цена растёт с их числом, а не с длиной поездки.
-    private static func downsampledForReplay(
-        coords: [CLLocationCoordinate2D],
-        speeds: [Double],
-        timestamps: [Date]
-    ) -> (coords: [CLLocationCoordinate2D], speeds: [Double], timestamps: [Date]) {
-        let limit = 300
-        guard coords.count > limit else { return (coords, speeds, timestamps) }
-        let idx = GeometryUtils.significantIndices(coords, budget: limit)
-        return (
-            idx.map { coords[$0] },
-            speeds.count == coords.count ? idx.map { speeds[$0] } : [],
-            timestamps.count == coords.count ? idx.map { timestamps[$0] } : []
-        )
+    /// Prepared values only: the fullscreen map reads this three times per
+    /// update, including updates during its expansion animation.
+    private var replayInput: TripReplayInput {
+        remoteTrack.isEmpty ? localReplayInput : remoteReplayInput
     }
 
     private func seedCaches(from social: SocialFeedTrip) {
@@ -1499,6 +1551,12 @@ struct TripDetailView: View {
         cachedStoppedTime = Double(social.stoppedTime ?? 0)
         cachedElevationGain = social.elevation ?? 0
         cachedMaxAltitude = social.maxAltitude ?? 0
+        // `nil` — клиент старше 0.5.6 высоты не слал; вписанную рукой поездку
+        // по высоте не меряли вовсе. Набор не больше полуметра — тот же
+        // плоский трек, по которому у своей поездки прячется график.
+        hasElevation = (social.source ?? .recorded) == .recorded
+            && social.maxAltitude != nil
+            && (social.elevation ?? 0) > 0.5
     }
 
     /// Draws the screen from a copy of the feed's payload — on arrival, and
@@ -1508,7 +1566,7 @@ struct TripDetailView: View {
         refreshedSocial = item
         myReaction = item.myReaction
         let adapted = Trip(social: item)
-        trip = adapted
+        replaceTrip(with: adapted)
         buildCaches(for: adapted)
         seedCaches(from: item)
     }
@@ -1545,7 +1603,12 @@ struct TripDetailView: View {
         } catch {
             return
         }
-        if let track = res.track { remoteTrack = track }
+        if let track = res.track {
+            remoteTrack = track
+            remoteReplayInput = TripReplayInput(
+                coords: track.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) },
+                speeds: track.map(\.speed), timestamps: track.map(\.t))
+        }
         // Nothing changed is the ordinary case for a refresh, and applying an
         // identical copy is not free: it rebuilds the trip, re-decodes the
         // route and hands the map a new object to fit itself to. Comparing
@@ -1741,21 +1804,41 @@ isOwn
     @ViewBuilder
     private func loadingSkeleton(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 0) {
-            c.cardAlt
+            TripDetailRoutePlaceholder(coordinates: openingPreview?.previewCoordinates ?? [])
                 .frame(height: posterHeight)
-                .shimmer()
-                .overlay { CarLoadingView() }
-            VStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 200, height: 12)
-                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 160, height: 20)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    ForEach(0..<6, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 16).fill(c.cardAlt).frame(height: 80)
+            VStack(alignment: .leading, spacing: 22) {
+                if let preview = openingPreview {
+                    VStack(alignment: .leading, spacing: 10) {
+                        titleBlock(trip: preview, c: c)
+                        chipsRow(trip: preview, c: c).allowsHitTesting(false)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 200, height: 12)
+                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 160, height: 32)
+                        RoundedRectangle(cornerRadius: 16).fill(c.cardAlt).frame(height: 28)
+                    }
+                    .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        if let preview = openingPreview {
+                            DetailStatCard(value: tripDistance(preview, lang.language).value,
+                                           unit: tripDistance(preview, lang.language).unit,
+                                           label: AppStrings.distance(lang.language), color: AppTheme.green)
+                            DetailStatCard(segments: TripDetailFormat.durationSegments(preview.duration, lang: lang.language),
+                                           label: AppStrings.duration(lang.language), color: AppTheme.accent)
+                        }
+                        ForEach(0..<4, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 14).fill(c.cardAlt).frame(height: 66)
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
             }
-            .padding(16)
-            .shimmer()
+            .padding(.horizontal, 16)
+            .padding(.top, 22)
             Spacer()
         }
     }
@@ -1765,6 +1848,7 @@ isOwn
     /// Миниатюры готовятся здесь, а не в карте: `MKAnnotationView` берёт
     /// картинку синхронно, и чтение с диска внутри него подвесило бы карту.
     private func rebuildPhotoPins() async {
+        guard !Task.isCancelled else { return }
         guard let trip, isOwn else {
             photoPins = []
             checkpointMarkers = []
@@ -1774,21 +1858,27 @@ isOwn
             return
         }
 
-        // Снимок, относящийся к отметке — прикреплённый или снятый рядом, —
-        // показывается В ней и не должен вторым экземпляром стоять там, где
-        // его поставило время съёмки.
-        let links = TripCheckpointPhotos.link(
-            checkpoints: trip.checkpoints, photos: trip.photos, points: trip.trackPoints)
-        checkpointPhotoLinks = links
-        let attached = Set(links.values.flatMap { $0 }.map(\.id))
-        let placed = TripPhotoPlacement.place(trip.photos, on: trip.trackPoints)
-            .filter { !attached.contains($0.id) }
+        // Geometry uses one immutable snapshot off the main actor. A photo's
+        // distance prefix and reading are shared by its pin and its moment.
+        let geometryRevision = photoGeometryRevision
+        guard let prepared = try? await TripPhotoPlacement.prepareAsync(
+            photos: trip.photos, checkpoints: trip.checkpoints,
+            points: trip.trackPoints, startDate: trip.startDate) else { return }
+        func isCurrentSnapshot() -> Bool {
+            !Task.isCancelled && isOwn && self.trip?.id == trip.id
+                && photoGeometryRevision == geometryRevision && self.trip?.startDate == trip.startDate
+                && self.trip?.photos == trip.photos && self.trip?.checkpoints == trip.checkpoints
+        }
+        guard isCurrentSnapshot() else { return }
+        let links = prepared.links
+        let placed = prepared.placed
         var pins: [PhotoPin] = []
         for item in placed {
             let image = await PhotoStorageService.loadThumbnail(filename: item.filename, maxSize: 80)
+            guard isCurrentSnapshot() else { return }
             // «Сколько до сюда» готовит экран: у него трек, единица и язык.
             // Карточка предпросмотра под булавкой только печатает готовое.
-            let reading = placement(ofPhoto: item.id).map {
+            let reading = prepared.fixes[item.id].map {
                 CheckpointReading.text(
                     elapsed: $0.elapsedFromStart, metres: $0.distanceFromStart,
                     unit: distanceUnit, lang: lang.language)
@@ -1798,15 +1888,17 @@ isOwn
                 accessibilityLabel: AppStrings.nounPhotos(lang.language, 1),
                 reading: reading, filename: item.filename))
         }
-        guard !Task.isCancelled else { return }
-        photoPins = pins
-
         var markers: [CheckpointMarker] = []
         for (index, checkpoint) in trip.checkpoints.enumerated() {
+            // Отметка без места на карту не идёт (0.8.3): она вернулась с
+            // сервера обрезанной приватной зоной, и рисовать её в Гвинейском
+            // заливе значило бы соврать координатой. В «Моментах» она есть.
+            guard checkpoint.hasCoordinate else { continue }
             var image: UIImage?
             let linked = links[checkpoint.id] ?? []
             if let cover = linked.first {
                 image = await PhotoStorageService.loadThumbnail(filename: cover.filename, maxSize: 120)
+                guard isCurrentSnapshot() else { return }
             }
             markers.append(CheckpointMarker(
                 id: checkpoint.id,
@@ -1823,19 +1915,22 @@ isOwn
                 timestamp: checkpoint.timestamp,
                 coverPhotoId: linked.first?.id))
         }
-        guard !Task.isCancelled else { return }
+        guard isCurrentSnapshot() else { return }
+        checkpointPhotoLinks = links
+        photoPins = pins
         checkpointMarkers = markers
 
         // Свободные снимки для ленты — те же, что стоят булавками на карте,
         // но с «сколько до сюда»: ленте нужны время и километры, не координата.
+        let photosByID = Dictionary(trip.photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let loose: [TripMoments.PlacedPhoto] = placed.compactMap { item in
-            guard let photo = trip.photos.first(where: { $0.id == item.id }),
-                  let fix = placement(ofPhoto: item.id) else { return nil }
+            guard let photo = photosByID[item.id], let fix = prepared.fixes[item.id] else { return nil }
             return TripMoments.PlacedPhoto(photo: photo, fix: fix)
         }
         tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
         reloadPlaceChips()
         reloadSegmentHistory()
+        reloadEnergy()
         // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
         // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
         // Один раз: иначе каждый повторный rebuildPhotoPins() отправлял бы
@@ -2021,6 +2116,42 @@ isOwn
         }
     }
 
+    /// Раскладка энергии: киловатт-часы, литры и деньги этой поездки (0.8.3).
+    ///
+    /// Считается здесь, рядом с `reloadPlaceChips` и по тем же поводам.
+    /// Гибриду нужен ДЕНЬ: запас хода тратится по порядку старта, и соседние
+    /// поездки той же машины за тот же календарный день меняют ответ. Выборка
+    /// маленькая (поездки одного дня, без точек трека), но это всё равно
+    /// запрос в базу, и в `body` ему не место.
+    ///
+    /// У машины на топливе и у электромобиля дня не существует — там ответ
+    /// зависит только от самой поездки, и лишнего запроса нет.
+    private func reloadEnergy() {
+        guard let trip, let vid = trip.vehicleId,
+              let vehicle = settings.vehicles.first(where: { $0.id == vid }),
+              // Сто метров — та же граница «ехали или маневрировали», что
+              // стояла у прежнего топливного блока.
+              trip.distance > 100 else { energyEstimate = nil; return }
+
+        guard vehicle.powertrain == .pluginHybrid else {
+            energyEstimate = EnergyEstimate.resolve(
+                vehicle: vehicle, metres: trip.distance,
+                avgSpeedMS: trip.averageSpeed, mode: energyMode)
+            return
+        }
+
+        // День — КАЛЕНДАРНЫЙ и по СТАРТУ; правило и запрос живут во
+        // вью-модели (спека §3.2).
+        var sameDay = viewModel.tripsOfSameDay(as: trip, vehicleId: vid)
+        // У СВОЕЙ поездки режим берётся с экрана, а не из выборки: в базе он
+        // уже лежит правильный, но порядок «записали — перечитали» не должен
+        // решать, что человек увидит после нажатия.
+        if let index = sameDay.firstIndex(where: { $0.id == trip.id }) {
+            sameDay[index].energyMode = energyMode
+        }
+        energyEstimate = EnergyEstimate.day(vehicle: vehicle, trips: sameDay)[trip.id]
+    }
+
     /// Перестроение булавок и маркеров — всегда одно, последнее. Две задачи
     /// подряд заканчиваются в случайном порядке, и первая, дольше грузившая
     /// миниатюры, переписала бы свежий результат второй удалённой отметкой.
@@ -2047,6 +2178,8 @@ isOwn
                     // это моргание, которое видно глазом.
                     heroSnapshot(c)
                 } else if cachedCoordinates.count > 1 {
+                    ZStack {
+                    if openingTransitionFinished {
                     RouteMapView(
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
@@ -2068,20 +2201,28 @@ isOwn
                             Haptics.selection()
                             momentScrollTarget = id
                         },
-                        // Our own territory fog has no business over someone
-                        // else's route.
-                        fogCutoffDate: trip.endDate,
-                        showsFog: isOwn,
+                        // Detail isolates this trip. The historical exploration
+                        // layer also draws other trips and belongs in the atlas.
+                        showsFog: false,
+                        elevationStyle: .flat,
                         treatAsPreview: isPreviewRoute,
                         // Слот героя — единственная карта, которая обязана
                         // ПЕРЕсчитывать кадр на каждую смену размера: она
                         // всегда показывает маршрут целиком, а свой размер
                         // получает последней, уже после того как экран
                         // заказал подгонку.
+                        animatesFit: false,
                         refitsOnResize: true,
                         host: mapHost,
                         fitTick: mapFitTick
                     )
+                    }
+                    if !mapHost.hasRenderedRoute {
+                        TripDetailRoutePlaceholder(coordinates: localReplayInput.coords)
+                            .transition(.opacity)
+                    }
+                    }
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: mapHost.hasRenderedRoute)
                 } else {
                     c.cardAlt
                         .overlay {
@@ -2128,59 +2269,33 @@ isOwn
         }
     }
 
-    /// Раскрыть карту: она не пересоздаётся и не открывается шторкой, а
-    /// переезжает из слота героя в слой поверх экрана и растёт до его
-    /// размера одной пружиной.
-    ///
-    /// Ни одного `Task.sleep` здесь нет и быть не может (CLAUDE.md, «Анимацию
-    /// можно прервать»): цепочку из сна нечем отменить, она доигрывает на
-    /// ушедшем экране и пишет в его `@State`. Фазы ведёт состояние:
-    /// монтирование — сам слой (`onAppear`), рост — `withAnimation` с
-    /// `completionCriteria`, хром — `.animation(_:value:)` с задержкой внутри
-    /// `FullscreenMapSheet`. Второй тап прерывает любую из них.
+    /// Transfer the existing map at its destination size, then crossfade.
+    /// Animating MapKit's bounds reruns tile/layout work on every frame.
     private func expandMap() {
         guard mapExpansion == .collapsed else { return }
-        heroMapFrame = heroMapFrameInWindow() ?? .zero
         mapWindowSafeArea = mapHost.mapView?.window?.safeAreaInsets ?? mapWindowSafeArea
         mapHost.captureSnapshot()
         mapHost.activePresentation = .fullscreen
-        // ВНЕ анимации: этот переход меняет ветку `if` в слоте героя (живая
-        // карта → снимок) и монтирует слой. Анимированная смена ветки держала
-        // бы в дереве ДВА представления одной `MKMapView` разом — второе
-        // отбирало бы её у первого прямо посреди перехода.
         mapExpansion = .expanding
     }
 
-    /// Слой встал в дерево — можно расти. Толчок даёт сам слой, а не таймер:
-    /// пружине нужно от чего оттолкнуться, а «от чего» появляется ровно
-    /// тогда, когда кадр карты получил свои границы.
     private func mapLayerDidMount() {
         guard mapExpansion == .expanding else { return }
-        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion),
-                      completionCriteria: .logicallyComplete) {
+        // A pending fit waits for the new slot's first usable bounds. It is
+        // instantaneous so there is no second camera flight after the fade.
+        mapFitTick += 1
+        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion)) {
             mapExpansion = .expanded
-        } completion: {
-            guard mapExpansion == .expanded else { return }
-            // Подгонка камеры — только на приехавшем кадре: MapKit вписывает
-            // маршрут в ТЕКУЩИЕ границы вида.
-            mapFitTick += 1
         }
     }
 
-    /// Закрыть: хром гаснет первым (задержку снимает сам лист), карта
-    /// возвращается в рамку героя, и только приехав перестаёт быть
-    /// полноэкранной.
     private func collapseMap() {
         guard mapExpansion == .expanded else { return }
-        // Рамка переснимается: поворот экрана или перекладка, пока карта была
-        // раскрыта, сделали прежнюю неверной, и карта уехала бы мимо слота.
-        heroMapFrame = heroMapFrameInWindow() ?? heroMapFrame
         withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion),
                       completionCriteria: .logicallyComplete) {
             mapExpansion = .collapsing
         } completion: {
             guard mapExpansion == .collapsing else { return }
-            // Снова ВНЕ анимации — по той же причине, что и монтирование.
             mapHost.activePresentation = .hero
             mapExpansion = .collapsed
             mapFitTick += 1
@@ -2188,59 +2303,34 @@ isOwn
         }
     }
 
-    /// Рамка карты-героя в координатах окна — спрашивается у самой карты.
-    private func heroMapFrameInWindow() -> CGRect? {
-        guard let map = mapHost.mapView, let window = map.window else { return nil }
-        return map.convert(map.bounds, to: window)
-    }
-
-    /// Слой полноэкранной карты. Живёт в корне экрана (`body`), а не в
-    /// прокрутке: накладка растягивается по виду, который меняет, и
-    /// повешенная на секцию она получила бы рамку этой секции.
+    /// The live map has stable fullscreen bounds throughout the fade. The
+    /// hero snapshot remains underneath until the map returns to its slot.
     @ViewBuilder
     private func fullscreenMapLayer() -> some View {
         if mapExpansion.isPresented {
-            GeometryReader { geo in
-                let here = geo.frame(in: .global)
-                let full = CGRect(origin: .zero, size: geo.size)
-                let hero = heroMapFrame == .zero
-                    ? full
-                    : heroMapFrame.offsetBy(dx: -here.minX, dy: -here.minY)
-                // Reduce Motion: кадр сразу полноэкранный и НЕ едет вовсе —
-                // меняется одна прозрачность, то есть кроссфейд на месте.
-                let target = (mapExpansion.fillsScreen || reduceMotion) ? full : hero
-                fullscreenMapSheet()
-                    .frame(width: max(1, target.width), height: max(1, target.height))
-                    .clipped()
-                    .position(x: target.midX, y: target.midY)
-                    .opacity(reduceMotion && !mapExpansion.fillsScreen ? 0 : 1)
-                    .onAppear { mapLayerDidMount() }
-            }
-            .ignoresSafeArea()
-            // Свайп от левого края не уводит с экрана, пока карта раскрыта:
-            // слой живёт ровно столько, сколько раскрытие, и его уход
-            // возвращает жест обратно.
-            .background(MapPopGestureGate())
-            // Глифы статус-бара над ночной картой у человека со СВЕТЛОЙ темой
-            // оставались тёмными: перекрасить их можно только
-            // `.preferredColorScheme`, а тот уходит до контроллера ВСЕГО
-            // экрана и красит страницу под картой (с видимой вспышкой на
-            // сворачивании). Прячем вместо того, чтобы красить, — тем же
-            // способом, каким это давно делает просмотрщик снимков.
-            .statusBarHidden(true)
-            // Тёмная схема — только у СВОЕЙ ветки.
-            //
-            // Раньше лист звал `.preferredColorScheme(.dark)`, и это было
-            // верно, пока он был отдельной презентацией. Слоем внутри экрана
-            // тот же модификатор уходит до контроллера ВСЕГО экрана поездки:
-            // на светлой теме страница под картой перекрашивалась в тёмную, а
-            // на сворачивании возвращалась отдельным кадром — видимая вспышка.
-            .environment(\.colorScheme, showsFogOnMap ? .dark : scheme)
+            fullscreenMapSheet()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .opacity(mapExpansion.isVisible ? 1 : 0)
+                .onAppear { mapLayerDidMount() }
+                .ignoresSafeArea()
+                // Свайп от левого края не уводит с экрана, пока карта раскрыта:
+                // слой живёт ровно столько, сколько раскрытие, и его уход
+                // возвращает жест обратно.
+                .background(MapPopGestureGate())
+                // Глифы статус-бара над ночной картой у человека со СВЕТЛОЙ темой
+                // оставались тёмными: перекрасить их можно только
+                // `.preferredColorScheme`, а тот уходит до контроллера ВСЕГО
+                // экрана и красит страницу под картой (с видимой вспышкой на
+                // сворачивании). Прячем вместо того, чтобы красить, — тем же
+                // способом, каким это давно делает просмотрщик снимков.
+                .statusBarHidden(true)
+                // Keep the hero and fullscreen in the same theme. A presentation-
+                // wide preferredColorScheme would recolor the page beneath the
+                // map and flash when collapsing it.
+                .environment(\.colorScheme, scheme)
         }
     }
-
-    /// Лежит ли на карте свой туман — от этого и ночная карта, и тёмный хром.
-    private var showsFogOnMap: Bool { isOwn }
 
     /// Та же раскладка, что открывалась шторкой, — только теперь она слой
     /// внутри экрана поездки, а карта в ней общая с героем (`mapHost`).
@@ -2259,7 +2349,6 @@ isOwn
             replaySpeeds: replayInput.speeds,
             distanceMeters: trip?.distance ?? 0,
             isOwnTrip: isOwn,
-            fogCutoffDate: trip?.endDate,
             checkpointMarkers: checkpointMarkers,
             photoPins: photoPins,
             onPhotoTap: { openPhoto(id: $0) },
@@ -2268,12 +2357,14 @@ isOwn
             trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],
             tripStartDate: trip?.startDate,
             onAddCheckpoint: checkpointAdder,
-            showsFog: isOwn,
+            showsFog: false,
+            elevationStyle: .flat,
             treatAsPreview: isPreviewRoute,
             language: lang.language,
             carColorName: tripCarColorName,
             host: mapHost,
             fitTick: mapFitTick,
+            animatesFit: false,
             mapIsInteractive: mapExpansion.isInteractive,
             chromeVisible: mapExpansion.showsChrome,
             onClose: { collapseMap() },
@@ -2331,11 +2422,14 @@ isOwn
                 .minimumScaleFactor(0.6)
 
             Text(heading)
-                .font(.inter(26, weight: .bold))
+                .accessibilityIdentifier("detail_title")
+                .font(.interScaled(26, weight: .bold, relativeTo: .title))
                 .tracking(-0.52)
                 .foregroundStyle(c.text)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
+                // Grows with Dynamic Type and wraps, instead of shrinking back
+                // to the size the person asked the system to enlarge.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
                 .multilineTextAlignment(.leading)
         }
     }
@@ -2361,12 +2455,19 @@ isOwn
             // черновика нет копии на сервере, и `deleteTrip` стирает строку
             // сразу, без надгробия.
             if isOwn, trip.isDraft {
-                DraftTripBanner(tripId: trip.id) { showDeleteConfirm = true }
+                DraftTripBanner(tripId: trip.id,
+                                onDelete: { showDeleteConfirm = true },
+                                onConfirmed: { dismiss() })
             }
 
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
                 statsGrid(trip: trip, c: c)
+                    .accessibilityIdentifier("detail_stats")
+                // Строка «Как ехал» — только у СВОЕЙ поездки плагин-гибрида:
+                // у машины на топливе и у электромобиля режим не читается
+                // вовсе, а чужую поездку править нельзя (спека §3.4).
+                energyModeRow(trip: trip, c: c)
             }
 
             // «Моменты» есть у каждой своей поездки, даже без отметок: старт и
@@ -2422,7 +2523,10 @@ isOwn
                 }
             }
 
-            if (cachedDrivingTime + cachedStoppedTime) > 0 {
+            // Только у записанной поездки: вписанная едет с постоянной
+            // скоростью по построению, и «без движения 0 сек» у неё — не
+            // измерение, а арифметика (`ManualTripBuilder`).
+            if trip.source == .recorded, (cachedDrivingTime + cachedStoppedTime) > 0 {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailSectionHeader(text: AppStrings.movingAndStops(lang.language))
                     MovingStopsCard(
@@ -2709,7 +2813,7 @@ isOwn
         // to re-read. Editing is owner-only, so in practice this always finds
         // one — the fallback is there so it can never blank the screen.
         if let local = viewModel.tripDetail(id: tripId) {
-            trip = local
+            replaceTrip(with: local)
         } else {
             trip?.title = title.isEmpty ? trip?.title : title
             trip?.tripDescription = notes
@@ -2876,43 +2980,20 @@ isOwn
                 // empty card on this screen. It used to be a lone sentence
                 // centred in an otherwise empty card, which reads as
                 // something that failed to arrive rather than as a state.
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(c.cardAlt).frame(width: 36, height: 36)
-                        Image(systemName: "heart")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
+                //
+                // The button keeps its whole label: it is the card's one
+                // action. When the line and the button do not fit side by
+                // side (German, large text), the button moves under the line
+                // instead of being cut to «Поставить…».
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        emptyReactionsLine(c)
+                        Spacer(minLength: 8)
+                        firstReactionButton
                     }
-                    Text(AppStrings.noReactionsYet(lang.language))
-                        .font(.inter(14.5))
-                        .foregroundStyle(c.textSecondary)
-                        .lineLimit(2)
-
-                    Spacer(minLength: 8)
-
-                    // Somebody has to be first, and on someone else's trip that
-                    // is the whole point of the section. Without this the «+»
-                    // only existed once a reaction was already there — you
-                    // could join a crowd but never start one.
-                    if !isOwn {
-                        Button {
-                            Haptics.tap()
-                            guard auth.isSignedIn else { signInPrompt = .react; return }
-                            showReactionPicker = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 12, weight: .bold))
-                                Text(AppStrings.beFirstToReact(lang.language))
-                                    .font(.inter(13, weight: .semibold))
-                            }
-                            .foregroundStyle(AppTheme.accent)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("reaction_add_first")
+                    VStack(alignment: .leading, spacing: 10) {
+                        emptyReactionsLine(c)
+                        firstReactionButton
                     }
                 }
                 .padding(.horizontal, 14)
@@ -2920,6 +3001,58 @@ isOwn
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .surfaceCard(cornerRadius: 14)
             }
+        }
+    }
+
+    private func emptyReactionsLine(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                Image(systemName: "heart")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            Text(AppStrings.noReactionsYet(lang.language))
+                .font(.inter(14.5))
+                .foregroundStyle(c.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Somebody has to be first, and on someone else's trip that is the whole
+    /// point of the section. Without this the «+» only existed once a
+    /// reaction was already there — you could join a crowd but never start
+    /// one. Nothing on our own trip: we do not react to ourselves.
+    @ViewBuilder
+    private var firstReactionButton: some View {
+        if !isOwn {
+            Button {
+                Haptics.tap()
+                guard auth.isSignedIn else { signInPrompt = .react; return }
+                showReactionPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
+                    // The command, not a slogan: «Будьте первым, кто
+                    // отреагирует» wrapped to three lines beside «Пока никто
+                    // не отреагировал», which already says nobody has. Same
+                    // words as the «+» in the reactions row.
+                    Text(AppStrings.addReaction(lang.language))
+                        .font(.inter(13, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .foregroundStyle(AppTheme.accent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("reaction_add_first")
         }
     }
 
@@ -3020,7 +3153,7 @@ isOwn
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let fresh = viewModel.tripDetail(id: tripId) else { continue }
                 guard fresh.isOnServer == expected else { continue }
-                trip = fresh
+                replaceTrip(with: fresh)
                 await refreshDetail()
                 return
             }
@@ -3230,7 +3363,7 @@ isOwn
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(entry.user.profileLevel)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.inter(11, weight: .medium).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer()
@@ -3322,7 +3455,7 @@ isOwn
         // nil — and assigning that blanked the whole screen the moment its
         // privacy changed.
         if let local = viewModel.tripDetail(id: tripId) {
-            self.trip = local
+            replaceTrip(with: local)
         } else {
             self.trip?.isPrivate = newValue
         }
@@ -3397,6 +3530,117 @@ isOwn
         Measure.elevationParts(metres: cachedMaxAltitude, unit: distanceUnit, lang: l)
     }
 
+    /// Строка «Как ехал» — ручная правка режима у СВОЕЙ поездки плагин-гибрида.
+    ///
+    /// Её не существует у машины на топливе и у электромобиля (там режим не
+    /// читается вовсе) и у чужой поездки (править нечего). Вопроса после
+    /// поездки нет нигде: он был бы платой вниманием за каждую поездку, а эта
+    /// строка отвечает на тот же вопрос — но только когда человеку есть что
+    /// поправить (решение владельца 25 сентября 2026, спека §1).
+    @ViewBuilder
+    private func energyModeRow(trip: Trip, c: AppTheme.Colors) -> some View {
+        if isOwn, let vid = trip.vehicleId,
+           let vehicle = settings.vehicles.first(where: { $0.id == vid }),
+           vehicle.powertrain == .pluginHybrid {
+            let l = lang.language
+            VStack(alignment: .leading, spacing: 8) {
+                // «50 км на батарее» — ответ на вопрос, который плитка
+                // киловатт-часов не задаёт. Расстояние только через `Measure`
+                // и подстановкой в строку, а не интерполяцией.
+                if let e = energyEstimate, e.electricMetres > 0 {
+                    Text(AppStrings.tripOnBattery(l, distance: Measure.distance(
+                        metres: e.electricMetres, unit: distanceUnit, lang: l)))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                }
+                HStack(spacing: 10) {
+                    Text(AppStrings.tripEnergyModeTitle(l))
+                        .font(.inter(13, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 8)
+                    energyModeSegments(trip: trip, c: c, l: l)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// Сегменты «Авто · Электро · Топливо».
+    ///
+    /// Свои, а не `Picker(.segmented)`: системный сегмент приносит свою
+    /// типографику и свои серые — ровно то, за что в этом приложении не
+    /// ставят системные модалки (CLAUDE.md, «Dialogs»).
+    private func energyModeSegments(
+        trip: Trip, c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        HStack(spacing: 2) {
+            ForEach(TripEnergyMode.allCases, id: \.self) { mode in
+                let selected = energyMode == mode
+                Button {
+                    guard !selected else { return }
+                    Haptics.tap()
+                    setEnergyMode(mode, for: trip)
+                } label: {
+                    Text(energyModeLabel(mode, l))
+                        .font(.inter(12, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? .white : c.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule().fill(selected ? AppTheme.accent : Color.clear))
+                        // Clear capsule: without a shape only the word took
+                        // the tap (the feed switcher's bug, 0.8.9).
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("trip_energy_mode_\(mode.rawValue)")
+                // Выбор обязан быть СКАЗАН, а не только показан цветом: без
+                // этого VoiceOver читает три одинаковые кнопки подряд, и какая
+                // из них сейчас стоит — неизвестно. Тем же признаком выбор
+                // виден UI-тесту (`isSelected`), то есть проверяется числом, а
+                // не глазами на кадре.
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+        }
+        .padding(2)
+        .background(c.cardAlt, in: Capsule())
+        .animation(.easeInOut(duration: 0.18), value: energyMode)
+        // Имя — на МАРКЕРЕ 1×1, а не на контейнере: `accessibilityIdentifier`
+        // на контейнере SwiftUI раздаёт ВСЕМ детям, и три кнопки режима
+        // теряют свои имена (та же ловушка, что у листа дома в 0.8.2).
+        .overlay(alignment: .topLeading) {
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityIdentifier("trip_energy_current_\(energyMode.rawValue)")
+        }
+    }
+
+    /// Имена режимов — СВОИ, короткие.
+    ///
+    /// Раньше два из трёх брались у `Powertrain`, но там теперь стоит вопрос
+    /// «на чём ездит машина» и ответы вроде «Бензин или дизель» — в сегмент
+    /// шириной в треть строки такое не влезает. Разные вопросы — разные слова.
+    private func energyModeLabel(_ mode: TripEnergyMode, _ l: LanguageManager.Language) -> String {
+        switch mode {
+        case .auto:     return AppStrings.energyModeAuto(l)
+        case .electric: return AppStrings.energyModeElectric(l)
+        case .fuel:     return AppStrings.energyModeFuel(l)
+        }
+    }
+
+    /// Правка режима — правка поездки: она уезжает в очередь синка, а плитки
+    /// пересчитываются сразу. Соседи того же дня тоже меняются (их остаток
+    /// запаса стал другим), поэтому пересчёт идёт через `reloadEnergy()`, а не
+    /// правкой одного числа.
+    private func setEnergyMode(_ mode: TripEnergyMode, for trip: Trip) {
+        energyMode = mode
+        mapVM.tripManager.setEnergyMode(mode, forTrip: trip.id)
+        reloadEnergy()
+    }
+
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {
         let l = lang.language
         return LazyVGrid(columns: [
@@ -3407,39 +3651,39 @@ isOwn
                 value: tripDistance(trip, l).value,
                 unit: tripDistance(trip, l).unit,
                 label: AppStrings.distance(l),
-                color: AppTheme.green,
-                staggerIndex: 0
+                color: c.distance
             )
+            // Цвет — у трёх главных величин и только у них, как на финише:
+            // дистанция зелёная, средняя синяя, максимум красный. Время —
+            // чернилами («time is neutral dark, not accent», Figma 147:1190),
+            // и вторичное тоже: синее «В движении» читалось скоростью, а
+            // зелёный набор высоты — дистанцией.
             DetailStatCard(
                 segments: TripDetailFormat.durationSegments(trip.duration, lang: l),
                 label: AppStrings.duration(l),
-                color: AppTheme.accent,
-                staggerIndex: 1
+                color: c.text
             )
             // Movement split surfaces "actually driving" vs "stationary
             // with engine on" — the only honest answer to the recurring
             // "why does my fuel feel off in traffic?" question. Hidden
             // when the trip has no usable track-point data.
-            if (cachedDrivingTime + cachedStoppedTime) > 0 {
+            if trip.source == .recorded, (cachedDrivingTime + cachedStoppedTime) > 0 {
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(cachedDrivingTime, lang: l),
                     label: AppStrings.statMoving(l),
-                    color: AppTheme.blue,
-                    staggerIndex: 2
+                    color: c.text
                 )
                 DetailStatCard(
                     segments: TripDetailFormat.durationSegments(cachedStoppedTime, lang: l),
                     label: AppStrings.statStops(l),
-                    color: c.textSecondary,
-                    staggerIndex: 3
+                    color: c.text
                 )
             }
             DetailStatCard(
                 value: tripAvgSpeed(trip, l).value,
                 unit: tripAvgSpeed(trip, l).unit,
                 label: AppStrings.statAvg(l),
-                color: AppTheme.blue,
-                staggerIndex: 4
+                color: AppTheme.blue
             )
             // «Макс.» у вписанной рукой поездки равен средней — плитка рядом
             // со средней печатала бы то же число дважды. Её нет вовсе, а не
@@ -3450,62 +3694,69 @@ isOwn
                     value: tripMaxSpeed(trip, l).value,
                     unit: tripMaxSpeed(trip, l).unit,
                     label: AppStrings.statMax(l),
-                    color: AppTheme.red,
-                    staggerIndex: 5
+                    color: AppTheme.red
                 )
             }
-            DetailStatCard(
-                value: tripElevationGain(l).value,
-                unit: tripElevationGain(l).unit,
-                label: AppStrings.elevationGain(l),
-                color: AppTheme.green,
-                staggerIndex: 6
-            )
-            DetailStatCard(
-                value: tripMaxAltitude(l).value,
-                unit: tripMaxAltitude(l).unit,
-                label: AppStrings.maxAltitude(l),
-                color: AppTheme.teal,
-                staggerIndex: 7
-            )
+            if hasElevation {
+                DetailStatCard(
+                    value: tripElevationGain(l).value,
+                    unit: tripElevationGain(l).unit,
+                    label: AppStrings.elevationGain(l),
+                    color: c.text
+                )
+                DetailStatCard(
+                    value: tripMaxAltitude(l).value,
+                    unit: tripMaxAltitude(l).unit,
+                    label: AppStrings.maxAltitude(l),
+                    color: c.text
+                )
+            }
 
-            // Fuel consumption (if vehicle configured)
-            if let fuel = tripFuelInfo(trip) {
-                DetailStatCard(
-                    // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
-                    // prefix said "estimated", which every number on this
-                    // screen is — and it made the tile read like a warning.
-                    value: TripDetailFormat.fuelVolume(fuel.volume, lang: l),
-                    unit: fuel.volUnit,
-                    label: AppStrings.statFuel(l),
-                    color: AppTheme.yellow,
-                    staggerIndex: 8
-                )
-                DetailStatCard(
-                    value: TripDetailFormat.money(fuel.cost),
-                    unit: fuel.currency,
-                    label: AppStrings.statCost(l),
-                    color: AppTheme.accent,
-                    staggerIndex: 9
-                )
+            // Энергия поездки (0.8.3): киловатт-часы, литры и деньги.
+            // Плитка части есть, только если у части есть километры И у машины
+            // задан её расход — «не задано» не печатается как «0».
+            if let energy = tripEnergyInfo(trip) {
+                if let electricity = energy.electricity {
+                    DetailStatCard(
+                        value: TripDetailFormat.fuelVolume(electricity.kWh, lang: l),
+                        unit: AppStrings.unitKWhShort(l),
+                        label: AppStrings.statElectricity(l),
+                        color: AppTheme.teal
+                    )
+                }
+                if let fuel = energy.fuel {
+                    DetailStatCard(
+                        // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
+                        // prefix said "estimated", which every number on this
+                        // screen is — and it made the tile read like a warning.
+                        value: TripDetailFormat.fuelVolume(fuel.volume, lang: l),
+                        unit: fuel.volUnit,
+                        label: AppStrings.statFuel(l),
+                        color: AppTheme.yellow
+                    )
+                }
+                if let cost = energy.cost {
+                    DetailStatCard(
+                        value: TripDetailFormat.money(cost.amount),
+                        unit: energy.currency,
+                        label: cost.label,
+                        color: AppTheme.accent
+                    )
+                }
             }
         }
     }
 
-    private func tripFuelInfo(_ trip: Trip) -> (volume: Double, cost: Double, volUnit: String, currency: String)? {
-        let vehicle: Vehicle?
-        if let vid = trip.vehicleId {
-            vehicle = settings.vehicles.first { $0.id == vid }
-        } else {
-            vehicle = nil
-        }
-        // Сто метров — та же граница «ехали или маневрировали», что стояла
-        // здесь как «0.1 км». В метрах, потому что её сосед по строке —
-        // `trip.distance`, а не показанное число.
-        guard let v = vehicle, v.cityConsumption > 0, trip.distance > 100 else { return nil }
-        // Метры и метры в секунду: мили, протёкшие в расход, дают +60 % литров
-        // и денег молча — расстояние входит в него дважды.
-        let fuel = v.fuelCost(metres: trip.distance, avgSpeedMS: trip.averageSpeed)
+    /// Что показать в плитках энергии.
+    ///
+    /// Раскладку считает `EnergyEstimate` и держит `energyEstimate`, которую
+    /// заполняет `reloadEnergy()` — В БАЗУ ЗА ДНЁМ ХОДИТ ОНА, а не `body`:
+    /// поездкам того же дня нужен запрос, а `body` перерисовывается на каждый
+    /// кадр. Здесь остаётся только выбор единиц и подписей.
+    private func tripEnergyInfo(_ trip: Trip) -> TripEnergyTiles? {
+        guard let vid = trip.vehicleId,
+              let v = settings.vehicles.first(where: { $0.id == vid }),
+              let e = energyEstimate else { return nil }
 
         // Литры или галлоны спрашивается у МАШИНЫ ТОЙ ПОЕЗДКИ, а не у
         // настройки аккаунта. Настройка одна, машин в гараже несколько — и до
@@ -3514,18 +3765,41 @@ isOwn
         // панель — галлоны, метрическая — литры.
         let dialect = v.consumptionUnit(app: distanceUnit)
         let currency = trip.fuelCurrency ?? FuelCurrency.current
-        let volShort = dialect.volumeUnit == .gallons
-            ? AppStrings.unitGallonsShort(lang.language)
-            : AppStrings.unitLitresShort(lang.language)
 
-        // Константа галлона живёт в `ConsumptionUnit` и больше нигде: здесь
-        // стояла её ЧЕТВЁРТАЯ копия, и записана она была с обрезанной пятой
-        // цифрой — 3.78541 против точных 3.785411784.
-        let volume = dialect.volumeUnit == .gallons
-            ? fuel.liters / ConsumptionUnit.litresPerGallon
-            : fuel.liters
+        var fuel: TripEnergyTiles.Fuel?
+        if e.litres > 0 {
+            let volShort = dialect.volumeUnit == .gallons
+                ? AppStrings.unitGallonsShort(lang.language)
+                : AppStrings.unitLitresShort(lang.language)
+            // Константа галлона живёт в `ConsumptionUnit` и больше нигде:
+            // здесь стояла её ЧЕТВЁРТАЯ копия, записанная с обрезанной пятой
+            // цифрой — 3.78541 против точных 3.785411784.
+            let volume = dialect.volumeUnit == .gallons
+                ? e.litres / ConsumptionUnit.litresPerGallon
+                : e.litres
+            fuel = .init(volume: volume, volUnit: volShort)
+        }
 
-        return (volume, fuel.cost, volShort, currency)
+        let electricity: TripEnergyTiles.Electricity? = e.kWh > 0 ? .init(kWh: e.kWh) : nil
+
+        // Подпись стоимости говорит, У ЧЕГО она, когда цена есть только у
+        // одной половины: «Стоимость» рядом с одними литрами из двух частей
+        // поездки — это обещание полной суммы, которой у нас нет.
+        var cost: TripEnergyTiles.Cost?
+        if let total = e.totalCost {
+            let label: String
+            switch (e.electricCost, e.fuelCost) {
+            case (.some, .some): label = AppStrings.statCost(lang.language)
+            case (.some, .none): label = AppStrings.statCostElectricity(lang.language)
+            case (.none, .some): label = AppStrings.statCostFuel(lang.language)
+            case (.none, .none): label = AppStrings.statCost(lang.language)
+            }
+            cost = .init(amount: total, label: label)
+        }
+
+        guard fuel != nil || electricity != nil || cost != nil else { return nil }
+        return TripEnergyTiles(electricity: electricity, fuel: fuel,
+                               cost: cost, currency: currency)
     }
 
     // MARK: - Badges Section («Достижения поездки»)
@@ -3647,6 +3921,11 @@ isOwn
                     .foregroundStyle(AppTheme.accent)
             }
         }
+        // Same 44 pt target as the owner's «+».
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .padding(.trailing, -12)
+        .padding(.vertical, -12)
         .disabled(companionPhotoUpload.isUploading)
         .accessibilityIdentifier("detail_add_photo")
         .accessibilityLabel(AppStrings.addPhotos(lang.language))
@@ -3705,7 +3984,14 @@ isOwn
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 20))
                         .foregroundStyle(AppTheme.accent)
+                        // The glyph stays 20 pt; the target is 44 (it was
+                        // 23 × 23 — half a finger). The negative trailing
+                        // padding keeps the glyph on the card's right edge.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .padding(.trailing, -12)
+                .padding(.vertical, -12)
                 .accessibilityIdentifier("detail_add_photo")
                 .accessibilityLabel(AppStrings.addPhotos(lang.language))
             }
@@ -3745,21 +4031,31 @@ isOwn
                     }
                 }
             } else {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Image(systemName: "camera")
-                            .font(.system(size: 24))
-                            .foregroundStyle(c.textTertiary)
-                        Text(AppStrings.addPhotos(lang.language))
-                            .font(.inter(12))
-                            .foregroundStyle(c.textTertiary)
+                // A button, not `.onTapGesture`: the tap has to answer under
+                // the finger (press feedback), and VoiceOver has to call it a
+                // button.
+                Button {
+                    Haptics.tap()
+                    showPhotoPicker = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Image(systemName: "camera")
+                                .font(.system(size: 24))
+                                .foregroundStyle(c.textTertiary)
+                            Text(AppStrings.addPhotos(lang.language))
+                                .font(.inter(12))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(.vertical, 20)
+                    .surfaceCard(cornerRadius: 12)
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .padding(.vertical, 20)
-                .surfaceCard(cornerRadius: 12)
-                .onTapGesture { showPhotoPicker = true }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("detail_add_photo_card")
             }
         }
     }
@@ -3934,15 +4230,6 @@ private struct TripDetailJourneyDestination: ViewModifier {
     }
 }
 
-/// How far the hero has scrolled, published from a `Color.clear` behind the
-/// map (never from inside the map's own subtree — this fires on every frame
-/// of a scroll, and the hero hosts an `MKMapView` with a display link).
-struct DetailScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
 
 /// Identifiable wrapper so the reactors peek can be presented with
 /// `.sheet(item:)` off a plain emoji string.

@@ -84,7 +84,7 @@ final class RoadGapFillerTests: XCTestCase {
     }
 
     private func fills(_ entity: TripEntity) -> [TrackPointEntity] {
-        (entity.trackPoints?.array as? [TrackPointEntity] ?? []).filter(\.isInterpolated)
+        entity.orderedTrackPoints.filter(\.isInterpolated)
     }
 
     func testPlausibleRoadReplacesTheStraightFill() async throws {
@@ -97,6 +97,63 @@ final class RoadGapFillerTests: XCTestCase {
         XCTAssertTrue(fills(entity).contains { $0.longitude > TrackTestKit.origin.longitude + 0.001 },
                       "достройка ушла на дорогу")
         XCTAssertEqual(entity.distance, distanceBefore, "километры достройку не видят")
+    }
+
+    func testPausedSectionNeverRequestsARoad() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs())
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)], on: entity)
+        try pc.container.viewContext.save()
+        let router = StubRoadRouter { _, _ in self.road() }
+        let result = await filler(router).fill(tripId: try XCTUnwrap(entity.id))
+        pc.container.viewContext.refreshAllObjects()
+
+        XCTAssertEqual(result, .done)
+        XCTAssertEqual(router.calls, 0)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertEqual(entity.roadFillState, RoadFillState.done.rawValue)
+    }
+
+    func testLibraryScanDoesNotFillAnExplicitPause() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs(), processed: true)
+        CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)], on: entity)
+        entity.distance = 400
+        try pc.container.viewContext.save()
+
+        let router = StubRoadRouter { _, _ in self.road() }
+        let count = await filler(router).scanLibrary()
+        pc.container.viewContext.refreshAllObjects()
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(router.calls, 0)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertEqual(entity.distance, 400)
+    }
+
+    func testPauseMetadataArrivingDuringDirectionsPreventsApplyingTheRoad() async throws {
+        let entity = TrackTestKit.insertTrip(into: pc, points: tunnelSpecs())
+        let id = try XCTUnwrap(entity.id)
+        let pcRef = pc!
+        let router = StubRoadRouter { _, _ in
+            let context = pcRef.newBackgroundContext()
+            context.performAndWait {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                if let current = try? context.fetch(request).first {
+                    CoreDataTripRepository.setRecordingBreaks([TrackTestKit.epoch.addingTimeInterval(80)],
+                                                              on: current)
+                    try? context.save()
+                }
+            }
+            return self.road()
+        }
+        var enqueued: [UUID] = []
+        _ = await filler(router, enqueue: { enqueued.append($0) }).fill(tripId: id)
+        pc.container.viewContext.refreshAllObjects()
+
+        XCTAssertEqual(router.calls, 1)
+        XCTAssertTrue(fills(entity).isEmpty)
+        XCTAssertTrue(enqueued.isEmpty)
+        XCTAssertEqual(CoreDataTripRepository.recordingBreaks(of: entity),
+                       [TrackTestKit.epoch.addingTimeInterval(80)])
     }
 
     func testImplausibleRoadKeepsTheStraightLine() async throws {
@@ -228,7 +285,7 @@ final class RoadGapFillerTests: XCTestCase {
             .contains { $0.longitude > TrackTestKit.origin.longitude + 0.001 }, "первая дыра ушла на дорогу")
         XCTAssertTrue(fills(entity).filter { gap2Range.contains($0.timestamp ?? .distantPast) }
             .allSatisfy { abs($0.longitude - TrackTestKit.origin.longitude) < 0.0001 }, "вторая дыра осталась прямой")
-        let timestamps = (entity.trackPoints?.array as? [TrackPointEntity] ?? []).map { $0.timestamp ?? .distantPast }
+        let timestamps = entity.orderedTrackPoints.map { $0.timestamp ?? .distantPast }
         XCTAssertEqual(timestamps, timestamps.sorted(), "трек лежит по времени")
         XCTAssertNotNil(entity.previewPolyline)
 

@@ -1,5 +1,13 @@
 # App Privacy для TripTrack — готовая анкета (10 сентября 2026)
 
+> **Актуализация 9 октября 2026:** при проверке 0.8.7 в ASC всё ещё была
+> опубликована «Data Not Collected». Анкета исправлена и опубликована:
+> 15 типов (включая Purchase History), 21 сочетание целей, Linked=true,
+> Tracking=false. Точное соответствие текущему PrivacyInfo проверено через
+> ASC API. Ниже сохранён исторический аудит сентября; его формулировки
+> «сейчас» и рекомендации не являются текущим статусом. Проверки релиза —
+> [`0.8.7/candidate-76.md`](0.8.7/candidate-76.md).
+
 **Вердикт:** «Data Not Collected» неверно однозначно и было неверно ещё до Sentry. Отмечать надо **14 типов данных в 7 категориях**, все — **Linked to You**, **Tracking = No** во всех. Анкету можно исправить сегодня, без сборки и без апдейта: Apple прямо разрешает («You may update your answers at any time, and you do not need to submit an app update in order to change your answers» — [app-privacy-details](https://developer.apple.com/app-store/app-privacy-details/)).
 
 ---
@@ -52,7 +60,7 @@ ASC → App → **App Privacy** → Edit → первый вопрос «Do you 
 | 22 | Identifiers → **User ID** | ✅ **ДА** | App Functionality, **Analytics** | **Yes** | No | Apple `sub` → `account.apple_subject` (`auth.service.ts:32`); `accountId` в каждом событии Sentry (`SentryService.swift:132-142`, ставится `AuthService.swift:183`, `:967`); `user_id` в каждой строке прод-лога (`logger.module.ts:61-64`) |
 | 23 | Identifiers → **Device ID** | ✅ **ДА** | App Functionality, Analytics | **Yes** | No | `localUserId` → `device.local_user_id` (`AuthService.swift:158`, `device.entity.ts:19-20`); APNs-токен (`PushNotificationManager.swift:96-111`); `device_app_hash` = SHA-1 от IDFV в событиях Sentry (`SentryCrashMonitor_System.m:389-431`); installation-UUID Sentry (`SentryInstallation.m:26-60`) |
 | 24 | Purchases → **Purchase History** | ✅ **ДА** (с 0.8.0) | App Functionality | **Yes** | No | Подписка «Плюс»: сервер хранит строку `plus_subscription` (`product_id`, `original_transaction_id`, `expires_at`, `is_trial`, `environment` — `1792000000000-AddPlus.ts:26-30`), события `plus_event` и `account.plus_until`, всё по `account_id`. Linked — потому что `appAccountToken` в покупке это id нашего аккаунта (`TipJarService.purchaseOptions`). Донат сюда тоже входит. **Обязано совпадать с `TripTrack/PrivacyInfo.xcprivacy`** — Privacy Report Xcode собирается из манифеста, и расхождение видит машина. См. #8: платёжные РЕКВИЗИТЫ по-прежнему не собираются |
-| 25 | Usage Data → **Product Interaction** | ✅ **ДА** | App Functionality, Analytics, Product Personalization | **Yes** | No | Реакции (`SocialFeedStore.swift:445`), подписки (`SuggestedUsersCarousel.swift:137`), прочтения уведомлений (`/notifications/mark-read`) — хранятся с account_id. **Плюс** сессии Sentry (счётчик запусков): `enableAutoSessionTracking` приходит включённым (`SentryOptions.m:83`) и у нас не выключен |
+| 25 | Usage Data → **Product Interaction** | ✅ **ДА** | App Functionality, Analytics, Product Personalization | **Yes** | No | Реакции (`SocialFeedStore.swift:445`), подписки (`DiscoverView.swift`, `PublicProfileView.swift`, `NotificationsInboxView.swift` → `/social/follow`), прочтения уведомлений (`/notifications/mark-read`) — хранятся с account_id. **Плюс** сессии Sentry (счётчик запусков): `enableAutoSessionTracking` приходит включённым (`SentryOptions.m:83`) и у нас не выключен |
 | 26 | Usage Data → Advertising Data | ❌ нет | — | — | — | Рекламы нет |
 | 27 | Usage Data → **Other Usage Data** | ✅ **ДА** | App Functionality | **Yes** | No | Геймификация: уровень, XP, текущая и лучшая серия, дата последней поездки → `account.profile_level/profile_xp/current_streak/best_streak` (`AuthService.swift:648-651`, `account.entity.ts:38-48`, `SettingsSyncPayload.swift:14-18`) |
 | 28 | Diagnostics → **Crash Data** | ✅ **ДА** | App Functionality | **Yes** | No | Sentry: `SentrySDK.start` (`SentryService.swift:43`) из `TripTrackApp.swift:47`; краш-хендлер по умолчанию YES (`SentryOptions.m:68`). **Linked = Yes именно из-за** `setAccount(id:)` (`SentryService.swift:132-142`) |

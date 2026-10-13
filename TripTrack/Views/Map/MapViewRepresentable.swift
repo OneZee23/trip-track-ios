@@ -246,7 +246,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         // trip-stop clear (fog-only swap, recording=false) doesn't cry wolf.
         if self.isRecording, existingOverlays.count > 1,
            toRemoveOverlays.count == existingOverlays.count {
-            renderLog.notice("overlays full rebuild: removed=\(toRemoveOverlays.count, privacy: .public) new=\(overlays.count, privacy: .public)")
+            context.coordinator.logFirstFullOverlayRebuild(
+                removed: toRemoveOverlays.count, added: overlays.count
+            )
         }
     }
 
@@ -260,6 +262,15 @@ struct MapViewRepresentable: UIViewRepresentable {
         var restoreTrackingWork: DispatchWorkItem?
         var savedTrackingMode: MKUserTrackingMode?
         var didSendInitialRect = false
+        private var didLogFullOverlayRebuild = false
+
+        /// Keep the regression signal without filling the recording archive on
+        /// every map update and evicting GPS errors or pause/stop diagnostics.
+        func logFirstFullOverlayRebuild(removed: Int, added: Int) {
+            guard !didLogFullOverlayRebuild else { return }
+            didLogFullOverlayRebuild = true
+            renderLog.notice("overlays full rebuild (first for this map): removed=\(removed, privacy: .public) new=\(added, privacy: .public)")
+        }
 
         /// Посадка экранной вуали — та же, что у «Атласа» и у экрана поездки.
         ///

@@ -29,6 +29,15 @@ struct SettingsOptionPicker<Option: Hashable>: View {
     /// обычный жетон: у «градиента скорости» одного цвета не существует.
     var badgeTint: ((Option) -> Color?)? = nil
     let label: (Option) -> String
+    /// Строка-пояснение под названием варианта. `nil` у всего типа — листа без
+    /// пояснений (единицы, тема, язык): там вариант объясняет сам себя одним
+    /// словом, и вторая строка была бы шумом.
+    ///
+    /// Нужна там, где выбор ТЕРМИНОЛОГИЧЕН: «Плагин-гибрид» человек, у
+    /// которого он есть, может не узнать по имени, а узнаёт по описанию — «и
+    /// заправляю, и заряжаю». Подвал на этот вопрос не отвечает: он один на
+    /// весь лист, а пояснение нужно КАЖДОМУ варианту.
+    var subtitle: ((Option) -> String?)? = nil
     let onSelect: (Option) -> Void
     /// Stem for the sheet's accessibility identifiers («units_row_0»,
     /// «units_close»), so UI tests match on structure and not on a label that
@@ -37,54 +46,68 @@ struct SettingsOptionPicker<Option: Hashable>: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // MARK: - Body
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
+        // Language lists and accessibility text can exceed the sheet's
+        // maximum height. Keep the close control visible and scroll choices.
+        // Short pickers retain their original content-sized presentation.
+        let needsScroll = dynamicTypeSize.isAccessibilitySize || options.count > 8
+        Group {
+            if needsScroll {
+                VStack(spacing: 0) {
+                    grabber
+                    header(c)
+                    ScrollView {
+                        choices(c)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .background(c.card)
+                .presentationBackground(c.card)
+                .presentationDetents([.large])
+            } else {
+                VStack(spacing: 0) {
+                    grabber
+                    header(c)
+                    choices(c)
+                }
+                .contentSizedSheet(background: c.card, contentClearsHomeIndicator: true)
+            }
+        }
+        .presentationDragIndicator(.hidden)
+    }
 
+    private var grabber: some View {
+        Capsule()
+            .fill(.primary.opacity(0.18))
+            .frame(width: 34, height: 5)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+    }
+
+    private func choices(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 0) {
-            // Drawn rather than `.presentationDragIndicator(.visible)`, which
-            // floats the system's grabber over the title — same treatment the
-            // Name/About/Username editors already use.
-            Capsule()
-                .fill(.primary.opacity(0.18))
-                .frame(width: 34, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-
-            header(c)
-
-            VStack(spacing: 4) {
-                // Indexed rather than by element: a row needs to know what sits
-                // above it to decide whether it draws a separator.
+            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 12 : 4) {
                 ForEach(options.indices, id: \.self) { index in
                     row(options[index], index: index, c: c)
                 }
             }
-            // 8, not 16: the selected row's fill runs 8pt wider than the row
-            // content on each side (1685:125), so the gutter lives here and
-            // the content adds its own 8 back.
             .padding(.horizontal, 8)
+            .padding(.top, dynamicTypeSize.isAccessibilitySize ? 6 : 0)
 
             Text(footnote)
-                .font(.inter(11.5))
-                .foregroundStyle(c.textTertiary)
+                .font(.interScaled(11.5, relativeTo: .caption))
+                .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
                 .padding(.bottom, 20)
         }
-        // Canon paints this sheet white (#FFF), not the cream page ground —
-        // and it has to, or the unselected badges (`cardAlt`) sit on a
-        // near-identical warm grey and stop reading as badges at all.
-        //
-        // The 20pt under the footnote is the whole of the bottom margin: this
-        // sheet ends in a caption, so the home-indicator strip on top of it
-        // was just an empty white field the height of another row.
-        .contentSizedSheet(background: c.card, contentClearsHomeIndicator: true)
-        .presentationDragIndicator(.hidden)
     }
 
     // MARK: - Header
@@ -92,10 +115,10 @@ struct SettingsOptionPicker<Option: Hashable>: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.inter(16, weight: .bold))
+                .font(.interScaled(16, weight: .bold, relativeTo: .headline))
                 .tracking(-0.16)
                 .foregroundStyle(c.text)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
 
@@ -132,11 +155,21 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             HStack(spacing: 12) {
                 badgeView(option, isSelected: isSelected, c: c)
 
-                Text(label(option))
-                    .font(.system(size: 14.5, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label(option))
+                        .font(.interScaled(14.5, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(c.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+
+                    if let hint = subtitle?(option), !hint.isEmpty {
+                        Text(hint)
+                            .font(.interScaled(11.5, relativeTo: .caption))
+                            .foregroundStyle(c.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
 
                 Spacer(minLength: 8)
 
@@ -150,14 +183,19 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             }
             .padding(.leading, 8)
             .padding(.trailing, 16)
-            .frame(height: 44)
-            // 56 around a 44pt row: the fill bleeds 6pt past the content on
-            // both sides so the pill reads taller than the text inside it,
-            // which is what makes the current choice unmistakable at a glance.
+            // `minHeight`, а не `height`: строка с пояснением выше одной
+            // строки текста, и жёсткая высота обрезала бы её.
+            .frame(minHeight: 44)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 6 : 0)
+            // Заливка бледнеет на 6 pt за края содержимого — от этого пилюля
+            // читается выше текста внутри, и выбранный вариант виден сразу.
+            // Отрицательный отступ вместо прежних жёстких 56: у строки в 44 pt
+            // он даёт ровно те же 56, а строка с пояснением растёт вместе с
+            // ним, а не вылезает из заливки.
             .background {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? AppTheme.accentBg : Color.clear)
-                    .frame(height: 56)
+                    .padding(.vertical, -6)
             }
             .overlay(alignment: .top) {
                 if showsDivider {

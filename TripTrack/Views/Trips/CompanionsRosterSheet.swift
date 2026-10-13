@@ -345,6 +345,7 @@ struct CompanionsRosterSheet: View {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
+                        .accessibilityHidden(true)
                 }
                 Text(AppStrings.companionsInvite(lang.language))
                     .font(.inter(15, weight: .semibold))

@@ -227,7 +227,7 @@ struct AutoRecordSettingsView: View {
             AutoTripService.shared.startIfNeeded()
         } label: {
             Text(title)
-                .font(.system(size: 14, weight: isSelected ? .bold : .medium))
+                .font(.inter(14, weight: isSelected ? .bold : .medium))
                 .foregroundStyle(isSelected ? c.text : c.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
@@ -265,7 +265,7 @@ struct AutoRecordSettingsView: View {
                 )
             }
             Text(AppStrings.autoStopMinutes(l, minutes: settings.autoStopTimeout))
-                .font(.system(size: 15, weight: .bold).monospacedDigit())
+                .font(.inter(15, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.text)
                 .frame(width: 54)
             stepperButton(

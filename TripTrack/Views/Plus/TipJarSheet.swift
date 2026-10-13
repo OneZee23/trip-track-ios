@@ -18,6 +18,8 @@ struct TipJarSheet: View {
     @ObservedObject private var jar = TipJarService.shared
 
     @State private var toastItem: ToastItem?
+    /// Чаевые прошли — лист показывает «Спасибо!» (состояние 20).
+    @State private var thanked = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -45,12 +47,15 @@ struct TipJarSheet: View {
             }
             .padding(.horizontal, 16)
 
-            Text(AppStrings.tipTitle(l))
+            if thanked {
+                thanksState(c, l)
+            } else {
+            Text(AppStrings.tipsTitle(l))
                 .font(.inter(21, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.top, 2)
 
-            Text(AppStrings.tipSubtitle(l))
+            Text(AppStrings.tipsText(l))
                 .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -76,6 +81,7 @@ struct TipJarSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 26)
             }
+            }
         }
         .contentSizedSheet(background: c.bg)
         .presentationDragIndicator(.hidden)
@@ -86,7 +92,52 @@ struct TipJarSheet: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tip_jar")
         .toast(item: $toastItem)
-        .task { if jar.products.isEmpty { await jar.load() } }
+        .task { await jar.load() }
+    }
+
+    /// Состояние 20: «Спасибо!». Сердце 64 на приглушённом фоне, короткое
+    /// спасибо и — ВТОРОЙ раз, уже после списания — то же обещание, что до
+    /// него: приложение останется бесплатным. Ни одного акцентного элемента:
+    /// чаевые не продают ничего, и терракота здесь была бы обещанием.
+    private func thanksState(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(c.textSecondary)
+                .frame(width: 64, height: 64)
+                .background(Circle().fill(c.cardAlt))
+
+            Text(AppStrings.tipsThanks(l))
+                .font(.inter(21, weight: .bold))
+                .foregroundStyle(c.text)
+
+            Text(AppStrings.tipsThanksText(l))
+                .font(.inter(13))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28)
+
+            Button {
+                Haptics.tap()
+                dismiss()
+            } label: {
+                Text(AppStrings.close(l))
+                    .font(AppType.action)
+                    .foregroundStyle(c.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("tip_jar_close")
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 20)
+        .accessibilityIdentifier("tip_jar_thanks")
     }
 
     private func tipButton(_ product: Product, _ c: AppTheme.Colors) -> some View {
@@ -96,12 +147,18 @@ struct TipJarSheet: View {
                 await jar.buy(product)
                 guard jar.phase == .succeeded else { return }
                 Haptics.success()
-                toastItem = ToastItem(
-                    type: .success, message: AppStrings.tipThanks(lang.language))
+                // Состояние 20 — СОСТОЯНИЕ листа, а не тост.
+                //
+                // Тост несёт одно поле, и второе обещание («приложение
+                // останется бесплатным») в него физически не влезало: строка
+                // была переведена на тринадцать языков и не показывалась
+                // нигде (находка финального ревью). А макет и рисует здесь
+                // состояние: сердце, «Спасибо!», текст и «Закрыть».
+                thanked = true
             }
         } label: {
             HStack(spacing: 12) {
-                Text(product.displayName)
+                Text(tipTitle(product))
                     .font(.inter(14.5, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -120,5 +177,18 @@ struct TipJarSheet: View {
         .buttonStyle(PressableCardStyle())
         .disabled(jar.phase == .purchasing)
         .opacity(jar.phase == .purchasing ? 0.5 : 1)
+    }
+
+    private func tipTitle(_ product: Product) -> String {
+        switch product.id {
+        case TipJarService.tipID:
+            return AppStrings.tipsCoffee(lang.language)
+        case TipJarService.tipMediumID:
+            return AppStrings.tipsMeal(lang.language)
+        case TipJarService.tipLargeID:
+            return AppStrings.tipsFuel(lang.language)
+        default:
+            return product.displayName
+        }
     }
 }

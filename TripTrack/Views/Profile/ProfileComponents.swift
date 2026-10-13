@@ -75,7 +75,7 @@ struct ProfileStatsStrip: View {
     private func column(value: String, label: String, c: AppTheme.Colors) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                .font(.inter(17, weight: .heavy).monospacedDigit())
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -206,13 +206,17 @@ struct SettingsIconRow<Trailing: View>: View {
     var iconBg: Color = AppTheme.accentBg
     let title: String
     var action: (() -> Void)?
+    /// Values move below their label when large text needs the whole column.
+    /// Rows whose trailing slot is only a chevron can keep it alongside.
+    var stacksTrailingAtAccessibilitySize = true
     @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let row = HStack(spacing: 12) {
+        let row = HStack(alignment: .center, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(iconBg)
@@ -230,16 +234,22 @@ struct SettingsIconRow<Trailing: View>: View {
                 }
             }
             .frame(width: 30, height: 30)
+            // Decoration: the title beside it says what the row is. Without
+            // this VoiceOver read the symbol's own name first — «Выровнять по
+            // левому краю», «photo.on.rectangle».
+            .accessibilityHidden(true)
 
-            Text(title)
-                .font(.inter(14.5, weight: .semibold))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            Spacer(minLength: 8)
-
-            trailing()
+            if dynamicTypeSize.isAccessibilitySize && stacksTrailingAtAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    titleText(c)
+                    trailing()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                titleText(c)
+                Spacer(minLength: 8)
+                trailing()
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
@@ -256,6 +266,14 @@ struct SettingsIconRow<Trailing: View>: View {
         } else {
             row
         }
+    }
+
+    private func titleText(_ c: AppTheme.Colors) -> some View {
+        Text(title)
+            .font(.interScaled(14.5, weight: .semibold))
+            .foregroundStyle(c.text)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -281,12 +299,15 @@ struct SettingsRowValue: View {
     var tint: Color?
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Text(text)
-            .font(.inter(14, weight: .medium))
+            .font(.interScaled(14, weight: .medium))
             .foregroundStyle(tint ?? AppTheme.colors(for: scheme).textSecondary)
-            .lineLimit(1)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
             .truncationMode(.tail)
     }
 }

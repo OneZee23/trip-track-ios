@@ -707,12 +707,19 @@ struct SocialSuggestedUser: Codable, Hashable, Identifiable {
     /// Lifetime public mileage in km (already divided by 1000 server-side,
     /// same convention as `SocialProfileStats.totalKm`).
     let totalKm: Double?
+    /// PRO cosmetics. The server spreads its account summary into each row
+    /// (`serializeAccountSummary`), so both keys arrive; until 0.8.9 this type
+    /// dropped them and a suggested PRO driver looked free. Optional: older
+    /// servers send neither, and that is «not said», not «no subscription».
+    var isPlus: Bool? = nil
+    var avatarFrame: String? = nil
 
     /// The shared shape the rest of the social stack speaks in — navigation
     /// destinations and `PublicProfileView.preloaded` both take an author.
     var author: SocialAuthor {
         SocialAuthor(id: id, displayName: displayName,
-                     avatarEmoji: avatarEmoji, profileLevel: profileLevel)
+                     avatarEmoji: avatarEmoji, profileLevel: profileLevel,
+                     isPlus: isPlus, avatarFrame: avatarFrame)
     }
 
     var reason: SuggestionMatchReason? { SuggestionMatchReason(serverValue: matchReason) }

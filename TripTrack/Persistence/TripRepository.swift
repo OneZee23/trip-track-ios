@@ -19,7 +19,7 @@ struct TripPreviewRef: Identifiable, Equatable {
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
-    /// Черновики — для секции «Ждут подтверждения» в «Я» (спека §3.3).
+    /// Черновики — для карточки «Черновики» в «Я» и их списка (0.8.2).
     func fetchDraftTrips() -> [Trip]
     /// Свои поездки, стартовавшие внутри окна дат. См. реализацию: окно режет
     /// база, а не фильтр в памяти.
@@ -77,6 +77,7 @@ protocol TripRepository {
     func addCheckpoint(_ checkpoint: TripCheckpoint, to tripId: UUID) -> TripCheckpoint?
     /// Возвращают id поездки — чтобы вызывающий мог поставить её в очередь синка.
     @discardableResult func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) -> UUID?
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID)
     @discardableResult func deleteCheckpoint(id: UUID) -> UUID?
 
     // MARK: Отрезки между отметками
@@ -897,6 +898,24 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
+    /// Записать, как ехал плагин-гибрид в этой поездке.
+    ///
+    /// Правка режима — ПРАВКА ПОЕЗДКИ, и лечится тем же `markCheckpointsChanged`:
+    /// без флага `pendingUpload` следующий pull заменил бы локальное значение
+    /// серверным, то есть отменил бы выбор, сделанный секунду назад. В очередь
+    /// синка поездку ставит `TripManager`, как у отметок и отрезков.
+    ///
+    /// «Авто» пишется в колонку как `nil` (`TripEnergyMode.stored`): у
+    /// поездки, где выбора не делали, хранить нечего. На проводе оно поедет
+    /// строкой — см. `TripEnergyMode`.
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        guard TripEnergyMode.parse(entity.energyMode) != mode else { return }
+        entity.energyMode = mode.stored
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+    }
+
     /// Прикреплённые снимки — JSON-массивом строк в одной колонке, как
     /// `stickersJSON` у поездки: связи с `TripPhotoEntity` нет нарочно, снимок
     /// может уехать с другого телефона позже, чем отметка.
@@ -1220,10 +1239,11 @@ final class CoreDataTripRepository: TripRepository {
 
     private func tripFromEntity(_ entity: TripEntity, includeTrackPoints: Bool = true) -> Trip? {
         guard let id = entity.id, let startDate = entity.startDate else { return nil }
+        let breaks = Self.recordingBreaks(of: entity)
 
         let points: [TrackPoint]
         if includeTrackPoints {
-            points = (entity.trackPoints?.array as? [TrackPointEntity])?.compactMap { pe in
+            points = entity.orderedTrackPoints.compactMap { pe in
                 guard let pid = pe.id, let ts = pe.timestamp else { return nil }
                 return TrackPoint(
                     id: pid, latitude: pe.latitude, longitude: pe.longitude,
@@ -1231,7 +1251,7 @@ final class CoreDataTripRepository: TripRepository {
                     horizontalAccuracy: pe.horizontalAccuracy, timestamp: ts,
                     isInterpolated: pe.isInterpolated
                 )
-            } ?? []
+            }
         } else {
             points = []
         }
@@ -1304,11 +1324,31 @@ final class CoreDataTripRepository: TripRepository {
             companions: companions, isOnServer: entity.serverCreatedAt != nil,
             source: Self.origin(of: entity),
             confirmation: Self.confirmation(of: entity),
-            roadFillState: Self.roadFillState(of: entity)
+            roadFillState: Self.roadFillState(of: entity),
+            energyMode: TripEnergyMode.parse(entity.energyMode),
+            recordingBreaks: breaks
         )
     }
 
     // MARK: - Sync Helpers
+
+    static func recordingBreaks(of entity: TripEntity) -> [Date] {
+        guard let json = entity.recordingBreaksJSON,
+              let data = json.data(using: .utf8),
+              let breaks = try? JSONDecoder().decode([Date].self, from: data) else { return [] }
+        return RecordingBreaks.normalized(breaks)
+    }
+
+    /// Assignment only: the caller owns the enclosing save/transaction.
+    static func setRecordingBreaks(_ breaks: [Date], on entity: TripEntity) {
+        let normalized = RecordingBreaks.normalized(breaks)
+        guard !normalized.isEmpty,
+              let data = try? JSONEncoder().encode(normalized) else {
+            entity.recordingBreaksJSON = nil
+            return
+        }
+        entity.recordingBreaksJSON = String(data: data, encoding: .utf8)
+    }
 
     func markAllPendingUpload() {
         // Scope each batch update to the CURRENT user's localUserId so we
@@ -1351,7 +1391,8 @@ final class CoreDataTripRepository: TripRepository {
     }
 
     func applyRemoteTrip(_ p: TripSyncPayload) {
-        let entity = fetchEntity(id: p.id) ?? TripEntity(context: context)
+        let existing = fetchEntity(id: p.id)
+        let entity = existing ?? TripEntity(context: context)
         // `pendingDelete` belongs in this guard as much as `pendingUpload`.
         // 0.6.1 forces one full pull on every device, and on a full pull a
         // soft-deleted trip is still a live server row — without this it would
@@ -1366,7 +1407,15 @@ final class CoreDataTripRepository: TripRepository {
         // Копия правила `applyRemoteVehicle` для `dashboardUnits`: правка,
         // ещё не уехавшая, сильнее приехавшего ответа. Считается ДО
         // присваиваний, пока `syncStatus` ещё не переписан ниже.
-        let hasLocalEdits = entity.syncStatus == SyncStatus.pendingUpload.rawValue
+        // A freshly inserted CoreData row defaults to pendingUpload too, but
+        // carries no local edit. Otherwise its FIRST pull loses source=manual
+        // and makes a web-created route eligible for recorded-trip rewards.
+        let hasLocalEdits = existing != nil && entity.syncStatus == SyncStatus.pendingUpload.rawValue
+        // Old servers omit this field. Never erase a recorded pause merely
+        // because an older peer knows only about coordinates and timestamps.
+        if !hasLocalEdits, let breaks = p.recordingBreaks {
+            Self.setRecordingBreaks(breaks, on: entity)
+        }
         entity.id = p.id
         entity.title = p.title
         entity.tripDescription = p.description
@@ -1388,10 +1437,35 @@ final class CoreDataTripRepository: TripRepository {
         // Источник поездки (0.8.0) — тем же приёмом, что `dashboardUnits` у
         // машины: ключ отсутствует или правка ещё не уехала — не трогаем.
         if !hasLocalEdits, let remoteSource = p.source { entity.source = remoteSource.rawValue }
+        // Режим энергии (0.8.3) — тем же приёмом. Ключ пришёл, значит второй
+        // телефон имеет мнение, включая «Авто»: у этого поля отсутствие
+        // ключа и «Авто» РАЗНЫЕ вещи (см. `TripSyncPayload.energyMode`), и
+        // `stored` кладёт «Авто» в колонку как `nil`.
+        // Знакомое значение — это ответ второго телефона, включая «Авто»
+        // (у него отсутствие ключа и «Авто» РАЗНЫЕ вещи, см.
+        // `TripSyncPayload.energyMode`); незнакомое и отсутствующее — молчание,
+        // локальное не трогаем. `stored` кладёт «Авто» в колонку как `nil`.
+        if !hasLocalEdits, let remoteMode = TripEnergyMode(rawValue: p.energyMode ?? "") {
+            entity.energyMode = remoteMode.stored
+        }
         entity.fuelCurrency = p.fuelCurrency
-        entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
-        // Кэш держал старую форму до перезапуска приложения.
-        Trip.invalidatePreviewCache(for: p.id)
+        // Превью с сервера — это ЭХО нашего же превью, и при включённой
+        // приватной зоне (0.8.2) эхо приходит ОБРЕЗАННЫМ: мы сами отправили
+        // его без двора. Записать его обратно значило бы обрезать локальное —
+        // а «своя поездка на своём телефоне остаётся целой всегда» это и есть
+        // всё правило версии. Превью кормит «Атлас», карточку ленты, обложку
+        // путешествия и подсказки мест, так что человек перестал бы видеть
+        // собственный двор на собственной карте, и никакой откат этого уже не
+        // вернул бы: локального полного превью не осталось бы нигде.
+        // То же правило, что у `capturedAt`/`exifLatitude` (0.6.5) и `placeId`
+        // (0.6.8) — локальное точнее серверного. Проверка «своё превью есть»
+        // стоит ПЕРВОЙ: у поездки со второго телефона его нет, и ей серверное
+        // как раз нужно.
+        if entity.previewPolyline == nil || HomeSettings.load().activeZone == nil {
+            entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
+            // Кэш держал старую форму до перезапуска приложения.
+            Trip.invalidatePreviewCache(for: p.id)
+        }
         entity.badgesJSON = p.badgesJson
         entity.xpEarned = Int32(p.xpEarned ?? 0)
         entity.conflictVersion = Int32(p.conflictVersion)
@@ -1411,10 +1485,9 @@ final class CoreDataTripRepository: TripRepository {
             // `trackPoints` is an ORDERED relationship (NSOrderedSet), not
             // NSSet — casting straight to `Set<TrackPointEntity>` always
             // fails and silently skips deletion, leaving stale local points
-            // alongside the server's replacement set.
-            if let existingTPs = entity.trackPoints?.array as? [TrackPointEntity] {
-                for tp in existingTPs { context.delete(tp) }
-            }
+            // alongside the server's replacement set. Since v23 the read goes
+            // through `orderedTrackPoints`, which cannot hit that cast.
+            for tp in entity.orderedTrackPoints { context.delete(tp) }
             for pt in serverPoints {
                 let tpe = TrackPointEntity(context: context)
                 tpe.id = pt.id
@@ -1465,9 +1538,18 @@ final class CoreDataTripRepository: TripRepository {
             // пул осиротил бы отметки, сверка зарегистрировала бы их заново — и
             // УДАЛЁННОЕ место воскресало бы с полной историей.
             var previous: [UUID: UUID] = [:]
+            // Координата своей отметки — по тому же правилу, что `placeId`
+            // строкой выше, и по той же причине (0.8.3). Внутри приватной
+            // зоны отметка уезжает БЕЗ адреса, и сервер возвращает её такой
+            // же: `nil` в ответе — это «сервер про место молчит», а не
+            // «места нет». Своя копия точнее серверной, и её не перезаписывают.
+            var previousPoint: [UUID: (Double, Double)] = [:]
             if let existing = entity.checkpoints?.array as? [TripCheckpointEntity] {
                 for ce in existing {
                     if let cid = ce.id, let pid = ce.placeId { previous[cid] = pid }
+                    if let cid = ce.id, ce.latitude != 0 || ce.longitude != 0 {
+                        previousPoint[cid] = (ce.latitude, ce.longitude)
+                    }
                     context.delete(ce)
                 }
             }
@@ -1475,8 +1557,14 @@ final class CoreDataTripRepository: TripRepository {
                 let ce = TripCheckpointEntity(context: context)
                 ce.id = c.id
                 ce.timestamp = c.timestamp
-                ce.latitude = c.latitude
-                ce.longitude = c.longitude
+                // Ключа нет — берём своё; своего нет тоже (переустановка,
+                // второй телефон) — отметка остаётся без места, и это
+                // честный ноль: `TripCheckpoint.hasCoordinate` его узнаёт, и
+                // ни карта, ни места такую отметку не трогают.
+                let point = c.latitude.flatMap { lat in c.longitude.map { (lat, $0) } }
+                    ?? previousPoint[c.id]
+                ce.latitude = point?.0 ?? 0
+                ce.longitude = point?.1 ?? 0
                 ce.distanceFromStart = c.distanceFromStart
                 ce.elapsedFromStart = c.elapsedFromStart
                 ce.name = c.name
@@ -1503,6 +1591,76 @@ final class CoreDataTripRepository: TripRepository {
 
         // Save deferred to PullApplier.flushPendingApplies() — batches a
         // /sync/pull's worth of writes into a single CoreData save call.
+    }
+
+    /// A server summary exists locally but its manual track has never been
+    /// downloaded. This snapshot guards a later network response against edits,
+    /// deletion and a newer pull. No recorded/local geometry is replaced.
+    func missingManualTrack(id: UUID) -> ManualTripTrackLoader.Snapshot? {
+        guard let entity = fetchEntity(id: id),
+              entity.source == TripOrigin.manual.rawValue,
+              entity.syncStatus == SyncStatus.synced.rawValue,
+              entity.serverCreatedAt != nil, entity.endDate != nil,
+              (entity.trackPoints?.count ?? 0) == 0 else { return nil }
+        return .init(id: id, conflictVersion: Int(entity.conflictVersion),
+                     lastModifiedAt: entity.lastModifiedAt)
+    }
+
+    /// Only track points are adopted. Calling applyRemoteTrip here would also
+    /// replace photos, checkpoints and metadata from a possibly older response.
+    ///
+    /// Runs on a background context: inserting and saving
+    /// up to ten thousand rows took ~260 ms on the main actor (simulator,
+    /// SQLite), a visible stall when opening the trip. The same guards run in
+    /// the SAME context right before the write, so nothing can slip between
+    /// the check and the save; `NSMergePolicy.error` makes a concurrent edit of
+    /// the row fail this save instead of being overwritten (as in
+    /// `RoadGapFiller`). The view context picks the rows up through
+    /// `automaticallyMergesChangesFromParent`.
+    func applyMissingManualTrackAsync(_ points: [TrackPointPayload],
+                                      expected: ManualTripTrackLoader.Snapshot) async -> Bool {
+        let bg = persistenceController.container.newBackgroundContext()
+        bg.mergePolicy = NSMergePolicy.error
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            bg.perform {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", expected.id as CVarArg)
+                request.fetchLimit = 1
+                guard let entity = try? bg.fetch(request).first,
+                      entity.source == TripOrigin.manual.rawValue,
+                      entity.syncStatus == SyncStatus.synced.rawValue,
+                      entity.serverCreatedAt != nil, entity.endDate != nil,
+                      (entity.trackPoints?.count ?? 0) == 0,
+                      Int(entity.conflictVersion) == expected.conflictVersion,
+                      entity.lastModifiedAt == expected.lastModifiedAt else {
+                    cont.resume(returning: false)
+                    return
+                }
+                for point in points {
+                    let row = TrackPointEntity(context: bg)
+                    row.id = point.id
+                    row.latitude = point.latitude
+                    row.longitude = point.longitude
+                    row.altitude = point.altitude
+                    row.speed = point.speed
+                    row.course = point.course
+                    row.horizontalAccuracy = point.horizontalAccuracy
+                    row.timestamp = point.timestamp
+                    row.isInterpolated = point.isInterpolated
+                    row.trip = entity
+                }
+                // A constructed manual route must never run through GPS reconstruction.
+                entity.isTrackProcessed = true
+                entity.placesMatchedAt = nil
+                do {
+                    try bg.save()
+                    cont.resume(returning: true)
+                } catch {
+                    bg.rollback()
+                    cont.resume(returning: false)
+                }
+            }
+        }
     }
 
     func applyRemoteVehicle(_ p: VehicleSyncPayload) {
@@ -1547,9 +1705,20 @@ final class CoreDataTripRepository: TripRepository {
         }
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
-        entity.cityConsumption = p.cityConsumption
-        entity.highwayConsumption = p.highwayConsumption
-        entity.fuelPrice = p.fuelPrice
+        // Расход и цена топлива — под тем же гейтом, что единица приборки, и
+        // по той же причине: это ЧИСЛА, по которым считается стоимость каждой
+        // поездки. Правка, ещё не уехавшая на сервер, сильнее приехавшего
+        // ответа — иначе полный пул (а его 0.6.1 заказывает на каждом
+        // устройстве, у которого не совпал штамп хранилища) возвращает
+        // прежние литры поверх только что набранных.
+        //
+        // Поля неопциональные, «сервер промолчал» ими не выражается, поэтому
+        // гейт один — `hasLocalEdits`.
+        if !hasLocalEdits {
+            entity.cityConsumption = p.cityConsumption
+            entity.highwayConsumption = p.highwayConsumption
+            entity.fuelPrice = p.fuelPrice
+        }
         // A server that predates these columns sends nothing back, and nothing
         // is not "reset to default" — keep whatever this device already knows.
         if let type = p.vehicleType { entity.vehicleType = type }
@@ -1589,6 +1758,16 @@ final class CoreDataTripRepository: TripRepository {
         // Фон карточки (0.8.0, «Плюс») — тем же приёмом, что единица
         // приборки: ключ отсутствует или правка ещё не уехала — не трогаем.
         if !hasLocalEdits, let style = p.cardStyle { entity.cardStyle = style }
+        // Электро и гибриды (0.8.3) — тем же приёмом и с той же ценой ошибки,
+        // что у единицы приборки: вернувшийся тип двигателя или обнулённый
+        // запас хода это НЕ косметика, а другая раскладка у каждой поездки
+        // гибрида — литры вместо киловатт-часов и другие деньги. Пока правка
+        // не уехала, побеждает она; ключа нет — сервер молчит, локальное не
+        // трогаем.
+        if !hasLocalEdits, let pt = p.powertrain { entity.powertrain = pt.rawValue }
+        if !hasLocalEdits, let c = p.electricConsumption { entity.electricConsumption = c }
+        if !hasLocalEdits, let price = p.electricityPrice { entity.electricityPrice = price }
+        if !hasLocalEdits, let range = p.electricRangeKm { entity.electricRangeKm = range }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
         if let about = p.about { entity.about = about }

@@ -88,4 +88,84 @@ final class TripDistanceGateTests: XCTestCase {
         XCTAssertLessThan(trip.movingAverageSpeedMS, 50 / 3.6,
                           "Teleport segment must not inflate the moving average")
     }
+
+    func testExplicitPauseExcludesPlausibleMissingJourneyButKeepsBothRecordedLegs() {
+        let samples = [sample(0, 0), sample(10, 1),
+                       sample(5010, 121, segment: 1), sample(5020, 122, segment: 1)]
+        XCTAssertEqual(TripDistanceGate.totalDistance(samples), 20, accuracy: 0.1)
+    }
+
+    func testSparseGPSWithoutPauseStillCountsTheBridge() {
+        let samples = [sample(0, 0), sample(10, 1), sample(5010, 121), sample(5020, 122)]
+        XCTAssertEqual(TripDistanceGate.totalDistance(samples), 5020, accuracy: 10)
+    }
+
+    func testPauseResetsAnchorBeforeMinimumDistanceCheck() {
+        let samples = [sample(0, 0), sample(4, 1, segment: 1), sample(8, 2, segment: 1),
+                       sample(10, 3, segment: 1)]
+        XCTAssertEqual(TripDistanceGate.totalDistance(samples), 6, accuracy: 0.1)
+    }
+
+    func testShortExplicitPauseIsExcludedFromMovementTimeAndDistance() {
+        func point(_ north: Double, _ seconds: Double) -> TrackPoint {
+            let c = TrackTestKit.coordinate(east: 0, north: north)
+            return TrackPoint(latitude: c.latitude, longitude: c.longitude, speed: 10,
+                              timestamp: TrackTestKit.epoch.addingTimeInterval(seconds))
+        }
+        var trip = Trip(startDate: TrackTestKit.epoch,
+                        endDate: TrackTestKit.epoch.addingTimeInterval(13),
+                        trackPoints: [point(0, 0), point(10, 1), point(110, 12), point(120, 13)])
+        trip.recordingBreaks = [TrackTestKit.epoch.addingTimeInterval(12)]
+        XCTAssertEqual(trip.measuredPoints.map(\.recordingSegmentIndex), [0, 0, 1, 1])
+        XCTAssertEqual(trip.drivingTime, 2, accuracy: 0.01)
+        XCTAssertEqual(trip.stoppedTime, 0, accuracy: 0.01)
+        XCTAssertEqual(trip.movingAverageSpeedMS, 10, accuracy: 0.1)
+    }
+
+    // MARK: - Maximum supported by recorded measurements
+
+    func testMaximumKeepsAValidSpeedFromTheFirstRecordedPoint() {
+        let samples = [sample(0, 0, speed: 25), sample(100, 5, speed: 0)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 25)
+    }
+
+    func testLongGPSGapWithStoppedArrivalStillProvesTheTripWasMoving() {
+        let samples = [sample(0, 0, speed: 0), sample(5000, 240, speed: 0)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 5000 / 240.0, accuracy: 0.1)
+        XCTAssertEqual(samples.last?.speed, 0, "The maximum lower bound must not rewrite arrival speed")
+    }
+
+    func testLongGPSGapUsesPlausibleDisplacementWhenSpeedsAreUnknownOrCorrupt() {
+        let samples = [sample(0, 0, speed: -1), sample(5000, 240, speed: 1000)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 5000 / 240.0, accuracy: 0.1)
+    }
+
+    func testMaximumDoesNotInferTravelDuringAnExplicitPause() {
+        let samples = [sample(0, 0, speed: 0), sample(5000, 240, segment: 1, speed: 0)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 0)
+    }
+
+    func testMaximumIgnoresImpossibleJumpRatherThanClampingToTheSpeedCeiling() {
+        let samples = [sample(0, 0, speed: -1), sample(5000, 11, speed: 1000)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 0)
+    }
+
+    func testDenseGeometryDoesNotInventAMaximumWhenSpeedWasNotMeasured() {
+        let samples = [sample(0, 0, speed: -1), sample(100, 10, speed: -1)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 0)
+    }
+
+    func testNonFiniteAndUnknownSpeedsAreNotRecords() {
+        let samples = [sample(0, 0, speed: .nan), sample(0, 1, speed: .infinity),
+                       sample(0, 2, speed: -1)]
+        XCTAssertEqual(TripDistanceGate.maximumRecordedSpeed(samples), 0)
+    }
+
+    private func sample(_ north: Double, _ seconds: Double, segment: Int = 0,
+                        speed: Double? = nil) -> TripDistanceGate.Sample {
+        let c = TrackTestKit.coordinate(east: 0, north: north)
+        return .init(latitude: c.latitude, longitude: c.longitude,
+                     timestamp: TrackTestKit.epoch.addingTimeInterval(seconds), recordingSegmentIndex: segment,
+                     speed: speed)
+    }
 }

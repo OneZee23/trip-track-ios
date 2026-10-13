@@ -45,7 +45,7 @@ final class MyMapTourTests: XCTestCase {
     /// Regions are sorted by kilometres, so the first row is always the one
     /// the seed drives hardest.
     private func openBusiestRegionExpanded() {
-        let summary = app.otherElements["mymap_summary"]
+        let summary = app.buttons["atlas_explored_title"]
         XCTAssertTrue(summary.waitForExistence(timeout: 8))
         summary.tap()
         usleep(1_200_000)
@@ -97,7 +97,7 @@ final class MyMapTourTests: XCTestCase {
 
         // 1 — far zoom: region fills, country chips, trip clusters, summary.
         snap("01_far")
-        XCTAssertTrue(app.otherElements["mymap_summary"].waitForExistence(timeout: 8),
+        XCTAssertTrue(app.buttons["atlas_explored_title"].waitForExistence(timeout: 8),
                       "collapsed summary must be up when nothing is selected")
         XCTAssertGreaterThan(app.otherElements.matching(identifier: "map_cluster").count, 0,
                              "far zoom must cluster trips instead of drawing hairlines")
@@ -117,7 +117,7 @@ final class MyMapTourTests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 4), "the card must offer a way out")
         close.tap()
         usleep(1_200_000)
-        XCTAssertTrue(app.otherElements["mymap_summary"].waitForExistence(timeout: 4),
+        XCTAssertTrue(app.buttons["atlas_explored_title"].waitForExistence(timeout: 4),
                       "closing a card returns to the summary")
         // Clustered pins stay in the accessibility tree with their own frames
         // even though MapKit draws only the cluster badge, so "the first pin"
@@ -149,7 +149,7 @@ final class MyMapTourTests: XCTestCase {
         app.buttons.matching(identifier: "tab_maps").firstMatch.tap()
         usleep(2_500_000)
 
-        let summary = app.otherElements["mymap_summary"]
+        let summary = app.buttons["atlas_explored_title"]
         XCTAssertTrue(summary.waitForExistence(timeout: 8))
         summary.tap()
         usleep(1_200_000)

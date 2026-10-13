@@ -17,6 +17,8 @@ struct DiscoverView: View {
     @State private var suggested: [SocialSuggestedUser] = []
     @State private var followedIds: Set<UUID> = []
     @State private var isSearching = false
+    /// Whose row is one's own — read once, not per row (`PersonName`).
+    @State private var ownId: UUID? = PersonName.ownId()
     @State private var isLoadingSuggested = false
     /// Typed path with `cappedAppend` — same pattern as FeedView. Replaces
     /// the previous `selectedAuthor` + chained `.navigationDestination(isPresented:)`
@@ -217,12 +219,11 @@ struct DiscoverView: View {
         .padding(.horizontal, 16)
     }
 
+    /// The house section heading (as on «Я»): 16/700 ink, sentence case.
+    /// Until 0.8.9 this was 11 pt grey capitals, the look «Я», stats and the
+    /// garage had already left.
     private func sectionHeader(title: String, c: AppTheme.Colors) -> some View {
-        Text(title)
-            .font(.inter(11, weight: .semibold))
-            .tracking(0.44)
-            .foregroundStyle(c.textTertiary)
-            .textCase(.uppercase)
+        ProfileSectionLabel(text: title)
     }
 
     // MARK: - User row
@@ -268,17 +269,10 @@ struct DiscoverView: View {
             authorPath.cappedAppend(.profile(user.id, user))
         } label: {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(c.cardAlt)
-                    .frame(width: 36, height: 36)
-                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(19)) }
+                PersonAvatar(author: user)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.inter(13.5, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    PersonName(author: user, font: .inter(13.5, weight: .bold), ownId: ownId)
                     // Line 2 — WHY this person is being suggested. Drawn
                     // only for a reason key this build recognises: an
                     // unknown one (a newer server's invention) drops the
@@ -295,7 +289,7 @@ struct DiscoverView: View {
                     // mileage, so this stays the bare "LVL n" it was (no
                     // fabricated data).
                     Text(levelLine(user.profileLevel, totalKm: totalKm))
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .font(.inter(11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 // Claim leftover horizontal space — without this the follow

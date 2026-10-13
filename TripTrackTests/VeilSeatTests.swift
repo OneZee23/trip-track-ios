@@ -34,6 +34,73 @@ final class VeilSeatTests: XCTestCase {
 
     // MARK: Место в дереве
 
+    /// The first SwiftUI mount can seat the veil while MapKit's content
+    /// parent is still 0×0. Its custom layout need not autoresize our children.
+    func testAnAlreadySeatedVeilFollowsItsParentsSizeWithoutReattachment() {
+        let tree = mapTree()
+        tree.content.bounds = .zero
+        tree.content.autoresizesSubviews = false
+        let veil = FogVeilView()
+        defer { veil.detach() }
+        XCTAssertTrue(veil.attach(inside: tree.root, seat: .aboveBaseMap))
+        XCTAssertEqual(veil.bounds.size, .zero)
+        let initialOrder = tree.content.subviews.map(ObjectIdentifier.init)
+
+        for size in [CGSize(width: 440, height: 430),
+                     CGSize(width: 440, height: 956),
+                     CGSize(width: 440, height: 430)] {
+            tree.content.bounds.size = size
+            veil.verifySeating()
+            XCTAssertEqual(veil.frame, tree.content.bounds,
+                           "A correct seat must still fill the resized map")
+            XCTAssertEqual(tree.content.subviews.map(ObjectIdentifier.init), initialOrder,
+                           "Resizing must preserve the route/veil/pin stacking order")
+        }
+    }
+
+    func testAnAlreadySeatedMetalVeilFollowsItsParentsSizeWithoutReattachment() throws {
+        let map = MKMapView(frame: .zero)
+        map.autoresizesSubviews = false
+        // A direct annotation container wins the breadth-first seat lookup;
+        // the test does not depend on private MapKit containers being present.
+        map.addSubview(AnnotationContainerStub(frame: .zero))
+        let seat = VeilSeat(margin: FogVeilView.defaultMargin, seat: .belowAnnotations)
+        let metalSeat = FogMetalSeat()
+        let metal = try XCTUnwrap(metalSeat.veil, "Metal unavailable")
+        defer { seat.detach(); metalSeat.unseat() }
+        seat.attach(to: map)
+        XCTAssertTrue(seat.isAttached)
+        XCTAssertTrue(seat.veil.superview === map)
+        metalSeat.follow(seat, on: map)
+        XCTAssertEqual(metal.bounds.size, .zero)
+        var reseats = 0
+        metalSeat.onSeated = { reseats += 1 }
+
+        for size in [CGSize(width: 440, height: 430),
+                     CGSize(width: 440, height: 956),
+                     CGSize(width: 440, height: 430)] {
+            map.bounds.size = size
+            seat.attach(to: map)
+            metalSeat.follow(seat, on: map)
+            XCTAssertEqual(seat.veil.frame, map.bounds)
+            XCTAssertEqual(metal.frame, map.bounds,
+                           "The GPU layer must not retain its initial zero size")
+            try assertMetalSitsUnderTheVeil(metal, veil: seat.veil, parent: map)
+        }
+        XCTAssertEqual(reseats, 0, "Size changes must not remove and reseat the GPU layer")
+
+        metal.layoutIfNeeded()
+        let frames = metal.frames
+        for _ in 0..<10 {
+            seat.attach(to: map)
+            metalSeat.follow(seat, on: map)
+            metal.layoutIfNeeded()
+        }
+        XCTAssertEqual(metal.frames, frames,
+                       "Checking the same layout must not order another GPU frame")
+        XCTAssertFalse(metal.isTracking, "A stationary layout must not start display-link ticks")
+    }
+
     /// «Атлас»: вуаль ВЫШЕ оверлеев (свои он с карты снимает и рисует в растр),
     /// но ниже пинов и подписей регионов.
     func testAtlasSeatsTheVeilAboveOverlaysAndBelowAnnotations() {

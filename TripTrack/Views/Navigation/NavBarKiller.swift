@@ -12,10 +12,19 @@ import UIKit
 /// Use via `.background(NavBarKiller())`. Safe only in stacks where every
 /// pushed view wants the bar gone. `CustomNavBar` wires this in.
 struct NavBarKiller: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> Controller { Controller() }
-    func updateUIViewController(_ vc: Controller, context: Context) {}
+    var onDidAppear: (() -> Void)? = nil
+
+    func makeUIViewController(context: Context) -> Controller {
+        let controller = Controller()
+        controller.onDidAppear = onDidAppear
+        return controller
+    }
+    func updateUIViewController(_ vc: Controller, context: Context) {
+        vc.onDidAppear = onDidAppear
+    }
 
     final class Controller: UIViewController {
+        var onDidAppear: (() -> Void)?
         private var watcher: NavBarFrameWatcher?
         private var hiddenObs: NSKeyValueObservation?
         private var alphaObs: NSKeyValueObservation?
@@ -66,6 +75,7 @@ struct NavBarKiller: UIViewControllerRepresentable {
             super.viewDidAppear(animated)
             log(phase: "didAppear", animated: animated)
             blankTheBar(phase: "didAppear")
+            onDidAppear?()
         }
 
         override func viewWillDisappear(_ animated: Bool) {

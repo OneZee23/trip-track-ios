@@ -134,7 +134,12 @@ final class AutoTripService: ObservableObject {
 
     private func startKeepAlive() {
         guard keepAliveLocationManager == nil else { return }
-        guard CLLocationManager.authorizationStatus() == .authorizedAlways else { return }
+        // Разрешение спрашивается у ЭКЗЕМПЛЯРА: статический
+        // `CLLocationManager.authorizationStatus()` снят с iOS 14 и отвечает
+        // не про этот менеджер, а про процесс целиком. Свой экземпляр здесь
+        // всё равно создаётся строкой ниже — спрашиваем его.
+        let probe = CLLocationManager()
+        guard probe.authorizationStatus == .authorizedAlways else { return }
 
         let delegate = KeepAliveLocationDelegate { [weak self] in
             // Woken by significant location change — check for automotive activity

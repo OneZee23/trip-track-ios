@@ -15,8 +15,10 @@ final class ProfileProgressSyncTests: XCTestCase {
     private var client: APIClient!
     private var savedKeychainService: String!
     private var savedNameLatch: Any?
+    private var savedProfileBackground: Any?
     private var accountId: UUID!
     private let nameLatch = "com.triptrack.profile.syncConfirmed"
+    private let profileBackgroundKey = "com.triptrack.settings.profileBackground"
     private nonisolated(unsafe) static var profileBodies: [[String: Any]] = []
 
     override func setUp() async throws {
@@ -25,6 +27,7 @@ final class ProfileProgressSyncTests: XCTestCase {
         savedKeychainService = KeychainHelper.service
         KeychainHelper.service = "com.triptrack.profile-progress-tests.\(UUID())"
         savedNameLatch = UserDefaults.standard.object(forKey: nameLatch)
+        savedProfileBackground = UserDefaults.standard.object(forKey: profileBackgroundKey)
         ProfileSyncLatch.markConfirmed()
         accountId = UUID()
         TokenStore.shared.setAccountId(accountId)
@@ -63,6 +66,11 @@ final class ProfileProgressSyncTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: nameLatch)
         }
+        if let savedProfileBackground {
+            UserDefaults.standard.set(savedProfileBackground, forKey: profileBackgroundKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: profileBackgroundKey)
+        }
         AuthService.shared.loadFromKeychain()
         settings = nil
         pc = nil
@@ -70,6 +78,7 @@ final class ProfileProgressSyncTests: XCTestCase {
         defaults = nil
         suite = nil
         savedNameLatch = nil
+        savedProfileBackground = nil
         savedKeychainService = nil
         accountId = nil
         try await super.tearDown()
@@ -162,6 +171,91 @@ final class ProfileProgressSyncTests: XCTestCase {
         for key in ["profileLevel", "profileXp", "currentStreak", "bestStreak"] {
             XCTAssertNil(body[key], key)
         }
+    }
+
+    func testChoosingProfileBackgroundPersistsAndPublishesIt() async throws {
+        settings.profileBackground = ""
+        serve()
+        let sent = expectation(description: "Selected background reaches profile update")
+
+        settings.setProfileBackground("plus_nebula") { [settings, client] in
+            Task { @MainActor in
+                await AuthService.shared.syncProfileToServer(
+                    refreshFeedAfter: false, client: client!, settings: settings!)
+                sent.fulfill()
+            }
+        }
+        await fulfillment(of: [sent], timeout: 3)
+
+        XCTAssertEqual(settings.profileBackground, "plus_nebula")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: profileBackgroundKey), "plus_nebula")
+        let body = try XCTUnwrap(Self.profileBodies.last)
+        XCTAssertEqual(body["profileBackground"] as? String, "plus_nebula",
+                       "Other users render the server copy, not this device's defaults")
+    }
+
+    func testRemovingProfileBackgroundPublishesEmptyStringAndIgnoresRepeatedSelection() async throws {
+        settings.profileBackground = "plus_nebula"
+        serve()
+        let sent = expectation(description: "Background removal reaches profile update")
+
+        settings.setProfileBackground("") { [settings, client] in
+            Task { @MainActor in
+                await AuthService.shared.syncProfileToServer(
+                    refreshFeedAfter: false, client: client!, settings: settings!)
+                sent.fulfill()
+            }
+        }
+        await fulfillment(of: [sent], timeout: 3)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: profileBackgroundKey), "")
+        XCTAssertEqual(try XCTUnwrap(Self.profileBodies.last)["profileBackground"] as? String, "",
+                       "An absent field would leave the old background on the server")
+
+        let redundantPush = expectation(description: "Unchanged background needs no second push")
+        redundantPush.isInverted = true
+        settings.setProfileBackground("") { redundantPush.fulfill() }
+        await fulfillment(of: [redundantPush], timeout: 0.1)
+    }
+
+    func testExpiredCosmeticsStayStoredAndPublishedThenReturnAfterRenewal() async throws {
+        let access = PlusAccess.shared
+        let previousEntitlement = access.isPlus
+        defer { access.isPlus = previousEntitlement }
+
+        settings.profileBackground = "plus_nebula"
+        settings.applyRemotePlusCosmetics(avatarFrame: "frame_gold", showPlusBadge: true)
+        access.isPlus = true
+        XCTAssertEqual(ProfileBackground.effective(id: settings.profileBackground, isPlus: access.isPlus),
+                       .plusNebula)
+        XCTAssertEqual(AvatarFrame.effective(id: settings.avatarFrame, isPlus: access.isPlus), .gold)
+
+        access.isPlus = false
+        XCTAssertEqual(ProfileBackground.effective(id: settings.profileBackground, isPlus: access.isPlus),
+                       .none)
+        XCTAssertEqual(AvatarFrame.effective(id: settings.avatarFrame, isPlus: access.isPlus), .none)
+
+        // A profile push while expired must keep the owner's raw choice. Sending
+        // the displayed fallback here would erase it permanently on the server.
+        serve()
+        await AuthService.shared.syncProfileToServer(
+            refreshFeedAfter: false, client: client, settings: settings)
+        let body = try XCTUnwrap(Self.profileBodies.last)
+        XCTAssertEqual(body["profileBackground"] as? String, "plus_nebula")
+        XCTAssertEqual(body["avatarFrame"] as? String, "frame_gold")
+
+        let reloaded = SettingsManager(persistenceController: pc, unitStore: defaults, regionUnit: .km)
+        XCTAssertEqual(reloaded.profileBackground, "plus_nebula")
+        XCTAssertEqual(reloaded.avatarFrame, "frame_gold")
+        XCTAssertEqual(ProfileBackground.effective(id: reloaded.profileBackground, isPlus: access.isPlus),
+                       .none)
+        XCTAssertEqual(AvatarFrame.effective(id: reloaded.avatarFrame, isPlus: access.isPlus), .none)
+
+        // Renewal changes only entitlement; no picker or repeated cosmetics
+        // write is needed to restore the previously selected appearance.
+        access.isPlus = true
+        XCTAssertEqual(ProfileBackground.effective(id: reloaded.profileBackground, isPlus: access.isPlus),
+                       .plusNebula)
+        XCTAssertEqual(AvatarFrame.effective(id: reloaded.avatarFrame, isPlus: access.isPlus), .gold)
     }
 
     func testOlderServerLevelWithoutXPKeepsXPUnknown() async throws {

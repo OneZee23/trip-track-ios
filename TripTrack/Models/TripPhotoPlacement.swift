@@ -21,6 +21,56 @@ import CoreLocation
 /// километров от места съёмки, и это хуже, чем не ставить вовсе.
 enum TripPhotoPlacement {
 
+    struct Prepared {
+        let links: [UUID: [TripPhoto]]
+        let placed: [Placed]
+        let fixes: [UUID: TripRouteLocator.Fix]
+    }
+
+    /// Value work only; callers hand in a single trip snapshot. Pins and the
+    /// moments list share each reading instead of walking the track twice.
+    static func prepare(
+        photos: [TripPhoto], checkpoints: [TripCheckpoint],
+        points: [TrackPoint], startDate: Date
+    ) throws -> Prepared {
+        try Task.checkCancellation()
+        let links = TripCheckpointPhotos.link(checkpoints: checkpoints, photos: photos, points: points)
+        let attached = Set(links.values.flatMap { $0 }.map(\.id))
+        let placed = place(photos, on: points).filter { !attached.contains($0.id) }
+        guard !placed.isEmpty else { return Prepared(links: links, placed: [], fixes: [:]) }
+
+        try Task.checkCancellation()
+        let index = TripRouteLocator.Index(points: points, startDate: startDate)
+        let photosByID = Dictionary(photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var fixes: [UUID: TripRouteLocator.Fix] = [:]
+        for item in placed {
+            try Task.checkCancellation()
+            if let photo = photosByID[item.id], let fix = index.fix(for: photo) {
+                fixes[item.id] = fix
+            }
+        }
+        return Prepared(links: links, placed: placed, fixes: fixes)
+    }
+
+    /// Cancellation follows the screen's rebuild task into the worker. No
+    /// managed object, image loading or UI state crosses this boundary.
+    static func prepareAsync(
+        photos: [TripPhoto], checkpoints: [TripCheckpoint],
+        points: [TrackPoint], startDate: Date
+    ) async throws -> Prepared {
+        try Task.checkCancellation()
+        let worker = Task.detached(priority: .userInitiated) {
+            try prepare(photos: photos, checkpoints: checkpoints, points: points, startDate: startDate)
+        }
+        let prepared = try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        try Task.checkCancellation()
+        return prepared
+    }
+
     struct Placed: Identifiable, Equatable {
         let id: UUID
         let filename: String

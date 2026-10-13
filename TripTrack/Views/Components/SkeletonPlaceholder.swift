@@ -17,10 +17,23 @@ struct SkeletonPlaceholder: View {
         case row
         /// A feed card: header, map block, footer.
         case card
+        /// Карточка подсказки «Похоже, вы здесь бываете» (состояние 23 спеки
+        /// «Места v2»). Своя форма, а не `.card`: у той внутри блок карты на
+        /// 140 pt, а подсказка — кружок, две строки и кнопка. Скелетон
+        /// обещает форму того, что приедет, и чужая форма обещала бы не то.
+        case placeSuggestion
+        /// Тройка чисел блока «Исследовано» (состояние 22 спеки «Атласа»):
+        /// три пары полосок 64 × 20 и 48 × 10 в ряд. Своя форма, потому что
+        /// все остальные — колонки, а эта строка: скелетон обещает форму
+        /// того, что приедет, и колонка обещала бы не то.
+        case atlasStats
     }
 
     var shape: Shape = .row
     var count: Int = 4
+    /// Период мерцания. По умолчанию общий для приложения; «Атлас» просит
+    /// 1.2 с своей спекой, и это единственное место, где число другое.
+    var period: Double = 0.9
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -34,12 +47,14 @@ struct SkeletonPlaceholder: View {
                 switch shape {
                 case .row:  rowSkeleton(c)
                 case .card: cardSkeleton(c)
+                case .placeSuggestion: suggestionSkeleton(c)
+                case .atlasStats: atlasStatsSkeleton(c)
                 }
             }
         }
         .opacity(shimmering ? 1.0 : 0.55)
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+            reduceMotion ? nil : .easeInOut(duration: period).repeatForever(autoreverses: true),
             value: shimmering
         )
         .onAppear { shimmering = true }
@@ -47,6 +62,21 @@ struct SkeletonPlaceholder: View {
         // gain from a dozen unlabelled grey rectangles.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AppStrings.loadingGeneric(lang.language))
+    }
+
+    /// Три колонки: число и подпись под ним. Ровно те же места, что займут
+    /// «189 миль / НОВЫХ ДОРОГ», «360 миль / ВСЕГО», «72 / ПОЕЗДКИ».
+    private func atlasStatsSkeleton(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { index in
+                if index > 0 { Spacer(minLength: 8) }
+                VStack(alignment: .leading, spacing: 6) {
+                    bar(c, width: 64, height: 20)
+                    bar(c, width: 48, height: 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private func bar(_ c: AppTheme.Colors, width: CGFloat?, height: CGFloat) -> some View {
@@ -67,6 +97,29 @@ struct SkeletonPlaceholder: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 2)
+    }
+
+    /// Кружок 36, две строки и кнопка — ровно то, из чего сложена
+    /// `PlaceSuggestionCardView`, теми же полями и тем же радиусом.
+    private func suggestionSkeleton(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 6) {
+                    bar(c, width: 132, height: 12)
+                    bar(c, width: 84, height: 10)
+                }
+                Spacer(minLength: 0)
+            }
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(c.cardAlt)
+                .frame(width: 168, height: 44)
+                .padding(.leading, 48)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14).padding(.bottom, 12)
+        .background(AtlasTheme.card,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func cardSkeleton(_ c: AppTheme.Colors) -> some View {

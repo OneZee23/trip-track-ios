@@ -34,6 +34,39 @@ enum TripRouteLocator {
     /// различает только время.
     static let distinctPassGap: TimeInterval = 10 * 60
 
+    /// Immutable route snapshot for several lookups on the same trip. The
+    /// odometer prefix belongs to the route, not to each photo that asks for it.
+    struct Index {
+        private let points: [TrackPoint]
+        private let prefix: [Double]
+        private let startDate: Date?
+
+        init(points: [TrackPoint], startDate: Date? = nil) {
+            self.points = points
+            self.prefix = TripRouteLocator.distancePrefix(points)
+            self.startDate = startDate
+        }
+
+        func passes(near coordinate: CLLocationCoordinate2D, radius: Double = TripRouteLocator.tapRadius) -> [Fix] {
+            TripRouteLocator.passes(near: coordinate, in: points, prefix: prefix,
+                                    radius: radius, startDate: startDate)
+        }
+
+        func fix(at moment: Date) -> Fix? {
+            TripRouteLocator.fix(at: moment, in: points, prefix: prefix, startDate: startDate)
+        }
+
+        /// Keep the existing reading rule: EXIF's first nearby pass, then
+        /// capture time if that coordinate has no pass on this trip.
+        func fix(for photo: TripPhoto) -> Fix? {
+            if let coordinate = photo.exifCoordinate,
+               let pass = passes(near: coordinate, radius: 300).first {
+                return pass
+            }
+            return photo.capturedAt.flatMap { fix(at: $0) }
+        }
+    }
+
     // MARK: - По месту
 
     /// Все проезды маршрута рядом с этой точкой, по времени.
@@ -49,9 +82,19 @@ enum TripRouteLocator {
         startDate: Date? = nil
     ) -> [Fix] {
         guard points.count > 1 else { return [] }
+        return passes(near: coordinate, in: points, prefix: distancePrefix(points),
+                      radius: radius, startDate: startDate)
+    }
 
+    private static func passes(
+        near coordinate: CLLocationCoordinate2D,
+        in points: [TrackPoint],
+        prefix: [Double],
+        radius: Double,
+        startDate: Date?
+    ) -> [Fix] {
+        guard points.count > 1 else { return [] }
         let target = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let prefix = distancePrefix(points)
         let origin = startDate ?? points[0].timestamp
 
         // Ближайшая точка в каждом отдельном проезде: идём по треку и держим
@@ -100,6 +143,12 @@ enum TripRouteLocator {
     /// у автопоездки (старт отодвигается назад при обнаружении) два пути дали
     /// бы два разных времени для одного места.
     static func fix(at moment: Date, in points: [TrackPoint], startDate: Date? = nil) -> Fix? {
+        guard let first = points.first, let last = points.last,
+              moment >= first.timestamp, moment <= last.timestamp else { return nil }
+        return fix(at: moment, in: points, prefix: distancePrefix(points), startDate: startDate)
+    }
+
+    private static func fix(at moment: Date, in points: [TrackPoint], prefix: [Double], startDate: Date?) -> Fix? {
         guard let first = points.first, let last = points.last else { return nil }
         guard moment >= first.timestamp, moment <= last.timestamp else { return nil }
 
@@ -117,7 +166,7 @@ enum TripRouteLocator {
             let after = points[index].timestamp.timeIntervalSince(moment)
             if before < after { index -= 1 }
         }
-        return fix(at: index, in: points, prefix: distancePrefix(points), origin: startDate ?? first.timestamp)
+        return fix(at: index, in: points, prefix: prefix, origin: startDate ?? first.timestamp)
     }
 
     // MARK: - Общее
@@ -141,6 +190,10 @@ enum TripRouteLocator {
             defer { prefix[i] = total }
             guard points[i].countsForDistance else { continue }
             let anchor = points[anchorIndex]
+            guard points[i].recordingSegmentIndex == anchor.recordingSegmentIndex else {
+                anchorIndex = i
+                continue
+            }
             let metres = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
                 .distance(from: CLLocation(latitude: points[i].latitude, longitude: points[i].longitude))
             if metres >= TripDistanceGate.minStep {

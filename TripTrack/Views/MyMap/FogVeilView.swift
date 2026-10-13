@@ -605,7 +605,13 @@ final class FogVeilView: UIView {
            container.superview === parent,
            let mine = parent.subviews.firstIndex(of: self),
            let theirs = parent.subviews.firstIndex(of: container),
-           mine < theirs { return }
+           mine < theirs {
+            // MapKit can seat us before its content view has any size and
+            // does not always autoresize foreign children afterwards. Correct
+            // sibling order alone is not enough: a seated 0×0 veil is invisible.
+            if frame != parent.bounds { frame = parent.bounds }
+            return
+        }
 
         // Пересадка трогает дерево, а дерево зовёт `didMoveToWindow` — то есть
         // эту же проверку изнутри неё самой.

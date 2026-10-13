@@ -10,6 +10,17 @@ enum DebugForeignTripFixture {
         ProcessInfo.processInfo.arguments.contains("-debug-foreign-trip")
     }
 
+    /// The author's public profile, offline, for reviewing it in every state:
+    /// `-debug-foreign-profile pro|free|new` (default `pro`). `pro` wears a
+    /// premium background and frame; `new` is the zero-trip newcomer.
+    static var profileVariant: String {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-debug-foreign-profile"), i + 1 < args.count else { return "pro" }
+        return args[i + 1]
+    }
+
+    private static let authorId = "D37A2000-0000-4000-8000-000000000081"
+
     static var session: URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [ForeignTripURLProtocol.self]
@@ -30,8 +41,10 @@ enum DebugForeignTripFixture {
         [
             "id": "D37A1000-0000-4000-8000-000000000081",
             "author": [
-                "id": "D37A2000-0000-4000-8000-000000000081",
-                "displayName": "Test Traveller", "avatarEmoji": "🚙", "profileLevel": 21
+                "id": authorId,
+                "displayName": "Test Traveller", "avatarEmoji": "🚙", "profileLevel": 21,
+                "isPlus": profileVariant == "pro",
+                "avatarFrame": profileVariant == "pro" ? "frame_gold" : NSNull()
             ],
             "title": refreshed ? "Foreign trip updated" : "Foreign trip preview",
             "description": "Offline navigation regression fixture.",
@@ -43,6 +56,67 @@ enum DebugForeignTripFixture {
             "photoCount": 0, "reactionCount": 0, "reactionBreakdown": [],
             "badgeIds": [], "commentCount": 0
         ]
+    }
+
+    private static func profile() -> [String: Any] {
+        let variant = profileVariant
+        let isNew = variant == "new"
+        let trips: [[String: Any]] = isNew ? [] : (0..<3).map { i in
+            [
+                "id": "D37A1000-0000-4000-8000-00000000008\(i + 2)",
+                "title": ["Москва → Тверь", "По Подмосковью", "Тверь → Москва"][i],
+                "startDate": "2026-09-2\(i)T09:00:00Z",
+                "distance": [182_000, 64_000, 179_000][i],
+                "duration": [9_600, 4_200, 9_300][i],
+                "endDate": "2026-09-2\(i)T12:00:00Z",
+                "region": "Moscow Oblast",
+                "previewPolyline": preview,
+                "isPrivate": false
+            ]
+        }
+        return [
+            "id": authorId,
+            "displayName": isNew ? "Vixor66" : "Test Traveller",
+            "avatarEmoji": isNew ? "🤠" : "🚙",
+            "profileLevel": isNew ? 1 : 21,
+            "profileBackground": variant == "free" ? NSNull() : "plus_nebula",
+            "currentStreak": isNew ? 0 : 4, "bestStreak": isNew ? 0 : 12,
+            "stats": [
+                "totalKm": isNew ? 0 : 12_840, "tripCount": isNew ? 0 : 214,
+                "regionsCount": isNew ? 0 : 9, "publicTripCount": isNew ? 0 : 37
+            ],
+            "activeVehicle": isNew ? NSNull() : [
+                "id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+                "level": 7, "odometerKm": 12_840, "avatarEmoji": "🚙", "avatarStyle": NSNull()
+            ],
+            "recentBadges": isNew ? [] : ["marathon_42", "night_rider", "early_bird", "long_shift", "first_trip"],
+            "recentTrips": trips,
+            "followerCount": isNew ? 1 : 48, "followingCount": isNew ? 0 : 23,
+            "isFollowing": true,
+            "bio": isNew ? NSNull() : "Езжу по выходным, люблю старые дороги",
+            "isPlus": variant == "pro",
+            "avatarFrame": variant == "pro" ? "frame_gold" : NSNull()
+        ]
+    }
+
+    private static func garageVehicle() -> [String: Any] {
+        [
+            "id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+            "avatarEmoji": "🚙", "avatarStyle": NSNull(), "vehicleType": NSNull(),
+            "make": "Škoda", "model": "Octavia", "year": 2019, "bodyType": NSNull(),
+            "level": 7, "odometerKm": 12_840, "about": NSNull(),
+            "isArchived": false, "soldAt": NSNull(), "plate": NSNull(),
+            "mapVisible": true, "photosVisible": true, "createdAt": NSNull()
+        ]
+    }
+
+    private static func suggestedUser(_ i: Int, name: String, emoji: String, level: Int,
+                                      reason: String, km: Double) -> [String: Any] {
+        ["id": i == 0 ? authorId : "D37A4000-0000-4000-8000-00000000008\(i)",
+         "displayName": name, "avatarEmoji": emoji, "profileLevel": level,
+         "matchReason": reason, "totalKm": km,
+         // The first suggestion is the PRO traveller of the trip fixture.
+         "isPlus": i == 0, "avatarFrame": i == 0 ? "frame_gold" : NSNull()]
     }
 
     static func response(path: String) throws -> Data {
@@ -57,8 +131,26 @@ enum DebugForeignTripFixture {
             payload = ["reactions": []]
         } else if path.hasSuffix(APIEndpoint.socialComments) {
             payload = ["comments": []]
+        } else if path.hasSuffix("/profile"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            payload = profile()
+        } else if path.contains("/garage"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            payload = ["vehicles": profileVariant == "new" ? [] : [garageVehicle()]]
+        } else if path.contains("/journeys"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            payload = ["journeys": [], "nextCursor": NSNull()]
         } else if path.hasSuffix(APIEndpoint.companionsList) {
             payload = ["items": [], "isOwnerView": false]
+        } else if path.hasSuffix(APIEndpoint.socialSuggested) {
+            // «Найти людей» for review: three suggestions with each rationale.
+            payload = ["users": [
+                suggestedUser(0, name: "Test Traveller", emoji: "🚙", level: 21, reason: "sharedRegion", km: 12_840),
+                suggestedUser(1, name: "Марина К.", emoji: "🏍️", level: 9, reason: "nearby", km: 3_120),
+                suggestedUser(2, name: "Alexander Konstantinopolsky", emoji: "🚐", level: 34, reason: "popular", km: 48_900),
+            ]]
+        } else if path.hasSuffix(APIEndpoint.socialSearch) {
+            payload = ["users": [
+                ["id": authorId, "displayName": "Test Traveller", "avatarEmoji": "🚙", "profileLevel": 21,
+                 "isPlus": true, "avatarFrame": "frame_gold"],
+            ]]
         } else {
             // Catch every other API request too: this fixture never falls
             // through to a real server, including incidental startup writes.

@@ -78,6 +78,32 @@ final class PlaceStoreTests: XCTestCase {
         XCTAssertEqual(store.passCount(placeId: place), 2)
     }
 
+    func testBatchPassesKeepsPlacesSeparateAndOrdersEachNewestFirst() {
+        let a = UUID(), b = UUID(), outside = UUID(), empty = UUID(), trip = UUID()
+        let aOld = pass(place: a, trip: trip, t: 100)
+        let aNew = pass(place: a, trip: trip, t: 900)
+        let bOld = pass(place: b, trip: trip, t: 200)
+        let bNew = pass(place: b, trip: trip, t: 700, course: 180)
+        store.replacePasses(placeId: a, tripId: trip, with: [aOld, aNew])
+        store.replacePasses(placeId: b, tripId: trip, with: [bNew, bOld])
+        store.replacePasses(placeId: outside, tripId: trip, with: [pass(place: outside, trip: trip, t: 1000)])
+
+        let result = store.passes(placeIds: [b, a, empty, a])
+
+        XCTAssertEqual(Set(result.keys), Set([a, b]), "A list snapshot must not include other places")
+        XCTAssertEqual(result[a]?.map(\.id), [aNew.id, aOld.id])
+        XCTAssertEqual(result[b]?.map(\.id), [bNew.id, bOld.id])
+        XCTAssertTrue((result[empty] ?? []).isEmpty)
+        XCTAssertEqual(result[a], store.passes(placeId: a), "The batch must preserve the detail screen's history")
+        XCTAssertEqual(result[b], store.passes(placeId: b))
+    }
+
+    func testEmptyBatchDoesNotReadUnrequestedHistory() {
+        let place = UUID(), trip = UUID()
+        store.replacePasses(placeId: place, tripId: trip, with: [pass(place: place, trip: trip, t: 100)])
+        XCTAssertTrue(store.passes(placeIds: []).isEmpty)
+    }
+
     func testDeletingPassesOfATripAndDeletingAPlace() {
         let place = UUID(), tripA = UUID(), tripB = UUID()
         store.replacePasses(placeId: place, tripId: tripA, with: [pass(place: place, trip: tripA, t: 100)])

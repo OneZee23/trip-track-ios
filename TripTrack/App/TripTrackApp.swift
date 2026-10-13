@@ -71,6 +71,12 @@ struct TripTrackApp: App {
         }
         #endif
         #if DEBUG && targetEnvironment(simulator)
+        // Reset the persisted value once, rather than pinning AppStorage to
+        // false through NSArgumentDomain. The latter can hide a completed
+        // onboarding when a UI test repeats the flow in the same container.
+        if ProcessInfo.processInfo.arguments.contains("-ui-test-onboarding") {
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        }
         if DebugForeignTripFixture.isRequested {
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
@@ -115,6 +121,10 @@ struct TripTrackApp: App {
                     .onAppear { themeManager.applyToWindows() }
             } else if hasCompletedOnboarding {
                 ContentView()
+                    .onAppear { ProductAnalytics.shared.flush() }
+                    .onReceive(CacheManager.shared.networkRestored) { _ in
+                        ProductAnalytics.shared.flush()
+                    }
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
@@ -184,6 +194,7 @@ struct TripTrackApp: App {
         // process deaths — sweep the system log into our own files there, or a
         // relaunch loses everything that was said since the last periodic one.
         .onChange(of: scenePhase) { _, phase in
+            if phase == .active { ProductAnalytics.shared.flush() }
             guard phase != .active else { return }
             Task { await LogArchive.shared.sweep() }
         }

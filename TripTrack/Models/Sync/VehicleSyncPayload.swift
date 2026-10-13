@@ -70,6 +70,21 @@ struct VehicleSyncPayload: Codable {
     /// нам незнакомо, и оба случая читаются как «не трогать локальное».
     let cardStyle: String?
 
+    // Электро и гибриды (0.8.3). Все четыре опциональные и с тем же смыслом,
+    // что `dashboardUnits`: сервер без колонок молчит, и молчание означает «не
+    // трогать локальное», а не «сбросить в ноль». Цена ошибки здесь та же, что
+    // у приборки: обнулённый запас хода — это не косметика, а другая раскладка
+    // у каждой поездки гибрида.
+
+    /// Тип двигателя. `nil` — старый сервер или незнакомое значение.
+    let powertrain: Powertrain?
+    /// Киловатт-часы на сотню КИЛОМЕТРОВ. Хранение метрическое всегда.
+    let electricConsumption: Double?
+    /// Цена киловатт-часа в валюте машины.
+    let electricityPrice: Double?
+    /// Запас хода на батарее, километры.
+    let electricRangeKm: Double?
+
     // Паспорт (0.6.4). Опциональные, как и всё, что появилось после первого
     // релиза: сервер до 0.6.4 этих ключей не знает, и их отсутствие обязано
     // означать «не трогать», а не «сбросить».
@@ -104,6 +119,10 @@ struct VehicleSyncPayload: Codable {
         fuelCurrency: String? = nil,
         dashboardUnits: DashboardUnits? = nil,
         cardStyle: String? = nil,
+        powertrain: Powertrain? = nil,
+        electricConsumption: Double? = nil,
+        electricityPrice: Double? = nil,
+        electricRangeKm: Double? = nil,
         about: String? = nil,
         make: String? = nil,
         model: String? = nil,
@@ -143,6 +162,10 @@ struct VehicleSyncPayload: Codable {
         self.fuelCurrency = fuelCurrency
         self.dashboardUnits = dashboardUnits
         self.cardStyle = cardStyle
+        self.powertrain = powertrain
+        self.electricConsumption = electricConsumption
+        self.electricityPrice = electricityPrice
+        self.electricRangeKm = electricRangeKm
     }
 
     // MARK: - Codable вручную
@@ -171,6 +194,7 @@ struct VehicleSyncPayload: Codable {
         case conflictVersion, lastModifiedAt, vehicleType, avatarStyle
         case plate, plateVisible, visibleToOthers, fuelCurrency, dashboardUnits
         case cardStyle
+        case powertrain, electricConsumption, electricityPrice, electricRangeKm
         case about, make, model, year, bodyType
         case mapVisible, photosVisible, isArchived, soldAt
     }
@@ -218,6 +242,15 @@ struct VehicleSyncPayload: Codable {
         dashboardUnits = DashboardUnits.parse(
             (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil)
         cardStyle = try c.decodeIfPresent(String.self, forKey: .cardStyle)
+        // Тип двигателя — строкой и через `parse`, как приборка выше: типом
+        // `decodeIfPresent` БРОСАЕТ на незнакомом значении, то есть роняет всю
+        // машину целиком из-за одного поля, которое приедет с первого же
+        // клиента, знающего четвёртый тип.
+        powertrain = Powertrain.parse(
+            (try? c.decodeIfPresent(String.self, forKey: .powertrain)) ?? nil)
+        electricConsumption = try c.decodeIfPresent(Double.self, forKey: .electricConsumption)
+        electricityPrice = try c.decodeIfPresent(Double.self, forKey: .electricityPrice)
+        electricRangeKm = try c.decodeIfPresent(Double.self, forKey: .electricRangeKm)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -243,6 +276,10 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(fuelCurrency, forKey: .fuelCurrency)
         try c.encodeIfPresent(dashboardUnits?.rawValue, forKey: .dashboardUnits)
         try c.encodeIfPresent(cardStyle, forKey: .cardStyle)
+        try c.encodeIfPresent(powertrain?.rawValue, forKey: .powertrain)
+        try c.encodeIfPresent(electricConsumption, forKey: .electricConsumption)
+        try c.encodeIfPresent(electricityPrice, forKey: .electricityPrice)
+        try c.encodeIfPresent(electricRangeKm, forKey: .electricRangeKm)
         try c.encodeIfPresent(about, forKey: .about)
         try c.encodeIfPresent(make, forKey: .make)
         try c.encodeIfPresent(model, forKey: .model)

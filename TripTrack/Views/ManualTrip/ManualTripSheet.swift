@@ -19,6 +19,14 @@ import MapKit
 /// модалок в приложении нет вовсе (CLAUDE.md, «Dialogs»), а «нет дороги» —
 /// это состояние формы, а не вопрос к человеку.
 struct ManualTripSheet: View {
+    /// Покупка НЕ записывает поездку сама — «Записать» человек нажимает сам.
+    ///
+    /// Константой, потому что это решение, а не деталь: автозапись после
+    /// покупки означала бы, что человек, зашедший на пейвол из листа,
+    /// получает поездку одним нажатием, которого он не делал. Держит
+    /// `ManualTripPaywallReturnTests`.
+    static let recordsAutomaticallyAfterPurchase = false
+
     /// Кто пишет в базу. Приходит снаружи, а не берётся из синглтона: у
     /// `TripManager` его нет — экземпляр держит `MapViewModel`, и оба входа
     /// (лента и «Мои») до него дотягиваются.
@@ -32,15 +40,34 @@ struct ManualTripSheet: View {
 
     @StateObject private var model: ManualTripModel
     @State private var searchTarget: SearchTarget?
+    @FocusState private var searchFocused: Bool
     @State private var isCreating = false
     /// «Точка на карте» взведена — следующий тап по герою листа ставит точку
     /// в активное поле (`ManualTripActiveField`), как и в поиске.
     @State private var mapTapArmed = false
     @State private var frequentPlaces: [Place] = []
+    /// Геометрия платной части — числом, а не измерением (правило проекта).
+    /// Карта-герой 40 % высоты экрана: прежние 260 pt были одинаковы у SE и
+    /// у Pro Max, то есть на первом занимали полэкрана, а на втором — треть.
+    private var layout: ProLayout {
+        let metrics = WindowLayoutMetrics.shared
+        return ProLayout(height: metrics.size?.height ?? 844,
+                         safeTop: metrics.safeAreaInsets?.top ?? 47,
+                         safeBottom: metrics.safeAreaInsets?.bottom ?? 34)
+    }
+
+    /// Пейвол открыт ПОВЕРХ этого листа (состояние 36б).
+    ///
+    /// Именно поверх, а не подменой содержимого хоста: `@StateObject model`
+    /// остаётся жив, и набранное — точки, остановки, время, машина —
+    /// сохраняется САМО, без отдельного кода восстановления. Подменить
+    /// содержимое значило бы уничтожить модель вместе с ним (§12.2 спеки).
+    @State private var paywallOverSheet = false
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = SettingsManager.shared
 
@@ -82,63 +109,80 @@ struct ManualTripSheet: View {
                 PlaceManager.shared.places, passCount: { PlaceManager.shared.passCount(for: $0) }
             )
         }
+        // Второй лист ПОВЕРХ первого — законный случай: он не «вместо», а
+        // «над», и первый под ним не закрывается. Запрет на две презентации
+        // подряд (CLAUDE.md) про другое — про «закрыть одну и открыть другую
+        // в одном нажатии», чего здесь не происходит.
+        .sheet(isPresented: $paywallOverSheet) {
+            PlusPaywallSheet(feature: .manualTrip, origin: .manualTrip)
+        }
     }
 
     // MARK: - Шапка
 
     private func header(_ c: AppTheme.Colors) -> some View {
-        ZStack {
-            Text(AppStrings.manualTripEntry(lang.language))
-                .font(.inter(16, weight: .bold))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 84)
-
-            HStack {
-                Button {
-                    Haptics.tap()
-                    // Из поиска «Отмена» возвращает в форму, а не закрывает
-                    // лист: закрыть форму, потеряв набранное, из второй стадии
-                    // человек не просил.
-                    if searchTarget != nil { searchTarget = nil } else { dismiss() }
-                } label: {
-                    Text(AppStrings.cancel(lang.language))
-                        .font(.inter(16, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("manual_trip_cancel")
-
-                Spacer()
+        HStack(spacing: 16) {
+            if !dynamicTypeSize.isAccessibilitySize { formTitle(c) }
+            Spacer(minLength: 0)
+            Button {
+                Haptics.tap()
+                if searchTarget != nil { cancelSearch() } else { dismiss() }
+            } label: {
+                Text(AppStrings.cancel(lang.language))
+                    .font(.interScaled(16, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(minHeight: 44)
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("manual_trip_cancel")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 8)
+    }
+
+    private func formTitle(_ c: AppTheme.Colors) -> some View {
+        Text(AppStrings.manualTripEntry(lang.language))
+            .font(.interScaled(18, weight: .bold, relativeTo: .headline))
+            .foregroundStyle(c.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Форма
 
     private func formStage(_ c: AppTheme.Colors) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                pointsCard(c)
-                ManualTripQuickPointsRow(
-                    home: settings.homeLocation,
-                    frequentPlaces: frequentPlaces,
-                    isMapTapArmed: mapTapArmed,
-                    onPick: quickPick,
-                    onArmMapTap: { mapTapArmed = true }
-                )
-                mapCard(c, height: 260)
-                routeStatus(c)
-                ManualTripWhenVehicleCard(model: model, vehicles: settings.recordableVehicles)
-                titleCard(c)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    // The large heading scrolls; cancel and save stay reachable
+                    // even on a 375 × 667 phone at the largest text setting.
+                    if dynamicTypeSize.isAccessibilitySize { formTitle(c) }
+                    pointsCard(c)
+                    ManualTripQuickPointsRow(
+                        home: settings.homeLocation,
+                        frequentPlaces: frequentPlaces,
+                        isMapTapArmed: mapTapArmed,
+                        onPick: quickPick,
+                        onArmMapTap: { mapTapArmed = true }
+                    )
+                    mapCard(c, height: layout.manualMap)
+                    routeStatus(c)
+                    ManualTripWhenVehicleCard(model: model, vehicles: settings.recordableVehicles)
+                    titleCard(c)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        footerDetails(c).id("manual_footer_details")
+                    }
+                }
+                .padding(16)
             }
-            .padding(16)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: model.createError) { _, error in
+                if dynamicTypeSize.isAccessibilitySize, error != nil {
+                    proxy.scrollTo("manual_footer_details", anchor: .bottom)
+                }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollDismissesKeyboard(.interactively)
     }
 
     private func mapCard(_ c: AppTheme.Colors, height: CGFloat) -> some View {
@@ -176,6 +220,20 @@ struct ManualTripSheet: View {
         all.append(contentsOf: model.via.filter { !$0.isPlaceholder })
         if let to = model.to { all.append(to) }
         return all
+    }
+
+    /// Выход из второй стадии. Заготовка промежуточной точки, ради которой
+    /// поиск и открывали, живёт в `model.via` с координатой (0, 0) — и, не
+    /// убери её здесь, оставалась бы в форме пустой строкой «Через», которую
+    /// снимает только кнопка «минус», о которой человек не думал. Маршруту она
+    /// не мешала (и `recomputeRoute`, и карта её отфильтровывают), поэтому
+    /// молчала.
+    private func cancelSearch() {
+        searchFocused = false
+        if case .via(let index) = searchTarget {
+            model.discardPlaceholderVia(at: index)
+        }
+        searchTarget = nil
     }
 
     /// Куда идёт следующий тап по карте — явная цель поиска, а пока её нет,
@@ -220,27 +278,25 @@ struct ManualTripSheet: View {
     /// маршрут, — via остаётся в прежнем порядке, но едет в обратную сторону
     /// вместе с концами.
     private func swapRow(_ c: AppTheme.Colors) -> some View {
-        ZStack {
-            Divider().overlay(c.border).padding(.leading, 16)
-        }
-        .frame(height: 1)
-        .overlay(alignment: .trailing) {
+        HStack(spacing: 8) {
+            Rectangle().fill(c.border).frame(height: 1)
             Button {
                 Haptics.tap()
                 swapPoints()
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.textSecondary)
-                    .frame(width: 28, height: 28)
-                    .background(c.card, in: Circle())
-                    .overlay(Circle().strokeBorder(c.border, lineWidth: 1))
+                    .frame(width: 44, height: 44)
+                    .background(c.cardAlt, in: Circle())
                     .contentShape(Circle())
             }
             .buttonStyle(PressableCardStyle())
+            .accessibilityLabel(AppStrings.manualTripSwapPoints(lang.language))
             .accessibilityIdentifier("manual_trip_swap")
-            .padding(.trailing, 12)
         }
+        .frame(minHeight: 44)
+        .padding(.horizontal, 12)
     }
 
     private func swapPoints() {
@@ -263,7 +319,7 @@ struct ManualTripSheet: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Text(AppStrings.manualTripAddVia(lang.language))
-                    .font(.inter(15, weight: .semibold))
+                    .font(.interScaled(15, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
                 Spacer(minLength: 0)
             }
@@ -290,17 +346,17 @@ struct ManualTripSheet: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(label)
-                            .font(.inter(11, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
+                            .font(.interScaled(13, weight: .semibold, relativeTo: .caption))
+                            .foregroundStyle(c.textSecondary)
                         Text(displayName(point))
-                            .font(.inter(15, weight: .semibold))
-                            .foregroundStyle(point == nil ? c.textTertiary : c.text)
-                            .lineLimit(1)
+                            .font(.interScaled(15, weight: .semibold))
+                            .foregroundStyle(point == nil ? c.textSecondary : c.text)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
+                        .foregroundStyle(c.textSecondary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
@@ -318,8 +374,8 @@ struct ManualTripSheet: View {
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.system(size: 17))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(width: 34, height: 34)
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -362,26 +418,34 @@ struct ManualTripSheet: View {
     private func routeStatus(_ c: AppTheme.Colors) -> some View {
         if model.isRouting {
             Text(AppStrings.manualTripRouting(lang.language))
-                .font(.inter(13))
+                .font(.interScaled(13))
                 .foregroundStyle(c.textSecondary)
         } else if model.isRouteTooLong {
             // Кнопка выключена, и рядом написано почему. Молча выключенная
             // кнопка — та самая мёртвая, которую запрещает CLAUDE.md.
             Text(AppStrings.manualTripErrorTooLong(lang.language))
-                .font(.inter(13, weight: .semibold))
+                .font(.interScaled(13, weight: .semibold))
                 .foregroundStyle(AppTheme.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_too_long")
+        } else if model.endsLater {
+            // Тот же случай, что `isRouteTooLong`: кнопка выключена, и рядом
+            // написано почему.
+            Text(AppStrings.manualTripErrorEndsLater(lang.language))
+                .font(.interScaled(13, weight: .semibold))
+                .foregroundStyle(AppTheme.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("manual_trip_ends_later")
         } else if let error = model.routeError {
             Text(errorText(error))
-                .font(.inter(13, weight: .semibold))
+                .font(.interScaled(13, weight: .semibold))
                 .foregroundStyle(AppTheme.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("manual_trip_error")
         } else if let route = model.route {
             Text(Measure.distance(metres: routeDistance(route), unit: distanceUnit,
                                   lang: lang.language, style: .tenths))
-                .font(.inter(15, weight: .bold))
+                .font(.interScaled(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .accessibilityIdentifier("manual_trip_distance")
         }
@@ -414,10 +478,10 @@ struct ManualTripSheet: View {
     private func titleCard(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.tripTitleLabel(lang.language))
-                .font(.inter(11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
+                .font(.interScaled(13, weight: .semibold, relativeTo: .caption))
+                .foregroundStyle(c.textSecondary)
             TextField(AppStrings.tripTitlePlaceholder(lang.language), text: $model.title)
-                .font(.inter(16))
+                .font(.interScaled(16))
                 .foregroundStyle(c.text)
                 .submitLabel(.done)
                 .accessibilityIdentifier("manual_trip_title")
@@ -430,15 +494,135 @@ struct ManualTripSheet: View {
     // MARK: - Кнопка
 
     private func footer(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 10) {
+            if !dynamicTypeSize.isAccessibilitySize { footerDetails(c) }
+            createButton(c)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .background(c.bg)
+    }
+
+    /// At accessibility sizes details scroll with the form, leaving the
+    /// explicit save action reachable without covering all editable fields.
+    private func footerDetails(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 8) {
+            if let error = model.createError { refusalCard(error, c) }
+            if let summary = routeSummary ?? ((model.from == nil || model.to == nil)
+                ? AppStrings.manualTripNeedPoints(lang.language) : nil) {
+                Text(summary)
+                    .font(.interScaled(14, weight: .medium, relativeTo: .subheadline))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("manual_trip_summary")
+            }
+            Text(AppStrings.manualHonesty(lang.language))
+                .font(.interScaled(12, relativeTo: .caption))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("manual_trip_honesty")
+        }
+        .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 0 : 16)
+    }
+
+    /// Карточка отказа записи — состояния 36а и 36в.
+    ///
+    /// Карточка, а не строка: у отказа есть ПРИЧИНА и есть ДЕЙСТВИЕ, и у двух
+    /// случаев они разные. Общее «не удалось» заставило бы человека с
+    /// кончившейся подпиской жать «Повторить», пока не устанет, а человека с
+    /// отказом базы — идти покупать то, что у него и так есть.
+    private func refusalCard(
+        _ error: ManualTripCreateError, _ c: AppTheme.Colors
+    ) -> some View {
+        let l = lang.language
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(refusalTitle(error, l))
+                .font(.interScaled(17, weight: .semibold))
+                .foregroundStyle(c.text)
+            Text(refusalText(error, l))
+                .font(.interScaled(15))
+                .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Haptics.action()
+                switch error.action {
+                case .renew:
+                    // Пейвол — ВТОРОЙ лист ПОВЕРХ этого, а не подмена
+                    // содержимого хоста. Модель под ним остаётся жива, и
+                    // точки, остановки, время и машина сохраняются САМИ;
+                    // подмена уничтожила бы `@StateObject` вместе с
+                    // набранным (§12.2 спеки).
+                    model.clearCreateError()
+                    paywallOverSheet = true
+                case .retry:
+                    create()
+                }
+            } label: {
+                Text(refusalAction(error, l))
+                    .font(.interScaled(16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(AppTheme.accent)
+                    )
+            }
+            .buttonStyle(PressableCardStyle())
+            .padding(.top, 8)
+            .accessibilityIdentifier("manual_trip_refusal_action")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(c.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(c.border, lineWidth: 1)
+        )
+        .accessibilityIdentifier("manual_trip_create_error")
+    }
+
+    private func refusalTitle(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
+        switch error {
+        case .noAccess: return AppStrings.manualFailedProTitle(l)
+        case .notSaved: return AppStrings.manualFailedDbTitle(l)
+        }
+    }
+
+    private func refusalText(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
+        switch error {
+        case .noAccess: return AppStrings.manualFailedProText(l)
+        case .notSaved: return AppStrings.manualFailedDbText(l)
+        }
+    }
+
+    private func refusalAction(
+        _ error: ManualTripCreateError, _ l: LanguageManager.Language
+    ) -> String {
+        switch error.action {
+        case .renew: return AppStrings.proCtxRenew(l)
+        case .retry: return AppStrings.retry(l)
+        }
+    }
+
+    private func createButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.action()
             create()
         } label: {
-            Text(footerLabel)
-                .font(.inter(16, weight: .bold))
+            Text(AppStrings.manualTripSave(lang.language))
+                .font(.interScaled(16, weight: .bold))
                 .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(
@@ -450,28 +634,19 @@ struct ManualTripSheet: View {
         .buttonStyle(PressableCardStyle())
         .disabled(!model.canCreate || isCreating)
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
-        .background(c.bg)
         .accessibilityIdentifier("manual_trip_create")
     }
 
-    /// «420 км · 5 ч 30 мин · вчера 09:00», как только маршрут готов; иначе —
-    /// подсказка, чего не хватает. Молча выключенная кнопка запрещена тем же
-    /// правилом, что держит строку у «слишком длинного» маршрута.
-    private var footerLabel: String {
-        if let route = model.route, model.canCreate {
-            return ManualTripSummaryLine.compose(
-                distance: Measure.distance(metres: routeDistance(route), unit: distanceUnit,
-                                           lang: lang.language, style: .tenths),
-                duration: ManualTripDurationText.string(model.duration, lang: lang.language),
-                when: RelativeTripDate.string(from: model.startDate, language: lang.language)
-            )
-        }
-        if model.from == nil || model.to == nil {
-            return AppStrings.manualTripNeedPoints(lang.language)
-        }
-        return AppStrings.manualTripCreate(lang.language)
+    /// The result summary is separate from the action: numbers never replace
+    /// the verb on a button, regardless of route length or language.
+    private var routeSummary: String? {
+        guard let route = model.route else { return nil }
+        return ManualTripSummaryLine.compose(
+            distance: Measure.distance(metres: routeDistance(route), unit: distanceUnit,
+                                       lang: lang.language, style: .tenths),
+            duration: ManualTripDurationText.string(model.duration, lang: lang.language),
+            when: RelativeTripDate.string(from: model.startDate, language: lang.language)
+        )
     }
 
     private func create() {
@@ -490,21 +665,25 @@ struct ManualTripSheet: View {
 
     private func searchStage(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 0) {
-            mapCard(c, height: 190)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+            if !searchFocused {
+                mapCard(c, height: dynamicTypeSize.isAccessibilitySize ? 120 : 190)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+            }
 
             searchField(c)
 
-            ManualTripQuickPointsRow(
-                home: settings.homeLocation,
-                frequentPlaces: frequentPlaces,
-                isMapTapArmed: mapTapArmed,
-                onPick: quickPick,
-                onArmMapTap: { mapTapArmed = true }
-            )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            if !searchFocused {
+                ManualTripQuickPointsRow(
+                    home: settings.homeLocation,
+                    frequentPlaces: frequentPlaces,
+                    isMapTapArmed: mapTapArmed,
+                    onPick: quickPick,
+                    onArmMapTap: { mapTapArmed = true }
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
 
             // Список сам по себе скроллится — `LazyVStack` внутри `ScrollView`
             // по правилу проекта для списков длиннее двадцати строк.
@@ -513,6 +692,19 @@ struct ManualTripSheet: View {
                     ForEach(Array(model.completions.enumerated()), id: \.offset) { _, item in
                         completionRow(item, c: c)
                     }
+                }
+                // Пустой список — это «ищем», «не нашлось» или «ещё ничего не
+                // набрано», и до 0.8.4 экран отвечал на все три одинаковым
+                // белым местом. Форму этого состояния дорисует дизайнер; пока
+                // здесь стоит честный минимум.
+                if model.completions.isEmpty && !model.isSearching
+                    && model.query.trimmingCharacters(in: .whitespacesAndNewlines).count > 1 {
+                    Text(AppStrings.noResults(lang.language))
+                        .font(.interScaled(14))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 28)
+                        .accessibilityIdentifier("manual_trip_no_results")
                 }
             }
             .scrollDismissesKeyboard(.immediately)
@@ -523,14 +715,17 @@ struct ManualTripSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
+                .foregroundStyle(c.textSecondary)
             TextField(
                 AppStrings.manualTripSearchHint(lang.language),
-                text: Binding(get: { model.query }, set: { model.updateSearch($0) })
+                text: Binding(get: { model.query }, set: { model.updateSearch($0) }),
+                prompt: Text(AppStrings.manualTripSearchHint(lang.language))
+                    .foregroundStyle(c.textSecondary)
             )
-            .font(.inter(16))
+            .font(.interScaled(16))
             .foregroundStyle(c.text)
             .autocorrectionDisabled()
+            .focused($searchFocused)
             .accessibilityIdentifier("manual_trip_search")
         }
         .padding(.horizontal, 14)
@@ -549,13 +744,13 @@ struct ManualTripSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.inter(15, weight: .semibold))
+                    .font(.interScaled(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 if !item.subtitle.isEmpty {
                     Text(item.subtitle)
-                        .font(.inter(12))
-                        .foregroundStyle(c.textTertiary)
+                        .font(.interScaled(12))
+                        .foregroundStyle(c.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -579,6 +774,7 @@ struct ManualTripSheet: View {
             model.via[index] = point
         case nil: return
         }
+        searchFocused = false
         searchTarget = nil
         mapTapArmed = false
         model.updateSearch("")

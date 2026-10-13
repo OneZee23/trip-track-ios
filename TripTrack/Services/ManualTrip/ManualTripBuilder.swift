@@ -104,6 +104,22 @@ enum ManualTripBuilder {
         date <= now && date >= now.addingTimeInterval(-maximumAge)
     }
 
+    /// Поездка, которая ещё НЕ ЗАКОНЧИЛАСЬ, вписана быть не может — по той же
+    /// причине, по которой не может быть вписана не начавшаяся.
+    /// `isPlausibleStart` проверяет только СТАРТ, и старт полчаса назад плюс
+    /// три часа пути давал поездку, финиш которой наступит через два с
+    /// половиной часа: в календаре истории она видна глазом, и это неправда в
+    /// данных, а не придирка.
+    ///
+    /// Отдельной функцией, а не строкой внутри `build`: то же правило
+    /// спрашивает лист, чтобы выключить кнопку и написать рядом ПОЧЕМУ
+    /// (`ManualTripModel.endsLater`), — а два места, считающие одно правило
+    /// каждое по-своему, однажды разойдутся.
+    static func hasEnded(startDate: Date, duration: TimeInterval,
+                         now: Date = Date()) -> Bool {
+        startDate.addingTimeInterval(duration) <= now
+    }
+
     /// `nil` значит «собрать не из чего»: меньше двух точек или неположительная
     /// длительность. Отказ, а не поездка нулевой длины, — такую пришлось бы
     /// потом отличать от настоящей на каждом экране.
@@ -111,6 +127,8 @@ enum ManualTripBuilder {
         let coords = draft.coordinates
         guard coords.count > 1, draft.duration > 0 else { return nil }
         guard isPlausibleStart(draft.startDate, now: now) else { return nil }
+        guard hasEnded(startDate: draft.startDate, duration: draft.duration,
+                       now: now) else { return nil }
 
         let endDate = draft.startDate.addingTimeInterval(draft.duration)
         let stamps = timestamps(count: coords.count,

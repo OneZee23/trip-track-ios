@@ -42,10 +42,66 @@
 	-->
 	<key>SENTRY_DSN</key>
 	<string>$(SENTRY_DSN)</string>
+	<!--
+		МАНИФЕСТ СЦЕН — ради экрана автомобиля (0.8.4), и это самый рискованный
+		ключ в файле: ошибка здесь кладёт не CarPlay, а ВЕСЬ экран телефона.
+
+		Объявлена ТОЛЬКО роль CarPlay. Роль окна телефона не объявлена нарочно:
+		приложение на жизненном цикле SwiftUI (`@main struct TripTrackApp: App`),
+		и свою сцену SwiftUI заводит сам. Объявить её здесь значило бы
+		назначить ей делегата, которого у SwiftUI-приложения нет.
+
+		`UIApplicationSupportsMultipleScenes` обязателен: CarPlay это ВТОРАЯ
+		сцена того же процесса, и без этого ключа система её не создаст. На
+		iPhone он ничего не меняет — многооконности там нет, а приложение
+		iPhone-only.
+
+		ПРОВЕРЯТЬ ПЕРВЫМ ДЕЛОМ на симуляторе: экран телефона обязан собраться
+		как прежде. Тестом это не задать — манифест читает система до нашего
+		кода.
+	-->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>TripTrackCarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<!--
+		ФОНОВЫЕ РЕЖИМЫ — ТОЛЬКО ТЕ, ЧТО ПРИЛОЖЕНИЕ ПРАВДА ИСПОЛЬЗУЕТ.
+		Каждый лишний — отказ ревью по 2.5.4, и такой отказ мы уже получили.
+
+		`location` — запись поездки продолжается, когда телефон в кармане; это
+		и есть смысл приложения.
+
+		`bluetooth-central` СНЯТ 30 сентября 2026 после отказа 2.5.4 по 0.8.2:
+		«we are unable to locate any Bluetooth Low Energy functionality».
+		Апелляции не требовалось — Apple права. Магнитола это классический
+		Bluetooth (A2DP/HFP), и BLE-сканирование её НЕ ВИДИТ НИКОГДА; так
+		написано и в самом коде (`AudioRouteDetector.currentBluetoothOutputName`).
+		Машину ловит аудио-маршрут, а не Core Bluetooth, и фон ему не нужен.
+		Сканирование BLE осталось и работает на переднем плане — для него
+		фоновый режим не требуется.
+
+		Добавляешь сюда режим — сначала убедись, что функция РАБОТАЕТ и её
+		видно человеку; ревьюер будет искать её руками. Держит
+		`BackgroundModesTests`.
+	-->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
-		<string>bluetooth-central</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

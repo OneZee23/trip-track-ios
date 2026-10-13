@@ -91,6 +91,40 @@ final class MyMapViewModel: ObservableObject {
     /// Нажатая булавка места — под ней встаёт карточка. `nil` — карточки нет.
     @Published var selectedPlaceId: UUID?
 
+    /// Нажата ли булавка дома — под ней встаёт карточка (спека v3, 26).
+    @Published var homeSelected = false
+    /// Сколько поездок началось у дома. Считается на загрузке, не в `body`.
+    @Published private(set) var homeTripCount = 0
+
+    /// Метка дома. `nil` — дома нет ИЛИ человек снял «показывать на карте».
+    ///
+    /// Живёт ЗДЕСЬ, а не в `@State` экрана и не читается координатором из
+    /// `HomeManager` напрямую, по той же причине, что стиль карты и период:
+    /// до карты всё везёт подписка `Coordinator.bindViewModel`, а
+    /// `updateUIViewController` на «Атласе» SwiftUI зовёт только на старте.
+    /// Положи это мимо вью-модели — и метка просто не появится, молча.
+    @Published private(set) var homePin: CLLocationCoordinate2D?
+
+    /// «Вид карты»: стиль мглы, клетки и фото на карте.
+    ///
+    /// Живёт ЗДЕСЬ, а не в `@State` экрана, по той же причине, что камера и
+    /// период: до карты выбор везёт подписка `Coordinator.bindViewModel`, а
+    /// `updateUIViewController` SwiftUI на «Атласе» зовёт только на старте
+    /// (замер 26 сентября). Пока стиль ехал ТОЛЬКО оттуда, он не доезжал
+    /// вовсе: лист переставлял галочку, а карта оставалась в стартовом
+    /// стиле — владелец на устройстве 27 сентября, три кадра трёх стилей
+    /// совпали побайтово. Держит `AtlasAppearanceWiringTests`.
+    @Published private(set) var appearance = AtlasMapAppearance.saved
+
+    /// Выбор человека в листе «Вид карты». Сохраняется здесь же: у выбора
+    /// одна дверь, и запоминать его отдельным `.onChange` на экране значило
+    /// бы завести вторую.
+    func setAppearance(_ value: AtlasMapAppearance) {
+        guard value != appearance else { return }
+        appearance = value
+        value.save()
+    }
+
     @Published private(set) var period: AtlasPeriod = .allTime
     @Published private(set) var isFiltering = false
     @Published private(set) var overview = AtlasOverviewIndex.empty
@@ -185,8 +219,11 @@ final class MyMapViewModel: ObservableObject {
         // загрузка иначе накрыла бы свежие маршруты сообщением об отказе.
         remoteFailed = result.failed
         apply(exploration: built.0, layer: built.1)
+        // «61 поездка отсюда» — по НАЧАЛАМ уже поднятых превью: второго
+        // похода в базу ради одной цифры на карточке быть не должно.
+        recountHomeTrips()
         loaded = true
-        isLoading = false
+        finishLoading()
     }
 
     /// Туман чужой (и машинной) карты — на лету, тем же `RevealBuilder`, и
@@ -268,7 +305,48 @@ final class MyMapViewModel: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.schedulePlacesReload() }
         }
+        // Дом — своей подпиской и без склейки: это одна точка, а не проход по
+        // библиотеке, и меняется она ровно тогда, когда человек стоит в листе
+        // настройки и смотрит на результат.
+        homePin = HomeManager.shared.settings.mapPin
+        NotificationCenter.default.addObserver(
+            forName: .homeSettingsChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.homePin = HomeManager.shared.settings.mapPin
+                // Дом переехал — число «отсюда» стало про другое место.
+                self.recountHomeTrips()
+                if self.homePin == nil { self.homeSelected = false }
+            }
+        }
         StartupTrace.mark("MyMapViewModel.init end")
+    }
+
+    /// Одна дверь на «атлас досчитался».
+    ///
+    /// Гасили флаг ТРИ места, и отладочный флаг, вставленный в одно из них,
+    /// молча не работал: скелетон снимался следующим же путём. Состояние 22
+    /// иначе непроверяемо вовсе — атлас считается по своей базе и успевает
+    /// досчитаться до того, как человек дойдёт до вкладки (на стресс-сиде
+    /// тоже).
+    private func finishLoading() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-debug-atlas-loading") { return }
+        #endif
+        isLoading = false
+    }
+
+    /// Пересчитать «поездок отсюда».
+    ///
+    /// Дома нет — ноль, и карточке этого хватает: её всё равно не показать.
+    private func recountHomeTrips() {
+        guard let home = HomeManager.shared.settings.coordinate else {
+            homeTripCount = 0
+            return
+        }
+        homeTripCount = AtlasHome.tripsStarted(
+            at: home, starts: exploration.trips.compactMap(\.route.first))
     }
 
     // MARK: - Места на карте
@@ -427,7 +505,7 @@ final class MyMapViewModel: ObservableObject {
         if period == .allTime {
             apply(exploration: cachedAllTime.exploration, layer: cachedAllTime.layer)
             isFiltering = false
-            isLoading = false
+            finishLoading()
             return true
         }
         isFiltering = true
@@ -452,7 +530,7 @@ final class MyMapViewModel: ObservableObject {
         guard generation == filterGeneration else { return false }
         apply(exploration: built.0, layer: built.1)
         isFiltering = false
-        isLoading = false
+        finishLoading()
         return true
     }
 

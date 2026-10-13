@@ -39,14 +39,15 @@ enum HeroMapProbe {
     /// Полоса, сжатая в сетку 16×8 одним `draw`: это и усреднение внутри
     /// каждой клетки, и дешёвый способ прочитать их все разом.
     static func grid(
-        of screenshot: XCUIScreenshot, from: CGFloat, to: CGFloat
+        of screenshot: XCUIScreenshot, from: CGFloat, to: CGFloat,
+        columns: Int = 16, rows: Int = 8
     ) -> [Double] {
         guard let full = screenshot.image.cgImage else { return [] }
         let height = CGFloat(full.height), width = CGFloat(full.width)
         let band = CGRect(x: 0, y: height * from, width: width, height: height * (to - from))
         guard let crop = full.cropping(to: band) else { return [] }
 
-        let cols = 16, rows = 8
+        let cols = columns
         var pixels = [UInt8](repeating: 0, count: cols * rows * 4)
         let context = pixels.withUnsafeMutableBytes { bytes in
             CGContext(

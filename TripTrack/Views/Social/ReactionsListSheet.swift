@@ -26,6 +26,8 @@ struct ReactionsListSheet: View {
     @State private var isLoading = true
     @State private var loadFailed = false
     @State private var selectedEmoji: String?
+    /// Whose row is one's own — read once, not per row (`PersonName`).
+    @State private var ownId: UUID? = PersonName.ownId()
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -206,16 +208,10 @@ struct ReactionsListSheet: View {
             onSelectUser(entry.user)
         } label: {
             HStack(spacing: 11) {
-                Circle()
-                    .fill(c.cardAlt)
-                    .frame(width: 36, height: 36)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.inter(18)) }
+                PersonAvatar(author: entry.user)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))
-                        .font(.inter(14, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
+                    PersonName(author: entry.user, font: .inter(14, weight: .bold), ownId: ownId)
                     Text(RelativeTripDate.string(from: entry.createdAt, language: lang.language))
                         .font(.inter(11))
                         .foregroundStyle(c.textTertiary)

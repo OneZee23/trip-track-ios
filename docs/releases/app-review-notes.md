@@ -4,7 +4,360 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.8.1 — a track without gaps, drafts, a new look (current submission)
+## v0.8.4 (73) — recording and map fixes (current submission)
+
+**Released October 6, 2026 at 08:27:37 UTC (11:27:37 MSK).**
+After the owner's instruction, the approved version was manually released.
+App Store Connect readback confirmed **Ready for Distribution**, selected
+build **0.8.4 (73)**. This is a full release, not a phased release; availability
+is configured for 175 countries and regions, and existing ratings were kept
+(`KEEP`). The previous public version was 0.8.1. At 08:29 UTC, public Apple
+Lookup still returned 0.8.1 for US and DE; the RU request failed with URLError.
+Availability of 0.8.4 across public storefronts is not yet confirmed.
+Today's Live Activity and history-counter fixes
+are not included in build 73; no new build or test run was performed for release.
+
+Earlier on October 6, build 73 was confirmed as Pending Developer Release.
+
+**Prepared October 5, 2026.** Build 73 combines the changes in
+[candidate 72](0.8.4/candidate-72.md) with the map-dash rendering correction.
+The Release archive passed verification and uploaded at 18:57 MSK.
+**Submitted October 5, 2026 at 19:07 MSK: Waiting for Review**, submission
+`9f604caf-1bd0-49a0-ac26-1e5f1d5eb2ab`. Build 73 replaced build 70;
+manual release was selected, with no public release at submission time.
+The six previously approved PRO/tip items do not require resubmission;
+the new submission contains the app version only. Exact Notes and selected
+build were read back after submission. The build 70 history below remains unchanged.
+See [candidate 73](0.8.4/candidate-73.md) for the test scope and remaining
+device checks. Preparing this packet does not mark those checks as passed.
+
+### Short version — paste into App Store Connect
+
+```
+TripTrack 0.8.4 (73) includes PRO and recording/map improvements. Recording,
+the atlas, places, journeys, photos and statistics stay free. No previously
+free feature became paid. PRO and tips were approved with build 70.
+
+ANSWERING 5.1.1(iv), BUILD 69
+Each pre-permission screen has one neutral Continue button leading to the
+iOS permission request, with no Not now, skip or swipe bypass. Users can
+deny access in the system dialog and continue onboarding; denial is
+respected without repeated prompts. Requests run sequentially: location,
+background location when available, Motion & Fitness, then notifications.
+TripTrack does not request microphone access or record audio. Car-stereo
+detection observes audio-route changes only. Test on a fresh installation,
+including denying access in the system dialogs.
+
+RECORDING AND MAPS
+GPS continuity checks reject implausible jumps before saving points, and
+the filter resets after a long signal gap. Manual pause boundaries are
+retained for distance calculations and sync. This cannot reconstruct a
+verified route where GPS measurements are missing or unreliable.
+Trip details have a stable initial layout and reuse the map on full-screen
+expansion. Gray dashed sections retain a consistent width while zooming.
+Existing trips are not automatically rewritten.
+
+PRO adds eight profile backgrounds, six avatar frames, eight vehicle-card
+backgrounds and route-line styles, plus manually adding past trips along
+roads, with up to three stops. Manual trips count toward distance, the
+Atlas and the vehicle odometer, but award no experience, levels, badges or
+finds. Cards are labelled "Added by hand". The PRO mark can be hidden in
+Privacy settings.
+
+SUBSCRIPTIONS
+Germany base prices: EUR 24.99/year or EUR 5.99/month. The paywall shows
+localized StoreKit prices. Only the yearly plan offers a 7-day free trial,
+and only when Apple reports eligibility; monthly has no trial. Both plans
+provide the same access in one subscription group. Family Sharing is off.
+Price, duration, trial renewal terms, Restore Purchases, Terms of Use and
+Privacy Policy are on the paywall.
+
+HOW TO FIND AND TEST
+1. Me/Profile -> TripTrack PRO opens the paywall. Cosmetic galleries offer
+   previews and a PRO purchase button.
+2. A successful sandbox purchase unlocks PRO. Restore Purchases with the
+   SAME purchasing Apple ID restores an active subscription without another
+   charge. An account without a subscription does not receive PRO.
+3. Profile -> active PRO row opens Apple's Manage Subscription sheet.
+   Cancellation preserves access until the current period ends.
+4. Manual trip: tap + beside History on Me/Profile, or the add-trip action
+   for the selected day in its history calendar.
+5. Tips: Me/Profile -> gear (Settings) -> author's card at the bottom ->
+   support row. Three repeatable Consumable tips have Germany base prices
+   EUR 0.99 / 2.99 / 9.99. They unlock nothing and never grant PRO.
+
+StoreKit 2 entitlements determine access, including offline, and refresh
+on foreground return. Verified signed transactions are sent separately
+to our server for public cosmetics. When PRO expires, free defaults are
+displayed and saved paid choices return with a renewed subscription.
+
+On the RUS storefront, purchase entry points are hidden. An already owned
+subscription continues to work regardless of storefront. No special app
+account is required to test; Sign in with Apple is available when needed.
+
+ANSWERING THE 2.5.4 REJECTION OF 0.8.2 (65)
+The unused bluetooth-central background mode was removed. The only remaining
+background mode is location, needed to record drives in the background.
+Car-stereo detection uses AVAudioSession audio-route changes, not BLE
+background scans. Core Bluetooth is used only in the foreground device
+selection sheet; its state-restoration identifier and willRestoreState
+handler were also removed.
+```
+
+This block is 3,875 characters and retains the responses to 5.1.1(iv) and
+2.5.4. The product approvals belong to build 70's completed submission;
+they are not an approval of the changes in build 73.
+
+---
+
+## v0.8.4 (70) — PRO and permission-flow correction (previous submission)
+
+**Live check, October 5, 2026:** Review Completed. Build 70, the PRO group,
+both subscriptions and all three tips are Approved. The app version is
+Pending Developer Release; manual release has not been triggered. The two
+messages in this submission are the October 2 rejection and our reply below,
+not a new rejection.
+
+**This is the first TripTrack build that sells anything.** Everything that
+existed before stays free; the subscription adds four cosmetic unlocks and one
+feature, and there is a separate tip that unlocks nothing at all.
+
+Build 70 was uploaded on October 2, 2026 at 17:00 MSK after 17 unit tests
+and 3 UI tests passed. These notes were saved and the reply below was sent
+with three permission-screen screenshots at 17:14 MSK. Resubmission was
+confirmed at 17:15 MSK: all seven items are Waiting for Review, with manual
+release after approval. Submission ID: `f0807f5f-e336-4c08-9293-6ff4c1b9c4ff`.
+
+### Short version — paste into App Store Connect
+
+```
+TripTrack 0.8.4 (70) introduces PRO. Recording, the map atlas, places, journeys,
+photos and statistics stay free. No previously free feature became paid.
+
+ANSWERING 5.1.1(iv), BUILD 69
+Each pre-permission screen now has one neutral Continue button leading to
+the iOS permission request, with no Not now, skip or swipe bypass. Users
+can deny access in the system dialog and continue onboarding; denial is
+respected without repeated prompts. Requests run sequentially: location,
+background location when available, Motion & Fitness, then notifications.
+TripTrack does not request microphone access or record audio. Car-stereo
+detection observes audio-route changes only. To check this flow, start a
+fresh installation and continue through onboarding, including denying access.
+
+PRO adds eight profile backgrounds, six avatar frames, eight vehicle-card
+backgrounds and route-line styles, plus manually adding a past trip along
+real roads. Manual trips support start/end address search or map selection
+and up to three stops. They count toward distance, the Atlas and the vehicle
+odometer, but award no experience, levels, badges or finds. Their cards are
+labelled "Added by hand". The optional PRO profile mark can be hidden in
+Privacy settings.
+
+SUBSCRIPTIONS. Germany base prices: EUR 24.99/year or EUR 5.99/month; the
+paywall displays localized StoreKit prices. Only the yearly plan has a
+7-day free trial, shown only when Apple reports eligibility. Both plans
+offer the same access and belong to one subscription group. Family Sharing
+is disabled. The paywall states price, duration and trial renewal terms,
+with Restore Purchases, Terms of Use and Privacy Policy links.
+
+HOW TO FIND AND TEST
+1. Me/Profile tab -> TripTrack PRO opens the paywall. Cosmetic galleries
+   offer previews and a PRO purchase button. The yearly plan is initially selected; an ineligible account is
+   not promised a free trial.
+2. After a successful sandbox purchase, PRO unlocks. On a clean installation
+   or second device with the SAME purchasing Apple ID, Restore Purchases
+   restores access without another charge. An account without a subscription
+   does not receive PRO.
+3. Profile -> active PRO row opens Apple's Manage Subscription sheet.
+   Cancellation preserves access until the paid period ends.
+4. Manual trip: tap + beside History on the Me tab, or an empty day in its
+   history calendar.
+5. Tips: Me/Profile -> gear (Settings) -> scroll to the author's card at the
+   bottom -> the support row. Three repeatable Consumable tips have Germany
+   base prices EUR 0.99 / 2.99 / 9.99. They unlock nothing and never grant PRO;
+   the screen explains this before purchase.
+
+StoreKit 2 entitlements determine access on the device, including offline.
+They are refreshed when the app returns to the foreground. Verified signed
+transactions are sent separately to our server for public profile cosmetics.
+When PRO ends, saved cosmetic choices remain; display falls back to free
+defaults and restores those choices if the user subscribes again.
+
+On the RUS storefront, purchase entry points are hidden. An already owned
+subscription continues to work regardless of storefront. No special app
+account is required to test; Sign in with Apple is available when needed.
+
+ANSWERING THE 2.5.4 REJECTION OF 0.8.2 (65)
+The review correctly identified an unused bluetooth-central background mode.
+It has been removed. The only remaining background mode is location, needed
+to keep recording drives while the app is in the background. Car-stereo
+detection uses AVAudioSession audio-route changes, not BLE background scans.
+Core Bluetooth is used only in the foreground device-selection sheet; its
+state-restoration identifier and willRestoreState handler were also removed.
+```
+
+This single paste block includes the responses to both rejections and
+must remain within App Store Connect's 4,000-character limit. Preparing these
+notes does not mark device acceptance or App Review as completed.
+
+### Reply to the 5.1.1(iv) rejection of 0.8.4 (69) — sent for build 70
+
+```
+Thank you for identifying the pre-permission flow issue in build 69.
+
+Build 70 removes the "Not now" and skip actions from the pre-permission
+screens and prevents swiping past them. Each screen has one neutral
+"Continue" button that proceeds to the corresponding iOS permission request.
+Users remain free to deny access in the system dialog and continue onboarding.
+The app respects that decision and does not repeatedly prompt after denial.
+
+Location, background location when available, Motion & Fitness, and
+notification requests are handled sequentially, without overlapping prompts.
+
+Regarding Audio: TripTrack does not request microphone access or record
+audio. Car-stereo detection observes AVAudioSession audio-route changes;
+the separate Motion & Fitness permission is used for automatic trip detection.
+
+Please review version 0.8.4 (70). On a fresh installation, proceed through
+onboarding with Continue; each unresolved permission is requested by iOS.
+Choosing not to allow access in the system dialog still allows onboarding
+to continue. The PRO subscription and tip purchase flows are unchanged.
+```
+
+### How to test the subscription in sandbox
+
+1. Use TestFlight or a sandbox installation of `com.onezee.TripTrack` on
+   the test device. A Debug Run using `Config/TripTrack.storekit` tests the
+   local catalog, not the products configured in App Store Connect. Configure
+   the tester account for a storefront where the app exposes purchases.
+2. In the app: **Я (Profile) → the PRO row** opens the paywall. Cosmetic
+   galleries offer previews; their PRO purchase button opens that paywall.
+3. The yearly plan is selected by default. If the sandbox account is eligible
+   it offers seven days free, followed by the localized yearly price
+   (EUR 24.99 on the German storefront). Otherwise the trial line is absent.
+4. Tap the purchase button and confirm in the system sheet. Test renewals
+   use an accelerated schedule that depends on the test environment and
+   sandbox account settings. The paywall closes and the cosmetics
+   and the hand-entered-trip entry point unlock immediately.
+5. **Restore:** delete and reinstall, or use a second device, then open the
+   paywall and tap "Restore Purchases" — PRO returns with no new charge. If
+   the Apple ID has no subscription, the app says so instead of failing
+   silently.
+6. **Cancel:** Profile → the active-subscription row → "Manage Subscription"
+   opens Apple's own sheet. Cancelling there does not revoke access until the
+   paid period ends.
+7. **Tips:** Profile → Settings (gear) → author's card at the bottom →
+   support row. Buy any tier and confirm that nothing
+   unlocks — that is the intended behaviour.
+
+### Where to find the hand-entered trip
+
+Three entry points, all of them behind PRO: the **+** in the header of
+"History" on the Я tab, a tap on an **empty day** in the profile's history
+calendar, and the second button on the first-trip welcome card. On the RUS
+storefront none of the three is shown at all.
+
+### Answering the 2.5.4 rejection of 0.8.2
+
+Version 0.8.2 (65) was rejected on 30 September 2026 under guideline 2.5.4:
+the app declared `bluetooth-central` in `UIBackgroundModes` while no Bluetooth
+Low Energy functionality could be found.
+
+**The finding was correct and the capability has been removed.** A car stereo
+is a classic-Bluetooth audio sink (A2DP/HFP); BLE scanning never sees one. The
+app detects the car through the audio route
+(`AVAudioSession.routeChangeNotification`), which needs no background mode.
+The only remaining background mode is `location`, which is the app's core
+function: a drive keeps recording while the phone is in a pocket and the app
+is in the background.
+
+Core Bluetooth is still used, but only in the foreground: the "choose your car
+stereo" sheet lists nearby BLE devices. The state-restoration identifier and
+the `willRestoreState` handler were removed along with the background mode.
+
+### What is NOT in this build
+
+- **No new permissions, no new privacy-manifest entries, no server
+  migrations.** The subscription collects nothing new; the purchase receipt
+  travels the same path introduced in 0.8.0.
+
+---
+
+## v0.8.3 — electric cars and hybrids (previous submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.8.3 started with a letter from a user in Germany: the app showed
+fuel consumption in litres, and he drives a plug-in hybrid.
+
+NO IN-APP PURCHASES IN THIS BUILD. There is no subscription, no tip jar and
+no paywall anywhere in the app, and nothing is submitted under In-App
+Purchase for this version. The app is free and complete as shipped.
+
+ENGINE TYPE FOR A CAR. A car now has a powertrain: petrol or diesel,
+electric, or both at once. An electric car is measured in kilowatt-hours and
+a price per kWh instead of litres; a plug-in hybrid is measured in both. The
+question is asked in plain language ("What does your car run on?") rather
+than with three technical terms.
+
+AN HONEST BREAKDOWN PER TRIP. Each trip shows how far it went on the battery,
+how far on fuel, and what that cost. The electric range is spent per calendar
+day: the first kilometres of each day come off the night's charge. Only the
+MODE of a trip is stored — everything else is computed at display time, so
+correcting the consumption or the range recalculates the whole history at
+once, with no migration and no stale numbers. The user can override the mode
+on any trip: Auto, Electric, Fuel.
+
+A CHECKPOINT INSIDE THE PRIVATE HOME ZONE NO LONGER CARRIES ITS COORDINATES.
+In 0.8.2 the track, the route preview and photo EXIF were already trimmed
+inside the user's private zone; a checkpoint placed there still travelled as
+an exact point. It now travels without latitude and longitude — the name, the
+time and the distance from the start are kept. This release sends strictly
+LESS data to our server than the previous one.
+
+RECORDING STARTS UNDER A BAD SKY. The idle accuracy gate was stricter than
+the recording gate, which blocked the start slider in an underground car
+park, in a courtyard or between tower blocks. The two gates are now the same.
+Distance keeps its own, stricter gate and does not change by a metre.
+
+FIXED. Edits to a car (consumption, fuel price, currency, name, visibility)
+could be rolled back by an incoming sync from a second device.
+
+HOW TO TEST
+1. Open the "Me" tab, then the garage card, then any car, then edit it.
+   The "Engine" row asks what the car runs on and offers three answers with
+   an explanation under each.
+2. Choose "Electricity and fuel" — fields for kWh per 100 km, the price per
+   kWh and the battery range appear next to the existing fuel fields.
+3. Open any trip of that car: the tiles show electricity, fuel and cost, and
+   a row underneath lets you switch the trip between Auto, Electric and Fuel.
+4. Record a trip in the Simulator with Features > Location > Freeway Drive
+   (not City Run: anything that never exceeds 15 km/h is discarded as a
+   walking misfire).
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. Everything above works fully
+signed out and with Cloud Sync off, which is the default.
+
+No new permissions are requested. Location usage is unchanged from 0.7.0.
+```
+
+### Если спросят про «Beta» на двух экранах
+
+Ответ тот же, что и в 0.8.1 и 0.8.2 — секция ниже, она не устарела.
+
+---
+
+## v0.8.2 — отдельной секции нет
+
+Заметки для ревьюера при сабмите 0.8.2 не обновлялись: версия ушла на ревью с
+текстом 0.8.1. Записано, чтобы это не выглядело потерянным файлом. Ничего в
+0.8.2 не требовало объяснений сверх того, что уже сказано ниже (значок «Бета»
+на двух вкладках, отсутствие покупок).
+
+---
+
+## v0.8.1 — a track without gaps, drafts, a new look
 
 ### Короткая версия — вставить в App Store Connect
 
@@ -152,7 +505,13 @@ with this build.
 
 ---
 
-## v0.8.x — Plus: subscription, cosmetics, manual trips (DEFERRED, not submitted)
+## v0.8.x — Plus: subscription, cosmetics, manual trips (SUPERSEDED — see v0.8.4 above)
+
+**Этот блок УСТАРЕЛ и вставлять его нельзя.** Он писался, когда монетизацию
+отложили, и врёт в трёх местах: подписка называется PRO, а не «Плюс»; цены
+стали 24,99 € в год и 5,99 € в месяц (здесь стоят прежние 29,99 и 6,99);
+чаевые заведены как Consumable. Актуальный текст — секция v0.8.4 выше.
+Оставлен как запись того, что предполагалось сказать.
 
 **Этот блок в App Store Connect для 0.8.0 НЕ вставляется.** «Плюс» спрятан
 выключателем `PlusAvailability.isEnabled = false`, товаров в сабмите нет.

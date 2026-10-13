@@ -42,8 +42,13 @@ final class TripMapSlotView: UIView {
         self.map = map
         lastReportedMapSize = nil
         map.removeFromSuperview()
-        map.frame = bounds
-        map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // A freshly mounted SwiftUI slot starts at 0×0. Keep the live map's
+        // previous viewport until the destination has a real size: collapsing
+        // it here needlessly invalidates MapKit's tiles during expansion.
+        // Layout owns the frame explicitly. A flexible mask would add the
+        // destination's first size to the retained frame before our callback.
+        map.autoresizingMask = []
+        if hasUsableSize { map.frame = bounds }
         addSubview(map)
         onAdopt?()
         reportSizeIfChanged()
@@ -62,13 +67,17 @@ final class TripMapSlotView: UIView {
         super.layoutSubviews()
         guard let map else { return }
         guard map.superview === self else { return }
-        // Автомаска может выставить frame ДО этого callback. Даже тогда
-        // координатор обязан узнать новый размер и выполнить ожидающий fit.
+        guard hasUsableSize else { return }
+        // A frame may already match after adoption; the coordinator still
+        // needs the first usable size to fulfill its pending route fit.
         if map.frame != bounds { map.frame = bounds }
         reportSizeIfChanged()
     }
 
+    private var hasUsableSize: Bool { bounds.width > 1 && bounds.height > 1 }
+
     private func reportSizeIfChanged() {
+        guard hasUsableSize else { return }
         guard lastReportedMapSize != bounds.size else { return }
         lastReportedMapSize = bounds.size
         onResize?()

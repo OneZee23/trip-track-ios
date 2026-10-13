@@ -28,6 +28,13 @@ struct PlacesMapView: UIViewRepresentable {
     var routes: [[CLLocationCoordinate2D]] = []
     var selectedId: UUID? = nil
     var isInteractive: Bool = true
+    /// Сети нет — плиток Apple не будет (состояние 24 спеки «Места v2»).
+    ///
+    /// Пустая серая сетка MapKit читается поломкой, а не отсутствием связи,
+    /// поэтому на её место кладётся ровная бумага. БУЛАВКИ ПРИ ЭТОМ
+    /// ОСТАЮТСЯ: они аннотации, живут выше оверлеев, и вопрос «куда я вообще
+    /// езжу» бумага не отменяет — отменяет только «что там на земле».
+    var isOffline: Bool = false
     var onPinTap: ((UUID) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
@@ -50,6 +57,7 @@ struct PlacesMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.onPinTap = onPinTap
         context.coordinator.sync(pins: pins, routes: routes, selectedId: selectedId, on: map)
+        context.coordinator.syncPaper(offline: isOffline, on: map)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -59,6 +67,9 @@ struct PlacesMapView: UIViewRepresentable {
         private var shownPins: [PlacePin] = []
         private var shownRoutes: [[CLLocationCoordinate2D]] = []
         private var fitted = false
+        /// Бумага вместо плиток. Держится отдельно от ниток: `sync()` меняет
+        /// маршруты пачкой, и снести её вместе с ними было бы легко.
+        private var paper: PaperTileOverlay?
         /// Запомненный выбор: `mapView(_:viewFor:)` красит свежесозданную
         /// булавку сразу, не дожидаясь следующего `sync()` — на момент
         /// дозапроса вида `map.view(for:)` эту аннотацию ещё не видит.
@@ -73,7 +84,10 @@ struct PlacesMapView: UIViewRepresentable {
                 fitted = false
             }
             if !Self.routesMatch(routes, shownRoutes) {
-                map.removeOverlays(map.overlays)
+                // Только НИТКИ: бумага (`PaperTileOverlay`) лежит в тех же
+                // оверлеях и снималась бы вместе с ними на каждой смене
+                // маршрутов — карта мигала бы серой сеткой Apple.
+                map.removeOverlays(map.overlays.filter { $0 is MKPolyline })
                 map.addOverlays(routes.filter { $0.count > 1 }.map { MKPolyline(coordinates: $0, count: $0.count) })
                 shownRoutes = routes
                 fitted = false
@@ -87,8 +101,10 @@ struct PlacesMapView: UIViewRepresentable {
             // Область — по всем булавкам и ниткам; одна булавка — двор в 1.5 км.
             var rect = MKMapRect.null
             for pin in pins { rect = rect.union(MKMapRect(origin: MKMapPoint(pin.coordinate), size: MKMapSize(width: 1, height: 1))) }
-            for overlay in map.overlays { rect = rect.union(overlay.boundingMapRect) }
-            if pins.count == 1 && map.overlays.isEmpty {
+            // Бумага накрывает ВЕСЬ мир, и её рамка увела бы кадр на глобус.
+            let lines = map.overlays.compactMap { $0 as? MKPolyline }
+            for line in lines { rect = rect.union(line.boundingMapRect) }
+            if pins.count == 1 && lines.isEmpty {
                 map.setRegion(MKCoordinateRegion(center: pins[0].coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
             } else {
                 map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40), animated: false)
@@ -127,7 +143,29 @@ struct PlacesMapView: UIViewRepresentable {
             onPinTap?(pin.id)
         }
 
+        /// Бумага вместо плиток и обратно.
+        ///
+        /// Оверлей с `canReplaceMapContent = true` — единственный
+        /// документированный способ сказать MapKit «свою карту не рисуй»:
+        /// прикрыть её сверху прямоугольником в SwiftUI нельзя, он накрыл бы
+        /// и булавки. Пересобирается ещё и при смене темы: плитка это
+        /// картинка, и цвет в неё уже запечён.
+        func syncPaper(offline: Bool, on map: MKMapView) {
+            let ink = AtlasTheme.fogUIColor.resolvedColor(with: map.traitCollection)
+            if let paper, !offline || paper.ink != ink {
+                map.removeOverlay(paper)
+                self.paper = nil
+            }
+            guard offline, paper == nil else { return }
+            let sheet = PaperTileOverlay(ink: ink)
+            paper = sheet
+            map.addOverlay(sheet, level: .aboveLabels)
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let sheet = overlay as? PaperTileOverlay {
+                return MKTileOverlayRenderer(tileOverlay: sheet)
+            }
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let r = MKPolylineRenderer(polyline: line)
             // Нитки проездов — приглушённый акцент: контекст, не содержание.
@@ -136,6 +174,37 @@ struct PlacesMapView: UIViewRepresentable {
             r.lineCap = .round
             return r
         }
+    }
+}
+
+/// Ровная бумага на месте карты, когда плиток нет (состояние 24).
+///
+/// `canReplaceMapContent = true` — вся суть: с ним MapKit СВОЮ карту не
+/// рисует вовсе, и пустая серая сетка, которая читается поломкой, не
+/// показывается ни на кадр. Плитка одна на весь мир: она одноцветная, и
+/// второй такой же не нужно — данные считаются один раз в `init`.
+final class PaperTileOverlay: MKTileOverlay {
+    /// Цвет, уже разрешённый под тему: в PNG он запечён, и на смену темы
+    /// оверлей пересобирается целиком (`Coordinator.syncPaper`).
+    let ink: UIColor
+    private let sheet: Data
+
+    init(ink: UIColor) {
+        self.ink = ink
+        let size = CGSize(width: 16, height: 16)
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            ink.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        sheet = image.pngData() ?? Data()
+        super.init(urlTemplate: nil)
+        tileSize = size
+        canReplaceMapContent = true
+    }
+
+    override func loadTile(at path: MKTileOverlayPath,
+                           result: @escaping (Data?, Error?) -> Void) {
+        result(sheet, nil)
     }
 }
 
@@ -157,10 +226,18 @@ final class PlaceAnnotation: NSObject, MKAnnotation {
 final class PlacePinView: MKAnnotationView {
     static let reuseID = "PlacePin"
 
-    /// Диаметры из макета. Подсказка меньше места нарочно: разница видна и
-    /// там, где обе булавки рядом, а цвет уже занят другим различием.
-    private static let placeSize: CGFloat = 28
-    private static let suggestedSize: CGFloat = 24
+    /// Диаметры. Подсказка меньше места нарочно: разница видна и там, где обе
+    /// булавки рядом, а цвет уже занят другим различием.
+    ///
+    /// С 26 сентября диск МЕНЬШЕ макетного (28/24 → 20/16): булавка не
+    /// масштабируется вместе с картой, и на отдалении десяток одинаковых
+    /// кружков забирал «Атлас» себе — владелец на устройстве: «слишком
+    /// здоровые… чтобы чисто поностальгировать, а не забрать на себя всё
+    /// внимание». Нажатие от уменьшения не пострадало: цель считается
+    /// радиусом от КООРДИНАТЫ (`Coordinator.placeTouchRadius`), а не рамкой
+    /// вида, то есть вид и палец с 0.8.2 разведены.
+    private static let placeSize: CGFloat = 20
+    private static let suggestedSize: CGFloat = 16
 
     private let disc = UIView()
     private let dot = UIView()
@@ -181,7 +258,7 @@ final class PlacePinView: MKAnnotationView {
         clipsToBounds = false
 
         disc.layer.borderColor = UIColor.white.cgColor
-        disc.layer.borderWidth = 2.6
+        disc.layer.borderWidth = 2
         disc.layer.shadowColor = UIColor.black.cgColor
         disc.layer.shadowOpacity = 0.18
         disc.layer.shadowRadius = 3
@@ -205,10 +282,10 @@ final class PlacePinView: MKAnnotationView {
         labelBox.layer.shadowRadius = 4
         labelBox.layer.shadowOffset = CGSize(width: 0, height: 2)
         labelBox.isHidden = true
-        label.font = UIFont(name: "Inter-Medium", size: 12) ?? .systemFont(ofSize: 12, weight: .medium)
+        label.font = .inter(12, weight: .medium)
         label.textColor = UIColor(AtlasTheme.ink)
         label.textAlignment = .center
-        detailLabel.font = UIFont(name: "Inter-Regular", size: 12) ?? .systemFont(ofSize: 12)
+        detailLabel.font = .inter(12)
         detailLabel.textColor = UIColor(AtlasTheme.secondary)
         detailLabel.textAlignment = .center
         detailLabel.isHidden = true
@@ -252,6 +329,19 @@ final class PlacePinView: MKAnnotationView {
         setSelectedAppearance(selected, name: name, detail: nil, alwaysLabelled: false)
     }
 
+    /// Видна ли булавка на нынешнем масштабе — решает карта
+    /// (`Coordinator.placesVisible`) и ставит сюда на каждом кадре жеста, как
+    /// `visible` у `RegionLabelView`. Применяется БЕЗУСЛОВНО: MapKit вправе
+    /// сам показать скрытую аннотацию заново при пересчёте столкновений.
+    var visible: Bool = true {
+        didSet { isHidden = !visible }
+    }
+
+    /// Стоит ли сейчас подпись. Шов для теста: на «Атласе» она обязана
+    /// появляться только у выбранной булавки, а увидеть это снаружи иначе
+    /// нечем — `labelBox` приватен, и правильно, что приватен.
+    var isLabelled: Bool { !labelBox.isHidden }
+
     /// `alwaysLabelled` — подпись стоит и у невыбранной булавки: так рисует
     /// «Атлас» (S8), где имя места это половина смысла карты. На вкладке
     /// «Места» подпись только у выбранной: десяток имён на карте города
@@ -290,7 +380,7 @@ final class PlacePinView: MKAnnotationView {
         case .outOfPeriod: disc.backgroundColor = UIColor(AtlasTheme.mutedPin)
         case .suggestion: disc.backgroundColor = UIColor(AtlasTheme.control)
         }
-        disc.layer.borderWidth = suggested ? 0 : 2.6
+        disc.layer.borderWidth = suggested ? 0 : 2
 
         ring.isHidden = !suggested
         if suggested {
@@ -300,7 +390,7 @@ final class PlacePinView: MKAnnotationView {
             ring.frame = bounds
         }
 
-        let dotSide: CGFloat = suggested ? 5.2 : 9
+        let dotSide: CGFloat = suggested ? 3.6 : 6.4
         dot.frame = CGRect(x: (side - dotSide) / 2, y: (side - dotSide) / 2, width: dotSide, height: dotSide)
         dot.layer.cornerRadius = dotSide / 2
         dot.backgroundColor = suggested ? UIColor(AtlasTheme.secondary) : .white

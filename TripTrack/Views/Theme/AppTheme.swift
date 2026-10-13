@@ -105,6 +105,16 @@ enum AppTheme {
                 ? Color(red: 30/255, green: 30/255, blue: 32/255)
                 : Color.white
         }
+        /// Цифры дистанции в плитках итога (финиш, поездка, путешествие).
+        /// Тот же зелёный, что `AppTheme.green`, но в светлой теме на 10 %
+        /// темнее: #2EAE50 на белой карточке даёт 2.88 : 1 — ниже порога 3 : 1
+        /// для крупных цифр, #299D48 — 3.49 : 1. В тёмной теме прежний цвет:
+        /// там у него 5.77 : 1, и затемнение только опустило бы контраст.
+        var distance: Color {
+            scheme == .dark
+                ? AppTheme.green
+                : Color(red: 41/255, green: 157/255, blue: 72/255)
+        }
         var cardAlt: Color {
             scheme == .dark
                 ? Color(red: 42/255, green: 42/255, blue: 44/255)
@@ -216,11 +226,13 @@ struct GlassPill: ViewModifier {
 // MARK: - Pressable Card Style
 
 struct PressableCardStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1.0)
             .opacity(configuration.isPressed ? 0.92 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
@@ -278,19 +290,31 @@ extension View {
 
 struct ShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = -1
+    /// «Уменьшить движение» — и блик НЕ едет вовсе.
+    ///
+    /// Бесконечная `repeatForever`-анимация это ровно то, что настройка
+    /// просит убрать, и просит не из вкуса: у части людей движущийся блик
+    /// вызывает тошноту. Соседний `SkeletonPlaceholder` это уже соблюдал, а
+    /// `shimmer()` — нет; поправлено в одном месте на всех вызывающих.
+    /// Место под содержимое при этом остаётся: гаснет движение, а не сам
+    /// скелетон.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.08), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .offset(x: phase * 300)
+                if !reduceMotion {
+                    LinearGradient(
+                        colors: [.clear, .white.opacity(0.08), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .offset(x: phase * 300)
+                }
             }
             .clipped()
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                     phase = 1
                 }

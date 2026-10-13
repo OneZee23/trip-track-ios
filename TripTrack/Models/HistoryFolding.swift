@@ -115,9 +115,11 @@ enum HistoryFolding {
             case .journey:
                 runs.append([row])
             case .trip:
-                if var last = runs.last, case .trip = last[0] {
-                    last.append(row)
-                    runs[runs.count - 1] = last
+                if let lastIndex = runs.indices.last, case .trip = runs[lastIndex][0] {
+                    // Mutate through the array's subscript. Copying `last`
+                    // out first shares its buffer with `runs`, so appending
+                    // copies the growing run on every trip (quadratic work).
+                    runs[lastIndex].append(row)
                 } else {
                     runs.append([row])
                 }

@@ -31,6 +31,24 @@ enum DebugMapSeed {
     /// это два листа и четыре тапа до первого же кадра.
     static let segmentArgument = "-seed-segment-demo"
 
+    /// Четыре черновика автотрекинга («Напоминания», 0.8.1) — по одному в
+    /// каждую группу списка: два «Сегодня», один «Вчера», один «Раньше».
+    ///
+    /// Завести их настоящим путём нельзя: черновик рождается только из старта
+    /// автотрекинга по магнитоле, а её в симуляторе нет. Сид кладёт запись
+    /// сразу с `confirmation = .draft`, то есть ровно в том виде, в каком её
+    /// оставляет `stopTrip`, — в мир она не выходит, `TripWorldEntry` её не
+    /// видел и не увидит до «Моя».
+    static let draftsArgument = "-seed-drafts"
+
+    /// Десять мест — чтобы у вкладки была БОЛЬШАЯ библиотека.
+    ///
+    /// Поиск, порядок и группы появляются только с восьми мест
+    /// (`PlacesPresentation.manyPlaces`), то есть половину состояний спеки
+    /// (7–11) на обычном демо-сиде не увидеть вовсе: там мест одно-два.
+    /// Настоящим путём десять мест — это десять отметок в десяти поездках.
+    static let manyPlacesArgument = "-seed-places-many"
+
     /// Одна поездка, вписанная рукой (0.8.0), — для проверки пометки на
     /// карточке и на экране поездки БЕЗ сети.
     ///
@@ -73,6 +91,17 @@ enum DebugMapSeed {
     /// Сбрасывает латчи миграций, как это делает свежая установка после
     /// обновления из стора — `reveal_rebuild_v18_done`,
     /// `territory_backfill_done`, `discoveries.extremes.v2`.
+    /// Плагин-гибрид и две поездки одного дня на нём (0.8.3).
+    ///
+    /// Раскладка энергии иначе непроверяема на симуляторе вовсе: у неё три
+    /// входа — тип двигателя машины, запас хода и СОСЕДНИЕ поездки того же
+    /// дня, — и завести всё это руками значит открыть форму, набрать четыре
+    /// числа и записать две поездки, которых в симуляторе не записать (GPS
+    /// там не едет). Сид кладёт готовую машину «Astra PHEV» с запасом 50 км и
+    /// две поездки: 30 км утром (целиком на батарее) и 60 км вечером (20 км
+    /// остатка плюс топливо) — то есть обе стороны правила «запас на день».
+    static let hybridArgument = "-seed-hybrid"
+
     static let hangStressArgument = "-seed-hang-stress"
 
     static var isRequested: Bool {
@@ -109,6 +138,18 @@ enum DebugMapSeed {
 
     static var isHangStressRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(hangStressArgument)
+    }
+
+    static var isManyPlacesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(manyPlacesArgument)
+    }
+
+    static var isDraftsRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(draftsArgument)
+    }
+
+    static var isHybridRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(hybridArgument)
     }
 
     /// Сеет 400×2000 точек и сбрасывает миграционные латчи — задача H.
@@ -273,6 +314,9 @@ enum DebugMapSeed {
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
             if isManualRequested { seedManualTrip(persistence: persistence) }
+            if isDraftsRequested { seedDrafts(persistence: persistence) }
+            if isManyPlacesRequested { seedManyPlaces() }
+            if isHybridRequested { seedHybrid(persistence: persistence) }
             seedGeocodeCache(persistence: persistence)
             seedPhotos(persistence: persistence)
             return
@@ -332,8 +376,192 @@ enum DebugMapSeed {
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
         if isManualRequested { seedManualTrip(persistence: persistence) }
+        if isDraftsRequested { seedDrafts(persistence: persistence) }
+        if isManyPlacesRequested { seedManyPlaces() }
+        if isHybridRequested { seedHybrid(persistence: persistence) }
         seedGeocodeCache(persistence: persistence)
         seedPhotos(persistence: persistence)
+    }
+
+    // MARK: - Большая библиотека мест (0.8.2)
+
+    /// Десять мест вокруг Краснодара, заведённых ТОЙ ЖЕ дверью, что
+    /// подсказка на вкладке (`PlaceManager.createPlace`), — своей второй
+    /// двери в места заводить нельзя.
+    ///
+    /// Идемпотентно: восемь мест уже есть — выходим. Имена настоящие, чтобы
+    /// поиск было чем искать, а группы — чем сортировать.
+    @MainActor
+    private static func seedManyPlaces() {
+        let manager = PlaceManager.shared
+        guard manager.places.count < 8 else { return }
+        let plan: [(String, Double, Double)] = [
+            ("Дом", 45.035, 38.975),
+            ("Работа", 45.052, 38.997),
+            ("Красная площадь", 45.023, 38.970),
+            ("Аэропорт", 45.035, 39.171),
+            ("Дача", 44.900, 38.800),
+            ("Море", 44.561, 38.077),
+            ("Заправка на выезде", 45.010, 39.050),
+            ("Горячий Ключ", 44.629, 39.131),
+            ("Джубга", 44.320, 38.705),
+            ("Ростов-на-Дону", 47.222, 39.719)
+        ]
+        for (name, latitude, longitude) in plan {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            _ = manager.createPlace(cell: Place.cell(latitude: latitude, longitude: longitude),
+                                    coordinate: coordinate, name: name)
+        }
+    }
+
+    // MARK: - Черновики (0.8.2)
+
+    /// Четыре черновика на три группы списка.
+    ///
+    /// Идемпотентно: черновик в базе уже есть — выходим. Иначе повторный
+    /// запуск с тем же флагом досевал бы ещё четыре, и снимок «Сегодня · 2»
+    /// на втором прогоне показывал бы четыре.
+    // MARK: - Плагин-гибрид (0.8.3)
+
+    /// Машина «Astra PHEV» и две её поездки в один день.
+    ///
+    /// Идемпотентно: второй запуск с тем же флагом находит машину по имени и
+    /// выходит. Числа выбраны так, чтобы обе половины правила «запас хода на
+    /// день» были видны на одном экране — утренняя поездка целиком
+    /// электрическая, вечерняя разрезана по остатку запаса.
+    private static func seedHybrid(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        existing.predicate = NSPredicate(format: "name == %@", "Astra PHEV")
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let vehicle = VehicleEntity(context: context)
+        let vehicleId = UUID()
+        vehicle.id = vehicleId
+        vehicle.name = "Astra PHEV"
+        vehicle.avatarEmoji = "🚗"
+        vehicle.vehicleType = "car"
+        vehicle.createdAt = Date()
+        vehicle.powertrain = Powertrain.pluginHybrid.rawValue
+        vehicle.electricConsumption = 18
+        vehicle.electricityPrice = 8
+        vehicle.electricRangeKm = 50
+        vehicle.cityConsumption = 10
+        vehicle.highwayConsumption = 6
+        vehicle.fuelPrice = 56
+        vehicle.fuelCurrency = "₽"
+        vehicle.visibleToOthers = true
+        vehicle.vehicleLevel = 1
+
+        let calendar = Calendar.current
+        // Часы заданы явно — снимок обязан быть одним и тем же на каждом
+        // прогоне (то же правило, что у сида черновиков).
+        let plan: [(String, Int, Int, [(Double, Double)])] = [
+            ("Утром на работу", 8, 30, [(45.035, 38.975), (44.960, 39.050), (44.900, 39.090)]),
+            ("Вечером к морю", 18, 5,
+             [(45.035, 38.975), (44.700, 38.840), (44.560, 38.780), (44.320, 38.705)])
+        ]
+
+        for (title, hour, minute, waypoints) in plan {
+            guard let start = calendar.date(bySettingHour: hour, minute: minute,
+                                            second: 0, of: Date()) else { continue }
+            let coordinates = densify(waypoints, stepMeters: 600)
+            let seconds = Double(coordinates.count) * 30
+
+            let trip = TripEntity(context: context)
+            trip.id = UUID()
+            trip.startDate = start
+            trip.endDate = start.addingTimeInterval(seconds)
+            trip.title = title
+            trip.region = "Краснодарский край"
+            trip.isPrivate = true
+            trip.vehicleId = vehicleId
+            trip.fuelCurrency = "₽"
+            trip.previewPolyline = Trip.encodePolyline(coordinates)
+            trip.distance = pathLength(coordinates)
+            trip.maxSpeed = 30
+            trip.averageSpeed = trip.distance / max(seconds, 1)
+
+            for (index, coordinate) in coordinates.enumerated() {
+                let point = TrackPointEntity(context: context)
+                point.id = UUID()
+                point.latitude = coordinate.latitude
+                point.longitude = coordinate.longitude
+                point.altitude = 40
+                point.speed = 16 + Double((index * 5) % 14)
+                point.course = 0
+                point.horizontalAccuracy = 5
+                point.timestamp = start.addingTimeInterval(Double(index) * 30)
+                point.trip = trip
+            }
+        }
+        persistence.save()
+        SettingsManager.shared.reloadFromCoreData()
+    }
+
+    private static func seedDrafts(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        existing.predicate = NSPredicate(format: "confirmation == %@",
+                                         TripConfirmation.draft.rawValue)
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        // Часы дня заданы явно: «18:01» в подписи карточки на «Я» обязано
+        // быть одним и тем же числом на каждом прогоне, иначе снимок нечем
+        // сравнивать с предыдущим.
+        let plan: [(String, Int, Int, Int, [(Double, Double)])] = [
+            ("Краснодар — Горячий Ключ", 0, 18, 1,
+             [(45.035, 38.975), (44.842, 39.045), (44.629, 39.131)]),
+            ("Поездка по городу", 0, 9, 24,
+             [(45.041, 38.961), (45.058, 38.988), (45.070, 39.010)]),
+            ("Краснодар — Джубга", 1, 15, 42,
+             [(45.035, 38.975), (44.700, 38.840), (44.320, 38.705)]),
+            ("Вечерняя поездка", 6, 20, 15,
+             [(45.020, 38.930), (45.055, 38.985), (45.090, 39.040)])
+        ]
+
+        for (title, daysAgo, hour, minute, waypoints) in plan {
+            let day = calendar.date(byAdding: .day, value: -daysAgo, to: now) ?? now
+            guard let start = calendar.date(bySettingHour: hour, minute: minute,
+                                            second: 0, of: day) else { continue }
+            let coordinates = densify(waypoints, stepMeters: 600)
+            let seconds = Double(coordinates.count) * 30
+
+            let trip = TripEntity(context: context)
+            trip.id = UUID()
+            trip.startDate = start
+            trip.endDate = start.addingTimeInterval(seconds)
+            trip.title = title
+            trip.region = "Краснодарский край"
+            trip.isPrivate = true
+            trip.confirmation = TripConfirmation.draft.rawValue
+            // Список черновиков поднимается БЕЗ точек трека
+            // (`fetchDraftTrips(includeTrackPoints: false)`), и миниатюру
+            // рисует превью — ровно так же, как у настоящей записи, где его
+            // кладёт `stopTrip` перед всем остальным.
+            trip.previewPolyline = Trip.encodePolyline(coordinates)
+            trip.distance = pathLength(coordinates)
+            trip.maxSpeed = 30
+            trip.averageSpeed = trip.distance / max(seconds, 1)
+
+            for (index, coordinate) in coordinates.enumerated() {
+                let point = TrackPointEntity(context: context)
+                point.id = UUID()
+                point.latitude = coordinate.latitude
+                point.longitude = coordinate.longitude
+                point.altitude = 40
+                point.speed = 16 + Double((index * 5) % 14)
+                point.course = 0
+                point.horizontalAccuracy = 5
+                point.timestamp = start.addingTimeInterval(Double(index) * 30)
+                point.trip = trip
+            }
+        }
+        persistence.save()
     }
 
     // MARK: - Кэш геокодера (0.8.0)
@@ -446,7 +674,7 @@ enum DebugMapSeed {
         request.fetchLimit = 1
         guard let trip = try? context.fetch(request).first,
               let tripId = trip.id else { return }
-        let points = (trip.trackPoints?.array as? [TrackPointEntity]) ?? []
+        let points = trip.orderedTrackPoints
         // Восемь, а не двадцать: свежая демо-поездка — городская петля в
         // 4.9 км, а точки сеются шагом 400 м. Порог в двадцать молча отменял
         // весь сид (ни одной булавки на карте, `NO_PHOTO_PIN` в UI-тесте) —
@@ -612,7 +840,7 @@ enum DebugMapSeed {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         guard let matches = try? context.fetch(request), matches.count < 3,
               let original = matches.first, let originalStart = original.startDate else { return }
-        let originalPoints = (original.trackPoints?.array as? [TrackPointEntity]) ?? []
+        let originalPoints = original.orderedTrackPoints
         guard !originalPoints.isEmpty else { return }
 
         for daysAgo in [40, 66] {

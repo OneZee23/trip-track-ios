@@ -37,7 +37,7 @@ final class HintsQuietShotTests: XCTestCase {
     }
 
     func test_quiet_hints_and_card() {
-        XCTAssertTrue(app.otherElements["mymap_summary"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["atlas_explored_title"].waitForExistence(timeout: 12))
         usleep(2_500_000)
 
         for _ in 0..<4 {

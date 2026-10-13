@@ -8,6 +8,11 @@ import SwiftUI
 struct DraftTripBanner: View {
     let tripId: UUID
     let onDelete: () -> Void
+    /// Что сделать экрану ПОСЛЕ «Моя». Решает экран, а не баннер: на экране
+    /// поездки, открытом из списка черновиков, ответ на вопрос значит «уходим
+    /// обратно в список» (спека, состояние 8), а на карточке итогов только что
+    /// записанной поездки уходить некуда — там человек как раз на неё смотрит.
+    var onConfirmed: (() -> Void)? = nil
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -27,6 +32,7 @@ struct DraftTripBanner: View {
                     Haptics.tap()
                     DraftDecisionQueue.shared.enqueue(tripId, .confirm)
                     NotificationCenter.default.post(name: .draftTripDecisionQueued, object: nil)
+                    onConfirmed?()
                 } label: {
                     Text(AppStrings.draftConfirm(lang.language))
                         .font(.inter(15, weight: .semibold))

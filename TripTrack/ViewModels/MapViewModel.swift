@@ -99,6 +99,7 @@ final class MapViewModel: ObservableObject {
     private var pendingCompletedTrip: Trip?
     private var pendingCompletionData: TripCompletionData?
     @Published var discardedJunkTrip: Bool = false
+    @Published var discardedJunkTripReason: TripJunkClassifier.Reason?
 
     // MARK: - Camera (idle mode only)
     @Published var zoomDelta: Double = 0
@@ -245,6 +246,11 @@ final class MapViewModel: ObservableObject {
         // Hand the connectivity manager a weak self so commands from
         // the Watch hit the same control surface as on-screen taps.
         PhoneConnectivityManager.shared.mapViewModel = self
+        // И то же самое для экрана автомобиля — четвёртой поверхности к той же
+        // записи. Слабая ссылка, как у часов: CarPlay не должен удерживать в
+        // живых модель мёртвого экрана телефона, а её отсутствие — законное
+        // состояние экрана машины, а не ошибка.
+        CarPlayLink.shared.attach(self)
 
         setupRecordingBindings()
         StartupTrace.mark("MapViewModel.init setupRecordingBindings")
@@ -293,11 +299,27 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        #if DEBUG
+        // Диалог «Геопозиция недоступна» (состояние 13 спеки «Атласа») иначе
+        // не показать: на этой вкладке `LocationManager` не запускается
+        // вовсе, и `locationDenied` меняет только настоящий отказ на экране
+        // записи. Флаг ЯВНЫЙ — скрытая настройка приватности симулятора
+        // делала бы вердикт сторожа случайным (CLAUDE.md).
+        let forcedDenied = ProcessInfo.processInfo.arguments.contains("-debug-location-denied")
+        if forcedDenied { locationDenied = true }
+        #endif
+
         // Location permission mirror for the Record screen (Figma 475:119).
         NotificationCenter.default.publisher(for: .locationAuthDenied)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] note in
                 guard let denied = note.object as? Bool else { return }
+                #if DEBUG
+                // Настоящий `LocationManager` на старте присылает своё
+                // «разрешено» и затирал бы отладочный отказ — тогда флаг не
+                // делал бы ничего, и это было бы видно только кадром.
+                if forcedDenied { return }
+                #endif
                 self?.locationDenied = denied
             }
             .store(in: &cancellables)
@@ -351,6 +373,10 @@ final class MapViewModel: ObservableObject {
         // задаче миграций ниже: первый пул приходит по `didBecomeActive`, и
         // подписка обязана стоять раньше него.
         RevealedLayerSync.shared.start()
+        // Приватная зона у дома (0.8.2): переотправка уже опубликованных
+        // поездок обрезанными. Здесь же и по той же причине — тумблер в листе
+        // настройки жмут раньше, чем кто-нибудь впервые тронет синглтон.
+        HomePrivacyResync.shared.start()
         StartupTrace.mark("MapViewModel.init end")
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
@@ -505,6 +531,10 @@ final class MapViewModel: ObservableObject {
         case liveActivity
         /// The Watch companion app over WatchConnectivity.
         case watch
+        /// The button on the car screen. A fourth surface, and it gets its own
+        /// case for the reason this enum exists: «запись встала на паузу, пока
+        /// я вёл» is unanswerable unless the log says the car asked.
+        case carPlay
     }
 
     /// Поставить отметку на маршруте — с Live Activity или с экрана записи.
@@ -860,6 +890,21 @@ final class MapViewModel: ObservableObject {
             }
     }
 
+    /// Returns a fresh question if GPS/time changed the promised outcome.
+    /// Otherwise finishes synchronously using the exact end time just checked.
+    /// A cancelled confirmation never reaches this method.
+    func stopRecording(confirming preview: RecordingFinishPreview) -> RecordingFinishPreview? {
+        guard isRecording, let current = tripManager.recordingFinishPreview() else { return nil }
+        guard preview.confirmsSameOutcome(as: current) else { return current }
+        stopRecording(suggestedEndDate: current.endDate)
+        PhoneConnectivityManager.shared.publish(
+            isRecording: isRecording, isPaused: isPaused,
+            speedKmh: speed * 3.6, distanceKm: distance / 1000,
+            elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
+        )
+        return nil
+    }
+
     func stopRecording(suggestedEndDate: Date? = nil) {
         // Re-entry guard — manual Stop tap, Live Activity Stop intent, and
         // AutoTripService.autoStopTrip can all reach this method on the same
@@ -878,6 +923,7 @@ final class MapViewModel: ObservableObject {
         // Stale from the previous trip would otherwise suppress the tab switch
         // for a perfectly good one.
         discardedJunkTrip = false
+        discardedJunkTripReason = nil
         // Notify subscribers (Feed, Stats) regardless of which cleanup branch
         // runs, including the junk-discard where the trip is deleted. The
         // object carries whether anything was actually saved — ContentView
@@ -945,6 +991,9 @@ final class MapViewModel: ObservableObject {
         if let trip = completedTrip, route == .discardJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
+            discardedJunkTripReason = TripJunkClassifier.reason(
+                distanceMeters: trip.distance, durationSeconds: trip.duration, maxSpeedMS: trip.maxSpeed
+            )
             discardedJunkTrip = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)
@@ -1246,6 +1295,32 @@ final class MapViewModel: ObservableObject {
         pendingCompletionData = nil
     }
 
+#if DEBUG
+    /// Открыть карточку итогов последней поездки — ТОЛЬКО по флагу запуска.
+    ///
+    /// Экран итогов иначе недостижим ничем, кроме настоящей поездки: он
+    /// показывается один раз на финише и закрывается навсегда. Значит его
+    /// нельзя ни снять кадром, ни проверить туром — а это один из главных
+    /// экранов приложения, и именно на нём с 0.8.4 живёт просьба сказать
+    /// спасибо.
+    ///
+    /// Флаг ЯВНЫЙ и детерминированный (принцип 0.8.2), компилируется только в
+    /// Debug и ничего не пишет: берёт самую свежую завершённую поездку и
+    /// показывает по ней тот же лист, что и финиш. Наград и находок в нём при
+    /// этом не будет — их считает финиш, а мы его не проводили; это видно
+    /// глазами и это честно.
+    func debugShowSummaryForLastTrip() {
+        guard ProcessInfo.processInfo.arguments.contains("-debug-trip-summary") else { return }
+        guard let listed = tripManager.fetchTrips(limit: 1, offset: 0).first else { return }
+        // The list fetch carries no track points, and the summary draws its
+        // hero map only from them: without the full read the debug sheet
+        // showed a finish screen with no map, which no real finish has.
+        let trip = tripManager.tripDetail(id: listed.id) ?? listed
+        lastCompletionData = nil
+        lastCompletedTrip = trip
+    }
+#endif
+
     func refreshTripStats() {
         let stats = tripManager.fetchTripStats()
         cachedTotalKm = stats.totalDistance / 1000.0
@@ -1274,8 +1349,8 @@ final class MapViewModel: ObservableObject {
                 let gap = Date().timeIntervalSince(self.lastSpeedUpdate)
                 if sampleMS == 0 {
                     // Sub-floor sample (<1 m/s). This is EITHER a genuine stop OR
-                    // an unknown-speed fix — CLLocation.speed == -1 is clamped to
-                    // 0 upstream and such fixes are deliberately KEPT in degraded
+                    // an unknown-speed fix — rawSpeed clamps -1 to 0 for this
+                    // HUD only; unknown fixes are deliberately KEPT in degraded
                     // GPS (tunnel/taiga). So snap the HUD to 0 only after TWO
                     // consecutive sub-floor samples: a lone unknown-speed fix
                     // among real speeds must NOT flash the speedometer 60→0→60,
@@ -1309,17 +1384,6 @@ final class MapViewModel: ObservableObject {
                 if self.gpsSignalStale { self.gpsSignalStale = false }
 
                 if self.isRecording && !self.isPaused {
-                    self.trackManager.addPoint(update.coordinate)
-                    // Территория — это «города и регионы» статистики: черновик
-                    // её не красит (спека §3.2). «Моя» перестроит её целиком.
-                    if self.tripManager.activeTrip?.isDraft != true {
-                        let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
-                        // Animate fog reveal when a new tile is discovered
-                        if isNewTile {
-                            self.revealFog(at: update.coordinate)
-                        }
-                    }
-
                     // Update Live Activity with current tracking data
                     LiveActivityManager.shared.updateActivity(
                         speedKmh: self.speed * 3.6,
@@ -1339,6 +1403,19 @@ final class MapViewModel: ObservableObject {
                         distanceKm: self.distance / 1000,
                         elapsedSeconds: elapsed
                     )
+                }
+            }
+            .store(in: &cancellables)
+
+        tripManager.recordedLocationPublisher
+            .sink { [weak self] location in
+                guard let self, self.isRecording, !self.isPaused else { return }
+                self.trackManager.addPoint(location.coordinate)
+                // Recording validation is shared with persistence. A rejected
+                // GPS teleport must not discover territory via a parallel path.
+                if self.tripManager.activeTrip?.isDraft != true,
+                   self.territoryManager.recordVisit(coordinate: location.coordinate) {
+                    self.revealFog(at: location.coordinate)
                 }
             }
             .store(in: &cancellables)

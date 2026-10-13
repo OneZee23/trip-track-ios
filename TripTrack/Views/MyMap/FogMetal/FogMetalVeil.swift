@@ -114,12 +114,23 @@ final class FogMetalVeil: MTKView {
     /// атрибуции не нашлось. Ставит его ХОСТ, ровно там же, где отдаёт окно
     /// растровой вуали.
     private var carve: FogCarveWindow?
+    /// Стиль «Клетки». Смена перерисовывает кадр даже на стоящей карте — на
+    /// ней тика нет, и без этого зова стиль доехал бы только с первым
+    /// движением пальца (та же причина, что у смены темы).
+    private var usesCells = false
     /// Окно, с которым взялись рисовать последний кадр, — вторая половина
     /// ключа «кадр покоя уже нарисован». Окно ездит вместе с разметкой и
     /// высотой листа, и сдвинувшееся на СТОЯЩЕЙ карте оно обязано доехать до
     /// экрана само: ждать движения пальца значило бы держать подпись Apple
     /// под полной мглой ровно до него.
     private var drawnCarve: FogCarveWindow?
+    /// Квантовал ли последний нарисованный кадр открытое клетками.
+    ///
+    /// Третий ключ латча «кадр покоя нарисован», наравне с палитрой и вырезом.
+    /// Без него смена стиля на СТОЯЩЕЙ карте применялась наполовину: палитра
+    /// доезжала (её ключ был), а клетки оставались прежними до первого
+    /// движения пальцем — `invalidate()` выходил на `restFrameDrawn`.
+    private var drawnUsesCells: Bool?
 
     /// Последний нарисованный кадр: прямоугольник карты и три его угла на
     /// экране. Совпало — GPU не трогаем вовсе, иначе на стоящей карте мы жгли
@@ -175,6 +186,18 @@ final class FogMetalVeil: MTKView {
         layer.isOpaque = false
         backgroundColor = .clear
         framebufferOnly = true
+        // КАДР ЛОЖИТСЯ В ТУ ЖЕ ТРАНЗАКЦИЮ CORE ANIMATION, ЧТО И ДВИЖЕНИЕ
+        // КАРТЫ. Без этого `present` асинхронен: мгла показывается тогда,
+        // когда её домолотил GPU, а плитки Apple — в коммите CA того же
+        // витка главного цикла. Две картинки одного кадра расходятся на
+        // один кадр, и на жесте это видно как «туман плывёт за пальцем»
+        // (владелец на устройстве, 26 сен). Растровая вуаль этим никогда не
+        // болела ровно потому, что везёт свой слой аффинным преобразованием
+        // ВНУТРИ `CATransaction` (`FogVeilView.sync`) — то есть уже в том же
+        // коммите. Метал получает то же свойство, а `draw(_:)` — тот
+        // порядок, которого требует этот режим: `commit` → `waitUntilScheduled`
+        // → `drawable.present()`.
+        presentsWithTransaction = true
         // Кадр заказываем сами, с `CADisplayLink`: рисовать по расписанию
         // MTKView значит рисовать и на стоящей карте.
         isPaused = true
@@ -270,6 +293,50 @@ final class FogMetalVeil: MTKView {
 
     /// Открытый мир. Буферы собираются вне главного потока и подменяются
     /// целиком — дозаписи в живой буфер нет: кадр может идти прямо сейчас.
+    /// Смена стиля проявляется, а не подменяется.
+    ///
+    /// Кросс-фейд средствами Core Animation, а не анимация параметров мглы:
+    /// мгла собирается заново КАЖДЫЙ кадр, и вести её по параметру значило
+    /// бы гнать шестьдесят кадров там, где хватает одного (см. правило «вид
+    /// карты стоит одного кадра»). CA снимает нынешнее содержимое слоя сам и
+    /// растворяет его в том, что приедет следующим кадром, — а кадр остаётся
+    /// ровно один.
+    ///
+    /// Зовётся ТОЛЬКО на смену стиля. Тумблер «Фото из поездок» мглы не
+    /// трогает вовсе, и растворять под ним карту значило бы обещать глазу
+    /// перемену, которой нет.
+    /// Ключ здесь НЕ свой: `CATransition` Core Animation кладёт под
+    /// `kCATransition` независимо от того, какой ключ ей дали, — своё имя
+    /// просто не нашлось бы потом ничем.
+    static let styleFade = kCATransition
+
+    func beginStyleCrossfade(duration: CFTimeInterval = 0.25) {
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = duration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(fade, forKey: Self.styleFade)
+    }
+
+    /// Квантование открытого клетками. Кадра НЕ заказывает — его заказывает
+    /// тот, кто поставил вид карты ЦЕЛИКОМ.
+    ///
+    /// Стиль это две вещи сразу: палитра (общая `FogVeilPainter.palette`) и
+    /// клетки. Пока кадр заказывали порознь — `applyPalette` своим
+    /// `invalidate()`, а этот метод вторым, — между двумя заказами
+    /// существовал кадр, которого нет ни в одном стиле: ночная мгла С
+    /// клетками или светлая БЕЗ них. Именно он и оставался на экране:
+    /// второй заказ на той же камере до экрана не доезжает (владелец на
+    /// устройстве 27 сентября, два кадра подряд — «переключая с „клетки“ на
+    /// „ночь“ карта показывает ночную карту, но с клетками»). «Туман» этим
+    /// не болел, потому что там меняется только одна половина.
+    ///
+    /// Что смена клеток доедет до СТОЯЩЕЙ карты, держит не этот зов, а ключ
+    /// латча в `invalidate()` (`drawnUsesCells`).
+    func setUsesCells(_ enabled: Bool) {
+        usesCells = enabled
+    }
+
     func setLayer(_ revealed: RevealedLayer) {
         let signature = FogMesh.signature(of: revealed)
         guard signature != installedSignature, let device else { return }
@@ -396,6 +463,21 @@ final class FogMetalVeil: MTKView {
         self.link = link
     }
 
+    /// Карта СООБЩИЛА новую камеру — рисуем кадр прямо сейчас.
+    ///
+    /// Зовётся из `mapViewDidChangeVisibleRegion`, то есть в тот самый виток
+    /// главного цикла, в котором MapKit обновил свою камеру, и в ту же
+    /// транзакцию Core Animation, в которой поедут его плитки. До этого кадр
+    /// заказывал ТОЛЬКО `CADisplayLink`, а его тик и обновление камеры —
+    /// два разных момента кадра: мгла рисовалась по камере, которая уже
+    /// устарела, и на жесте это видно как «туман плывёт за пальцем»
+    /// (владелец на устройстве, 26 сен; `presentsWithTransaction` этого не
+    /// лечит — он про то, КОГДА показать кадр, а не про то, КАКУЮ камеру в
+    /// него положить). `CADisplayLink` остаётся: он догоняет движения, о
+    /// которых карта не сообщает покадрово, а лишней работы не делает —
+    /// `redrawIfNeeded` выходит сразу, если камера та же.
+    func followCamera() { redrawIfNeeded() }
+
     /// Камера встала: досматриваем хвост и гаснем сами, в `tick`.
     func extendTracking(tail: TimeInterval = trackingTail) {
         linkStopAt = Date().addingTimeInterval(tail)
@@ -425,7 +507,8 @@ final class FogMetalVeil: MTKView {
     /// туда и обратно на стоящей карте, застряла бы до первого движения
     /// пальца.
     func invalidate() {
-        if drawnPaletteIsDark != FogVeilPainter.palette.isDark || drawnCarve != carve {
+        if drawnPaletteIsDark != FogVeilPainter.palette.isDark || drawnCarve != carve
+            || drawnUsesCells != usesCells {
             restFrameDrawn = false
         }
         guard !restFrameDrawn else { return }
@@ -502,6 +585,7 @@ final class FogMetalVeil: MTKView {
         frames += 1
         drawnPaletteIsDark = FogVeilPainter.palette.isDark
         drawnCarve = carve
+        drawnUsesCells = usesCells
         // Рисовать нечем (вид только что встал в дерево, drawable не выдан) —
         // кадр пропускаем, но ПАМЯТЬ о нём стираем целиком: иначе
         // `redrawIfNeeded` посчитал бы камеру нарисованной, а `invalidate()`
@@ -539,7 +623,10 @@ final class FogMetalVeil: MTKView {
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
             palette: FogVeilPainter.palette,
             carve: carve,
-            reveal: revealCircle(map: map))
+            reveal: revealCircle(map: map),
+            grid: usesCells
+                ? FogCellGrid.make(visible: visible, viewportPoints: bounds.size)
+                : nil)
 
         // Текстура покрытия пережила прошлый кадр — её не стало только если
         // сменился размер или память отобрали. Не создалась вовсе — кадр
@@ -550,9 +637,19 @@ final class FogMetalVeil: MTKView {
                            target: pass, into: buffer)
         }
 
-        buffer.present(drawable)
-        buffer.commit()
+        // Цена КОДИРОВАНИЯ снимается здесь, до отправки: ниже идёт ожидание
+        // планировщика GPU, и, попав в ту же сумму, оно превратило бы
+        // «кодирование, мс/кадр» в другое число и сломало бы сравнение с
+        // бюджетом.
         encodeSeconds += CACurrentMediaTime() - started
+        // Порядок продиктован `presentsWithTransaction` (см. `init`): при нём
+        // presentation делает САМ drawable и делает синхронно, уже после того
+        // как буфер отдан планировщику. `buffer.present(drawable)` в этом
+        // режиме показал бы кадр мимо транзакции — то есть вернул бы ровно ту
+        // рассинхронизацию, ради которой всё это и заведено.
+        buffer.commit()
+        buffer.waitUntilScheduled()
+        drawable.present()
         // Цена кодирования на процессоре — то единственное число, ради
         // которого кадр и меряется. Раз в сто двадцать кадров, чтобы
         // сам замер не стоил дороже.

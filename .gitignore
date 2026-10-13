@@ -31,10 +31,14 @@ Local.xcconfig
 # Git worktrees
 .worktrees/
 
-# Superpowers brainstorm
+# Внутренняя кухня — репозиторий ПУБЛИЧНЫЙ (см. CLAUDE.md).
+# Планы, спеки, журналы планирования и бизнес-материалы запуска наружу не
+# уезжают. Решение владельца 29 сен 2026: «перестанем класть туда новое,
+# история пусть будет» — то, что уже в истории, не переписывается.
 .superpowers/
-docs/superpowers/**/*
+docs/superpowers/
 docs/specs/
+mvp/
 
 # App Store docs (private)
 docs/APP_STORE_SUBMISSION.md

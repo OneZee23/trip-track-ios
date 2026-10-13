@@ -2,7 +2,8 @@ import Foundation
 import Combine
 
 /// Список вкладки «Места»: считается на загрузке и по `.placesChanged`,
-/// а не в `body` — `passes(for:)` ходит в CoreData на каждое место.
+/// а не в `body`. Проезды всех мест читаются одной выборкой: запрос на
+/// каждую строку задерживал открытие вкладки с большой историей.
 ///
 /// Вторая половина экрана — подсказки «Похоже, вы здесь бываете»
 /// (`PlaceSuggestions`). Их счёт разбирает превью ВСЕЙ библиотеки, поэтому
@@ -12,15 +13,35 @@ import Combine
 @MainActor
 final class PlacesTabViewModel: ObservableObject {
     @Published private(set) var items: [PlaceListItem] = []
-    @Published private(set) var suggestions: [PlaceSuggestion] = []
+    /// Подсказки, и `nil` здесь — «ЕЩЁ СЧИТАЕТСЯ», а пустой массив —
+    /// «не нашлось» (правило дома, то же, что у `TripCompletionData
+    /// .discoveries`). Разница видна глазом: пока `nil`, у секции скелетон
+    /// (состояние 23), а при пустом массиве секции нет вовсе.
+    ///
+    /// В `nil` значение возвращается ровно один раз — до ПЕРВОГО ответа.
+    /// Пересчёт поверх уже показанных подсказок скелетона не заказывает:
+    /// `.placesChanged` приходит на каждой поездке с изменениями, и мигание
+    /// секции на каждом таком уведомлении было бы хуже её отсутствия.
+    @Published private(set) var suggestions: [PlaceSuggestion]?
     /// Последние поездки — секция «Отметить в поездке» у новичка (S3).
     /// Отметку ставят В ПОЕЗДКЕ, и пока мест нет, дорога туда — единственное
     /// действие, которое вообще есть на этой вкладке кроме подсказки.
     @Published private(set) var recentTrips: [Trip] = []
+    /// «Дача · вчера · на 7 мин быстрее обычного» — одна строка над списком,
+    /// ответ вкладки на «зачем сюда возвращаться» (спека §3.6). Правило
+    /// целиком живёт в `PlaceLastPass`; здесь только выбор места и гашение.
+    @Published private(set) var lastPass: PlaceLastPass.Reading?
 
     /// Сколько поездок показывать в «Отметить в поездке». Три — это «недавно»;
     /// дальше это уже лента, а она на своей вкладке.
     static let recentTripsShown = 3
+
+    /// Подсказки как список: `nil` и «не нашлось» для карты, булавок и
+    /// выбора — одно и то же, скелетон рисует только секция.
+    var knownSuggestions: [PlaceSuggestion] { suggestions ?? [] }
+
+    /// Идёт ли счёт прямо сейчас — единственный вход скелетона (23).
+    var isComputingSuggestions: Bool { suggestions == nil }
     private let manager: PlaceManager
     private let repository: TripRepository
     private var cancellables = Set<AnyCancellable>()
@@ -55,14 +76,47 @@ final class PlacesTabViewModel: ObservableObject {
         reload()
     }
 
+    /// Что уже показано и погашено: строка живёт до следующей сохранённой
+    /// поездки ИЛИ до открытия этого места, что раньше. Второе — действие
+    /// человека, и пережить переключение вкладки оно обязано: вью-модель
+    /// `ContentView` пересоздаёт на каждом переходе.
+    private static let seenKey = "places.lastPassSeen"
+
     func reload() {
-        items = PlaceListItem.sorted(manager.places.map {
-            PlaceListItem.build(place: $0, passes: manager.passes(for: $0.id))
+        let places = manager.places
+        let passesByPlace = manager.passes(for: places.map(\.id))
+        items = PlaceListItem.sorted(places.map { place in
+            PlaceListItem.build(place: place, passes: passesByPlace[place.id] ?? [])
         })
+        lastPass = freshestReading(passesByPlace)
         // Поднимаются только когда их будут показывать: у человека с сотней
         // мест эта секция не рисуется, и выборка ему ни к чему.
         recentTrips = items.isEmpty ? repository.fetchTrips(limit: Self.recentTripsShown, offset: 0) : []
         refreshSuggestions()
+    }
+
+    /// Самый свежий проезд по всем местам — и только если он ещё не погашен.
+    ///
+    /// Место выбирается по ВРЕМЕНИ проезда, а не по числу проездов: вопрос
+    /// строки «что было в последней поездке», и ответ на него один.
+    private func freshestReading(_ passes: [UUID: [PlacePass]]) -> PlaceLastPass.Reading? {
+        let readings = passes.compactMap { PlaceLastPass.reading(placeId: $0.key, passes: $0.value) }
+        guard let best = readings.max(by: { $0.at < $1.at }) else { return nil }
+        return Self.seenKeyValue(best) == UserDefaults.standard.string(forKey: Self.seenKey)
+            ? nil : best
+    }
+
+    /// Ключ гашения — место И ВРЕМЯ проезда: следующая поездка через то же
+    /// место даёт другое время, и строка появляется снова сама.
+    private static func seenKeyValue(_ reading: PlaceLastPass.Reading) -> String {
+        "\(reading.placeId.uuidString)|\(Int(reading.at.timeIntervalSince1970))"
+    }
+
+    /// Человек открыл это место — сравнение он увидел, и строка гаснет.
+    func markLastPassSeen() {
+        guard let reading = lastPass else { return }
+        UserDefaults.standard.set(Self.seenKeyValue(reading), forKey: Self.seenKey)
+        lastPass = nil
     }
 
     /// Человек согласился: подсказка становится местом тем же путём, что
@@ -70,7 +124,7 @@ final class PlacesTabViewModel: ObservableObject {
     /// уходит сразу, не дожидаясь `.placesChanged`: кнопка обязана ответить
     /// в момент нажатия, а бэкфилл истории идёт секунды.
     func save(_ suggestion: PlaceSuggestion) {
-        suggestions.removeAll { $0.id == suggestion.id }
+        suggestions = knownSuggestions.filter { $0.id != suggestion.id }
         manager.createPlace(cell: suggestion.cell, coordinate: suggestion.coordinate, name: suggestion.name)
     }
 

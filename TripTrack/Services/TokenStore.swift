@@ -12,6 +12,7 @@ final class TokenStore {
     var accessToken: String? { KeychainHelper.loadString(key: Keys.accessToken) }
     var refreshToken: String? { KeychainHelper.loadString(key: Keys.refreshToken) }
     var accountId: UUID? { KeychainHelper.loadString(key: Keys.accountId).flatMap(UUID.init) }
+    var accountIdRead: KeychainRead { KeychainHelper.read(key: Keys.accountId) }
 
     /// Трёхзначное чтение для тех, кто по отсутствию токена принимает решение
     /// о судьбе сессии. `nil` из обычного геттера значит И «токена нет», И

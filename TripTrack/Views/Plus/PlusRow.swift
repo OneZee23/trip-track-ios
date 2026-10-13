@@ -1,145 +1,92 @@
 import SwiftUI
 import StoreKit
 
-/// Строка «Плюс» в профиле — единственное место, где о подписке говорят, когда
-/// её не покупают.
+/// Строка «TripTrack PRO» в разделе «Подписка» на экране «Я» — состояния
+/// 12…17а матрицы 0.8.4.
 ///
-/// Форма — `ProfileClubsRow`: диск 44 pt, заголовок, подпись, шеврон. Три
-/// состояния и три разных нажатия: не куплено — пейвол; куплено — системный
-/// лист управления подпиской Apple (своего экрана «отменить» у нас нет и быть
-/// не может: отмена живёт у Apple, и подделывать её кнопкой значит обещать
-/// действие, которого мы не совершаем); витрина без платного — строки нет
-/// вовсе.
+/// Сама она ничего не решает: что написать и куда вести, отвечает `ProStatus`,
+/// а рисовать ли раздел вообще — `ProfileView` по тому же статусу. До 0.8.4
+/// строка знала три состояния и разбирала их внутри `body`; состояний восемь,
+/// два из них про витрину, и проверить такое открытым экраном нельзя.
+///
+/// Отмена подписки живёт у Apple, и своего экрана для неё не существует. С
+/// 0.8.9 `.manageSubscription` открывает «Ваш PRO» (`ProManageSheet`) — что
+/// включено и когда следующее списание, — а системный лист Apple открывается
+/// строкой на нём. Это единственная законная системная презентация в
+/// приложении (запрет в «Dialogs» — про диалоги, которые мы могли бы
+/// нарисовать сами).
 struct PlusRow: View {
+    /// Что сейчас с подпиской. Приходит СНАРУЖИ и здесь не считается: пока
+    /// строка считала статус сама, на вопрос «видно ли платное» отвечали два
+    /// места — ровно то дублирование, которое запрещает правило «одна дверь на
+    /// один вопрос» (находка ревью задачи 2).
+    let status: ProStatus
     /// Открыть пейвол. Зовётся только там, где платное продаётся.
     let onOpenPaywall: () -> Void
+    /// Открыть «Ваш PRO». Зовётся только у подписчика.
+    let onOpenManage: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
-    @ObservedObject private var store = PlusStore.shared
-
-    /// Длина бесплатного периода годового тарифа. В `@State`, а не вычислением
-    /// в `body`: разбор `introductoryOffer` идёт на каждой перерисовке строки,
-    /// а меняется он ровно тогда, когда приезжает список продуктов.
-    @State private var trialDays: Int?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
-        let plus = store.isPlus
 
         Button {
             Haptics.tap()
-            if plus {
-                Self.openManageSubscriptions()
-            } else {
-                onOpenPaywall()
+            switch status.destination {
+            case .paywall:            onOpenPaywall()
+            case .manageSubscription: onOpenManage()
+            case .nothing, .none:     break
             }
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(AppTheme.accentBg)
-                        .frame(width: 44, height: 44)
-                    Image(systemName: plus ? "star.fill" : "star")
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "star.fill")
                         .font(.system(size: 17))
                         .foregroundStyle(AppTheme.accent)
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(AppStrings.plusTitle(l))
-                        .font(.inter(14.5, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(status.rowTitle(lang: l))
+                        .font(.inter(16, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
-                    Text(Self.status(
-                        state: store.state,
-                        expiresAt: store.expiresAt,
-                        trialDays: trialDays,
-                        lang: l
-                    ))
-                    .font(.inter(11.5))
-                    .foregroundStyle(c.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
+                    Text(status.rowSubtitle(lang: l))
+                        .font(.inter(13))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
                 }
 
                 Spacer(minLength: 8)
 
-                Text(plus ? AppStrings.plusManage(l) : AppStrings.plusSubscribe(l))
-                    .font(.inter(12, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .lineLimit(1)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+                // Шеврон стоит только там, где нажатие что-то открывает.
+                // «Ждём подтверждения» не открывает ничего, и обещать переход
+                // было бы неправдой (CLAUDE.md, «Нажатие обязано отвечать»).
+                if status.destination != .nothing {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .frame(minHeight: 68)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
+        .disabled(status.destination == .nothing)
         .surfaceCard(cornerRadius: 16)
         .accessibilityIdentifier("profile_plus_row")
-        // Право на триал спрашивается у Apple, а не выводится из наличия
-        // предложения у продукта: вернувшемуся подписчику строка обещала бы
-        // бесплатную неделю, которой он уже не получит.
-        .task(id: TrialKey(products: store.products.map(\.id),
-                           eligible: store.introEligible)) {
-            trialDays = store.introEligible ? Self.trialDays(of: store.yearly) : nil
-        }
+        .accessibilityElement(children: .combine)
     }
 
-    /// Ключ перезапроса: и список продуктов, и право на предложение — ответ
-    /// меняется от обоих.
-    private struct TrialKey: Equatable {
-        let products: [String]
-        let eligible: Bool
-    }
-
-    /// Длина бесплатного периода — приманка в подписи у того, кто ещё не
-    /// покупал. Из `introductoryOffer`, не из литерала.
-    private static func trialDays(of product: Product?) -> Int? {
-        product.flatMap(PlusProductInfo.init(product:))?.trialDays
-    }
-
-    // MARK: - Правила
-
-    /// Подпись строки. Чистая, чтобы держаться тестом: четыре состояния и
-    /// «ещё не покупал» разводятся здесь, а не в `body`.
-    static func status(
-        state: PlusStore.State,
-        expiresAt: Date?,
-        trialDays: Int?,
-        lang: LanguageManager.Language
-    ) -> String {
-        switch state {
-        case .active, .trial:
-            guard let expiresAt else { return AppStrings.plusRowSubtitle(lang) }
-            return AppStrings.plusUntil(lang, date: shortDate(expiresAt, lang))
-        case .grace:
-            return AppStrings.plusGraceStatus(lang)
-        case .expired:
-            return AppStrings.plusExpiredStatus(lang)
-        case .none:
-            if let trialDays { return AppStrings.plusTrialAvailable(lang, days: trialDays) }
-            return AppStrings.plusRowSubtitle(lang)
-        }
-    }
-
-    /// «12 окт» — день и месяц своим порядком для каждого языка. Года нет
-    /// нарочно: подписка живёт год, и «до 12 окт» читается однозначно, а
-    /// полная дата в строке шириной с профиль обрезается.
-    private static let formatters = LocalizedDateFormatter.templates("dMMM")
-
-    static func shortDate(_ date: Date, _ lang: LanguageManager.Language) -> String {
-        formatters[lang]?.string(from: date) ?? ""
-    }
-
-    /// Системный лист Apple. Единственное место в приложении, где системная
-    /// презентация законна: отмену подписки делает Apple, и своего экрана для
-    /// неё не существует (см. «Dialogs» — запрет там про диалоги, которые мы
-    /// могли бы нарисовать сами).
+    /// Системный лист Apple.
     static func openManageSubscriptions() {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })

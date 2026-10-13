@@ -163,6 +163,30 @@ extension AppStrings {
         }
     }
 
+    /// «3 черновика» — в заголовке диалога удаления нескольких.
+    ///
+    /// Счётным существительным, а не stringsdict: у приложения своя таблица
+    /// форм CLDR (`plural`), и у русского с украинским три формы, у польского
+    /// свои, а у индонезийского множественного нет вовсе. Спека называет
+    /// stringsdict, но его в проекте не существует; смысл — один и тот же.
+    static func nounDrafts(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "черновик", few: "черновика", many: "черновиков")
+        case .en: return plural(lang, n, one: "draft", many: "drafts")
+        case .de: return plural(lang, n, one: "Entwurf", many: "Entwürfe")
+        case .es: return plural(lang, n, one: "borrador", many: "borradores")
+        case .fr: return plural(lang, n, one: "brouillon", many: "brouillons")
+        case .it: return plural(lang, n, one: "bozza", many: "bozze")
+        case .pl: return plural(lang, n, one: "szkic", few: "szkice", many: "szkiców")
+        case .id: return "draf"
+        case .tr: return "taslak"
+        case .fil: return plural(lang, n, one: "draft", many: "draft")
+        case .uk: return plural(lang, n, one: "чернетка", few: "чернетки", many: "чернеток")
+        case .kk: return "жоба"
+        case .pt: return plural(lang, n, one: "rascunho", many: "rascunhos")
+        }
+    }
+
     /// «3 машины» — счётчик под превью гаража.
     ///
     /// Слово родовое, а не «автомобиль»: в гараже бывают мотоцикл, скутер и

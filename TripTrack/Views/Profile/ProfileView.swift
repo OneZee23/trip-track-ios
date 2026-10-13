@@ -7,8 +7,8 @@ private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 /// «Я» tab — 0.6.0 canon (Figma 580:122 list / 755:119 grid, 127:896 guest).
 /// Self-hosts a `NavigationStack` (ContentView mounts the tab bare) and pushes
 /// Статистика, Уровни, Достижения, «Как видят другие» + trip details (all hide
-/// the tab bar via the existing preference). Order: hero → Достижения → Гараж →
-/// История (header row, calendar filter, then the trips).
+/// the tab bar via the existing preference). History follows the hero and a
+/// compact disclosure for garage, PRO, achievements and clubs.
 ///
 /// The canon header and stat strip are now ONE object, `ProfileHeroCard` — the
 /// screen opened as four stacked greys and read as a settings page. The grey
@@ -25,6 +25,7 @@ struct ProfileView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
@@ -35,6 +36,9 @@ struct ProfileView: View {
     /// Два бита про платное — «куплено?» и «эта витрина вообще продаёт?».
     /// Читаются только здесь, решение принимает `PlusGate`.
     @ObservedObject private var plusAccess = PlusAccess.shared
+    /// Нужен ради статуса подписки: `PlusAccess` знает только «есть/нет», а
+    /// строке PRO нужны восемь случаев (триал, грейс, ждём одобрения, дата).
+    @ObservedObject private var plusStore = PlusStore.shared
 
     /// True when hosted as the «Я» tab (0.6.0) — the floating tab bar needs
     /// scroll clearance. False when presented as the legacy Feed sheet.
@@ -49,6 +53,9 @@ struct ProfileView: View {
         /// Гараж — страница, а не шит. Канон 0.6.4 рисует его полноэкранным,
         /// и внутри него «машина» пушится дальше по этому же стеку.
         case garage
+        /// Список черновиков (0.8.2). Единственный новый экран переделки:
+        /// экран поездки не меняется, «Я» меняется на один раздел.
+        case drafts
         case stats
         /// Чужая статистика и чужая карта (0.6.3). Те же экраны, что и свои,
         /// с другим источником поездок; имя владельца едет с ними, чтобы
@@ -145,7 +152,14 @@ struct ProfileView: View {
     /// Presented here rather than from «Мой профиль» itself, for the same
     /// reason the three field editors are: one host owns every presentation
     /// this stack raises.
-    @State private var showBackgroundPicker = false
+    /// Открытая витрина оформления. Одна переменная на все виды: четыре
+    /// `@State`-флага рядом умели бы показать два листа сразу.
+    @State private var showcase: ProShowcaseKind?
+    /// «Ваш PRO» (0.8.9) и то, что открыть, когда он закроется: витрину или
+    /// лист ручной поездки. Два листа подряд UIKit не даёт, поэтому следующий
+    /// ждёт `onDismiss`.
+    @State private var showProManage = false
+    @State private var afterProManage: ProManageSheet.Destination?
     /// Лист «Вписать поездку» (0.8.0). Гейт решает, что покажется в нём —
     /// форма или пейвол (`manualTripHost`).
     @State private var showManualTrip = false
@@ -169,12 +183,18 @@ struct ProfileView: View {
     @State private var agg: MeAggregates?
     /// Every completed trip, newest first. `agg.recentTrips` stops at 10,
     /// which made a date filter over История meaningless.
-    @State private var allTrips: [Trip] = []
+    @State private var historyLibrary = ProfileHistoryLibrary(trips: [])
+    private var allTrips: [Trip] { historyLibrary.trips }
     /// Черновики — отдельно от `allTrips`: в мир они не вошли, и ни
     /// статистика, ни путешествия, ни календарь их не видят (спека §3.2).
     @State private var drafts: [Trip] = []
-    /// `allTrips` after the calendar range. See `refreshVisibleTrips`.
-    @State private var visibleTrips: [Trip] = []
+    /// Filtered trips, folded journey rows, grid runs and historical levels
+    /// move together. Unrelated body updates only read this prepared value.
+    @State private var preparedHistory = PreparedProfileHistory.empty
+    @State private var historyQuery = ""
+    @FocusState private var historySearchFocused: Bool
+    @State private var showsProfileSections = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Which awards are earned — the one thing `AchievementDetailView` needs
     /// that a badge id cannot carry. Resolved by the award destinations
     /// themselves (`refreshUnlockedBadges`) rather than in `loadAggregates`:
@@ -207,9 +227,8 @@ struct ProfileView: View {
     @State private var toastItem: ToastItem?
 
     /// Витрина «Плюса» и лист чаевых. Два листа, а не один с сегментом:
-    /// подписка и чаевые — разные сделки (см. `ProfileSupportRow`).
+    /// подписка и чаевые — разные сделки (см. `TipEntry`).
     @State private var showPaywall = false
-    @State private var showTipJar = false
 
     // MARK: - Подсказка путешествия (0.6.6) — состояние
 
@@ -256,6 +275,7 @@ struct ProfileView: View {
             // бы предлагать объединить то, что уже объединено, — до следующей
             // записанной поездки.
             .onChange(of: journeys.journeys) { _, _ in
+                refreshVisibleTrips()
                 Task { await refreshJourneyPrompts(trips: allTrips) }
             }
             // Человек подтвердил дом — подсказка может быть готова уже сейчас.
@@ -263,6 +283,11 @@ struct ProfileView: View {
                 guard homeAcceptedTick > 0 else { return }
                 await refreshJourneyPrompts(trips: allTrips)
             }
+            // Контекстное предложение PRO. Вешается РОВНО на два экрана — сюда
+            // и на «Ленту», — и список этот закрыт спекой §11: запись, экран
+            // поездки и лист ручной поездки перечислены в ней как запрещённые.
+            .proContextOffer(tripCount: mapVM.cachedTripCount)
+            .proShowcase($showcase)
     }
 
     // MARK: - Ручная поездка (0.8.0, редизайн 20 сен)
@@ -308,7 +333,7 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
-    private var stage: some View {
+    private var stageNavigation: some View {
         let c = AppTheme.colors(for: scheme)
 
         NavigationStack(path: $mePath) {
@@ -351,53 +376,30 @@ struct ProfileView: View {
                                 .padding(.bottom, 12)
                         }
 
-                        // Достижения and История both read local CoreData —
-                        // nothing here touches a session, so both stay up for
-                        // guests. The gate is data, not auth: a guest with 40
-                        // trips must not see the strip, the sign-in card, and
-                        // then nothing.
-                        if !allTrips.isEmpty {
-                            ProfileAchievementsSection(
-                                trips: allTrips,
-                                onTapAll: { push(.achievements) },
-                                // Straight to the award, not to the list: a
-                                // tappable chip that opens a grid the user has
-                                // to find the same badge in again is a chip
-                                // that may as well not be tappable.
-                                onTapBadge: { push(.achievement($0.id)) }
-                            )
-                            // Resolved HERE, not at the award destination: the
-                            // chips open one directly, and a set that is still
-                            // empty on the destination's first frame paints an
-                            // earned badge as «Ещё не открыто» (a hidden one as
-                            // «? ? ?») before flipping. Only runs while the
-                            // section is actually on screen.
-                            .task(id: allTrips.count) { await refreshUnlockedBadges() }
-                            .padding(.bottom, 12)
-                        }
-
-                        // Above История on purpose: История is an endless
-                        // list, and anything under it is a place nobody
-                        // scrolls to — which is exactly where the Гараж spent
-                        // 0.6.0 (at the foot of a settings sheet). The chain
-                        // below is split around this call so the section keeps
-                        // its place whether the library is empty, loading, or
-                        // full.
-                        garageSection(c)
-
-                        plusSection()
-
-                        clubsSection()
+                        profileSections(c)
 
                         // Над «Историей», а не под ней: подсказка про только
                         // что законченное путешествие теряет смысл, если её
                         // надо доскроллить.
                         journeyPrompts()
 
+                        // Раздел «Черновики»: ОДНА карточка вместо списка
+                        // полных карточек поездок (спека §2). Нет черновиков —
+                        // раздела нет совсем: ни пустой карточки, ни текста.
                         if !drafts.isEmpty {
-                            ProfileDraftsSection(drafts: drafts, level: settings.profileLevel,
-                                                 vehicles: settings.vehicles) { openTrip($0) }
-                                .padding(.bottom, 12)
+                            VStack(alignment: .leading, spacing: 0) {
+                                ProfileSectionLabel(text: AppStrings.draftsTitle(lang.language))
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 4)
+                                    .padding(.bottom, 8)
+                                    .accessibilityIdentifier("profile_drafts_header")
+                                ProfileDraftsRow(count: drafts.count,
+                                                 lastAt: drafts.map(\.startDate).max()) {
+                                    push(.drafts)
+                                }
+                                .padding(.horizontal, 16)
+                            }
+                            .padding(.bottom, 12)
                         }
 
                         if !allTrips.isEmpty {
@@ -432,6 +434,7 @@ struct ProfileView: View {
                         if auth.isSignedIn {
                             WithMeSection(onTapTrip: { push(.companionTrip($0)) })
                         }
+
                     }
                 }
                 // As a tab (0.6.0), leave room for the floating tab bar so the
@@ -448,6 +451,8 @@ struct ProfileView: View {
                 switch dest {
                 case .garage:
                     GarageView()
+                case .drafts:
+                    draftsDest
                 case .stats:
                     // Push onto THIS stack. Without the callback the screen
                     // falls back to the app-wide `.openTripDetail` channel,
@@ -532,7 +537,8 @@ struct ProfileView: View {
                     // fix it; deferred — История's primary flow is 1 deep.
                     TripDetailView(
                         tripId: id,
-                        viewModel: TripsViewModel(tripManager: mapVM.tripManager)
+                        viewModel: TripsViewModel(tripManager: mapVM.tripManager),
+                        preview: allTrips.first(where: { $0.id == id })
                     )
                 case .journey(let id):
                     // Экран путешествия сам рисует свою шапку и прячет таб-бар.
@@ -558,6 +564,10 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    private var stageDataWatchers: some View {
+        stageNavigation
         .onAppear {
             settings.reloadGamificationState()
         }
@@ -565,6 +575,8 @@ struct ProfileView: View {
         // in `loadAggregates`, the range moves here.
         .onChange(of: dateFrom) { _, _ in refreshVisibleTrips() }
         .onChange(of: dateTo) { _, _ in refreshVisibleTrips() }
+        .onChange(of: historyQuery) { _, _ in refreshVisibleTrips() }
+        .onChange(of: lang.language) { _, _ in refreshVisibleTrips() }
         .task {
             await loadAggregates()
         }
@@ -579,6 +591,10 @@ struct ProfileView: View {
         .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
             Task { await loadAggregates() }
         }
+    }
+
+    private var stageRoutingWatchers: some View {
+        stageDataWatchers
         // История pushes TripDetailView, where trips get deleted or flip
         // privacy — without these the popped-back list keeps a ghost row
         // (tapping it lands on an empty detail with no back affordance).
@@ -632,6 +648,10 @@ struct ProfileView: View {
                 push(.publicProfile(accountId, nil))
             }
         }
+    }
+
+    private var stage: some View {
+        stageRoutingWatchers
         // Одноразовый флаг: без сброса КАЖДОЕ следующее открытие настроек до
         // конца сессии само прыгало бы в «Приватность».
         .sheet(isPresented: $showSettings, onDismiss: { opensPrivacyFromNotice = false }) {
@@ -639,12 +659,6 @@ struct ProfileView: View {
                 .environmentObject(lang)
                 .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
-        }
-        .sheet(isPresented: $showBackgroundPicker) {
-            ProfileBackgroundPickerSheet()
-                .environmentObject(lang)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showNameEditor) {
             NameEditorSheet(
@@ -711,7 +725,8 @@ struct ProfileView: View {
             // The same screen the LVL pill in the header opens.
             onTapLevel: { push(.levels) },
             onTapCountry: { push(.country) },
-            onTapBackground: { showBackgroundPicker = true },
+            onTapBackground: { showcase = .profileBackground },
+            onTapAvatarFrame: { showcase = .avatarFrame },
             onTapStats: { push(.stats) },
             // Straight onto THIS stack — the same destination the
             // public profile's counters reach, minus the detour
@@ -777,6 +792,13 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
+    /// Вынесено из `navigationDestination` отдельным свойством: ещё один
+    /// `case` в том `switch` переполнил вывод типов SwiftUI — та же ловушка,
+    /// что у `TripDetailView.body` и у самого `ProfileView.body` (CLAUDE.md).
+    private var draftsDest: some View {
+        DraftsListView { push(.trip($0)) }
+    }
+
     private func vehicleDest(id: UUID, vehicleId: UUID, name: String?) -> some View {
         PublicVehicleView(accountId: id, vehicleId: vehicleId, ownerName: name)
             .hideAppTabBar()
@@ -792,7 +814,7 @@ struct ProfileView: View {
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)
         case .publicJourneys(let id, let name): return .publicJourneys(id, name)
-        case .garage, .stats, .myProfile, .levels, .country, .achievements,
+        case .drafts, .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .journey, .companionTrip,
              .clubs, .clubsCatalog, .club:
             return nil
@@ -896,9 +918,9 @@ struct ProfileView: View {
         return trimmed
     }
 
-    /// «Здесь появятся ваши поездки» (canon). The point of the copy is the
-    /// second line: recording is automatic and needs no account — that's the
-    /// product's whole pitch, and the empty state is where it lands.
+    /// «Здесь появятся ваши поездки» (canon). The second line says how a first
+    /// trip actually starts: automatically only when auto-record is on (it is
+    /// off by default), otherwise with the button — and no account either way.
     private func noTripsCard(_ c: AppTheme.Colors) -> some View {
         let lng = lang.language
         return VStack(spacing: 12) {
@@ -916,7 +938,9 @@ struct ProfileView: View {
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
-            Text(AppStrings.profileRecordingStartsBy(lng))
+            Text(settings.autoRecordMode == .off
+                 ? AppStrings.profileRecordingStartsByButton(lng)
+                 : AppStrings.profileRecordingStartsBy(lng))
                 .font(.inter(14))
                 .lineSpacing(4)
                 .foregroundStyle(c.textSecondary)
@@ -1010,31 +1034,47 @@ struct ProfileView: View {
         .padding(.bottom, 12)
     }
 
-    /// «Плюс» и «Поддержать» — под гаражом, над клубами.
-    ///
-    /// Строка «Плюс» ПРОПАДАЕТ целиком на витрине, которая платного не
-    /// продаёт (`PlusGate` → `.hidden`), а не показывается серой: спека §1
-    /// требует, чтобы платного не было ВИДНО, а не только чтобы оно не
-    /// покупалось. Уже купивший видит строку и там — `PlusGate` пропускает его
-    /// первым правилом.
-    ///
-    /// «Поддержать» спрашивает витрину НАПРЯМУЮ, а не через гейт: чаевые не
-    /// фича, `PlusFeature` для них нет и заводить его нельзя — список из пяти
-    /// закрыт. Причина скрытия при этом та же: кнопка, которая не может
-    /// сработать, хуже отсутствующей.
-    @ViewBuilder
-    private func plusSection() -> some View {
-        let level = PlusGate.allows(
-            .profileBackgrounds,
-            isPlus: plusAccess.isPlus,
+    /// Что сейчас с подпиской — ОДИН ответ на два места показа: раздел
+    /// «Подписка» и строка чаевых в самом низу. Два вычисления одного статуса
+    /// однажды разошлись бы — та же по форме находка, что у `PlusRow` в
+    /// задаче 2, где на «видно ли платное» отвечали два места.
+    private var proStatus: ProStatus {
+        ProStatus.resolve(
+            state: plusStore.state,
+            expires: plusStore.displayExpiry,
+            isPending: plusStore.awaitingApproval,
             storefrontHidesPlus: plusAccess.storefrontHidesPlus
         )
-        VStack(alignment: .leading, spacing: 10) {
-            if level != .hidden {
-                PlusRow { showPaywall = true }
-            }
-            if !plusAccess.storefrontHidesPlus {
-                ProfileSupportRow { showTipJar = true }
+    }
+
+    /// Раздел «Подписка» — под гаражом, над клубами.
+    ///
+    /// Строка ПРОПАДАЕТ целиком на витрине, которая платного не продаёт
+    /// (`ProStatus.hiddenStorefront` → `showsRow == false`), а не
+    /// показывается серой: спека §1 требует, чтобы платного не было ВИДНО, а
+    /// не только чтобы оно не покупалось. Уже купивший видит строку и там —
+    /// статус разбирает право ПЕРВЫМ, как `PlusGate`.
+    ///
+    /// Чаевые сюда БОЛЬШЕ НЕ ВХОДЯТ: с 0.8.4 они одной приглушённой строкой
+    /// в самом низу «Я». Соседство с тарифом намекало, что за них что-то
+    /// открывается, — а за ними не открывается ничего, и это единственное,
+    /// что они обещают.
+
+    @ViewBuilder
+    private func plusSection() -> some View {
+        // ОДИН ответ на «видно ли платное» — статус, а не второй гейт рядом.
+        // Дата окончания берётся `displayExpiry`: при `.expired` Apple живую
+        // уже не отдаёт, и показывать надо запомненную.
+        let status = proStatus
+        return VStack(alignment: .leading, spacing: 10) {
+            if status.showsRow {
+                // Заголовок раздела появился в 0.8.4 вместе со статусами: до
+                // этого строка висела без имени, а теперь их в разделе две —
+                // подписка и чаевые, и это разные сделки.
+                ProfileSectionLabel(text: AppStrings.meProSection(lang.language))
+                PlusRow(status: status,
+                        onOpenPaywall: { showPaywall = true },
+                        onOpenManage: { showProManage = true })
             }
         }
         .padding(.horizontal, 16)
@@ -1047,8 +1087,21 @@ struct ProfileView: View {
         .sheet(isPresented: $showPaywall) {
             PlusPaywallSheet().environmentObject(lang)
         }
-        .sheet(isPresented: $showTipJar) {
-            TipJarSheet().environmentObject(lang)
+        .sheet(isPresented: $showProManage, onDismiss: openAfterProManage) {
+            ProManageSheet(status: status) { afterProManage = $0 }
+                .environmentObject(lang)
+        }
+    }
+
+    /// Лист «Ваш PRO» закрылся — открыть то, что в нём выбрали.
+    private func openAfterProManage() {
+        guard let next = afterProManage else { return }
+        afterProManage = nil
+        switch next {
+        case .showcase(let kind): showcase = kind
+        case .manualTrip:
+            manualTripPreset = nil
+            showManualTrip = true
         }
     }
 
@@ -1209,6 +1262,75 @@ struct ProfileView: View {
         .accessibilityIdentifier("profile_garage_empty")
     }
 
+    private var profileSectionsTitle: String {
+        var items = [AppStrings.garage(lang.language)]
+        if proStatus.showsRow { items.append("PRO") }
+        items.append(AppStrings.achievementsSection(lang.language))
+        items.append(AppStrings.clubsTitle(lang.language))
+        return items.joined(separator: " · ")
+    }
+
+    /// Rare destinations stay one tap away, above the unbounded trip list.
+    private func profileSections(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                Haptics.tap()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    showsProfileSections.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Text(profileSectionsTitle)
+                        .font(.interScaled(14, weight: .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(showsProfileSections ? 180 : 0))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 52)
+                .background(c.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("profile_sections_toggle")
+            .accessibilityValue(showsProfileSections
+                ? AppStrings.historySectionsExpanded(lang.language)
+                : AppStrings.historySectionsCollapsed(lang.language))
+
+            if showsProfileSections {
+                if !allTrips.isEmpty {
+                    ProfileAchievementsSection(
+                        trips: allTrips,
+                        onTapAll: { push(.achievements) },
+                        // Straight to the award, not to the list: a
+                        // tappable chip that opens a grid the user has
+                        // to find the same badge in again is a chip
+                        // that may as well not be tappable.
+                        onTapBadge: { push(.achievement($0.id)) }
+                    )
+                    // Resolved HERE, not at the award destination: the
+                    // chips open one directly, and a set that is still
+                    // empty on the destination's first frame paints an
+                    // earned badge as «Ещё не открыто» (a hidden one as
+                    // «? ? ?») before flipping. Only runs while the
+                    // section is actually on screen.
+                    .task(id: allTrips.count) { await refreshUnlockedBadges() }
+                    .padding(.bottom, 12)
+                }
+
+                garageSection(c)
+                plusSection()
+                clubsSection()
+            }
+        }
+        .padding(.bottom, 12)
+    }
+
     // MARK: - История (Figma 580:172 header · 580:122 list · 755:119 grid)
 
     /// Header row, calendar filter, then the trips themselves. Canon goes
@@ -1219,7 +1341,7 @@ struct ProfileView: View {
         // One filtered array for both consumers: the calendar prints the count,
         // the list draws the rows, and they must never disagree about what
         // "matched" means.
-        let trips = visibleTrips
+        let trips = preparedHistory.visibleTrips
 
         historyHeader(c)
 
@@ -1228,8 +1350,7 @@ struct ProfileView: View {
             dateTo: $dateTo,
             kmByDay: kmByDay,
             maxKmDay: maxKmDay,
-            filteredCount: trips.count,
-            onEmptyDayTap: ManualTripEntry.isVisible ? openManualTrip(forDay:) : nil
+            filteredCount: trips.count
         )
         .padding(.horizontal, 16)
         // Canon's 16pt gap to the first card. As padding rather than a spacer
@@ -1237,45 +1358,28 @@ struct ProfileView: View {
         // would otherwise butt straight into «Со мной».
         .padding(.bottom, 16)
 
-        // A filter matching nothing draws NOTHING here: the «здесь появятся
-        // ваши поездки» card would be a lie about a library that has trips,
-        // and the calendar's own «сбросить» row is already the way out.
         if !trips.isEmpty {
-            // Плечи путешествия схлопываются в одну карточку — и только здесь.
-            // Считается один раз на отрисовку блока: и сетке, и списку нужен
-            // один и тот же ответ о том, что спрятано.
-            let rows = historyRows
-
             switch historyMode {
             case .grid:
-                gridHistory(rows)
+                gridHistory(preparedHistory.gridRuns)
             case .list:
-                listHistory(rows, trips: trips)
+                listHistory(preparedHistory.rows)
             }
+        } else {
+            historyEmptyState(c)
         }
-    }
-
-    /// «История» с учётом путешествий. `visibleTrips` уже отфильтрован
-    /// календарём — и отрезок передаётся отдельно: по одному списку поездок
-    /// «плечи отрезал фильтр» неотличимо от «плеч не осталось».
-    private var historyRows: [HistoryRow] {
-        HistoryFolding.fold(
-            trips: visibleTrips,
-            journeys: journeys.journeys,
-            range: HistoryFolding.dayRange(from: dateFrom, to: dateTo)
-        )
     }
 
     /// Сетка рисуется кусками: подряд идущие поездки — своей решёткой,
     /// путешествие — карточкой во всю ширину между ними. Растянуть клетку
     /// `LazyVGrid` на обе колонки нечем, а две половинки путешествия — не
     /// карточка.
-    private func gridHistory(_ rows: [HistoryRow]) -> some View {
+    private func gridHistory(_ runs: [[HistoryRow]]) -> some View {
         LazyVStack(spacing: 12) {
             // Ключ — id первой строки куска, а не его номер: по номеру SwiftUI
             // считает вторую решётку той же, что была первой, и после
             // объединения плечи переезжают между кусками без анимации.
-            ForEach(HistoryFolding.runs(rows), id: \.[0].id) { run in
+            ForEach(runs, id: \.[0].id) { run in
                 if run.count == 1, case .journey(let journey, let legs) = run[0] {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
@@ -1323,14 +1427,13 @@ struct ProfileView: View {
         .padding(.bottom, 12)
     }
 
-    private func listHistory(_ rows: [HistoryRow], trips: [Trip]) -> some View {
+    private func listHistory(_ rows: [HistoryRow]) -> some View {
         // The level shown is the one held WHEN each trip was driven,
         // not today's. Same number on every card told the owner what
         // they already knew; this way the list shows them growing.
-        // Считается по ВСЕМ видимым поездкам, а не по строкам: плечо внутри
-        // путешествия — такая же поездка, и убрать её из истории уровней
-        // значило бы сдвинуть уровни у соседей.
-        let historicalLevels = TripLevelHistory.levels(for: trips)
+        // Search and calendar filters change which trips are visible, not
+        // the XP earned before them. Folded journey legs also keep their XP.
+        let historicalLevels = preparedHistory.historicalLevels
         return LazyVStack(spacing: 12) {
             ForEach(rows) { row in
                 switch row {
@@ -1377,60 +1480,117 @@ struct ProfileView: View {
     }
 
     private func historyHeader(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 8) {
-            ProfileSectionLabel(text: AppStrings.historySection(lang.language))
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 10) {
-                // «Вписать поездку» (0.8.0). На витрине, которая не продаёт
-                // платное, кнопки нет вовсе — не «есть, но с замком».
-                if ManualTripEntry.isVisible {
-                    historyAddButton(c)
-                }
-                historyModeButton(
-                    .grid,
-                    systemImage: "square.grid.2x2.fill",
-                    label: AppStrings.historyModeGrid(lang.language),
-                    identifier: "profile_history_grid",
-                    c: c
-                )
-                historyModeButton(
-                    .list,
-                    // Canon 749:125 is three PLAIN bars. `list.bullet` adds
-                    // dots, which at 16pt reads as a different control.
-                    systemImage: "line.3.horizontal",
-                    label: AppStrings.historyModeList(lang.language),
-                    identifier: "profile_history_list",
-                    c: c
-                )
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(AppStrings.historySection(lang.language))
+                    .font(.interScaled(22, weight: .bold, relativeTo: .title2))
+                    .foregroundStyle(c.text)
+                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
             }
+            if dynamicTypeSize.isAccessibilitySize { historyModeControls(c) }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(c.textSecondary)
+                TextField(AppStrings.historySearch(lang.language), text: $historyQuery,
+                          prompt: Text(AppStrings.historySearch(lang.language)).foregroundStyle(c.textSecondary))
+                    .font(.interScaled(15))
+                    .foregroundStyle(c.text)
+                    .submitLabel(.search)
+                    .focused($historySearchFocused)
+                    .onSubmit { historySearchFocused = false }
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("profile_history_search")
+                if !historyQuery.isEmpty {
+                    Button { historyQuery = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(c.textSecondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppStrings.historyClearSearch(lang.language))
+                    .accessibilityIdentifier("profile_history_clear_search")
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .frame(minHeight: 48)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 14))
+            // The whole 48 pt card focuses the field, not only its 20 pt line
+            // of text: a tap on the magnifier or the card's edge used to do
+            // nothing.
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .onTapGesture { historySearchFocused = true }
+            if ManualTripEntry.isVisible { historyAddButton(c) }
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
     }
 
-    /// «+» в шапке «Истории» — единственный вход в ручную поездку из «Мои».
-    /// Замок рядом с плюсом, когда «Плюса» нет: пункт виден, но честно
-    /// говорит, что за ним витрина.
+    private func historyModeControls(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 4) {
+            historyModeButton(.grid, systemImage: "square.grid.2x2.fill",
+                              label: AppStrings.historyModeGrid(lang.language),
+                              identifier: "profile_history_grid", c: c)
+            historyModeButton(.list, systemImage: "line.3.horizontal",
+                              label: AppStrings.historyModeList(lang.language),
+                              identifier: "profile_history_list", c: c)
+        }
+    }
+
     private func historyAddButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.tap()
             manualTripPreset = nil
             showManualTrip = true
         } label: {
-            Image(systemName: ManualTripEntry.isLocked ? "plus.circle" : "plus")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
-                .frame(width: 26, height: 44)
+            Label(AppStrings.manualTripEntry(lang.language), systemImage: "plus")
+                .font(.interScaled(15, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
-                .padding(.horizontal, -5)
-                .padding(.vertical, -12)
         }
         .buttonStyle(PressableCardStyle())
-        .accessibilityLabel(AppStrings.manualTripEntry(lang.language))
         .accessibilityIdentifier("profile_history_add")
+    }
+
+    private func historyEmptyState(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(historyQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 ? AppStrings.historyNoTripsInPeriod(lang.language)
+                 : AppStrings.historyNoMatches(lang.language))
+                .accessibilityIdentifier("profile_history_empty")
+                .font(.interScaled(17, weight: .semibold))
+                .foregroundStyle(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                historyQuery = ""
+                dateFrom = nil
+                dateTo = nil
+            } label: {
+                Text(AppStrings.historyClearFilters(lang.language))
+                    .font(.interScaled(15, weight: .medium))
+                    .frame(minHeight: 44)
+            }
+            .accessibilityIdentifier("profile_history_clear_filters")
+            // A date always filters. Manual creation is a separate, explicit
+            // action and keeps that chosen day through the purchase flow.
+            if ManualTripEntry.isVisible, historyQuery.isEmpty,
+               let day = dateFrom, dateTo.map({ Calendar.current.isDate(day, inSameDayAs: $0) }) ?? true {
+                Button { openManualTrip(forDay: day) } label: {
+                    Label(AppStrings.manualTripEntry(lang.language), systemImage: "plus")
+                        .font(.interScaled(15, weight: .semibold))
+                        .frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("profile_history_empty_add")
+            }
+        }
+        .tint(AppTheme.accent)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(cornerRadius: 16)
+        .padding(.horizontal, 16)
     }
 
     private func historyModeButton(
@@ -1449,45 +1609,22 @@ struct ProfileView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isActive ? AppTheme.accent : c.textSecondary)
-                // Grown to 44pt tall for the touch target, then taken back out
-                // of layout so the row keeps canon's height. The width claims
-                // only half of the 10pt gap on each side: a literal 44pt-wide
-                // target would overlap its neighbour's, and the neighbour —
-                // drawn later — would steal the taps landing on this glyph's
-                // own right edge.
-                .frame(width: 26, height: 44)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
-                .padding(.horizontal, -5)
-                .padding(.vertical, -12)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
 
-    /// `allTrips` narrowed to the calendar range, both ends inclusive and
-    /// compared on `startOfDay` so a trip that began at 23:50 still belongs to
-    /// the day the user tapped. No range → the whole list, without walking it.
-    ///
-    /// Held in state rather than computed in `body`: this view observes
-    /// `SyncQueue`, so a sync draining a hundred items republishes a hundred
-    /// times, and each pass would re-walk the entire library building a fresh
-    /// array. Recomputed only when the library or the range actually moves.
-    private static func filter(_ trips: [Trip], from: Date?, to: Date?) -> [Trip] {
-        guard let from else { return trips }
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: from)
-        // A half-set range (first tap only) is a single day, which is what the
-        // calendar itself highlights while you pick the second end.
-        let end = cal.startOfDay(for: to ?? from)
-        return trips.filter { trip in
-            let day = cal.startOfDay(for: trip.startDate)
-            return day >= start && day <= end
-        }
-    }
-
+    /// Recompute only when the library, journeys, query, language or dates
+    /// change. No count/date cache key: same-count edits must replace cards too.
     private func refreshVisibleTrips() {
-        visibleTrips = Self.filter(allTrips, from: dateFrom, to: dateTo)
+        preparedHistory = PreparedProfileHistory(
+            library: historyLibrary, journeys: journeys.journeys,
+            query: historyQuery, from: dateFrom, to: dateTo,
+            language: lang.language
+        )
     }
 
     // MARK: - Объединение в путешествие (0.6.6)
@@ -1944,21 +2081,21 @@ struct ProfileView: View {
 
     // MARK: - Data
 
-    /// Everything История needs out of the raw trip list, built in ONE pass:
-    /// the km-per-day walk touches every trip, so it belongs here — off the
-    /// main actor, once per load — and never in `body`.
+    /// Library-wide ordering, historical levels and km-per-day values are
+    /// prepared off the main actor once per load, never in `body`.
     private struct HistoryData {
-        let trips: [Trip]
+        let library: ProfileHistoryLibrary
+        var trips: [Trip] { library.trips }
         let kmByDay: [Date: Double]
         let maxKmDay: Double
 
         init(trips: [Trip], calendar: Calendar) {
-            // The repository already sorts newest-first; re-sorting costs
-            // nothing on an ordered array and keeps История right if that
-            // ever stops being true (a test double, another fetch path).
-            self.trips = trips.sorted { $0.startDate > $1.startDate }
+            // The repository already sorts newest-first. Keep this invariant
+            // even for another fetch path or a test double.
+            let sortedTrips = trips.sorted { $0.startDate > $1.startDate }
+            self.library = ProfileHistoryLibrary(trips: sortedTrips)
             var byDay: [Date: Double] = [:]
-            for trip in self.trips {
+            for trip in sortedTrips {
                 byDay[calendar.startOfDay(for: trip.startDate), default: 0] += trip.distance / 1000
             }
             self.kmByDay = byDay
@@ -1994,7 +2131,7 @@ struct ProfileView: View {
         }.value
         guard !Task.isCancelled else { return }
         agg = crunched.aggregates
-        allTrips = crunched.history.trips
+        historyLibrary = crunched.history.library
         kmByDay = crunched.history.kmByDay
         maxKmDay = crunched.history.maxKmDay
         // Every path that reloads the library lands here — a deleted trip has

@@ -29,7 +29,8 @@ enum FogOffscreen {
     static func params(rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
                        palette: FogVeilPainter.Palette,
                        carve: FogCarveWindow? = nil,
-                       reveal: FogRevealCircle? = nil) -> FogFrameParams? {
+                       reveal: FogRevealCircle? = nil,
+                       cells: Bool = false) -> FogFrameParams? {
         guard rect.width > 0, rect.height > 0, scale > 0,
               let frame = VeilFrame(
                 p00: .zero,
@@ -56,7 +57,8 @@ enum FogOffscreen {
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
             palette: palette,
             carve: carve,
-            reveal: reveal)
+            reveal: reveal,
+            grid: cells ? FogCellGrid.make(visible: rect, viewportPoints: sizePoints) : nil)
     }
 
     /// Картинка с премультиплицированной альфой: открытое прозрачно, мгла
@@ -65,9 +67,10 @@ enum FogOffscreen {
     static func render(layer: RevealedLayer, rect: MKMapRect, sizePoints: CGSize,
                        scale: CGFloat, palette: FogVeilPainter.Palette,
                        carve: FogCarveWindow? = nil,
-                       reveal: FogRevealCircle? = nil) -> CGImage? {
+                       reveal: FogRevealCircle? = nil,
+                       cells: Bool = false) -> CGImage? {
         guard let params = params(rect: rect, sizePoints: sizePoints, scale: scale,
-                                  palette: palette, carve: carve, reveal: reveal),
+                                  palette: palette, carve: carve, reveal: reveal, cells: cells),
               let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let encoder = FogFrameEncoder(device: device) else { return nil }

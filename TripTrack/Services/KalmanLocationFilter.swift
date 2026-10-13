@@ -9,6 +9,11 @@ final class KalmanLocationFilter {
 
     // MARK: - Public State
 
+    /// This GPS measurement began a fresh estimate after an outage. Its
+    /// instantaneous stop/unknown speed says nothing about travel during the
+    /// missing interval, so the recorder must not classify that bridge as drift.
+    private(set) var lastUpdateResetAfterGap = false
+
     /// Seconds since last GPS update
     var timeSinceLastGPS: TimeInterval {
         guard let t = lastGPSTime else { return .infinity }
@@ -29,6 +34,10 @@ final class KalmanLocationFilter {
 
     /// Maximum prediction duration without GPS (seconds)
     private let predictionTimeout: TimeInterval = 10.0
+
+    /// A burst of the same fix is one observation, not dozens of independent
+    /// measurements. Match the recorder's maximum shape cadence (3 Hz).
+    private let repeatedFixInterval: TimeInterval = 1.0 / 3.0
 
     /// Process noise acceleration (m/s²) on a straight — tuned for automotive.
     /// Lower = filter is stiffer, resists GPS jumps more.
@@ -55,7 +64,8 @@ final class KalmanLocationFilter {
 
     private var isInitialized = false
     private var lastGPSTime: Date?
-    private var lastPredictionTime: Date?
+    private var lastGPSMeasurement: CLLocation?
+    private var lastFilteredLocation: CLLocation?
 
     // ENU origin (first GPS point)
     private var originLat: Double = 0
@@ -76,18 +86,38 @@ final class KalmanLocationFilter {
 
     /// Process a GPS measurement. Returns a smoothed location.
     func processGPSUpdate(_ location: CLLocation) -> CLLocation {
+        lastUpdateResetAfterGap = false
         let now = location.timestamp
 
         if !isInitialized {
             initialize(with: location)
-            lastGPSTime = now
             return location
         }
 
         let dt = now.timeIntervalSince(lastGPSTime ?? now)
         guard dt > 0 else {
-            lastGPSTime = now
-            return filteredLocation(timestamp: now)
+            // A cached/out-of-order fix must not rewind the estimator's clock.
+            return lastFilteredLocation ?? location
+        }
+
+        if dt < repeatedFixInterval, let previous = lastGPSMeasurement,
+           location.coordinate.latitude == previous.coordinate.latitude,
+           location.coordinate.longitude == previous.coordinate.longitude,
+           location.speed == previous.speed, location.course == previous.course {
+            // CoreLocation can repeat the same coordinate with millisecond
+            // timestamps and slightly changing accuracy. Assimilating every
+            // copy invents certainty and moves the filter along a fake track.
+            return lastFilteredLocation ?? location
+        }
+
+        guard dt <= predictionTimeout else {
+            // The constant-velocity model expires with the prediction horizon.
+            // Do not extrapolate stale velocity/covariance through a GPS outage
+            // lasting minutes. The recording gate decides whether the returning
+            // measurement is trustworthy; this filter starts a fresh estimate.
+            initialize(with: location)
+            lastUpdateResetAfterGap = true
+            return location
         }
 
         // Predict step (advance state to current time)
@@ -118,34 +148,41 @@ final class KalmanLocationFilter {
         }
 
         lastGPSTime = now
-        lastPredictionTime = nil
+        lastGPSMeasurement = location
         lastAltitude = location.altitude
         if location.course >= 0 { lastCourse = location.course }
 
-        return filteredLocation(timestamp: now)
+        // A valid scalar GPS speed does not require a heading. It cannot update
+        // the two velocity components without one, but remains a measurement
+        // for recording/reporting, independent of the position-derived estimate.
+        let scalarSpeed = location.speed >= 0 && location.course < 0 ? location.speed : nil
+        let result = filteredLocation(timestamp: now, speedOverride: scalarSpeed)
+        lastFilteredLocation = result
+        return result
     }
 
     /// Get predicted location during GPS gap. Returns nil if timeout exceeded or not initialized.
-    func predictedLocation() -> CLLocation? {
-        guard isInitialized, isPredicting else { return nil }
+    func predictedLocation(at now: Date = Date()) -> CLLocation? {
+        guard isInitialized, let lastGPSTime else { return nil }
+        let dt = now.timeIntervalSince(lastGPSTime)
+        guard dt > gpsGapThreshold, dt <= predictionTimeout else { return nil }
 
-        let now = Date()
-        let lastRef = lastPredictionTime ?? lastGPSTime ?? now
-        let dt = now.timeIntervalSince(lastRef)
-        guard dt > 0 else { return nil }
+        // Rendering is a projection, never another GPS update. Mutating x/P
+        // here previously advanced the same interval again when GPS returned,
+        // making the recorded track depend on foreground timer scheduling.
+        let projected = predictedState(dt: dt, accel: processNoiseAccelCruise)
 
-        // В разрыве GPS судить о манёвре не по чему — держим спокойное значение.
-        predict(dt: dt, accel: processNoiseAccelCruise)
-        lastPredictionTime = now
-
-        return filteredLocation(timestamp: now)
+        return filteredLocation(timestamp: now, state: projected.state,
+                                covariance: projected.covariance)
     }
 
     /// Reset all state (call when starting a new recording)
     func reset() {
+        lastUpdateResetAfterGap = false
         isInitialized = false
         lastGPSTime = nil
-        lastPredictionTime = nil
+        lastGPSMeasurement = nil
+        lastFilteredLocation = nil
         x = [0, 0, 0, 0]
         P = Array(repeating: 0, count: 16)
         lastAltitude = 0
@@ -179,7 +216,10 @@ final class KalmanLocationFilter {
         ]
 
         lastAltitude = location.altitude
-        if location.course >= 0 { lastCourse = location.course }
+        lastCourse = location.course
+        lastGPSTime = location.timestamp
+        lastGPSMeasurement = location
+        lastFilteredLocation = location
         isInitialized = true
     }
 
@@ -200,13 +240,20 @@ final class KalmanLocationFilter {
     }
 
     private func predict(dt: Double, accel: Double) {
+        let projected = predictedState(dt: dt, accel: accel)
+        x = projected.state
+        P = projected.covariance
+    }
+
+    private func predictedState(dt: Double, accel: Double) -> (state: [Double], covariance: [Double]) {
         // State prediction: x' = F * x
         // F = [1  0  dt  0 ]
         //     [0  1  0   dt]
         //     [0  0  1   0 ]
         //     [0  0  0   1 ]
-        x[0] += x[2] * dt  // east += vE * dt
-        x[1] += x[3] * dt  // north += vN * dt
+        var projected = x
+        projected[0] += x[2] * dt  // east += vE * dt
+        projected[1] += x[3] * dt  // north += vN * dt
         // velocity unchanged (constant-velocity model)
 
         // Covariance prediction: P' = F * P * F^T + Q
@@ -256,7 +303,7 @@ final class KalmanLocationFilter {
         pNew[10] += q * dt2
         pNew[15] += q * dt2
 
-        P = pNew
+        return (projected, pNew)
     }
 
     // MARK: - Kalman Update (position)
@@ -408,22 +455,28 @@ final class KalmanLocationFilter {
 
     // MARK: - Output
 
-    private func filteredLocation(timestamp: Date) -> CLLocation {
-        let (lat, lon) = enuToLatLon(east: x[0], north: x[1])
+    private func filteredLocation(timestamp: Date, speedOverride: Double? = nil) -> CLLocation {
+        filteredLocation(timestamp: timestamp, state: x, covariance: P, speedOverride: speedOverride)
+    }
+
+    private func filteredLocation(
+        timestamp: Date, state: [Double], covariance: [Double], speedOverride: Double? = nil
+    ) -> CLLocation {
+        let (lat, lon) = enuToLatLon(east: state[0], north: state[1])
 
         // Compute estimated accuracy from covariance diagonal
-        let posVariance = max(P[0], P[5])
+        let posVariance = max(covariance[0], covariance[5])
         let estimatedAccuracy = sqrt(max(posVariance, 0))
 
         // Compute speed and course from velocity state
-        let speed = sqrt(x[2] * x[2] + x[3] * x[3])
+        let estimatedSpeed = hypot(state[2], state[3])
         // Курс, которого не было, остаётся −1: это язык CoreLocation для «не
         // знаю», и его понимают все, кто читает эти точки. Прежняя строка
         // нормализации прибавляла к нему 360 и выдавала 359° — то есть
         // «почти строго на север», неотличимое от измерения.
         let normalizedCourse: Double
-        if speed > 0.5 {
-            let bearing = atan2(x[2], x[3]) * 180.0 / .pi
+        if estimatedSpeed > 0.5 {
+            let bearing = atan2(state[2], state[3]) * 180.0 / .pi
             normalizedCourse = bearing < 0 ? bearing + 360.0 : bearing
         } else {
             normalizedCourse = lastCourse
@@ -435,7 +488,7 @@ final class KalmanLocationFilter {
             horizontalAccuracy: estimatedAccuracy,
             verticalAccuracy: -1,
             course: normalizedCourse,
-            speed: speed,
+            speed: speedOverride ?? estimatedSpeed,
             timestamp: timestamp
         )
     }

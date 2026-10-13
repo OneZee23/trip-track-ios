@@ -32,7 +32,7 @@ enum PlacesPresentation {
     /// Группа списка. `title == nil` — единственная группа, и заголовок ей
     /// не нужен: «Мои места» уже стоит выше.
     struct Group: Identifiable, Equatable {
-        enum Kind: String { case all, frequent, others }
+        enum Kind: String { case all, frequent, others, today, thisWeek, earlier }
         let kind: Kind
         let items: [PlaceListItem]
         var id: String { kind.rawValue }
@@ -90,22 +90,61 @@ enum PlacesPresentation {
     /// Группы. Отделять «частых гостей» есть смысл только когда их меньше,
     /// чем всех: группа, в которую попало ВСЁ, не группирует ничего, а
     /// заголовок над ней врёт, что где-то есть остальные.
-    static func group(_ items: [PlaceListItem], grouped: Bool) -> [Group] {
-        guard grouped else { return items.isEmpty ? [] : [Group(kind: .all, items: items)] }
-        let frequent = items.filter(\.isFrequentGuest)
-        let others = items.filter { !$0.isFrequentGuest }
-        guard !frequent.isEmpty, !others.isEmpty else {
-            return items.isEmpty ? [] : [Group(kind: .all, items: items)]
+    static func group(_ items: [PlaceListItem], grouped: Bool,
+                      by order: PlacesSort = .frequent,
+                      now: Date = Date(),
+                      calendar: Calendar = .current) -> [Group] {
+        guard grouped else { return single(items) }
+        switch order {
+        case .name:
+            // «По имени» групп не имеет вовсе (спека §3.4): алфавит сам и
+            // есть группировка, а вторая поверх него ничего не добавляет.
+            return single(items)
+        case .frequent:
+            let frequent = items.filter(\.isFrequentGuest)
+            let others = items.filter { !$0.isFrequentGuest }
+            return pack([(.frequent, frequent), (.others, others)], all: items)
+        case .recent:
+            let startOfToday = calendar.startOfDay(for: now)
+            // Неделя считается ОТ СЕГОДНЯ назад, а не от понедельника:
+            // вопрос у человека «когда я там был последний раз», и в
+            // воскресенье «на этой неделе» из одного дня было бы обманом.
+            let weekAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
+            var today: [PlaceListItem] = []
+            var week: [PlaceListItem] = []
+            var earlier: [PlaceListItem] = []
+            for item in items {
+                guard let last = item.lastAt else { earlier.append(item); continue }
+                if last >= startOfToday { today.append(item) }
+                else if last >= weekAgo { week.append(item) }
+                else { earlier.append(item) }
+            }
+            return pack([(.today, today), (.thisWeek, week), (.earlier, earlier)], all: items)
         }
-        return [Group(kind: .frequent, items: frequent), Group(kind: .others, items: others)]
+    }
+
+    private static func single(_ items: [PlaceListItem]) -> [Group] {
+        items.isEmpty ? [] : [Group(kind: .all, items: items)]
+    }
+
+    /// Группа, в которую попало ВСЁ, не группирует ничего, а заголовок над
+    /// ней врёт, что где-то есть остальные. Поэтому пустые выбрасываются, и
+    /// единственная выжившая превращается обратно в «Мои места».
+    private static func pack(_ candidates: [(Group.Kind, [PlaceListItem])],
+                             all items: [PlaceListItem]) -> [Group] {
+        let filled = candidates.filter { !$0.1.isEmpty }
+        guard filled.count > 1 else { return single(items) }
+        return filled.map { Group(kind: $0.0, items: $0.1) }
     }
 
     /// Весь путь разом — то, что зовёт экран.
     static func build(_ items: [PlaceListItem], query: String, sort order: PlacesSort,
-                      language: LanguageManager.Language) -> [Group] {
+                      language: LanguageManager.Language, now: Date = Date()) -> [Group] {
         let found = filter(items, query: query, language: language)
         // Группы включает РАЗМЕР БИБЛИОТЕКИ, а не размер выдачи: иначе
         // поиск, сузивший список до трёх строк, менял бы ещё и его форму.
-        return group(sort(found, by: order), grouped: items.count >= manyPlaces && query.isEmpty)
+        return group(sort(found, by: order),
+                     grouped: items.count >= manyPlaces && query.isEmpty,
+                     by: order, now: now)
     }
 }

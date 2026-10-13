@@ -158,6 +158,10 @@ extension AppStrings {
     static func atlasNightStyle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasNightStyle", ru: "Ночь", en: "Night")
     }
+    /// Третий стиль карты (0.8.2): открытое квантовано клетками.
+    static func atlasCellsStyle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasCellsStyle", ru: "Клетки", en: "Cells")
+    }
 
     static func atlasShowCityLabels(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasShowCityLabels", ru: "Подписи городов", en: "City labels")
@@ -169,7 +173,104 @@ extension AppStrings {
     static func atlasNotVisited(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasNotVisited", ru: "Ещё не открыто", en: "Not explored yet")
     }
+    /// Единственное действие карточки места — словами, а не стрелкой.
+    static func atlasOpenPlace(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasOpenPlace", ru: "Открыть место", en: "Open place")
+    }
+
+    /// Подпись второй колонки тройки: одно слово.
+    ///
+    /// Своя, а не `atlasTotalTravelled` («проехано всего»): в колонке шириной
+    /// в треть карточки та переносится на две строки и ломает ряд —
+    /// в макете там ровно «ВСЕГО».
+    static func atlasTotalShort(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTotalShort", ru: "всего", en: "total")
+    }
+
+    /// Заголовок секции регионов в списке «Атласа» (спека §3.5).
+    static func atlasRegions(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasRegions", ru: "Регионы", en: "Regions")
+    }
+
+    /// «4 из 28 городов» — сколько городов региона открыто из всех его.
+    ///
+    /// Подстановки токенами, а не интерполяцией в литерал: `tr` для
+    /// остальных одиннадцати языков читает ГОТОВУЮ строку из таблиц и числа
+    /// в момент вызова получить не может (CLAUDE.md).
+    static func atlasCitiesOutOf(_ lang: LanguageManager.Language,
+                                 visited: Int, total: Int) -> String {
+        tr(lang, "atlasCitiesOutOf",
+           ru: "{visited} из {total} {cities}", en: "{visited} of {total} {cities}")
+            .replacingOccurrences(of: "{visited}", with: formattedCount(visited, lang: lang))
+            .replacingOccurrences(of: "{total}", with: formattedCount(total, lang: lang))
+            .replacingOccurrences(of: "{cities}", with: nounCities(lang, total))
+    }
+
+    /// Пунктирный чип закрытых городов: «ещё 26 в тумане».
+    static func atlasMoreInFog(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "atlasMoreInFog", ru: "ещё {count} в тумане", en: "{count} more in the fog")
+            .replacingOccurrences(of: "{count}", with: formattedCount(count, lang: lang))
+    }
+
+    /// Заголовок секции поездок в подсостоянии региона (состояние 16).
+    ///
+    /// Своя, а не `AppStrings.mapTripsSection`: та с 0.7.0 напечатана
+    /// ПРОПИСНЫМИ прямо в таблицах — наследство HTML-макета, от которого
+    /// «Атлас» и «Места» отучили 26 сентября («мелкие серые прописные и были
+    /// тем, чем эти вкладки отличались от соседних»). Чинить регистр в
+    /// тринадцати таблицах ради одного места показа значит трогать строку,
+    /// которую читает ещё и прежняя панель; проще завести свою в нужном
+    /// регистре, чем разойтись с соседней «Города» на одном экране.
+    static func atlasTripsHere(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTripsHere", ru: "Поездки здесь", en: "Trips here")
+    }
+
+    /// Строка внизу списка: сколько поездок участвует в атласе.
+    static func atlasTripsInAtlas(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasTripsInAtlas", ru: "Поездки в атласе", en: "Trips in the atlas")
+    }
+
     static func atlasTotalDistanceSuffix(_ lang: LanguageManager.Language) -> String {
         tr(lang, "atlasTotalDistanceSuffix", ru: "всего", en: "total")
+    }
+
+    // MARK: - Дом на карте, нет сети, геопозиция (0.8.2)
+
+    /// Имя карточки дома на «Атласе» (состояние 26).
+    static func atlasHome(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasHome", ru: "Дом", en: "Home")
+    }
+
+    /// «61 поездка отсюда» — строка смысла в карточке дома.
+    ///
+    /// Число со склонённым существительным собирается ОТДЕЛЬНО и приходит
+    /// сюда готовым: порядок слов у «отсюда» в тринадцати языках свой, а
+    /// склонение — общее (`nounTrips`).
+    static func atlasTripsFromHome(_ lang: LanguageManager.Language, trips: String) -> String {
+        tr(lang, "atlasTripsFromHome", ru: "{trips} отсюда", en: "{trips} from here")
+            .replacingOccurrences(of: "{trips}", with: trips)
+    }
+
+    /// Действие в карточке дома: ведёт в настройку дома (S16).
+    static func atlasHomeConfigure(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasHomeConfigure", ru: "Настроить", en: "Set up")
+    }
+
+    /// Строка над сводкой, когда сети нет (состояние 24).
+    static func atlasOffline(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasOffline", ru: "Нет сети", en: "No network")
+    }
+
+    /// Заголовок диалога у перечёркнутой кнопки «где я» (состояние 13).
+    static func atlasLocationDeniedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasLocationDeniedTitle",
+           ru: "Геопозиция недоступна", en: "Location unavailable")
+    }
+
+    /// Одна фраза под ним — и она про то, ЧТО изменится, а не про запрет.
+    static func atlasLocationDeniedBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "atlasLocationDeniedBody",
+           ru: "Разрешите доступ в Настройках, чтобы атлас следовал за вами",
+           en: "Allow access in Settings so the atlas can follow you")
     }
 }

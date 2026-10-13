@@ -13,12 +13,16 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private let lock = NSLock()
     private var _maxGapMs: Double = 0
     private var running = false
+    /// Замер окончен — новые пробы больше не учитываются. См. `stop()`.
+    private var frozen = false
     private let intervalMs: Double
 
     init(intervalMs: Double = 15) {
         self.intervalMs = intervalMs
     }
 
+    /// Максимальный разрыв. ПОСЛЕ `stop()` не меняется — читать можно сколько
+    /// угодно раз и получать одно и то же.
     var maxGapMs: Double {
         lock.lock(); defer { lock.unlock() }
         return _maxGapMs
@@ -41,7 +45,15 @@ final class MainThreadWatchdog: @unchecked Sendable {
                 let gapMs = Double(DispatchTime.now().uptimeNanoseconds - sentAt.uptimeNanoseconds) / 1_000_000
 
                 self.lock.lock()
-                self._maxGapMs = max(self._maxGapMs, gapMs)
+                // Пробу, начатую до `stop()`, а доехавшую после, НЕ учитываем:
+                // её разрыв наполовину про то, что главный поток делал уже
+                // после замера (разбор теста, следующий тест), и приписать его
+                // измеряемой работе нельзя. Отбрасывается ровно одна —
+                // пограничная; настоящий простой в N миллисекунд ловят пробы
+                // целиком внутри окна, они идут каждые 15 мс.
+                if !self.frozen {
+                    self._maxGapMs = max(self._maxGapMs, gapMs)
+                }
                 self.lock.unlock()
 
                 Thread.sleep(forTimeInterval: self.intervalMs / 1000)
@@ -49,7 +61,19 @@ final class MainThreadWatchdog: @unchecked Sendable {
         }
     }
 
-    func stop() {
-        lock.lock(); running = false; lock.unlock()
+    /// Остановить замер и ЗАМОРОЗИТЬ результат, вернув его.
+    ///
+    /// Возвращает нарочно: до этого тесты читали `maxGapMs` дважды — один раз
+    /// в печать, второй в проверку, — а между двумя чтениями доезжала
+    /// пограничная проба и меняла число. Выглядело это как «в печати 0 мс, в
+    /// упавшей проверке 219», то есть как невозможный отчёт, по которому не
+    /// понять, был простой или нет. Берёшь число у `stop()` один раз —
+    /// печать и проверка говорят об одном.
+    @discardableResult
+    func stop() -> Double {
+        lock.lock(); defer { lock.unlock() }
+        running = false
+        frozen = true
+        return _maxGapMs
     }
 }

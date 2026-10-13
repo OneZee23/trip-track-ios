@@ -111,7 +111,7 @@ struct TripPhotoPicker: View {
                     HStack(spacing: 8) {
                         Image(systemName: "photo.badge.plus")
                         Text(AppStrings.managePhotoAccess(lang.language))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.inter(13, weight: .semibold))
                         Spacer(minLength: 0)
                     }
                     .foregroundStyle(AppTheme.accent)

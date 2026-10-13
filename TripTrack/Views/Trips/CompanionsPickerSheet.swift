@@ -317,7 +317,7 @@ struct CompanionsPickerSheet: View {
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(row.candidate.profileLevel)")
-                        .font(.system(size: 11).monospacedDigit())
+                        .font(.inter(11).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

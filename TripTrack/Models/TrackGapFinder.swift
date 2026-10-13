@@ -12,6 +12,16 @@ enum TrackGapFinder {
         let longitude: Double
         let timestamp: Date
         let isInterpolated: Bool
+        let recordingSegmentIndex: Int
+
+        init(latitude: Double, longitude: Double, timestamp: Date, isInterpolated: Bool,
+             recordingSegmentIndex: Int = 0) {
+            self.latitude = latitude
+            self.longitude = longitude
+            self.timestamp = timestamp
+            self.isInterpolated = isInterpolated
+            self.recordingSegmentIndex = recordingSegmentIndex
+        }
 
         var coordinate: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -41,6 +51,7 @@ enum TrackGapFinder {
         var result: [Gap] = []
         var fillIndex = 0
         for (a, b) in zip(real, real.dropFirst()) {
+            guard a.recordingSegmentIndex == b.recordingSegmentIndex else { continue }
             let gap = Gap(from: a, to: b)
             guard gap.seconds >= minDuration, gap.straightMetres >= minDistance else { continue }
             while fillIndex < fills.count, fills[fillIndex] <= a.timestamp { fillIndex += 1 }

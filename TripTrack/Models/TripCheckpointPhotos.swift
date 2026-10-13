@@ -92,7 +92,12 @@ enum TripCheckpointPhotos {
         }
         if let coordinate = photo.exifCoordinate {
             let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            // Отметка без координаты в поиск по МЕСТУ не входит (0.8.3):
+            // её ноль — это «места нет», а не Гвинейский залив, и снимок
+            // притянулся бы к ней с другого конца планеты. По ВРЕМЕНИ она
+            // по-прежнему участвует — часы у неё целы.
             let byPlace = checkpoints
+                .filter(\.hasCoordinate)
                 .map { ($0, here.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))) }
                 .filter { $0.1 <= distanceWindow }
                 .min { $0.1 < $1.1 }

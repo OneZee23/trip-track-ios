@@ -174,7 +174,7 @@ struct AchievementsView: View {
                     filter = item
                 } label: {
                     Text(item.title(lang.language))
-                        .font(.system(size: 13, weight: filter == item ? .bold : .medium))
+                        .font(.inter(13, weight: filter == item ? .bold : .medium))
                         .foregroundStyle(filter == item ? c.text : c.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)

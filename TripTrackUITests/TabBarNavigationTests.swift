@@ -24,14 +24,14 @@ final class TabBarNavigationTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Foreign trip preview"].firstMatch.waitForExistence(timeout: 20))
         tap("tab_maps")
-        XCTAssertTrue(app.buttons["atlas_period"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["atlas_appearance"].waitForExistence(timeout: 15))
         tap("mymap_grabber")
         tap("mymap_grabber")
         XCTAssertTrue(app.textFields["atlas_search"].waitForExistence(timeout: 10))
         absent(app.buttons["tab_home"])
         tap("mymap_close")
         tap("tab_places")
-        absent(app.buttons["atlas_period"])
+        absent(app.buttons["atlas_appearance"])
         let places = app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier IN %@", ["places_empty", "places_list", "places_suggestions"])).firstMatch
         XCTAssertTrue(places.waitForExistence(timeout: 10), "The Places screen must actually appear")
@@ -40,7 +40,7 @@ final class TabBarNavigationTests: XCTestCase {
             format: "identifier IN %@", ["profile_guest_signin", "profile_garage_card", "profile_garage_empty"])).firstMatch
         XCTAssertTrue(profile.waitForExistence(timeout: 10), "The profile must appear regardless of saved sign-in state")
         tap("tab_maps")
-        XCTAssertTrue(app.buttons["atlas_period"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["atlas_appearance"].waitForExistence(timeout: 10))
         tap("tab_record")
         XCTAssertTrue(app.buttons["tracking_back"].waitForExistence(timeout: 10))
         absent(app.buttons["tab_home"])
@@ -55,6 +55,6 @@ final class TabBarNavigationTests: XCTestCase {
         tap("detail_back")
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         tap("tab_maps")
-        XCTAssertTrue(app.buttons["atlas_period"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["atlas_appearance"].waitForExistence(timeout: 10))
     }
 }

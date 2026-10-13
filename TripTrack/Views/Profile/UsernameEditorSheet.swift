@@ -209,7 +209,7 @@ struct UsernameEditorSheet: View {
             Spacer(minLength: 0)
 
             Text("\(text.count)/\(Self.maxLength)")
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .font(.inter(11, weight: .medium).monospacedDigit())
                 .foregroundStyle(text.count >= Self.maxLength ? AppTheme.red : c.textTertiary)
         }
     }

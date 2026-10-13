@@ -69,7 +69,7 @@ final class TripRepositoryTrackPointsReplaceTests: XCTestCase {
         guard let entity = repo.fetchEntity(id: tripId) else {
             return XCTFail("поездка не нашлась")
         }
-        let points = entity.trackPoints?.array as? [TrackPointEntity] ?? []
+        let points = entity.orderedTrackPoints
         XCTAssertEqual(points.count, 1, "старые точки обязаны быть удалены, а не накоплены")
         XCTAssertEqual(points.first?.id, newPoint.id)
     }
@@ -81,7 +81,7 @@ final class TripRepositoryTrackPointsReplaceTests: XCTestCase {
         guard let entity = repo.fetchEntity(id: tripId) else {
             return XCTFail("поездка не нашлась")
         }
-        let points = entity.trackPoints?.array as? [TrackPointEntity] ?? []
+        let points = entity.orderedTrackPoints
         XCTAssertEqual(points.count, 2, "отсутствие ключа не должно трогать локальные точки")
     }
 
@@ -93,7 +93,7 @@ final class TripRepositoryTrackPointsReplaceTests: XCTestCase {
         guard let entity = repo.fetchEntity(id: tripId) else {
             return XCTFail("поездка не нашлась")
         }
-        let points = entity.trackPoints?.array as? [TrackPointEntity] ?? []
+        let points = entity.orderedTrackPoints
         XCTAssertEqual(points.count, 0, "пустой список заменяет локальные точки целиком")
     }
 }

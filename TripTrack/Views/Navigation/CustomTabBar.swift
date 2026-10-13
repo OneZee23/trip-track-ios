@@ -16,6 +16,8 @@ struct CustomTabBar: View {
     @Binding var selectedTab: AppTab
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    /// Точка у «Я», пока есть неоткрытые черновики (0.8.2).
+    @ObservedObject private var draftsBadge = DraftsBadge.shared
 
     // MARK: - Геометрия
 
@@ -92,6 +94,9 @@ struct CustomTabBar: View {
         } label: {
             VStack(spacing: 3) {
                 glyph(tab)
+                    .overlay(alignment: .topTrailing) {
+                        if tab == .profile, draftsBadge.hasUnseen { unseenDot }
+                    }
                 Text(label)
                     .font(.inter(10, weight: .semibold))
                     .lineLimit(1)
@@ -104,7 +109,25 @@ struct CustomTabBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isActive ? .isSelected : [])
+        // Точка у «Я» дублируется голосом (спека черновиков §9): то, что
+        // видно глазу, обязано быть сказано и вслух.
+        .accessibilityValue(tab == .profile && draftsBadge.hasUnseen
+                            ? AppStrings.draftsTabHint(lang.language) : "")
         .accessibilityIdentifier("tab_\(tab.rawValue)")
+    }
+
+    /// Точка 8 pt с обводкой 2 цветом капсулы — чтобы она читалась и когда
+    /// ложится на саму линию иконки. Сдвинута наружу на её половину: у
+    /// контурного глифа угол пустой, и точка внутри рамки выглядела бы
+    /// частью рисунка.
+    private var unseenDot: some View {
+        Circle()
+            .fill(AtlasTheme.accent)
+            .frame(width: 8, height: 8)
+            .overlay(Circle().strokeBorder(AtlasTheme.navSurface, lineWidth: 2))
+            .frame(width: 12, height: 12)
+            .offset(x: 4, y: -2)
+            .accessibilityHidden(true)
     }
 
     /// Диск 60 pt в кольце подложки 68 pt; `-12` поднимает его центр ровно на

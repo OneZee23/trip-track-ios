@@ -1,23 +1,17 @@
 import SwiftUI
 
-// MARK: - Section Label (12pt account variant)
+// MARK: - Section Label
 
-/// Uppercased tracking label above the account-page cards («СИНХРОНИЗАЦИЯ»,
-/// «ПРИВАТНОСТЬ», «АККАУНТ»). Deliberately NOT reusing the 10pt
-/// `GarageSectionLabel` — the account section's Figma spec is explicitly
-/// 12pt bold / tracking 0.36. Vertical rhythm (14–18pt above / 8pt below)
-/// is handled by callers.
+/// Heading above the account-page cards («Синхронизация», «Приватность»,
+/// «Аккаунт»). Since 0.8.9 it is the house section heading, the same as «Я»
+/// and the settings it opens from; it was 12 pt grey capitals. Kept as a
+/// name so its callers read the same. Vertical rhythm (14–18pt above / 8pt
+/// below) is handled by callers.
 struct AccountSectionLabel: View {
     let text: String
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        Text(text).textCase(.uppercase)
-            .font(.inter(12, weight: .bold))
-            .tracking(0.36)
-            .foregroundStyle(c.textTertiary)
+        ProfileSectionLabel(text: text)
     }
 }
 

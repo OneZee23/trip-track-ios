@@ -53,13 +53,14 @@ struct ManualTripQuickPointsRow: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 12, weight: .semibold))
-                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(title).font(.interScaled(13, weight: .semibold)).lineLimit(1)
             }
             .foregroundStyle(highlighted ? .white : c.text)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(highlighted ? AppTheme.accent : c.cardAlt, in: Capsule())
-            .contentShape(Capsule())
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
     }

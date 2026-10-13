@@ -42,6 +42,9 @@ struct FogFrameParams {
     /// и у постера тоже: дыра в тумане это состояние одной секунды, а не то,
     /// чем делятся.
     let reveal: FogRevealCircle?
+    /// Сетка «Клеток». `nil` — стиль не выбран или клетка на экране слишком
+    /// мелкая, и кадр выходит байт в байт эталонным «Туманом».
+    var grid: FogCellGrid? = nil
 }
 
 /// Два прохода Metal-тумана: покрытие открытого и композит мглы.
@@ -82,6 +85,20 @@ final class FogFrameEncoder {
         var solid: Float
     }
 
+    /// Совпадать с `FogGrid` в шейдере байт в байт.
+    private struct Grid {
+        /// Прямая матрица «смещение в точках карты → точки экрана» — ТА ЖЕ,
+        /// что у прохода покрытия. Разойдись они, клетки поехали бы от
+        /// коридора, который сами и показывают.
+        var m: SIMD4<Float>
+        /// Обратная ей.
+        var inv: SIMD4<Float>
+        var origin: SIMD2<Float>
+        var cellOrigin: SIMD2<Float>
+        /// Ноль — сетки нет; композит тогда берёт покрытие как есть.
+        var side: Float
+    }
+
     /// Совпадать с `FogComposite` в шейдере байт в байт.
     private struct Composite {
         var colour: SIMD4<Float>
@@ -92,6 +109,7 @@ final class FogFrameEncoder {
         var viewport: SIMD2<Float>
         var carve: Carve
         var reveal: Reveal
+        var grid: Grid
     }
 
     private let coveragePipeline: MTLRenderPipelineState
@@ -218,7 +236,28 @@ final class FogFrameEncoder {
                          viewport: SIMD2<Float>(Float(params.viewportPoints.width),
                                                 Float(params.viewportPoints.height)),
                          carve: carve(params.carve),
-                         reveal: reveal(params.reveal))
+                         reveal: reveal(params.reveal),
+                         grid: grid(params))
+    }
+
+    /// Сетка «Клеток» в тех же числах, что у прохода покрытия.
+    ///
+    /// Матрица берётся из `params.frame` — ОДИН источник на оба прохода;
+    /// вырожденную (нулевой определитель) сетка не переживёт, и в таком кадре
+    /// она молча выключается, а не делит на ноль.
+    private static func grid(_ params: FogFrameParams) -> Grid {
+        let empty = Grid(m: .zero, inv: .zero, origin: .zero, cellOrigin: .zero, side: 0)
+        guard let cell = params.grid, cell.sideMapPoints > 0 else { return empty }
+        let f = params.frame
+        let det = f.a * f.d - f.c * f.b
+        guard det != 0, det.isFinite else { return empty }
+        return Grid(
+            m: SIMD4<Float>(Float(f.a), Float(f.b), Float(f.c), Float(f.d)),
+            inv: SIMD4<Float>(Float(f.d / det), Float(-f.b / det),
+                              Float(-f.c / det), Float(f.a / det)),
+            origin: SIMD2<Float>(Float(f.origin.x), Float(f.origin.y)),
+            cellOrigin: SIMD2<Float>(Float(cell.originOffset.x), Float(cell.originOffset.y)),
+            side: Float(cell.sideMapPoints))
     }
 
     /// Прорези нет — в буфер уезжает нулевой радиус, и композит остаётся тем

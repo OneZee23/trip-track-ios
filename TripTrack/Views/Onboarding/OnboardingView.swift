@@ -1,15 +1,10 @@
 import SwiftUI
 import CoreLocation
 import UserNotifications
-import CoreMotion
 
-/// 0.6.0 onboarding — 5 pages per the Figma spec (§01 · ОНБОРДИНГ):
-/// Welcome (IdleRing hook) → Ценность (trip card, real trip when there is
-/// one) → Гео «При использовании» → Гео «Всегда» + motion → Уведомления.
-/// One permission per screen, each with a way past it: asking for three at
-/// once (what the old bundled page did) trades a permanent "Don't Allow" for
-/// a moment of convenience. Custom pagination dots replace
-/// the system page indicator; hero badges are 96pt accent-tinted circles.
+/// Five pages: the product, an example trip, location, background recording,
+/// and notifications. Permission explanations have one neutral Continue action;
+/// the choice to grant or refuse always belongs to the following iOS prompt.
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
     @EnvironmentObject private var lang: LanguageManager
@@ -31,7 +26,7 @@ struct OnboardingView: View {
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
     // so UI tests / simulator screenshot runs can open any page directly.
     @State private var currentPage = UserDefaults.standard.integer(forKey: "onboardingStartPage")
-    @State private var locationManager: CLLocationManager?
+    @StateObject private var permissions = OnboardingPermissionCoordinator()
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -39,26 +34,19 @@ struct OnboardingView: View {
         ZStack {
             c.bg.ignoresSafeArea()
 
-            TabView(selection: $currentPage) {
-                welcomePage
-                    .tag(0)
-
-                valuePropPage
-                    .tag(1)
-
-                // Location permission page
-                locationPage
-                    .tag(2)
-
-                // Background location («Всегда») + motion
-                autoRecordPage
-                    .tag(3)
-
-                // Notifications — its own ask (canon), and the last page
-                notificationsPage
-                    .tag(4)
+            // A paged TabView also allowed swiping past the pre-permission
+            // explanation. Navigation is explicit so every Continue reaches
+            // the system request, where refusal still moves the flow forward.
+            Group {
+                switch currentPage {
+                case 0: welcomePage
+                case 1: valuePropPage
+                case 2: locationPage
+                case 3: autoRecordPage
+                default: notificationsPage
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            .task { refreshPermissionStatus() }
             // Re-read authorization on every page change and when the app
             // comes back from the system prompt: a permission granted in
             // that alert must be reflected here without a relaunch.
@@ -177,6 +165,7 @@ struct OnboardingView: View {
             }
             .font(.inter(24, weight: .heavy))
             .multilineTextAlignment(.center)
+            .accessibilityIdentifier("onboarding_page_0")
             .padding(.horizontal, 32)
             .padding(.top, 47)
 
@@ -199,52 +188,73 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Text("TRIP TRACK")
-                .font(.custom("PressStart2P-Regular", size: 8))
-                .tracking(0.64)
-                .foregroundStyle(Color(red: 155/255, green: 155/255, blue: 165/255).opacity(0.5))
-                .padding(.bottom, 44)
+            primaryButton(AppStrings.onboardingContinue(lang.language)) {
+                Haptics.tap()
+                withAnimation { currentPage = 1 }
+            }
+            .accessibilityIdentifier("onboarding_continue_welcome")
+            .padding(.horizontal, 32)
+            .padding(.bottom, 56)
         }
     }
 
     // MARK: - Value-prop Page (mock trip card)
 
     /// Shows what a recorded trip looks like — a static mock card with a
-    /// speed-gradient route on a parchment map and a 2×3 metrics grid.
+    /// speed-gradient route on a parchment map and one row of three metrics.
     /// Answers "what do I get?" in two seconds.
+    ///
+    /// «Дальше» is pinned 56 pt above the bottom, where the other four pages
+    /// keep it. Until 0.8.9 it scrolled with the content, and the content was
+    /// 143 pt taller than an iPhone 16: every new user met the button below
+    /// the edge and the page dots on top of the caption. The card lost its
+    /// second row (maximum, fuel, altitude — dashes for a newcomer anyway),
+    /// the caption that promised fuel and the glyphs over the numbers, which
+    /// the app's own trip tiles never had. The story now fits an iPhone 16
+    /// without scrolling; a shorter screen (SE) scrolls it above the button.
     private var valuePropPage: some View {
         let c = AppTheme.colors(for: scheme)
-        // ScrollView + basedOnSize: static on tall phones, scrolls only where
-        // the ~700pt content stack exceeds the screen (667pt SE class).
-        return ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                // A drawn album of maps rather than the system photo glyph:
-                // this page answers «what do I get?», and the answer is the
-                // artefact, not an icon standing for one.
-                onboardingHero("onboard_memory")
-                    .padding(.top, 56)
-
-                Text(AppStrings.onboardingValueTitle(lang.language))
-                    .font(.inter(24, weight: .heavy))
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    // 49, like every other hero page: at 24 this title sat
-                    // 25pt higher than its neighbours (y≈183 vs the canon
-                    // y=208), so the headline jumped on every swipe.
-                    .padding(.top, 36)
-
-                mockTripCard(c)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 20)
-                    .task { loadRealTrip() }
-
-                bodyText(AppStrings.onboardingValueCaption(lang.language), c, size: 14)
-                    .padding(.top, 16)
-                    .padding(.bottom, 56)
+        return VStack(spacing: 0) {
+            ViewThatFits(in: .vertical) {
+                valueStory(c)
+                ScrollView(showsIndicators: false) { valueStory(c) }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            primaryButton(AppStrings.onboardingContinue(lang.language)) {
+                Haptics.tap()
+                withAnimation { currentPage = 2 }
+            }
+            .accessibilityIdentifier("onboarding_continue_value")
+            .padding(.horizontal, 32)
+            .padding(.top, 8)
+            .padding(.bottom, 56)
         }
-        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func valueStory(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            // A drawn album of maps rather than the system photo glyph:
+            // this page answers «what do I get?», and the answer is the
+            // artefact, not an icon standing for one.
+            onboardingHero("onboard_memory")
+                .padding(.top, 56)
+
+            Text(AppStrings.onboardingValueTitle(lang.language))
+                .accessibilityIdentifier("onboarding_page_1")
+                .font(.inter(24, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                // Same y as the next page's title (351 on an iPhone 16),
+                // so the headline does not jump on the swipe.
+                .padding(.top, 36)
+
+            mockTripCard(c)
+                .padding(.horizontal, 28)
+                .padding(.top, 20)
+                .task { loadRealTrip() }
+        }
     }
 
     /// Static "what your recorded trip looks like" card. Pure SwiftUI —
@@ -354,13 +364,19 @@ struct OnboardingView: View {
 
             VStack {
                 HStack {
-                    Text(AppStrings.onboardingRecordedAuto(lang.language))
+                    // Над макетом — «Пример»: это не чья-то поездка. Над
+                    // собственной поездкой человека подписи нет вовсе: она
+                    // могла быть записана кнопкой, и «записано автоматически»
+                    // было бы неправдой (автозапись по умолчанию выключена).
+                    if realTrip == nil {
+                    Text(AppStrings.proDemoExample(lang.language))
                         .font(.inter(12.5, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72), in: Capsule())
                         .overlay(Capsule().stroke(.white.opacity(0.08), lineWidth: 1))
+                    }
                     Spacer()
                 }
                 Spacer()
@@ -387,14 +403,6 @@ struct OnboardingView: View {
         return "\(prefix) · \(df.string(from: realTrip.startDate))"
     }
 
-    /// Разделитель — общий на приложение (`AppStrings.decimalSeparator`), а не
-    /// записанный руками в подставных значениях карточки: иначе настоящее
-    /// число и подставное разошлись бы типографикой посреди онбординга.
-    private static func number(_ value: Double, decimals: Int, lng: LanguageManager.Language) -> String {
-        let s = String(format: "%.\(decimals)f", value)
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
-    }
-
     private func mockEndpointDot(_ color: Color) -> some View {
         Circle()
             .fill(color)
@@ -402,70 +410,41 @@ struct OnboardingView: View {
             .overlay(Circle().stroke(.white, lineWidth: 2))
     }
 
-    /// White card bottom: trip title + 2×3 metrics grid with hairline
-    /// dividers. Values are static mock data (RU uses decimal comma).
+    /// White card bottom: trip title + one row of three metrics with hairline
+    /// dividers. A real trip shows its own numbers, a first launch the sample.
     private func mockStatsArea(lng: LanguageManager.Language) -> some View {
         let l = lang.language
         // Канонические 82 и 150 км/ч демо-карточки — в СИ. Делит на 3.6 ровно
         // одно место в проекте (`DistanceUnit`), и это оно; своя копия здесь
         // была бы второй арифметикой на экране, который видят первым.
         let demoAvgMS = DistanceUnit.km.metresPerSecond(fromSpeed: 82)
-        let demoMaxMS = DistanceUnit.km.metresPerSecond(fromSpeed: 150)
         // Real numbers whenever there's a real trip behind the card; the
         // canned set only fills in for a first-ever launch, where there is
         // genuinely nothing to show.
-        let metrics: [(icon: String, value: String, unit: String, color: Color, label: String)] =
+        let metrics: [(value: String, unit: String, color: Color, label: String)] =
             realTrip.map { trip in
-                // Расход считается по КИЛОМЕТРАМ, а показывается пересчитанным
-                // (`ConsumptionUnit`): «л/100» — это литры на сотню того, в чём
-                // человек меряет дорогу, и подставленные сюда мили дали бы
-                // +60 % без единой ошибки компилятора.
-                let fuel = trip.distance > 0
-                    ? trip.fuelUsed / (trip.distance / 1000) * 100
-                    : 0
                 let distance = Measure.distanceParts(
                     metres: trip.distance, unit: distanceUnit, lang: lng, style: .adaptive)
                 let avg = Measure.speedParts(
                     ms: trip.averageSpeed, unit: distanceUnit, lang: lng)
-                let max = Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lng)
-                let elevation = Measure.elevationParts(
-                    metres: trip.elevation, unit: distanceUnit, lang: lng)
                 return [
-                    ("point.topleft.down.curvedto.point.bottomright.up",
-                     distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
-                    ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
-                    ("gauge", avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-                    ("bolt.fill", max.value, max.unit, AppTheme.red, AppStrings.onboardingStatMax(l)),
-                    ("drop", Self.number(fuel, decimals: 1, lng: lng),
-                     AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-                    ("mountain.2", elevation.value, elevation.unit,
-                     AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
+                    (distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
+                    (trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
+                    (avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
                 ]
             } ?? [
-            // Канонические числа демо-карточки — 246 км, 82 и 150 км/ч,
-            // 340 м — записаны в СИ и проходят через тот же `Measure`, включая
-            // высоту (с 0.6.7 она тоже следует настройке). Первый запуск —
+            // Канонические числа демо-карточки — 246 км и 82 км/ч — записаны
+            // в СИ и проходят через тот же `Measure`. Первый запуск —
             // единственный экран, который человек видит ДО того, как у него
             // появится хоть одна поездка, и мильная карточка с подписью «км»
             // была бы первым, что приложение о себе соврало.
-            ("point.topleft.down.curvedto.point.bottomright.up",
-             Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).value,
+            (Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).value,
              Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).unit,
              AppTheme.green, AppStrings.distance(l)),
-            ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
-            ("gauge",
-             Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).value,
+            ("2:59", "", AppTheme.accent, AppStrings.duration(l)),
+            (Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).value,
              Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).unit,
              AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-            ("bolt.fill",
-             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).value,
-             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).unit,
-             AppTheme.red, AppStrings.onboardingStatMax(l)),
-            ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-            ("mountain.2",
-             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).value,
-             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).unit,
-             AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
         ]
         let hairline = Color.black.opacity(0.05)
 
@@ -476,31 +455,23 @@ struct OnboardingView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
-            VStack(spacing: 0) {
-                mockMetricsRow(Array(metrics[0..<3]), hairline: hairline)
-                hairline.frame(height: 1)
-                    .padding(.horizontal, 13)
-                mockMetricsRow(Array(metrics[3..<6]), hairline: hairline)
-            }
-            .padding(.bottom, 6)
+            mockMetricsRow(metrics, hairline: hairline)
+                .padding(.bottom, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
     }
 
     private func mockMetricsRow(
-        _ row: [(icon: String, value: String, unit: String, color: Color, label: String)],
+        _ row: [(value: String, unit: String, color: Color, label: String)],
         hairline: Color
     ) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(row.enumerated()), id: \.offset) { index, m in
                 if index > 0 {
-                    hairline.frame(width: 1, height: 46)
+                    hairline.frame(width: 1, height: 30)
                 }
                 VStack(spacing: 3) {
-                    Image(systemName: m.icon)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(m.value)
                             .font(.inter(17, weight: .heavy).monospacedDigit())
@@ -535,6 +506,7 @@ struct OnboardingView: View {
                 .padding(.top, 56)
 
             Text(AppStrings.onboardingLocation(lang.language))
+                .accessibilityIdentifier("onboarding_page_2")
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
@@ -548,34 +520,13 @@ struct OnboardingView: View {
 
             VStack(spacing: 12) {
                 if hasLocationPermission {
-                    // Already granted (re-run of onboarding, or the user
-                    // allowed it from a system prompt earlier): asking again
-                    // is a no-op in iOS, so the screen states the fact and
-                    // the button just moves forward.
                     Text(AppStrings.onboardingAlreadyGranted(lang.language))
                         .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.green)
+                }
 
-                    primaryButton(AppStrings.onboardingContinue(lang.language)) {
-                        withAnimation { currentPage = 3 }
-                    }
-                } else {
-                    primaryButton(AppStrings.onboardingAllow(lang.language)) {
-                        requestLocationAndAdvance()
-                    }
-
-                    // Nothing has to be granted here. Recording asks for what
-                    // it needs at the moment it needs it, and forcing the
-                    // decision before the app has shown anything is the
-                    // fastest way to get a "Don't Allow" you can never undo.
-                    Button {
-                        Haptics.tap()
-                        withAnimation { currentPage = 3 }
-                    } label: {
-                        Text(AppStrings.onboardingSkipForNow(lang.language))
-                            .font(.inter(14, weight: .medium))
-                            .foregroundStyle(c.textSecondary)
-                    }
+                permissionButton(.location, identifier: "onboarding_continue_location") {
+                    withAnimation { currentPage = 3 }
                 }
 
                 // Consent stays on this screen too (product decision): the
@@ -601,14 +552,15 @@ struct OnboardingView: View {
                 .padding(.top, 56)
 
             Text(AppStrings.onboardingBackgroundTitle(lang.language))
+                .accessibilityIdentifier("onboarding_page_3")
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.top, 36)
 
-            // Canon copy: says exactly what breaks with «While Using», which
-            // is the only argument that makes «Always» reasonable to grant.
+            // Explain the purpose of both upcoming requests without making
+            // a particular choice on either system prompt for the person.
             bodyText(AppStrings.onboardingBackgroundSub(lang.language), c)
                 .padding(.top, 12)
 
@@ -621,21 +573,8 @@ struct OnboardingView: View {
                         .foregroundStyle(AppTheme.green)
                 }
 
-                primaryButton(
-                    hasAlwaysPermission
-                        ? AppStrings.onboardingContinue(lang.language)
-                        : AppStrings.onboardingBackgroundAllow(lang.language)
-                ) {
-                    requestAlwaysAndAdvance()
-                }
-
-                Button {
-                    Haptics.tap()
+                permissionButton(.background, identifier: "onboarding_continue_background") {
                     withAnimation { currentPage = 4 }
-                } label: {
-                    Text(AppStrings.onboardingSkipForNow(lang.language))
-                        .font(.inter(14, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
                 }
 
                 consentText(c)
@@ -658,6 +597,7 @@ struct OnboardingView: View {
                 .padding(.top, 56)
 
             Text(AppStrings.onboardingNotificationsTitle(lang.language))
+                .accessibilityIdentifier("onboarding_page_4")
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
@@ -674,23 +614,10 @@ struct OnboardingView: View {
                     Text(AppStrings.onboardingAlreadyGranted(lang.language))
                         .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.green)
+                }
 
-                    primaryButton(AppStrings.onboardingContinue(lang.language)) {
-                        finishOnboarding()
-                    }
-                } else {
-                    primaryButton(AppStrings.onboardingNotificationsEnable(lang.language)) {
-                        requestNotificationsAndFinish()
-                    }
-
-                    Button {
-                        Haptics.tap()
-                        finishOnboarding()
-                    } label: {
-                        Text(AppStrings.onboardingNotNow(lang.language))
-                            .font(.inter(14, weight: .medium))
-                            .foregroundStyle(c.textSecondary)
-                    }
+                permissionButton(.notifications, identifier: "onboarding_continue_notifications") {
+                    finishOnboarding()
                 }
 
                 consentText(c)
@@ -723,7 +650,7 @@ struct OnboardingView: View {
     }
 
     private func refreshPermissionStatus() {
-        permissionStatus = (locationManager ?? CLLocationManager()).authorizationStatus
+        permissionStatus = CLLocationManager().authorizationStatus
         // Notification status is async-only; ask the system rather than
         // trusting a cached flag, since it can change in Settings while the
         // onboarding is on screen.
@@ -749,36 +676,26 @@ struct OnboardingView: View {
 
     // MARK: - Actions
 
-    private func requestLocationAndAdvance() {
-        let manager = CLLocationManager()
-        locationManager = manager
-        manager.requestWhenInUseAuthorization()
-        withAnimation { currentPage = 3 }
-    }
-
-    /// «Всегда» + motion, then on to the notifications page. Motion rides
-    /// along here because auto-start needs both — asking for it on a screen
-    /// of its own would be a permission prompt with nothing to explain.
-    private func requestAlwaysAndAdvance() {
-        // The system prompt outlives this view's state, and iOS cancels a
-        // pending prompt when its CLLocationManager deallocates — the
-        // retainer holds it until authorization resolves. (Same invariant
-        // documented in AutoRecordSettingsView.)
-        let manager = locationManager ?? CLLocationManager()
-        locationManager = manager
-        AlwaysAuthorizationRetainer.requestAlwaysAuthorization(retaining: manager)
-        MotionDetector.requestAuthorization { _ in }
-        withAnimation { currentPage = 4 }
-    }
-
-    private func requestNotificationsAndFinish() {
-        NotificationManager.shared.requestAuthorization { granted in
-            if granted {
-                Task { @MainActor in
-                    PushNotificationManager.shared.registerForRemoteNotifications()
-                }
+    private func permissionButton(
+        _ step: OnboardingPermissionCoordinator.Step,
+        identifier: String,
+        completion: @escaping () -> Void
+    ) -> some View {
+        primaryButton(AppStrings.onboardingContinue(lang.language)) {
+            Haptics.tap()
+            permissions.proceed(from: step) {
+                refreshPermissionStatus()
+                completion()
             }
-            Task { @MainActor in finishOnboarding() }
+        }
+        .disabled(permissions.isRequesting)
+        .accessibilityIdentifier(identifier)
+        .overlay(alignment: .trailing) {
+            if permissions.isRequesting {
+                ProgressView()
+                    .tint(.white)
+                    .padding(.trailing, 20)
+            }
         }
     }
 
@@ -787,62 +704,6 @@ struct OnboardingView: View {
         // launch, and recording starts by itself anyway.
         UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
         hasCompletedOnboarding = true
-    }
-}
-
-/// Keeps the CLLocationManager of the final Always-authorization request
-/// alive after OnboardingView is torn down.
-///
-/// `enableAutoRecordAndFinish()` flips `hasCompletedOnboarding` in the same
-/// update cycle as `requestAlwaysAuthorization()`, destroying the view and
-/// its `@State` manager — and iOS cancels a pending authorization prompt
-/// when its CLLocationManager deallocates ("Must retain CLLocationManager
-/// until dialog completes", AutoRecordSettingsView). There the view outlives
-/// the prompt; here it cannot by design, so a static strong reference roots
-/// the manager (plus this delegate) until the flow resolves, then releases
-/// both.
-private final class AlwaysAuthorizationRetainer: NSObject, CLLocationManagerDelegate {
-    /// Strong root that keeps the retainer + manager alive past the view's
-    /// deallocation. Cleared once authorization resolves.
-    private static var active: AlwaysAuthorizationRetainer?
-
-    private let manager: CLLocationManager
-    /// Core Location delivers one initial callback right after the delegate
-    /// is assigned; it reports the CURRENT status, not the user's answer.
-    private var receivedInitialStatusCallback = false
-
-    static func requestAlwaysAuthorization(retaining manager: CLLocationManager) {
-        let retainer = AlwaysAuthorizationRetainer(manager: manager)
-        active = retainer // replaces (and releases) any earlier request
-        manager.delegate = retainer
-        manager.requestAlwaysAuthorization()
-    }
-
-    private init(manager: CLLocationManager) {
-        self.manager = manager
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        defer { receivedInitialStatusCallback = true }
-        switch manager.authorizationStatus {
-        case .notDetermined:
-            // Full prompt pending (user swiped past the Geo page without
-            // granting While-Using) — keep holding.
-            break
-        case .authorizedWhenInUse where !receivedInitialStatusCallback:
-            // Initial status report while the Always-upgrade prompt is
-            // pending — keep holding until the user answers it.
-            break
-        default:
-            // Resolved: .authorizedAlways / .denied / .restricted, or a
-            // post-prompt .authorizedWhenInUse ("Keep Only While Using").
-            release()
-        }
-    }
-
-    private func release() {
-        manager.delegate = nil
-        if Self.active === self { Self.active = nil }
     }
 }
 

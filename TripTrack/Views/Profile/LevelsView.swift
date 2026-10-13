@@ -132,7 +132,7 @@ struct LevelsView: View {
             Circle().fill(rankTint(ink))
             Circle().strokeBorder(ink, lineWidth: 3.5)
             Text("\(level)")
-                .font(.system(size: 26, weight: .heavy).monospacedDigit())
+                .font(.inter(26, weight: .heavy).monospacedDigit())
                 .minimumScaleFactor(0.6)   // three digits still fit at level 100+
                 .lineLimit(1)
                 .foregroundStyle(ink)
@@ -267,7 +267,7 @@ struct LevelsView: View {
                 ProfileSectionLabel(text: AppStrings.levelsAllRanks(l))
                 Spacer()
                 Text("\(DriverRank.allCases.count)")
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.inter(13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(c.textSecondary)
             }
             .padding(.leading, 4)
@@ -301,7 +301,7 @@ struct LevelsView: View {
                     .frame(width: 11, height: 11)
 
                 Text(r.title(l))
-                    .font(.system(size: 14, weight: isCurrent ? .bold : .semibold))
+                    .font(.inter(14, weight: isCurrent ? .bold : .semibold))
                     .foregroundStyle(ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

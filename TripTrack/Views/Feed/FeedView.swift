@@ -269,7 +269,8 @@ struct FeedView: View {
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: feedVM.tripManager),
                         pushPath: $authorPath,
-                        focus: focus
+                        focus: focus,
+                        preview: feedVM.allTrips.first(where: { $0.id == id })
                     )
                 case .socialTrip(let t, let focus):
                     // Same screen as our own trips, fed from the feed's copy.
@@ -616,6 +617,10 @@ struct FeedView: View {
         }
         } // ZStack
         .animation(.spring(response: 0.36, dampingFraction: 0.82), value: undo.pending?.id)
+        // Контекстное предложение PRO. Вешается РОВНО на два экрана — сюда и
+        // на «Я», — и список этот закрыт спекой §11: запись, экран поездки и
+        // лист ручной поездки перечислены в ней как запрещённые.
+        .proContextOffer(tripCount: mapVM.cachedTripCount)
     }
 
     // MARK: - Header (Figma 140:945)
@@ -739,6 +744,10 @@ struct FeedView: View {
                     in: RoundedRectangle(cornerRadius: 8)
                 )
                 .shadow(color: active ? Color.black.opacity(0.03) : Color.clear, radius: 2, y: 1)
+                // The whole half takes the tap. Without it the inactive pill
+                // — clear fill — caught taps only on the letters of its word,
+                // a 66 × 16 pt target inside a 178 × 32 pt half (0.8.9).
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         // The active segment is only signalled by fill/color — expose it to

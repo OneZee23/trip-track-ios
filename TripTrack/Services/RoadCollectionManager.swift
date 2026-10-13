@@ -12,7 +12,7 @@ final class RoadCollectionManager {
     // MARK: - Process Trip
 
     /// Call after trip is completed. Returns road info for the completion screen.
-    func processTrip(_ trip: Trip) -> RoadCompletionInfo? {
+    func processTrip(_ trip: Trip, history: [Trip]) -> RoadCompletionInfo? {
         guard trip.trackPoints.count >= 2 else { return nil }
 
         let fingerprint = computeGeohashFingerprint(trackPoints: trip.trackPoints)
@@ -20,6 +20,10 @@ final class RoadCollectionManager {
 
         let startHash = fingerprint.first!
         let endHash = fingerprint.last!
+        // RoadEntity is a local collection, never restored by cloud sync.
+        // Its reward progression stays intact; the completion label instead
+        // reports matches from the saved history available on this device.
+        let historyCount = SimilarRecordedTrips.count(for: trip, in: history)
 
         // Try to match existing road
         if let existingRoad = findMatchingRoad(startHash: startHash, endHash: endHash, fingerprint: fingerprint) {
@@ -34,8 +38,8 @@ final class RoadCollectionManager {
                 name: existingRoad.name ?? formatRoadName(trip: trip),
                 rarity: RoadRarity(rawValue: existingRoad.rarity ?? "common") ?? .common,
                 level: newLevel,
-                timesDriven: Int(existingRoad.timesDriven),
-                isNew: false
+                timesDriven: historyCount,
+                isNew: historyCount < 2
             )
         }
 
@@ -67,8 +71,8 @@ final class RoadCollectionManager {
             name: name,
             rarity: rarity,
             level: .discovered,
-            timesDriven: 1,
-            isNew: true
+            timesDriven: historyCount,
+            isNew: historyCount < 2
         )
     }
 

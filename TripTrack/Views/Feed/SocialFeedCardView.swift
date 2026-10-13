@@ -174,7 +174,7 @@ struct SocialFeedCardView: View {
                     if PlusBadgeVisibility.shows(
                         isPlus: trip.author.isPlus, isOwn: isOwn,
                         showsOwnBadge: SettingsManager.shared.showPlusBadge) {
-                        PlusBadge(size: 13)
+                        ProBadge(height: 16)
                     }
                     if isOwn {
                         // Subtle "this is you" badge — explicit signal that
@@ -545,6 +545,7 @@ struct SocialFeedCardView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "face.smiling")
                                 .font(.system(size: 13, weight: .medium))
+                                .accessibilityHidden(true)
                             Text(AppStrings.socialFeedReact(lang.language))
                                 .font(.inter(12, weight: .semibold))
                         }

@@ -143,7 +143,7 @@ struct NameEditorSheet: View {
                 }
                 Spacer(minLength: 0)
                 Text("\(trimmed.count)/\(Self.maxLength)")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .font(.inter(11, weight: .medium).monospacedDigit())
                     .foregroundStyle(trimmed.count >= Self.maxLength
                                      ? AppTheme.red
                                      : c.textTertiary)

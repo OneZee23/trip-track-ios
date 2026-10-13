@@ -19,6 +19,65 @@ final class PlacesPresentationTests: XCTestCase {
         return PlaceListItem(place: place, stats: stats, usual: 600)
     }
 
+    // MARK: Группы по свежести
+
+    /// «Недавно» режет список на «Сегодня», «Эта неделя» и «Раньше»
+    /// (спека §3.4). Неделя считается от СЕГОДНЯ назад, а не от понедельника:
+    /// вопрос у человека «когда я там был», и в воскресенье «на этой неделе»
+    /// из одного дня было бы обманом.
+    func testRecentSplitsByHowLongAgo() {
+        let items = [item("Дом", passes: 9, lastDaysAgo: 0),
+                     item("Работа", passes: 9, lastDaysAgo: 3),
+                     item("Дача", passes: 9, lastDaysAgo: 40)]
+        let groups = PlacesPresentation.group(items, grouped: true, by: .recent)
+        XCTAssertEqual(groups.map(\.kind), [.today, .thisWeek, .earlier])
+        XCTAssertEqual(groups[0].items.map { $0.place.name }, ["Дом"])
+        XCTAssertEqual(groups[1].items.map { $0.place.name }, ["Работа"])
+        XCTAssertEqual(groups[2].items.map { $0.place.name }, ["Дача"])
+    }
+
+    /// Пустые группы не рисуются, а единственная выжившая превращается
+    /// обратно в «Мои места»: заголовок над всем списком врал бы, что
+    /// где-то есть остальные.
+    func testASingleSurvivingGroupCollapsesBackToAll() {
+        let items = [item("Дом", passes: 9, lastDaysAgo: 0),
+                     item("Работа", passes: 9, lastDaysAgo: 0)]
+        let groups = PlacesPresentation.group(items, grouped: true, by: .recent)
+        XCTAssertEqual(groups.map(\.kind), [.all])
+        XCTAssertEqual(groups[0].items.count, 2)
+    }
+
+    /// Место без единого проезда даты не имеет — и попадает в «Раньше», а не
+    /// теряется из списка.
+    func testAPlaceWithoutPassesLandsInEarlier() {
+        let never = PlaceListItem(
+            place: Place(id: UUID(), cell: "ucfv0j1", latitude: 45, longitude: 39,
+                         name: "Новое", createdAt: Date()),
+            stats: PlaceStats(passCount: 0, firstAt: nil, lastAt: nil,
+                              medianElapsed: nil, isFrequentGuest: false, directions: []),
+            usual: nil)
+        let groups = PlacesPresentation.group([item("Дом", passes: 9, lastDaysAgo: 0), never],
+                                              grouped: true, by: .recent)
+        XCTAssertEqual(groups.map(\.kind), [.today, .earlier])
+        XCTAssertEqual(groups[1].items.map { $0.place.name }, ["Новое"])
+    }
+
+    /// «По имени» групп не имеет вовсе: алфавит сам и есть группировка.
+    func testByNameHasNoGroups() {
+        let items = [item("Дом", passes: 9, lastDaysAgo: 0, frequent: true),
+                     item("Дача", passes: 1, lastDaysAgo: 40)]
+        XCTAssertEqual(PlacesPresentation.group(items, grouped: true, by: .name).map(\.kind),
+                       [.all])
+    }
+
+    /// «Часто» по-прежнему делит на частых гостей и остальных.
+    func testFrequentKeepsItsTwoGroups() {
+        let items = [item("Дом", passes: 9, lastDaysAgo: 0, frequent: true),
+                     item("Дача", passes: 1, lastDaysAgo: 40)]
+        XCTAssertEqual(PlacesPresentation.group(items, grouped: true, by: .frequent).map(\.kind),
+                       [.frequent, .others])
+    }
+
     // MARK: Поиск
 
     func testSearchIgnoresCaseAndDiacritics() {
@@ -89,11 +148,20 @@ final class PlacesPresentationTests: XCTestCase {
             item("Место \($0)", passes: 40 - $0, lastDaysAgo: $0, frequent: $0 < 2)
         }
         items.append(item("Дача", passes: 1, lastDaysAgo: 30))
+        // У «Недавно» группы теперь по свежести (спека §3.4); у «Часто» —
+        // прежние «частые гости» и «остальные». Предмет теста не в них, а в
+        // том, что ПОИСК форму не меняет.
         let grouped = PlacesPresentation.build(items, query: "", sort: .recent, language: .ru)
-        XCTAssertEqual(grouped.map(\.kind), [.frequent, .others])
+        XCTAssertEqual(grouped.map(\.kind), [.today, .thisWeek, .earlier])
+        XCTAssertEqual(PlacesPresentation.build(items, query: "", sort: .frequent,
+                                                language: .ru).map(\.kind),
+                       [.frequent, .others])
 
         let searched = PlacesPresentation.build(items, query: "Дача", sort: .recent, language: .ru)
         XCTAssertEqual(searched.map(\.kind), [.all], "поиск не группирует")
+        XCTAssertEqual(PlacesPresentation.build(items, query: "Дача", sort: .frequent,
+                                                language: .ru).map(\.kind),
+                       [.all], "и не группирует ни в каком порядке")
         XCTAssertEqual(searched.first?.items.count, 1)
     }
 

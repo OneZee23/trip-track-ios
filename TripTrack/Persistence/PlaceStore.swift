@@ -28,6 +28,9 @@ protocol PlaceStore {
     /// иначе сверка при запуске воскресила бы место тем же вечером.
     func deletePlace(id: UUID)
     func passes(placeId: UUID) -> [PlacePass]
+    /// One read for a list of places. Each group is newest first; places
+    /// without valid passes are absent and callers treat them as empty.
+    func passes(placeIds: [UUID]) -> [UUID: [PlacePass]]
     func passes(tripId: UUID) -> [PlacePass]
     func passCount(placeId: UUID) -> Int
     /// Список проездов пары (место, поездка) заменяется целиком — повторная
@@ -135,6 +138,22 @@ final class CoreDataPlaceStore: PlaceStore {
     func passes(placeId: UUID) -> [PlacePass] {
         passEntities(format: "placeId == %@", placeId).compactMap(pass(from:))
             .sorted { $0.timestamp > $1.timestamp }
+    }
+
+    func passes(placeIds: [UUID]) -> [UUID: [PlacePass]] {
+        guard !placeIds.isEmpty else { return [:] }
+        let req: NSFetchRequest<PlacePassEntity> = PlacePassEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "placeId IN %@", placeIds)
+        req.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+        // Every field is converted immediately; don't fault the fetched
+        // rows one at a time while building the list snapshot.
+        req.returnsObjectsAsFaults = false
+        var grouped: [UUID: [PlacePass]] = [:]
+        for entity in (try? context.fetch(req)) ?? [] {
+            guard let pass = pass(from: entity) else { continue }
+            grouped[pass.placeId, default: []].append(pass)
+        }
+        return grouped
     }
 
     func passes(tripId: UUID) -> [PlacePass] {

@@ -1,210 +1,30 @@
 import SwiftUI
 
-/// The period is a draft until Apply. Closing this sheet keeps the current map.
-struct AtlasPeriodSheet: View {
-    let onSelect: (AtlasPeriod) -> Void
-
-    @EnvironmentObject private var lang: LanguageManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var draft: AtlasPeriod
-    @State private var start: Date
-    @State private var end: Date
-    @State private var editingStart = true
-    @State private var previousPreset: AtlasPeriod = .allTime
-    @State private var detent: PresentationDetent = .medium
-
-    init(period: AtlasPeriod, onSelect: @escaping (AtlasPeriod) -> Void) {
-        self.onSelect = onSelect
-        _draft = State(initialValue: period)
-        if case let .custom(start, end) = period {
-            let window = AtlasPeriodBounds.clamp(start: start, end: end)
-            _start = State(initialValue: window.start)
-            _end = State(initialValue: window.end)
-            _detent = State(initialValue: .large)
-        } else {
-            let now = Date()
-            _start = State(initialValue: Calendar.current.date(byAdding: .day, value: -29, to: now) ?? now)
-            _end = State(initialValue: now)
-            _previousPreset = State(initialValue: period)
-        }
-    }
-
-    private var isCustom: Bool {
-        if case .custom = draft { return true }
-        return false
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            AtlasControlsHeader(
-                title: isCustom ? AppStrings.atlasCustomPeriod(lang.language) : AppStrings.atlasPeriod(lang.language),
-                onBack: isCustom ? {
-                    withAnimation { draft = previousPreset; detent = .medium }
-                } : nil
-            )
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if isCustom { customDates } else { presets }
-                    Text(AppStrings.atlasPeriodHint(lang.language))
-                        .font(.inter(14))
-                        .foregroundStyle(AtlasTheme.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(16)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) { applyButton }
-        .background(AtlasTheme.background)
-        .presentationBackground(AtlasTheme.background)
-        .presentationCornerRadius(AtlasTheme.sheetRadius)
-        .presentationDetents(isCustom ? [.large] : [.medium, .large], selection: $detent)
-        .presentationDragIndicator(.hidden)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("atlas_period_sheet")
-    }
-
-    private var presets: some View {
-        VStack(spacing: 0) {
-            periodRow(.allTime, title: AppStrings.atlasAllTime(lang.language), id: "all_time")
-            separator
-            periodRow(.thisYear, title: AppStrings.atlasThisYear(lang.language), id: "this_year")
-            separator
-            periodRow(.last30Days, title: AppStrings.atlasLast30Days(lang.language), id: "last_30_days")
-            separator
-            periodRow(.custom(start: start, end: end), title: AppStrings.atlasCustomPeriod(lang.language), id: "custom")
-        }
-        .padding(.horizontal, 16)
-        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
-    }
-
-    private var separator: some View {
-        Rectangle().fill(AtlasTheme.separator).frame(height: 0.5)
-    }
-
-    private func periodRow(_ period: AtlasPeriod, title: String, id: String) -> some View {
-        let selected = period == draft || (id == "custom" && isCustom)
-        return Button {
-            Haptics.tap()
-            withAnimation {
-                if id == "custom" {
-                    previousPreset = draft
-                    detent = .large
-                }
-                draft = period
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Circle()
-                    .strokeBorder(selected ? AtlasTheme.accent : AtlasTheme.secondary.opacity(0.5),
-                                  lineWidth: selected ? 7 : 2)
-                    .frame(width: 24, height: 24)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.inter(16, weight: .semibold))
-                    .foregroundStyle(AtlasTheme.ink)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if id == "custom" {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 16))
-                        .foregroundStyle(AtlasTheme.secondary)
-                        .accessibilityHidden(true)
-                }
-            }
-            .frame(minHeight: 56)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("atlas_period_\(id)")
-    }
-
-    private var customDates: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                dateButton(start, title: AppStrings.atlasFrom(lang.language), isStart: true)
-                dateButton(end, title: AppStrings.atlasTo(lang.language), isStart: false)
-            }
-            DatePicker(
-                editingStart ? AppStrings.atlasFrom(lang.language) : AppStrings.atlasTo(lang.language),
-                selection: editingStart ? $start : $end,
-                // Верх обеих границ — сегодня: поездок из будущего не
-                // бывает (`AtlasPeriodBounds`). Собирается чистой функцией —
-                // перевёрнутый `ClosedRange` роняет процесс, и проверять это
-                // обязан тест, а не открытый на телефоне экран.
-                in: editingStart
-                    ? AtlasPeriodBounds.start(start: start, end: end)
-                    : AtlasPeriodBounds.end(start: start, end: end),
-                displayedComponents: .date
-            )
-            .datePickerStyle(.graphical)
-            .tint(AtlasTheme.accent)
-            .environment(\.locale, lang.language.locale)
-            .accessibilityIdentifier("atlas_period_calendar")
-        }
-        .padding(8)
-        .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
-    }
-
-    private func dateButton(_ date: Date, title: String, isStart: Bool) -> some View {
-        let selected = editingStart == isStart
-        return Button {
-            Haptics.tap()
-            editingStart = isStart
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.inter(12, weight: .semibold))
-                Text(date, format: .dateTime.day().month(.abbreviated).year().locale(lang.language.locale))
-                    .font(.inter(14, weight: .bold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .foregroundStyle(selected ? AtlasTheme.accentInk : AtlasTheme.secondary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(selected ? AtlasTheme.accentSoft : AtlasTheme.background,
-                        in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier(isStart ? "atlas_period_from" : "atlas_period_to")
-    }
-
-    private var applyButton: some View {
-        Button {
-            Haptics.tap()
-            onSelect(isCustom ? .custom(start: start, end: end) : draft)
-            dismiss()
-        } label: {
-            Text(AppStrings.atlasShow(lang.language))
-                .font(AppType.button)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(AtlasTheme.accent, in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityIdentifier("atlas_period_apply")
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(AtlasTheme.background)
-    }
-}
-
 /// These choices change the existing map immediately; no second map is created.
 struct AtlasAppearanceSheet: View {
     @Binding var appearance: AtlasMapAppearance
+    /// Открыть настройку дома. Лист закрывается, а дом открывается экраном
+    /// выше: лист поверх листа увёл бы нижний вниз, а вернуться из него было
+    /// бы некуда.
+    var onOpenHome: () -> Void = {}
     @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var home = HomeManager.shared
+    @Environment(\.distanceUnit) private var distanceUnit
 
     var body: some View {
         VStack(spacing: 0) {
             AtlasControlsHeader(title: AppStrings.atlasMapStyle(lang.language))
             ScrollView {
                 VStack(spacing: 16) {
-                    HStack(spacing: 10) {
+                    // Три в ряд — как рисует макет A7. Сетка, а не `HStack`:
+                    // у трёх плиток подписи разной длины, и колонки обязаны
+                    // быть равными, а не по содержимому.
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8),
+                                             count: 3),
+                              spacing: 8) {
                         styleCard(.fog, title: AppStrings.atlasFogStyle(lang.language))
                         styleCard(.night, title: AppStrings.atlasNightStyle(lang.language))
+                        styleCard(.cells, title: AppStrings.atlasCellsStyle(lang.language))
                     }
                     layerToggles
                 }
@@ -221,19 +41,69 @@ struct AtlasAppearanceSheet: View {
 
     private var layerToggles: some View {
         VStack(spacing: 0) {
-            Toggle(AppStrings.atlasShowCityLabels(lang.language), isOn: $appearance.showsCityLabels)
-                .frame(minHeight: 56)
-                .accessibilityIdentifier("atlas_city_labels_toggle")
-            Rectangle().fill(AtlasTheme.separator).frame(height: 0.5)
+            // Подписи городов убраны вовсе (владелец, 26 сен): наш «Геленджик»
+            // ложился поверх «Gelendzhik», который рисует сама Apple. Имена
+            // городов знает карта, и знает лучше — на тринадцати языках и без
+            // нашего слоя. Вместе с подписями ушёл и тумблер: выключателя у
+            // того, чего нет, быть не может.
             Toggle(AppStrings.atlasShowPhotos(lang.language), isOn: $appearance.showsPhotos)
                 .frame(minHeight: 56)
                 .accessibilityIdentifier("atlas_photos_toggle")
+            AtlasTheme.separator.frame(height: 1)
+            homeRow
         }
         .font(.inter(16, weight: .semibold))
         .foregroundStyle(AtlasTheme.ink)
         .tint(AtlasTheme.accent)
         .padding(.horizontal, 16)
         .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+    }
+
+    /// **Строка, а не тумблер** — отступление от доски A7 со своей причиной.
+    ///
+    /// Доска рисует здесь переключатель «Дом на карте · Видно только тебе».
+    /// Но дом в этой версии задаётся ТОЛЬКО руками, и у человека, который
+    /// его ещё не поставил, переключать нечего: тумблер у несуществующего
+    /// дома — это нажатие, которое ничего не делает, а такое хуже
+    /// отсутствующего. Поэтому здесь строка со сводкой, а сам тумблер
+    /// видимости живёт на экране дома рядом с точкой, которой командует.
+    private var homeRow: some View {
+        Button {
+            Haptics.tap()
+            onOpenHome()
+        } label: {
+            HStack(spacing: 12) {
+                Text(AppStrings.homeRow(lang.language))
+                Spacer(minLength: 8)
+                Text(homeSummary)
+                    .font(.inter(14, weight: .regular))
+                    .foregroundStyle(AtlasTheme.secondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
+            }
+            .frame(minHeight: 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("atlas_home_row")
+    }
+
+    /// «Не задан» / «Виден только тебе» / «Скрыт на карте · зона 500 м».
+    private var homeSummary: String {
+        let l = lang.language
+        let settings = home.settings
+        guard settings.isSet else { return AppStrings.homeNotSet(l) }
+        var parts = [settings.showsOnMap
+                     ? AppStrings.homeVisibleOnlyToYou(l)
+                     : AppStrings.homeHiddenOnMap(l)]
+        if settings.trimsPublicTracks {
+            parts.append(AppStrings.homeZoneShort(
+                l, radius: Measure.radius(metres: Double(settings.radius.rawValue),
+                                          unit: distanceUnit, lang: l)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func styleCard(_ style: AtlasMapAppearance.Style, title: String) -> some View {
@@ -332,7 +202,10 @@ struct AtlasExplanationSheet: View {
     }
 }
 
-private struct AtlasControlsHeader: View {
+/// Шапка листов «Атласа». Не `private`: тем же заголовком
+/// пользуется лист дома (0.8.2), а вторая копия шапки разошлась бы с
+/// первой на первой же правке.
+struct AtlasControlsHeader: View {
     let title: String
     var onBack: (() -> Void)? = nil
     @EnvironmentObject private var lang: LanguageManager
@@ -395,10 +268,18 @@ private struct AtlasStylePreview: View {
                 ? Color(red: 0.11, green: 0.14, blue: 0.19)
                 : Color(red: 0.90, green: 0.90, blue: 0.88)))
             let route = routePath(size)
-            context.stroke(route, with: .color(night
-                ? Color(red: 0.20, green: 0.25, blue: 0.30)
-                : Color(red: 0.85, green: 0.82, blue: 0.69)),
-                style: StrokeStyle(lineWidth: 28, lineCap: .round, lineJoin: .round))
+            let openedColour = Color(red: 0.85, green: 0.82, blue: 0.69)
+            if style == .cells {
+                // У «Клеток» открытое — КЛЕТКИ, и превью обязано показывать
+                // именно их: тайл, подписанный «Клетки», но нарисованный
+                // мягким коридором, обещал бы не то, что человек увидит.
+                context.fill(openedCells(route, size: size), with: .color(openedColour))
+            } else {
+                context.stroke(route, with: .color(night
+                    ? Color(red: 0.20, green: 0.25, blue: 0.30)
+                    : openedColour),
+                    style: StrokeStyle(lineWidth: 28, lineCap: .round, lineJoin: .round))
+            }
             var streets = Path()
             for x in stride(from: CGFloat(-20), through: size.width + 40, by: 26) {
                 streets.move(to: CGPoint(x: x, y: 0))
@@ -419,6 +300,31 @@ private struct AtlasStylePreview: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// Клетки, которых коридор касается. Сторона взята «на глаз кадра», а не
+    /// из `FogCellGrid`: превью это рисунок в восемьдесят точек, и настоящая
+    /// сторона в точках карты здесь ничего не значит — значит только то, что
+    /// открытое выглядит квадратами такого же порядка, как на карте.
+    private func openedCells(_ route: Path, size: CGSize) -> Path {
+        let side: CGFloat = 13
+        let halo: CGFloat = 14
+        let wide = route.strokedPath(StrokeStyle(lineWidth: halo * 2,
+                                                 lineCap: .round, lineJoin: .round))
+        var cells = Path()
+        var y: CGFloat = 0
+        while y < size.height {
+            var x: CGFloat = 0
+            while x < size.width {
+                let cell = CGRect(x: x, y: y, width: side, height: side)
+                if wide.contains(CGPoint(x: cell.midX, y: cell.midY)) {
+                    cells.addRect(cell)
+                }
+                x += side
+            }
+            y += side
+        }
+        return cells
     }
 
     private func routePath(_ size: CGSize) -> Path {

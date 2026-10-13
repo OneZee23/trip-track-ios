@@ -150,11 +150,14 @@ final class FogMetalCarveTests: XCTestCase {
     /// перед тем, как отдать окно обеим вуалям. Сам кадр рисует то, что ему
     /// дали: у шейдера нет права решать за хост, иначе решений стало бы два.
     /// Эта же развязка у растра, и проверяется она там так же —
-    /// `AttributionClearTests.testCarveOnlyHappensUnderTheNightVeil`.
+    /// `AttributionClearTests.testNoCarveUnderAnyVeil`.
     func testTheLightPaletteGateLivesInTheHostNotTheShader() throws {
-        XCTAssertFalse(AttributionCarve.carves(palette: .mist),
-                       "под бледной дымкой окна не бывает — и решает это хост")
-        XCTAssertTrue(AttributionCarve.carves(palette: .night))
+        // Хост с 26 сентября не просит окна НИ ПРИ КАКОЙ палитре (решение
+        // владельца, цена — в `AttributionCarve.carves`). А шейдер как умел
+        // его рисовать, так и умеет: развязка хоста и кадра — предмет этого
+        // теста, и она пережила выключение.
+        XCTAssertFalse(AttributionCarve.carves(palette: .mist))
+        XCTAssertFalse(AttributionCarve.carves(palette: .night))
 
         let mist = FogVeilPainter.Palette.mist
         let window = FogCarveWindow.attribution(rect: box)

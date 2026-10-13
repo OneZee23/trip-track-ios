@@ -60,7 +60,7 @@ struct NotesEditorView: View {
             HStack {
                 Spacer()
                 Text("\(text.count) / \(charLimit)")
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .font(.inter(12, weight: .medium).monospacedDigit())
                     .foregroundStyle(text.count >= charLimit ? AppTheme.red : c.textTertiary)
             }
             .padding(.horizontal, 20)

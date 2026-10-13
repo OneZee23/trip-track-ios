@@ -21,14 +21,34 @@ struct PlacesView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var model = PlacesTabViewModel()
     @State private var path: [PlacesDest] = []
     @State private var query = ""
     @State private var sort = PlacesSort.load()
-    @State private var showsSort = false
-    @State private var showsMap = false
+    /// Положение панели. Источник правды один — выбор булавки и пустая
+    /// вкладка тоже пишут сюда, а не заводят своё состояние: панель на
+    /// вкладке ОДНА (принцип 1 спеки).
+    @State private var stop: PlacesPanelStop = .half
+    /// Живой верх во время жеста: за ним идут поля карты.
+    @State private var liveTop: CGFloat?
+    /// Куда вернуться, сняв выбор булавки.
+    @State private var stopBeforeSelection: PlacesPanelStop = .half
+    @State private var selectedPlaceId: UUID?
+    @State private var selectedHintId: UUID?
     @State private var showsBeta = false
+    /// Поиск — МОДАЛЬНОЕ состояние вкладки (10 и 11), а не поле внутри
+    /// списка: фокус поднимает панель в полный список, гасит заголовок
+    /// вкладки и кладёт на карту скрим. Выход один — «Отмена» (или тап по
+    /// скриму): она снимает фокус, чистит запрос и возвращает панель туда,
+    /// откуда пришли.
+    @State private var searching = false
+    @State private var stopBeforeSearch: PlacesPanelStop = .list
     @FocusState private var searchFocused: Bool
+    /// Тот же монитор, что у «Ленты» (`CacheManager.shared`), а не свой:
+    /// второй `NWPathMonitor` — это вторая подписка на путь сети ради
+    /// одного булева.
+    @ObservedObject private var network = CacheManager.shared.networkMonitor
     /// Тот же ключ, что у таб-бара: с пустого экрана единственная кнопка
     /// уводит на запись, а не открывает «как это работает» ещё раз.
     @AppStorage(AppTab.storageKey) private var selectedTab: AppTab = .home
@@ -36,16 +56,29 @@ struct PlacesView: View {
     /// Меньше трёх мест — экран ещё не умеет рассказать о себе сам, и
     /// карточка «как это работает» стоит своего места. Подсказки её
     /// отменяют: они объясняют то же самое делом.
-    private var showsHowItWorks: Bool { model.items.count < 3 && model.suggestions.isEmpty }
+    private var showsHowItWorks: Bool { model.items.count < 3 && model.knownSuggestions.isEmpty }
     private var showsControls: Bool { model.items.count >= PlacesPresentation.manyPlaces }
     private var groups: [PlacesPresentation.Group] {
         PlacesPresentation.build(model.items, query: query, sort: sort, language: lang.language)
     }
 
+    /// Совпадения поиска — БЕЗ группировки: заголовок секции над выдачей
+    /// отвечал бы на вопрос, которого никто не задавал (спека §6, состояние
+    /// 10). Порядок при этом остаётся выбранный: чипы никуда не делись.
+    private var searchMatches: [PlaceListItem] {
+        PlacesPresentation.sort(
+            PlacesPresentation.filter(model.items, query: query, language: lang.language),
+            by: sort
+        )
+    }
+
+    private var searchOutcome: PlacesSearchOutcome {
+        PlacesSearchOutcome.resolve(query: query, matches: searchMatches.count)
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            content
-                .background(AtlasTheme.background.ignoresSafeArea())
+            stage(slot)
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: PlacesDest.self) { dest in
                     switch dest {
@@ -61,12 +94,22 @@ struct PlacesView: View {
                     }
                 }
         }
-        .sheet(isPresented: $showsSort) { sortSheet }
+        // Клавиатура НЕ двигает вкладку, и снимать это надо у САМОГО
+        // ВЕРХНЕГО вида, а не внутри.
+        //
+        // Панель стоит смещением от края экрана, а безопасную зону под
+        // клавиатуру SwiftUI добавляет корню — и вся вкладка уезжала вверх
+        // на её высоту: поле поиска ложилось на часы и на значок батареи.
+        // Две попытки снять это ниже по дереву (у `ZStack` сцены и у самой
+        // панели) не дали ничего — оба уже внутри сдвинутого контейнера.
+        // Поймано кадром на симуляторе, не сборкой.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .sheet(isPresented: $showsBeta) {
             AtlasBetaSheet(model: .make(.places), onDismiss: { showsBeta = false })
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).card)
         }
-        .task { model.reload() }
+        // The model fills the first frame in init and observes changes itself.
+        // Reloading here repeated that same CoreData work on every tab entry.
         .onChange(of: sort) { _, value in value.save() }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToPlace)) { note in
             guard let id = note.object as? UUID else { return }
@@ -74,15 +117,433 @@ struct PlacesView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if model.items.isEmpty && model.suggestions.isEmpty {
-            emptyState
-        } else if showsMap {
-            mapMode
-        } else {
-            list
+    /// Геометрия панели — из `WindowLayoutMetrics`, снимка окна ПОСЛЕ
+    /// разметки UIKit. Не из `GeometryReader`: внутри безопасной зоны тот
+    /// отдаёт её отступы нулями, и панель встаёт на сотню точек выше. И не из
+    /// живого `UIWindow` в `body` — он однажды зациклил разметку «Атласа».
+    private var slot: PlacesSlot {
+        let metrics = WindowLayoutMetrics.shared
+        let size = metrics.size ?? CGSize(width: 390, height: 844)
+        let insets = metrics.safeAreaInsets ?? UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0)
+        return PlacesSlot(height: size.height, safeTop: insets.top, safeBottom: insets.bottom)
+    }
+
+    /// Карта во всю высоту, панель поверх неё. Больше на вкладке ничего нет:
+    /// заголовок, переключатель, поиск и порядок живут ВНУТРИ панели.
+    private func stage(_ slot: PlacesSlot) -> some View {
+        ZStack {
+            map(interactive: true)
+                .ignoresSafeArea()
+            if network.isOffline { offlineCaption(slot) }
+            if searching { searchScrim }
+            panel(slot)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Клавиатура НЕ двигает панель.
+        //
+        // Иначе SwiftUI поднимает всё содержимое над ней, и панель, чей верх
+        // считается от безопасной зоны (`зона + 56`), уезжает ПОД ЧАСЫ —
+        // поле поиска ложится на время и на значок батареи (поймано кадром на
+        // симуляторе). Панель стоит там же, где стояла; клавиатура просто
+        // накрывает её низ, ровно как рисует матрица состояний.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onChange(of: emptyState) { _, state in
+            // Во время поиска панель держит полный список и чужим правкам
+            // не подчиняется: место, приехавшее пулом, не имеет права
+            // уронить панель из-под пальца, который набирает запрос.
+            guard !searching else { return }
+            withAnimation(SlotGesture.spring) { stop = state.stop(in: slot) }
+        }
+        .onAppear {
+            if emptyState.isPinned { stop = emptyState.stop(in: slot) }
+            else if !stop.isDraggable { stop = slot.defaultStop }
+        }
+        // Фокус в поле И ЕСТЬ вход в поиск. Обратное неверно: потеря фокуса
+        // (скролл гасит клавиатуру) поиск не закрывает — иначе один
+        // неосторожный свайп стирал бы набранный запрос.
+        .onChange(of: searchFocused) { _, focused in
+            if focused { beginSearch() }
+        }
+    }
+
+    /// Пустая вкладка (13, 14, 15). Подсказки в этот вопрос НЕ входят: до
+    /// 0.8.2 входили, и вкладка без мест, но с подсказками уходила в
+    /// половину вместо пустой — подсказка отменяла пустоту, хотя мест от неё
+    /// не появлялось.
+    private var emptyState: PlacesEmptyState {
+        PlacesEmptyState.resolve(places: model.items.count, trips: model.recentTrips.count)
+    }
+
+    /// Скрим 38 % под поиском (10 и 11). Он же второй выход: палец, ушедший
+    /// мимо «Отмены», не должен упираться в экран, с которого не выйти.
+    private var searchScrim: some View {
+        AtlasTheme.scrim
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture { endSearch() }
+            .transition(.opacity)
+            // Скрим ГЛУХОЙ для VoiceOver, иначе ротор уходит на карту под
+            // ним — то же правило, что у `AppConfirmDialog`.
+            .accessibilityHidden(true)
+    }
+
+    /// «Карта появится, когда будет сеть» (24) — по СЕРЕДИНЕ видимой карты, а
+    /// не у верхнего края: видимая полоска меняется от 56 pt в списке до
+    /// целого экрана в положении «Карта», и подпись у края читалась бы
+    /// системным баннером в одном случае и потерянной строкой в другом.
+    private func offlineCaption(_ slot: PlacesSlot) -> some View {
+        let visible = max(0, (liveTop ?? slot.top(of: stop)) - slot.safeTop)
+        return VStack(spacing: 0) {
+            Text(AppStrings.placesOfflineMap(lang.language))
+                .font(AppType.caption)
+                .foregroundStyle(AtlasTheme.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity)
+                .frame(height: visible)
+            Spacer(minLength: 0)
+        }
+        // Подпись не перехватывает тапы: под ней карта с булавками, и они
+        // остаются на месте — сеть отменяет плитки, а не места.
+        .allowsHitTesting(false)
+        .accessibilityIdentifier("places_offline_note")
+    }
+
+    private func panel(_ slot: PlacesSlot) -> some View {
+        PlacesPanel(
+            slot: slot,
+            stop: $stop,
+            liveTop: $liveTop,
+            isPinned: emptyState.isPinned || searching,
+            accessibilityTitle: AppStrings.tabPlaces(lang.language),
+            header: {
+                // Заголовок вкладки на время поиска СКРЫТ (состояния 10 и
+                // 11): человек ищет место, а не читает, на какой он вкладке,
+                // и переключатель «Список · Карта» ему сейчас некуда вести.
+                if !searching {
+                    PlacesPanelHeader(
+                        title: AppStrings.tabPlaces(lang.language),
+                        listTitle: AppStrings.placesViewList(lang.language),
+                        mapTitle: AppStrings.placesViewMap(lang.language),
+                        stop: stop,
+                        onBeta: { showsBeta = true },
+                        onList: { move(to: .list) },
+                        onMap: { move(to: .map) }
+                    )
+                }
+            },
+            content: { panelContent }
+        )
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Переключатель не меняет экраны — он двигает панель (спека §3.2).
+    private func move(to target: PlacesPanelStop) {
+        clearSelection()
+        withAnimation(SlotGesture.spring) {
+            stop = target
+            liveTop = nil
+        }
+    }
+
+    /// Тап по булавке МЕНЯЕТ СОДЕРЖИМОЕ ПАНЕЛИ, а не открывает экран
+    /// (состояния 5 и 6). Экран места открывает строка в панели — так у
+    /// человека остаётся шаг назад, и промах по булавке не уносит его со
+    /// вкладки.
+    ///
+    /// Для подсказки это НОВОЕ поведение: раньше тап по пунктирной булавке не
+    /// делал ничего, потому что открывать было нечего. Теперь открывать есть
+    /// что — карточку с «Сохранить как место».
+    private func select(pin id: UUID) {
+        let isPlace = model.items.contains { $0.id == id }
+        let isHint = model.knownSuggestions.contains { $0.id == id }
+        guard isPlace || isHint else { return }
+        if stop.isDraggable { stopBeforeSelection = stop }
+        withAnimation(SlotGesture.spring) {
+            selectedPlaceId = isPlace ? id : nil
+            selectedHintId = isPlace ? nil : id
+            stop = isPlace ? .selectedPlace : .selectedHint
+            liveTop = nil
+        }
+    }
+
+    private func clearSelection() {
+        selectedPlaceId = nil
+        selectedHintId = nil
+    }
+
+    @ViewBuilder
+    private var panelContent: some View {
+        if searching {
+            searchContent
+        } else {
+            stopContent
+        }
+    }
+
+    @ViewBuilder
+    private var stopContent: some View {
+        switch stop {
+        case .map:
+            // Только заголовок: карта во всю высоту.
+            EmptyView()
+        case .selectedPlace, .selectedHint:
+            selectionContent
+        case .empty:
+            emptyContent
+        case .half:
+            halfContent
+        case .list:
+            listContent
+        }
+    }
+
+    /// Половина: список без скролла. Скролл начинается в полном списке —
+    /// иначе жест по содержимому спорил бы с жестом панели.
+    @ViewBuilder
+    private var halfContent: some View {
+        VStack(spacing: 12) {
+            lastPassSection
+            placesSection
+            suggestionsSection
+        }
+        .padding(.top, 4)
+    }
+
+    /// Поиск (10 и 11): поле с «Отменой» закреплено, результаты строками
+    /// сразу под ним. Заголовка секции нет, чипов порядка нет — экран сейчас
+    /// отвечает на один вопрос, и лишние контролы над ответом только мешают.
+    @ViewBuilder
+    private var searchContent: some View {
+        VStack(spacing: 12) {
+            searchRow(cancellable: true)
+            if searchOutcome == .nothingFound {
+                nothingFoundBlock
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(searchMatches) { item in
+                            PlaceCardView(item: item, compact: true) { push(.place(item.id)) }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    // Клавиатуру `ContentView` гасит для всего окна
+                    // (`.ignoresSafeArea(.keyboard)`), поэтому нижние строки
+                    // достаются из-под неё ЧИСЛОМ — как и высоты панели.
+                    .padding(.bottom, Self.keyboardClearance)
+                    .accessibilityIdentifier("places_search_results")
+                }
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.immediately)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    /// Клавиатура спеки §9: 291 pt на всех телефонах кроме SE (260). Берём
+    /// больший — лишний воздух под последней строкой не мешает, а нехватка
+    /// прячет строку насовсем.
+    private static let keyboardClearance: CGFloat = 291
+
+    /// Состояние 11. Кнопок нет ни одной нарочно: «Отмена» уже стоит у поля,
+    /// а вторая дорога к тому же результату — это выбор там, где его нет.
+    private var nothingFoundBlock: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle().fill(AtlasTheme.chip)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(AtlasTheme.secondary)
+            }
+            .frame(width: 56, height: 56)
+            Text(AppStrings.placesSearchEmpty(lang.language))
+                .font(AppType.itemTitle)
+                .foregroundStyle(AtlasTheme.ink)
+            Text(AppStrings.placesSearchEmptyHint(lang.language))
+                .font(AppType.body)
+                .foregroundStyle(AtlasTheme.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 28)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("places_search_empty")
+    }
+
+    /// Фокус в поле — это переход в состояние 10, а не «начал печатать».
+    private func beginSearch() {
+        guard !searching else { return }
+        stopBeforeSearch = stop.isDraggable ? stop : .list
+        withAnimation(SlotGesture.animation(reduceMotion: reduceMotion)) {
+            searching = true
+            stop = .list
+            liveTop = nil
+        }
+        // Фокус ставится ПОВТОРНО, и это не подстраховка.
+        //
+        // Поле поиска до входа и после — физически РАЗНЫЕ `TextField`: список
+        // и состояние поиска это разные поддеревья, и SwiftUI пересоздаёт
+        // поле вместе с его `@FocusState`. Фокус уходит в никуда, клавиатура
+        // не приезжает вовсе, и человек видит открывшийся поиск, в котором
+        // нечем набрать (поймано кадром на симуляторе, а не сборкой).
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            guard searching else { return }
+            searchFocused = true
+        }
+    }
+
+    /// «Отмена» (и тап по скриму): снимает фокус, ЧИСТИТ запрос и возвращает
+    /// панель туда, откуда пришли (спека: «Отмена» → 7).
+    private func endSearch() {
+        searchFocused = false
+        withAnimation(SlotGesture.animation(reduceMotion: reduceMotion)) {
+            searching = false
+            query = ""
+            stop = stopBeforeSearch
+            liveTop = nil
+        }
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if showsControls {
+                    searchRow(cancellable: false)
+                    sortChips
+                }
+                lastPassSection
+                placesSection
+                suggestionsSection
+            }
+            .padding(.top, 4)
+            .padding(.bottom, CustomTabBar.clearance)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+    }
+
+    /// «Последний проезд» — ответ вкладки на «зачем сюда возвращаться».
+    ///
+    /// Показывается редко и по границам `PlaceLastPass`: не меньше пяти минут
+    /// и не меньше десятой доли медианы, внутри одного направления, с медианой
+    /// от трёх проездов. Находка обязана остаться находкой — «быстрее на
+    /// минуту» после каждой поездки обесценило бы её за неделю.
+    @ViewBuilder
+    private var lastPassSection: some View {
+        if let reading = model.lastPass,
+           let item = model.items.first(where: { $0.id == reading.placeId }) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(AppStrings.placeLastPassSection(lang.language))
+                    .atlasSectionStyle()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("places_last_pass")
+                Button {
+                    Haptics.tap()
+                    model.markLastPassSeen()
+                    push(.place(reading.placeId))
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AtlasTheme.accentInk)
+                            .frame(width: 40, height: 40)
+                            .background(AtlasTheme.accentSoft, in: RoundedRectangle(cornerRadius: 16))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.place.name ?? AppStrings.placeUnnamed(lang.language))
+                                .font(AppType.itemTitle)
+                                .foregroundStyle(AtlasTheme.ink)
+                                .lineLimit(1)
+                            Text(lastPassLine(reading))
+                                .font(AppType.meta)
+                                .foregroundStyle(AtlasTheme.secondary)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 64)
+                    .background(AtlasTheme.card,
+                                in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("places_last_pass_row")
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    /// «Вчера · на 7 мин быстрее обычного». «Дольше» — теми же словами и тем
+    /// же цветом: это наблюдение, а не провал.
+    private func lastPassLine(_ reading: PlaceLastPass.Reading) -> String {
+        let l = lang.language
+        let when = RelativeTripDate.string(from: reading.at, language: l)
+        let delta = CheckpointReading.clock(reading.delta, lang: l)
+        return reading.isFaster
+            ? AppStrings.placeLastPassFaster(l, when: when, delta: delta)
+            : AppStrings.placeLastPassSlower(l, when: when, delta: delta)
+    }
+
+    @ViewBuilder
+    private var emptyContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                suggestionsSection
+                noPlacesNote
+                markInTripSection
+            }
+            .padding(.top, 4)
+            .padding(.bottom, CustomTabBar.clearance)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    /// Выбранная на карте булавка: одна строка или одна карточка и крестик.
+    @ViewBuilder
+    private var selectionContent: some View {
+        if let id = selectedPlaceId, let item = model.items.first(where: { $0.id == id }) {
+            HStack(spacing: 8) {
+                PlaceCardView(item: item, compact: true) { push(.place(id)) }
+                closeButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+        } else if let id = selectedHintId,
+                  let hint = model.knownSuggestions.first(where: { $0.id == id }) {
+            HStack(alignment: .top, spacing: 8) {
+                PlaceSuggestionCardView(suggestion: hint) { model.save(hint) }
+                closeButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+        }
+    }
+
+    private var closeButton: some View {
+        Button {
+            Haptics.tap()
+            withAnimation(SlotGesture.spring) {
+                clearSelection()
+                stop = stopBeforeSelection
+            }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AtlasTheme.secondary)
+                .frame(width: 36, height: 36)
+                .background(AtlasTheme.chip, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(AppStrings.close(lang.language))
+        .accessibilityIdentifier("places_selection_close")
     }
 
     /// Идемпотентный push — быстрый двойной тап по одной и той же булавке
@@ -97,74 +558,8 @@ struct PlacesView: View {
         push(.trip(id, focus: .top))
     }
 
-    // MARK: - Шапка
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Значок «Бета» — ВПЛОТНУЮ к заголовку (зазор 6), как на
-            // «Атласе»: он подпись к слову «Места», а не отдельный контрол.
-            HStack(spacing: 6) {
-                Text(AppStrings.tabPlaces(lang.language))
-                    .font(AppType.title)
-                    .tracking(AppType.titleTracking)
-                    .foregroundStyle(AtlasTheme.ink)
-                AtlasBetaChip(action: { showsBeta = true }, identifier: "places_beta_chip")
-            }
-            Spacer(minLength: 0)
-            if showsControls {
-                Text(AppStrings.placesCount(lang.language, count: model.items.count))
-                    .font(AppType.meta)
-                    .foregroundStyle(AtlasTheme.secondary)
-            }
-        }
-        .frame(minHeight: 44)
-        .padding(.horizontal, 16)
-    }
-
-    /// Список / Карта. Появляется только вместе с остальными контролами:
-    /// у пяти мест карта и так стоит первой строкой экрана.
-    private var modeSwitch: some View {
-        HStack(spacing: 2) {
-            modeButton(title: AppStrings.placesViewList(lang.language),
-                       symbol: "list.bullet", active: !showsMap) { showsMap = false }
-            modeButton(title: AppStrings.placesViewMap(lang.language),
-                       symbol: "map", active: showsMap) { showsMap = true }
-        }
-        .padding(3)
-        .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 16)
-    }
-
-    private func modeButton(title: String, symbol: String, active: Bool,
-                            action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            searchFocused = false
-            withAnimation(.snappy(duration: 0.22)) { action() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 14, weight: .medium))
-                Text(title).font(active ? AppType.chip : AppType.body)
-            }
-            .foregroundStyle(active ? AtlasTheme.ink : AtlasTheme.secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background {
-                if active {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(AtlasTheme.card)
-                        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(active ? .isSelected : [])
-        .accessibilityIdentifier("places_mode_\(symbol == "map" ? "map" : "list")")
-    }
-
-    private var searchRow: some View {
-        HStack(spacing: 8) {
+    private func searchRow(cancellable: Bool) -> some View {
+        HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 15, weight: .medium))
@@ -192,64 +587,70 @@ struct PlacesView: View {
             .frame(height: 44)
             .background(AtlasTheme.searchBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Button {
-                Haptics.tap()
-                searchFocused = false
-                showsSort = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 14, weight: .medium))
-                    Text(sortTitle).font(AppType.chip)
-                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+            if cancellable {
+                Button {
+                    Haptics.tap()
+                    endSearch()
+                } label: {
+                    Text(AppStrings.cancel(lang.language))
+                        .font(AppType.action)
+                        .foregroundStyle(AtlasTheme.accent)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
                 }
-                .foregroundStyle(AtlasTheme.ink)
-                .padding(.leading, 10).padding(.trailing, 12)
-                .frame(height: 44)
-                .background(AtlasTheme.card, in: Capsule())
-                .overlay(Capsule().stroke(AtlasTheme.separator, lineWidth: 1))
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("places_search_cancel")
             }
-            .buttonStyle(PressableCardStyle())
-            .accessibilityIdentifier("places_sort")
         }
         .padding(.horizontal, 16)
     }
 
-    private var sortTitle: String {
-        switch sort {
+    /// Порядок — ЧИПАМИ, а не листом (спека §3.4).
+    ///
+    /// Лист прятал три коротких слова за двумя нажатиями и модальным экраном;
+    /// здесь выбор виден целиком и меняется одним тапом, а активный чип ещё и
+    /// отвечает на «в каком порядке я сейчас смотрю».
+    private var sortChips: some View {
+        HStack(spacing: 8) {
+            ForEach(PlacesSort.allCases, id: \.self) { order in
+                sortChip(order)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func sortChip(_ order: PlacesSort) -> some View {
+        let active = sort == order
+        return Button {
+            Haptics.tap()
+            searchFocused = false
+            withAnimation(.snappy(duration: 0.22)) { sort = order }
+        } label: {
+            Text(title(for: order))
+                .font(active ? AppType.chipActive : AppType.chip)
+                .foregroundStyle(active ? AtlasTheme.background : AtlasTheme.ink)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(active ? AtlasTheme.ink : AtlasTheme.chip, in: Capsule())
+                // Нарисован 32, палец получает 44 (спека §7).
+                .frame(height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+        .accessibilityIdentifier("places_sort_\(order.rawValue)")
+    }
+
+    private func title(for order: PlacesSort) -> String {
+        switch order {
         case .recent: return AppStrings.placesSortRecent(lang.language)
         case .frequent: return AppStrings.placesSortFrequent(lang.language)
         case .name: return AppStrings.placesSortName(lang.language)
         }
-    }
-
-    private var sortSheet: some View {
-        SettingsOptionPicker(
-            title: AppStrings.placesSortTitle(lang.language),
-            options: PlacesSort.allCases,
-            selection: sort,
-            footnote: "",
-            badge: { option in
-                switch option {
-                case .recent: return "clock"
-                case .frequent: return "flame"
-                case .name: return "textformat.abc"
-                }
-            },
-            badgeIsSymbol: true,
-            label: { option in
-                switch option {
-                case .recent: return AppStrings.placesSortRecent(lang.language)
-                case .frequent: return AppStrings.placesSortFrequent(lang.language)
-                case .name: return AppStrings.placesSortName(lang.language)
-                }
-            },
-            onSelect: { option in
-                sort = option
-                showsSort = false
-            },
-            accessibilityPrefix: "places_sort_option"
-        )
-        .contentSizedSheet(background: AtlasTheme.background)
     }
 
     // MARK: - Карта
@@ -258,7 +659,7 @@ struct PlacesView: View {
     /// `PlacesMapView` умеет несколько булавок и подбирает область по всем.
     private var pins: [PlacePin] {
         model.items.map { PlacePin(id: $0.id, coordinate: $0.place.coordinate) }
-            + model.suggestions.map { PlacePin(id: $0.id, coordinate: $0.coordinate, isSuggested: true) }
+            + model.knownSuggestions.map { PlacePin(id: $0.id, coordinate: $0.coordinate, isSuggested: true) }
     }
 
     private func map(interactive: Bool) -> some View {
@@ -267,97 +668,24 @@ struct PlacesView: View {
                       // начатый на карте, панорамирует её вместо того чтобы
                       // скроллить список. Тап по булавке от этого не страдает.
                       isInteractive: interactive,
-                      onPinTap: { tapped in
-                          // Подсказка — ещё не экран: у неё нет ни истории,
-                          // ни проездов. Открываем только место.
-                          guard model.items.contains(where: { $0.id == tapped }) else { return }
-                          push(.place(tapped))
-                      })
+                      isOffline: network.isOffline,
+                      onPinTap: { tapped in select(pin: tapped) })
     }
 
     /// Превью со «стеклянной» кнопкой «Карта» в углу — она и есть вход в
     /// режим карты, когда переключателя ещё нет.
-    private var mapCard: some View {
-        map(interactive: false)
-            .frame(height: 196)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(alignment: .bottomTrailing) {
-                Button {
-                    Haptics.tap()
-                    withAnimation(.snappy(duration: 0.22)) { showsMap = true }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(AppStrings.placesViewMap(lang.language)).font(AppType.body)
-                    }
-                    .foregroundStyle(AtlasTheme.ink)
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
-                    .background(AtlasTheme.card.opacity(0.94), in: Capsule())
-                }
-                .buttonStyle(PressableCardStyle())
-                .padding(10)
-                .accessibilityIdentifier("places_open_map")
-            }
-            .padding(.horizontal, 16)
-    }
-
-    private var mapMode: some View {
-        VStack(spacing: 12) {
-            header
-            modeSwitch
-            map(interactive: true)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .padding(.horizontal, 16)
-                .padding(.bottom, CustomTabBar.clearance)
-        }
-        .padding(.top, 2)
-    }
-
     // MARK: - Список
-
-    private var list: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                header
-                if showsControls {
-                    modeSwitch
-                    searchRow
-                }
-                if !showsControls || query.isEmpty { mapCard }
-                if model.items.isEmpty { noPlacesNote }
-                placesSection
-                suggestionsSection
-                markInTripSection
-                if showsHowItWorks {
-                    PlacesHowItWorksCard(onOpenLastTrip: model.lastTripId == nil ? nil : openLastTrip,
-                                         onStartRecording: startRecording)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                }
-            }
-            .padding(.top, 2)
-            .padding(.bottom, CustomTabBar.clearance)
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.immediately)
-        // Как лента: скролл до физического низа, клиренс — от него.
-        .ignoresSafeArea(edges: .bottom)
-    }
 
     @ViewBuilder
     private var placesSection: some View {
         let built = groups
         if built.isEmpty {
-            if !query.isEmpty {
-                Text(AppStrings.placesSearchEmpty(lang.language))
-                    .font(AppType.body)
-                    .foregroundStyle(AtlasTheme.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 28)
-                    .accessibilityIdentifier("places_search_empty")
-            } else if model.items.isEmpty {
+            // Пустой выдачи поиска здесь больше НЕТ: поиск стал модальным
+            // состоянием панели (10 и 11) и рисует свой `nothingFoundBlock`,
+            // а «Отмена» чистит запрос на выходе — то есть в этой ветке
+            // `query` всегда пуст. Двух «Ничего не нашлось» с одним
+            // идентификатором быть не должно.
+            if model.items.isEmpty {
                 // Мест нет, но подсказки есть (S3): заголовок секции здесь
                 // был бы заголовком над пустотой.
                 VStack(spacing: 6) {
@@ -404,29 +732,54 @@ struct PlacesView: View {
     private func groupTitle(_ group: PlacesPresentation.Group) -> String {
         switch group.kind {
         case .all: return AppStrings.placesMineSection(lang.language)
+        // Относительные даты берём УЖЕ переведённые: спека прямо запрещает
+        // заводить под них новые ключи.
+        case .today: return AppStrings.today(lang.language)
+        case .thisWeek: return AppStrings.thisWeek(lang.language)
+        case .earlier: return AppStrings.earlier(lang.language)
         case .frequent: return AppStrings.placesGroupFrequent(lang.language)
         case .others: return AppStrings.placesGroupOthers(lang.language)
         }
     }
 
+    /// «Похоже, вы здесь бываете» — и СКЕЛЕТОН, пока подсказки считаются
+    /// (состояние 23). «Мои места» читаются из базы мгновенно, а подсказки
+    /// разбирают превью всей библиотеки вне главного актёра и приезжают
+    /// позже: без скелетона блок появлялся рывком под уже прочитанным
+    /// списком. Других скелетонов на вкладке нет и быть не должно — места
+    /// локальные, «загружать» тут нечего.
     @ViewBuilder
     private var suggestionsSection: some View {
-        if !model.suggestions.isEmpty, query.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(AppStrings.placeSuggestSection(lang.language))
-                    .atlasSectionStyle()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // Идентификатор — на ЗАГОЛОВКЕ, не на колонке: на
-                    // контейнере он достаётся и строкам внутри, и каждая
-                    // подсказка теряет своё имя (`place_suggestion_<ячейка>`).
-                    .accessibilityIdentifier("places_suggestions")
-                ForEach(model.suggestions) { suggestion in
-                    PlaceSuggestionCardView(suggestion: suggestion) { model.save(suggestion) }
+        if query.isEmpty {
+            if model.isComputingSuggestions {
+                suggestionsBlock {
+                    SkeletonPlaceholder(shape: .placeSuggestion, count: 1)
+                        .accessibilityLabel(AppStrings.placesSuggestLoading(lang.language))
+                        .accessibilityIdentifier("places_suggestions_skeleton")
+                }
+            } else if !model.knownSuggestions.isEmpty {
+                suggestionsBlock {
+                    ForEach(model.knownSuggestions) { suggestion in
+                        PlaceSuggestionCardView(suggestion: suggestion) { model.save(suggestion) }
+                    }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
         }
+    }
+
+    private func suggestionsBlock<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AppStrings.placeSuggestSection(lang.language))
+                .atlasSectionStyle()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Идентификатор — на ЗАГОЛОВКЕ, не на колонке: на
+                // контейнере он достаётся и строкам внутри, и каждая
+                // подсказка теряет своё имя (`place_suggestion_<ячейка>`).
+                .accessibilityIdentifier("places_suggestions")
+            content()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
     }
 
     // MARK: - Пусто
@@ -537,42 +890,6 @@ struct PlacesView: View {
     }
 
     private static let tripDayMonth = LocalizedDateFormatter.templates("dMMM")
-
-    /// Пустая вкладка (S2): что это такое, как выглядит и что нажать.
-    ///
-    /// Иллюстрации-заглушки здесь больше нет. Она честно говорила «пусто», но
-    /// на вопрос «а что тут бывает» не отвечала ничем — а именно его и задаёт
-    /// человек, открывший вкладку в первый раз («не очень ощущение, что экран
-    /// «Места» пустой какой-то», владелец 20 сен).
-    private var emptyState: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                Text(AppStrings.placesEmptyIntro(lang.language))
-                    .font(AppType.body)
-                    .foregroundStyle(AtlasTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, -4)
-                PlacesHowItWorksCard(onOpenLastTrip: model.lastTripId == nil ? nil : openLastTrip,
-                                     onStartRecording: startRecording)
-                    .padding(.horizontal, 16)
-            }
-            .padding(.top, 2)
-            .padding(.bottom, CustomTabBar.clearance)
-            // `.contain`, не по умолчанию: без своего контейнера SwiftUI
-            // отдаёт идентификатор вниз по немаркированным обёрткам и не
-            // заводит элемент, по которому экран можно найти (та же ловушка,
-            // что у `place_detail`).
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("places_empty")
-        }
-        .scrollIndicators(.hidden)
-        .frame(maxWidth: .infinity)
-        // Тот же приём, что у `list`: без него центр сцены считается от края
-        // safe area, а не от физического низа, и стоит выше пилюли.
-        .ignoresSafeArea(edges: .bottom)
-    }
 
     private func startRecording() {
         selectedTab = .record

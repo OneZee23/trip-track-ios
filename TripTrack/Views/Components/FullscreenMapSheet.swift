@@ -68,6 +68,7 @@ struct FullscreenMapSheet: View {
     var onAddCheckpoint: ((TripRouteLocator.Fix) -> Void)?
     /// Forwarded to the map — someone else's trip carries no fog of mine.
     var showsFog: Bool = true
+    var elevationStyle: MKStandardMapConfiguration.ElevationStyle = .realistic
     /// Social trips pass `true` — their preview polyline is sparsely sampled
     /// and the gap-splitting in RouteMapView would zero out the bounds.
     var treatAsPreview: Bool = false
@@ -92,6 +93,7 @@ struct FullscreenMapSheet: View {
     /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумает его
     /// экран, когда кадр приехал на полный размер.
     var fitTick: Int = 0
+    var animatesFit: Bool = true
     /// Принимает ли карта пальцы. На едущем кадре — нет: жест спорил бы с
     /// пружиной раскрытия.
     var mapIsInteractive: Bool = true
@@ -204,6 +206,7 @@ struct FullscreenMapSheet: View {
                 onRouteTap: onAddCheckpoint == nil ? nil : { handleTap($0, metersPerPoint: $1) },
                 fogCutoffDate: fogCutoffDate,
                 showsFog: showsFog,
+                elevationStyle: elevationStyle,
                 treatAsPreview: treatAsPreview,
                 carColorName: carColorName,
                 zoomTick: zoomTick,
@@ -214,6 +217,7 @@ struct FullscreenMapSheet: View {
                 playbackCoords: (canReplay || canCrawl) ? playbackSeries : nil,
                 playbackFollow: followsCar,
                 fitInsets: (canReplay || canCrawl) ? replayFitInsets : plainFitInsets,
+                animatesFit: animatesFit,
                 host: host,
                 hostPresentation: .fullscreen,
                 fitTick: fitTick
@@ -459,7 +463,7 @@ struct FullscreenMapSheet: View {
     private var timecodePill: some View {
         let c = AppTheme.colors(for: scheme)
         return Text(readoutText)
-            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+            .font(.inter(12, weight: .semibold).monospacedDigit())
             .foregroundStyle(c.text)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -503,7 +507,7 @@ struct FullscreenMapSheet: View {
                 let speed = Measure.speedParts(
                     ms: engine.currentSpeedMS, unit: distanceUnit, lang: language)
                 Text(speed.value)
-                    .font(.system(size: 15, weight: .heavy).monospacedDigit())
+                    .font(.inter(15, weight: .heavy).monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
                 Text(speed.unit)
                     .font(.inter(10, weight: .medium))
@@ -612,7 +616,7 @@ struct FullscreenMapSheet: View {
             engine.cycleRate()
         } label: {
             Text(Self.rateLabel(engine.rate, language))
-                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                .font(.inter(12, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.textSecondary)
                 .frame(width: 40, height: 40)
                 .contentShape(Rectangle())

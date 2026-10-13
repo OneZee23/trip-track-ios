@@ -412,7 +412,7 @@ struct PhotoFullScreenView: View {
         VStack(spacing: 6) {
             if pages.count > 1 {
                 Text("\(currentIndex + 1) / \(livePages.count)")
-                    .font(.system(size: 17, weight: .bold).monospacedDigit())
+                    .font(.inter(17, weight: .bold).monospacedDigit())
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("photo_viewer_counter")
             }

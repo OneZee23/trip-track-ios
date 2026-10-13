@@ -212,8 +212,9 @@ struct DetailSectionHeader: View {
 
     var body: some View {
         Text(text)
-            .font(.inter(17, weight: .bold))
+            .font(.interScaled(17, weight: .bold, relativeTo: .headline))
             .foregroundStyle(AppTheme.colors(for: scheme).text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -824,7 +825,7 @@ struct DetailDescriptionCard: View {
 
         HStack(alignment: .top, spacing: 10) {
             Text(text)
-                .font(.inter(13.5))
+                .font(.interScaled(13.5, relativeTo: .subheadline))
                 .lineSpacing(4.5)
                 .foregroundStyle(bodyColor)
                 .multilineTextAlignment(.leading)
@@ -850,23 +851,24 @@ struct DetailDescriptionCard: View {
 
 // MARK: - Trip achievements
 
-/// «Достижения поездки» — 3-up cards: tinted icon circle + badge name.
-/// Figma shows emoji; badges in the app are SF-symbol + color, so the
-/// cards use the badge's own icon/tint (consistent with the badge system).
+/// «Достижения поездки» — 3-up cards: the badge's engraving + its name.
+/// One drawing for every badge since 0.8.2 (`BadgeArt`), with no plate under
+/// it: the card is already the plate, and a tinted disc behind the engraving
+/// would be a badge inside a badge.
 struct TripAchievementsGrid: View {
     let badges: [Badge]
     let language: LanguageManager.Language
     let onTap: (Badge) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
+        // Three across on a normal size; two on accessibility sizes, where a
+        // third of the width split «Марафонец» mid-word.
+        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10)
-            ],
+            columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: count),
             spacing: 10
         ) {
             ForEach(badges) { badge in
@@ -875,21 +877,19 @@ struct TripAchievementsGrid: View {
                     onTap(badge)
                 } label: {
                     VStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(badge.color.opacity(0.14))
-                                .frame(width: 40, height: 40)
-                            Image(systemName: badge.icon)
-                                .font(.system(size: 18))
-                                .foregroundStyle(badge.color)
-                        }
+                        BadgeArt(badge: badge, side: 56)
                         Text(badge.title(language))
-                            .font(.inter(11, weight: .semibold))
+                            .font(.interScaled(11, weight: .semibold, relativeTo: .caption2))
                             .foregroundStyle(c.text)
                             .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.85)
-                            .frame(height: 28, alignment: .top)
+                            .lineLimit(3)
+                            // A long word («Марафонец») shrinks a little
+                            // before it is split mid-word.
+                            .minimumScaleFactor(0.7)
+                            .allowsTightening(true)
+                            // Two lines on a normal size, as before; the box
+                            // grows with Dynamic Type instead of clipping.
+                            .frame(minHeight: 28, alignment: .top)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)

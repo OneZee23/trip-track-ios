@@ -15,28 +15,63 @@ import SwiftUI
 /// Роли набора — в `AppType` ниже; руками размеры и веса больше не
 /// подбираются.
 ///
-/// Always `fixedSize`: the app sizes ALL type with fixed
-/// `.system(size:)` values, and `Font.custom(_:size:)` — unlike
-/// `.system(size:)` — scales with the user's Dynamic Type setting. On a
-/// device with enlarged text the Inter runs ballooned while the SF text
-/// around them stayed put (feed metrics, 2026-08-06). Теперь, когда SF в
-/// тексте не осталось, это ограничение можно снять — но снимать его надо
-/// отдельной волной, с проверкой каждой раскладки на крупном шрифте.
+/// `inter` keeps the existing fixed geometry for map overlays, branding and
+/// other layouts not yet checked at accessibility sizes. Forms and settings
+/// use `interScaled` after their rows have been made multiline/adaptive.
+/// Scaling is deliberately adopted by flow, not by replacing every font at
+/// once: increasing text inside a fixed row would only hide more of it.
 extension Font {
     static func inter(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let name: String
-        if weight == .heavy || weight == .black {
-            name = "Inter-ExtraBold"
-        } else if weight == .bold {
-            name = "Inter-Bold"
-        } else if weight == .semibold {
-            name = "Inter-SemiBold"
-        } else if weight == .medium {
-            name = "Inter-Medium"
-        } else {
-            name = "Inter-Regular"
-        }
-        return .custom(name, fixedSize: size)
+        .custom(interName(for: weight), fixedSize: size)
+    }
+
+    /// Inter at the same default size, following the user's Dynamic Type
+    /// setting. The semantic style controls the scaling curve, not the base
+    /// size. Call sites must allow the resulting text to wrap and grow.
+    static func interScaled(
+        _ size: CGFloat,
+        weight: Font.Weight = .regular,
+        relativeTo style: Font.TextStyle = .body
+    ) -> Font {
+        .custom(interName(for: weight), size: size, relativeTo: style)
+    }
+
+    private static func interName(for weight: Font.Weight) -> String {
+        InterFace.name(heavy: weight == .heavy || weight == .black, bold: weight == .bold,
+                       semibold: weight == .semibold, medium: weight == .medium)
+    }
+}
+
+/// The weight → file table, ONE for SwiftUI and UIKit: two copies would drift
+/// the day one of them gains a weight.
+enum InterFace {
+    static func name(heavy: Bool, bold: Bool, semibold: Bool, medium: Bool) -> String {
+        if heavy { return "Inter-ExtraBold" }
+        if bold { return "Inter-Bold" }
+        if semibold { return "Inter-SemiBold" }
+        if medium { return "Inter-Medium" }
+        return "Inter-Regular"
+    }
+}
+
+/// Inter for the UIKit text drawn ON maps — checkpoint cards, region names,
+/// seal and hint chips (0.8.9). They were the last text in the system face:
+/// `OneTypefaceTests` reads SwiftUI `Text` and never saw a `UILabel`.
+/// Falls back to the system face only if the bundled file is missing.
+extension UIFont {
+    static func inter(_ size: CGFloat, weight: UIFont.Weight = .regular,
+                      monospacedDigits: Bool = false) -> UIFont {
+        let name = InterFace.name(heavy: weight == .heavy || weight == .black, bold: weight == .bold,
+                                  semibold: weight == .semibold, medium: weight == .medium)
+        let base = UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: weight)
+        guard monospacedDigits else { return base }
+        // Inter's tabular figures (`tnum`): times and distances that change
+        // in place keep their width instead of jittering.
+        let tabular = base.fontDescriptor.addingAttributes([
+            .featureSettings: [[UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+                                UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector]]
+        ])
+        return UIFont(descriptor: tabular, size: size)
     }
 }
 
@@ -112,5 +147,16 @@ enum AppType {
     static let meta = Font.inter(13)
     static let caption = Font.inter(12)
     static let button = Font.inter(16, weight: .semibold)
+    /// Заголовок экрана в ШАПКЕ push-навигации — мельче заголовка вкладки и
+    /// заголовка листа: он стоит между двумя кнопками, а не над содержимым.
+    /// Роль существовала и до 0.8.2, но набиралась руками в семи местах.
+    static let navTitle = Font.inter(17, weight: .semibold)
+    /// Текстовое действие — слово вместо кнопки: «Выбрать», «Готово»,
+    /// «Отмена» в шапке. Тоже набиралось руками, теперь у него есть имя.
+    static let action = Font.inter(15, weight: .semibold)
     static let chip = Font.inter(13, weight: .medium)
+    /// Активный сегмент переключателя и активный чип порядка: тот же размер,
+    /// на ступень тяжелее (спека «Мест» §3.1). Ступень, а не цвет: цветом
+    /// активность уже показана заливкой, и второй сигнал был бы лишним.
+    static let chipActive = Font.inter(13, weight: .semibold)
 }

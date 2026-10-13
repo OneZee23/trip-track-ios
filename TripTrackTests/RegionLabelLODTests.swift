@@ -72,3 +72,38 @@ final class RegionLabelUserDotTests: XCTestCase {
             labelFrame: .zero, userDotCentre: CGPoint(x: 160, y: 115)))
     }
 }
+
+/// A region name yields to the status bar (0.8.9).
+///
+/// The Atlas map runs under the clock, and a neighbouring region's centre
+/// can land at the top of the screen: «РОСТОВСКАЯ ОБЛАСТЬ · 68 км» sat on the
+/// clock, Wi-Fi and battery on the region screen. Hidden while any part of it
+/// is above the safe area, back once the map moves.
+final class RegionLabelStatusBarTests: XCTestCase {
+    private let safeTop: CGFloat = 59
+
+    func testLabelUnderTheClockYields() {
+        XCTAssertTrue(RegionLabelLOD.yieldsToStatusBar(
+            labelFrame: CGRect(x: 230, y: 26, width: 150, height: 24), safeTop: safeTop))
+    }
+
+    func testLabelTouchingTheSafeAreaFromAboveYields() {
+        XCTAssertTrue(RegionLabelLOD.yieldsToStatusBar(
+            labelFrame: CGRect(x: 100, y: 58, width: 150, height: 24), safeTop: safeTop))
+    }
+
+    func testLabelBelowTheSafeAreaStays() {
+        XCTAssertFalse(RegionLabelLOD.yieldsToStatusBar(
+            labelFrame: CGRect(x: 100, y: 59, width: 150, height: 24), safeTop: safeTop))
+        XCTAssertFalse(RegionLabelLOD.yieldsToStatusBar(
+            labelFrame: CGRect(x: 100, y: 300, width: 150, height: 24), safeTop: safeTop))
+    }
+
+    /// No safe area (an iPhone SE in landscape, a test host) or a label not
+    /// laid out yet: nothing to yield to.
+    func testNothingToYieldToWithoutASafeAreaOrASize() {
+        XCTAssertFalse(RegionLabelLOD.yieldsToStatusBar(
+            labelFrame: CGRect(x: 0, y: 0, width: 150, height: 24), safeTop: 0))
+        XCTAssertFalse(RegionLabelLOD.yieldsToStatusBar(labelFrame: .zero, safeTop: safeTop))
+    }
+}

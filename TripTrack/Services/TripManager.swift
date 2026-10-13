@@ -26,20 +26,48 @@ final class TripManager: ObservableObject {
 
     var isPaused: Bool = false {
         didSet {
+            guard isPaused != oldValue else { return }
             // Drop the pre-pause fix so the first point after resume doesn't add a
             // cross-pause jump to the distance (a settling/drift fix while parked
             // could otherwise be measured from the spot where pause began).
-            if isPaused { lastLocation = nil; lastDistanceLocation = nil }
+            if isPaused {
+                if isRecording, let entity = activeTripEntity {
+                    // Save the boundary immediately: a later recalculation or
+                    // process restart must not count movement while paused.
+                    let now = recordingNow()
+                    let breaks = RecordingBreaks.normalized(
+                        CoreDataTripRepository.recordingBreaks(of: entity) + [now])
+                    CoreDataTripRepository.setRecordingBreaks(breaks, on: entity)
+                    entity.lastModifiedAt = now
+                    activeTrip?.recordingBreaks = breaks
+                    persistenceController.save()
+                }
+                lastLocation = nil
+                lastDistanceLocation = nil
+                recordingContinuity.reset()
+                kalmanFilter.reset()
+            }
         }
     }
 
     /// Kalman filter for GPS smoothing and gap prediction
     let kalmanFilter = KalmanLocationFilter()
+    private var recordingContinuity = RecordingFixContinuity()
+    private var rejectedRecordingFixes = 0
+    private var lastRecordingRejectionLog = Date.distantPast
+    private let recordedLocationSubject = PassthroughSubject<CLLocation, Never>()
+
+    /// Only points admitted to the saved route may draw the live trail or
+    /// discover territory. Raw provider updates still serve the idle GPS HUD.
+    var recordedLocationPublisher: AnyPublisher<CLLocation, Never> {
+        recordedLocationSubject.eraseToAnyPublisher()
+    }
 
     let repository: TripRepository
 
     private let locationManager: LocationManager
     private let persistenceController: PersistenceController
+    private let recordingNow: () -> Date
     private var cancellables = Set<AnyCancellable>()
     private var activeTripEntity: TripEntity?
 
@@ -83,6 +111,8 @@ final class TripManager: ObservableObject {
         unsavedPointCount = 0
         lastSaveTime = Date()
         kalmanFilter.reset()
+        recordingContinuity.reset()
+        rejectedRecordingFixes = 0
         locationManager.startTracking()
         // Журнал сырых фиксов переживает процесс на диске, а актор — нет:
         // после убийства это НОВЫЙ `RawFixLog`, который своего файла не
@@ -113,10 +143,12 @@ final class TripManager: ObservableObject {
     private let saveBatchSize = 10
     private let saveInterval: TimeInterval = 15
 
-    init(locationManager: LocationManager, persistenceController: PersistenceController = .shared, repository: TripRepository? = nil) {
+    init(locationManager: LocationManager, persistenceController: PersistenceController = .shared,
+         repository: TripRepository? = nil, recordingNow: @escaping () -> Date = Date.init) {
         self.locationManager = locationManager
         self.persistenceController = persistenceController
         self.repository = repository ?? CoreDataTripRepository(persistenceController: persistenceController)
+        self.recordingNow = recordingNow
 
         locationManager.$currentLocation
             .compactMap { $0 }
@@ -182,7 +214,10 @@ final class TripManager: ObservableObject {
         unsavedPointCount = 0
         lastSaveTime = Date()
         kalmanFilter.reset()
+        recordingContinuity.reset()
+        rejectedRecordingFixes = 0
         locationManager.startTracking()
+        ProductAnalytics.shared.recordingStarted(id: tripId)
     }
 
     /// Backdate the active trip's start time (for auto-start recovery)
@@ -207,6 +242,7 @@ final class TripManager: ObservableObject {
 
     @discardableResult
     func stopTrip(suggestedEndDate: Date? = nil) -> Trip? {
+        let saveStartedAt = Date()
         locationManager.stopTracking()
         Task { await RawFixLog.shared.end() }
         isRecording = false
@@ -226,14 +262,19 @@ final class TripManager: ObservableObject {
         // from BEFORE this trip began — which persisted a negative duration and
         // a negative average speed, and drew a trip that ended before it
         // started everywhere those two numbers are shown.
-        let proposedEnd = trimmedEndDate(for: entity) ?? suggestedEndDate ?? Date()
-        entity.endDate = max(proposedEnd, entity.startDate ?? proposedEnd)
+        entity.endDate = recordingEndDate(for: entity, suggested: suggestedEndDate, now: Date())
         entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
-        persistenceController.save()
+        let savedLocally = persistenceController.save()
 
         let completedTrip = entity.id.flatMap { repository.fetchTripDetail(id: $0) }
+        if let id = entity.id {
+            ProductAnalytics.shared.recordingFinished(
+                id: id, saved: savedLocally,
+                eligible: completedTrip.map { !$0.isJunk } ?? false,
+                elapsed: max(0, Date().timeIntervalSince(saveStartedAt)))
+        }
 
         geocodeAndNameTrip(entity: entity)
         deleteDemoTripIfNeeded()
@@ -247,14 +288,30 @@ final class TripManager: ObservableObject {
         return completedTrip
     }
 
+    /// Compute only when the confirmation opens or is accepted; recalculating
+    /// the full odometer in a SwiftUI body would walk a long track every second.
+    func recordingFinishPreview(now: Date = Date(), suggestedEndDate: Date? = nil) -> RecordingFinishPreview? {
+        guard isRecording, let entity = activeTripEntity, let id = entity.id else { return nil }
+        let end = recordingEndDate(for: entity, suggested: suggestedEndDate, now: now)
+        let stats = finalRecordingStats(entity)
+        return RecordingFinishPreview(tripID: id, endDate: end, distance: stats.distance,
+                                      duration: end.timeIntervalSince(entity.startDate ?? end),
+                                      maxSpeed: stats.maxSpeed)
+    }
+
+    private func recordingEndDate(for entity: TripEntity, suggested: Date?, now: Date) -> Date {
+        let proposed = trimmedEndDate(for: entity) ?? suggested ?? now
+        return max(proposed, entity.startDate ?? proposed)
+    }
+
     /// Returns a trimmed endDate if the trip ends with a stationary tail.
     /// Walks the track points backwards and returns the timestamp of the last
     /// meaningful movement (≥7 km/h, confirmed by an adjacent point also moving).
     /// Only trims when the stationary tail exceeds 60 seconds — short stops at
     /// lights/parking are preserved.
     private func trimmedEndDate(for entity: TripEntity) -> Date? {
-        guard let points = (entity.trackPoints?.array as? [TrackPointEntity]),
-              points.count > 2 else { return nil }
+        let points = entity.orderedTrackPoints
+        guard points.count > 2 else { return nil }
 
         let movingThresholdMs: Double = 2.0 // ~7.2 km/h — clearly driving, not parking
         let minTailToTrim: TimeInterval = 60
@@ -306,6 +363,12 @@ final class TripManager: ObservableObject {
 
     func fetchTripsModifiedSince(_ date: Date) -> [Trip] {
         repository.fetchTripsModifiedSince(date)
+    }
+
+    /// Поездки в окне дат, без точек трека. Нужна раскладке энергии гибрида:
+    /// запас хода тратится по дню, и соседей по дню надо знать (0.8.3).
+    func fetchTrips(from start: Date, to end: Date) -> [Trip] {
+        repository.fetchTrips(from: start, to: end)
     }
 
     func fetchTripsForMap() -> [Trip] {
@@ -395,6 +458,10 @@ final class TripManager: ObservableObject {
         repository.fetchTripDetail(id: id)
     }
 
+    func tripDetailAsync(id: UUID) async -> Trip? {
+        await repository.fetchTripDetailAsync(id: id)
+    }
+
     // MARK: - Orphan Cleanup & Recovery
 
     /// Max age for a restorable orphan trip. Raised 1h→6h so a long road trip
@@ -423,7 +490,7 @@ final class TripManager: ObservableObject {
             // First pass: drop empty/junk orphans, collect the rest with their last point time.
             var candidates: [(entity: TripEntity, lastTimestamp: Date)] = []
             for entity in orphans {
-                let points = (entity.trackPoints?.array as? [TrackPointEntity]) ?? []
+                let points = entity.orderedTrackPoints
 
                 if points.isEmpty {
                     context.delete(entity)
@@ -469,7 +536,8 @@ final class TripManager: ObservableObject {
                     maxSpeed: entity.maxSpeed,
                     averageSpeed: entity.averageSpeed,
                     vehicleId: entity.vehicleId,
-                    confirmation: CoreDataTripRepository.confirmation(of: entity)
+                    confirmation: CoreDataTripRepository.confirmation(of: entity),
+                    recordingBreaks: CoreDataTripRepository.recordingBreaks(of: entity)
                 )
                 recoverableOrphanDuration = lastTimestamp.timeIntervalSince(startDate)
                 recoverableOrphanIsFresh = age < Self.silentResumeWindow
@@ -548,6 +616,15 @@ final class TripManager: ObservableObject {
 
     func deleteCheckpoint(id: UUID) {
         guard let tripId = repository.deleteCheckpoint(id: id) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
+    /// Как ехал плагин-гибрид — правка поездки, и уезжает она той же дверью,
+    /// что отметки и отрезки: репозиторий взводит `pendingUpload`, очередь
+    /// ставит сюда. Соседние поездки того же дня пересчитывать не нужно —
+    /// раскладка нигде не хранится, её считает `EnergyEstimate` при показе.
+    func setEnergyMode(_ mode: TripEnergyMode, forTrip tripId: UUID) {
+        repository.setEnergyMode(mode, forTrip: tripId)
         enqueueTripUpdate(tripId)
     }
 
@@ -734,6 +811,20 @@ final class TripManager: ObservableObject {
         guard location.horizontalAccuracy >= 0,
               location.horizontalAccuracy <= FixGate.recordingAccuracyLimit else { return }
 
+        // The provider's accuracy/speed checks cannot catch a position jump
+        // with a plausible reported speed. Reject it before Kalman assimilates
+        // it: removing the odometer segment afterwards still corrupts the map
+        // and the filter's next velocity estimate.
+        if let reason = recordingContinuity.rejection(for: location) {
+            rejectedRecordingFixes += 1
+            let now = Date()
+            if rejectedRecordingFixes == 1 || now.timeIntervalSince(lastRecordingRejectionLog) >= 30 {
+                lastRecordingRejectionLog = now
+                gpsLog.notice("recording rejected raw fix: reason=\(reason.rawValue, privacy: .public) total=\(self.rejectedRecordingFixes)")
+            }
+            return
+        }
+
         // Грубый фикс (хуже 65 м) рисует форму, но в километры не идёт
         // (спека §2.2). Фильтр Калмана его видит: дисперсия измерения у него
         // `accuracy²`, и такой фикс сдвигает оценку во много раз слабее
@@ -743,6 +834,23 @@ final class TripManager: ObservableObject {
 
         // Smooth through Kalman filter
         let filtered = kalmanFilter.processGPSUpdate(location)
+        // The smoother returns its last observation for correlated duplicate
+        // deliveries. It must not create another stored point at that old time.
+        if let last = lastLocation, filtered.timestamp <= last.timestamp { return }
+        let recordingSpeed: Double
+        if TripDistanceGate.isPlausibleSpeed(filtered.speed) {
+            recordingSpeed = filtered.speed
+        } else if TripDistanceGate.isPlausibleSpeed(location.speed) {
+            recordingSpeed = location.speed
+        } else if countsForDistance, let anchor = lastDistanceLocation {
+            // No measured speed after reacquisition: retain the plausible
+            // chord-average estimate instead of turning "unknown" into a stop.
+            let dt = filtered.timestamp.timeIntervalSince(anchor.timestamp)
+            let estimate = dt > 0 ? filtered.distance(from: anchor) / dt : -1
+            recordingSpeed = TripDistanceGate.isPlausibleSpeed(estimate) ? estimate : 0
+        } else {
+            recordingSpeed = 0
+        }
 
         // --- Километры ---
         // Свой якорь и прежние правила: пять метров, защита от дрейфа, проверка
@@ -766,7 +874,9 @@ final class TripManager: ObservableObject {
                     let timeDelta = filtered.timestamp.timeIntervalSince(anchor.timestamp)
                     if timeDelta > 0 {
                         let calculatedSpeed = delta / timeDelta
-                        if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                        if !kalmanFilter.lastUpdateResetAfterGap,
+                           filtered.speed >= 0, filtered.speed < driftSpeedThreshold,
+                           calculatedSpeed > driftCalcSpeedLimit {
                             // Как и до 0.6.5, дрейф отменяет фикс целиком: ни в
                             // километры, ни в форму. Якорь остаётся на месте.
                             return
@@ -780,6 +890,16 @@ final class TripManager: ObservableObject {
                     // back to the absolute cap when there's no usable time delta.
                     if TripDistanceGate.isPlausibleSegment(meters: delta, dt: timeDelta) {
                         entity.distance += delta
+                        // Persist the same long-gap speed evidence as the
+                        // final calculation. Orphan recovery must not discard
+                        // a real drive that regained GPS after stopping.
+                        let gapMaximum = TripDistanceGate.maximumRecordedSpeed([
+                            .init(latitude: anchor.coordinate.latitude, longitude: anchor.coordinate.longitude,
+                                  timestamp: anchor.timestamp),
+                            .init(latitude: filtered.coordinate.latitude, longitude: filtered.coordinate.longitude,
+                                  timestamp: filtered.timestamp)
+                        ])
+                        entity.maxSpeed = max(entity.maxSpeed, gapMaximum)
                     }
                     lastDistanceLocation = filtered
                 }
@@ -802,7 +922,7 @@ final class TripManager: ObservableObject {
         point.latitude = filtered.coordinate.latitude
         point.longitude = filtered.coordinate.longitude
         point.altitude = filtered.altitude
-        point.speed = max(0, filtered.speed)
+        point.speed = recordingSpeed
         point.course = filtered.course
         // Сырая точность GPS, а не оценка фильтра (спека §2.2): по ней одометр
         // отличает грубые точки, её же честно показывает экспорт.
@@ -811,10 +931,11 @@ final class TripManager: ObservableObject {
         point.trip = entity
 
         lastLocation = filtered
+        recordedLocationSubject.send(filtered)
 
         // Update speeds — рекорд только по точкам, которым можно верить.
-        let speed = max(0, filtered.speed)
-        if countsForDistance, speed > entity.maxSpeed {
+        let speed = recordingSpeed
+        if countsForDistance, TripDistanceGate.isPlausibleSpeed(speed), speed > entity.maxSpeed {
             entity.maxSpeed = speed
         }
 
@@ -850,7 +971,8 @@ final class TripManager: ObservableObject {
             // него поездка в памяти через секунду после старта переставала бы
             // быть черновиком, и её завершали бы по правилам человека, а не
             // приложения.
-            confirmation: CoreDataTripRepository.confirmation(of: entity)
+            confirmation: CoreDataTripRepository.confirmation(of: entity),
+            recordingBreaks: CoreDataTripRepository.recordingBreaks(of: entity)
         )
 
         // Batch saves: persist every N points or every M seconds
@@ -868,8 +990,24 @@ final class TripManager: ObservableObject {
     }
 
     private func updateEntityStats(_ entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count > 1 else { return }
+        let points = entity.orderedTrackPoints
+        guard points.count > 1 else { return }
+
+        let stats = finalRecordingStats(entity)
+        entity.distance = stats.distance
+        entity.maxSpeed = stats.maxSpeed
+
+        if let start = entity.startDate, let end = entity.endDate {
+            let elapsed = end.timeIntervalSince(start)
+            entity.averageSpeed = elapsed > 0 ? stats.distance / elapsed : 0
+        }
+    }
+
+    /// Shared with the stop preview: live UI distance/maxSpeed can differ from
+    /// the final trusted-point calculation, so they cannot decide the warning.
+    private func finalRecordingStats(_ entity: TripEntity) -> (distance: Double, maxSpeed: Double) {
+        let points = entity.orderedTrackPoints
+        guard points.count > 1 else { return (entity.distance, entity.maxSpeed) }
 
         // Пятиметровым шагом, а не «каждая точка минус предыдущая». Эта функция
         // ПЕРЕЗАПИСЫВАЕТ километры, набранные во время записи, — то есть именно
@@ -879,27 +1017,25 @@ final class TripManager: ObservableObject {
             TripDistanceGate.countsForDistance(horizontalAccuracy: $0.horizontalAccuracy,
                                                isInterpolated: $0.isInterpolated)
         }
-        let totalDistance = TripDistanceGate.totalDistance(
-            trusted.map {
-                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
+        let recordingBreaks = CoreDataTripRepository.recordingBreaks(of: entity)
+        let samples = trusted.map {
+                TripDistanceGate.Sample(
+                    latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp,
+                    recordingSegmentIndex: RecordingBreaks.segmentIndex(
+                        at: $0.timestamp ?? .distantPast,
+                        breaks: recordingBreaks), speed: $0.speed)
             }
-        )
-        let maxSpeed = trusted.dropFirst().reduce(0.0) { max($0, $1.speed) }
+        let totalDistance = TripDistanceGate.totalDistance(samples)
+        let maxSpeed = TripDistanceGate.maximumRecordedSpeed(samples)
 
-        entity.distance = totalDistance
-        entity.maxSpeed = maxSpeed
-
-        if let start = entity.startDate, let end = entity.endDate {
-            let elapsed = end.timeIntervalSince(start)
-            entity.averageSpeed = elapsed > 0 ? totalDistance / elapsed : 0
-        }
+        return (totalDistance, maxSpeed)
     }
 
     // MARK: - Geocoding (with persistent cache)
 
     private func geocodeAndNameTrip(entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              let first = points.first, let last = points.last else { return }
+        let points = entity.orderedTrackPoints
+        guard let first = points.first, let last = points.last else { return }
 
         let startCoord = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
         let endCoord = CLLocationCoordinate2D(latitude: last.latitude, longitude: last.longitude)
@@ -1019,8 +1155,7 @@ final class TripManager: ObservableObject {
     /// Reverse-geocode only the region for an entity's first track point.
     private func geocodeRegion(for entity: TripEntity, completion: @escaping () -> Void) {
         guard !entity.isDeleted,
-              let points = entity.trackPoints?.array as? [TrackPointEntity],
-              let first = points.first else {
+              let first = entity.orderedTrackPoints.first else {
             completion()
             return
         }
@@ -1336,8 +1471,8 @@ final class TripManager: ObservableObject {
 
     /// Generate a simplified polyline (~20 points) for feed card previews.
     private func generatePreviewPolyline(for entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count >= 2 else { return }
+        let points = entity.orderedTrackPoints
+        guard points.count >= 2 else { return }
 
         let sorted = points.sorted {
             ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)

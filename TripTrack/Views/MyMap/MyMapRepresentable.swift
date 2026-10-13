@@ -30,11 +30,38 @@ enum MapZoomLevel: Int, Comparable {
 final class MapHostController: UIViewController {
     let map = MKMapView()
     private var usesDarkFog = true
+    /// Последний применённый вид карты — то, что человек на ней видит.
+    /// Снимком, а не выводом из `usesDarkFog`: «Клетки» и «Туман» делят
+    /// палитру, и по ней их не различить.
+    private(set) var appliedAppearance = AtlasMapAppearance(style: .night)
 
+    /// Вид карты ставится ЦЕЛИКОМ и стоит ОДНОГО кадра.
+    ///
+    /// Порядок здесь — правило, а не вкус. «Ночь» и «Клетки» меняют сразу
+    /// две вещи: палитру и квантование, — и пока кадр заказывала каждая
+    /// половина отдельно, между ними существовал кадр, которого нет ни в
+    /// одном стиле. На экране устройства оставался именно он (владелец
+    /// 27 сентября): первый заказ рисовал половинчатый кадр, а второй на той
+    /// же камере до экрана не доезжал. Поэтому клетки ставятся ПЕРВЫМИ и
+    /// молча, а кадр заказывается последней строкой — один на весь вид.
     func setAppearance(_ appearance: AtlasMapAppearance) {
-        usesDarkFog = appearance.style == .night
+        let styleChanged = appearance.style != appliedAppearance.style
+        appliedAppearance = appearance
+        usesDarkFog = appearance.usesDarkFog
+        // Клетки — дело одного Metal-слоя: у растрового отката их нет, и это
+        // осознанно. Откат случается там, где Metal недоступен вовсе, и
+        // показать на нём третий стиль нечем; мгла при этом остаётся той же,
+        // что у «Тумана», — человек видит знакомую карту, а не пустоту.
+        fogMetal.veil?.setUsesCells(appearance.usesCells)
+        // Растворение заказывается ДО кадра: Core Animation снимает нынешнее
+        // содержимое слоя в тот момент, когда его просят, а новое приедет
+        // этим же витком главного цикла.
+        if styleChanged { fogMetal.veil?.beginStyleCrossfade() }
         applyPalette()
         updateAttributionCarve()
+        // Палитра могла и не смениться («Туман» ⇄ «Клетки») — тогда кадра не
+        // просил никто.
+        fogMetal.invalidate()
     }
 
     /// Посадка экранной вуали — общая на три карты (`VeilSeat`). Вуаль не
@@ -231,7 +258,6 @@ final class MapHostController: UIViewController {
             }
         }
         for annotation in map.annotations {
-            (map.view(for: annotation) as? CityDotView)?.refreshPalette()
             (map.view(for: annotation) as? RegionLabelView)?.refreshPalette()
         }
     }
@@ -440,6 +466,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     // Public and vehicle maps retain their previous night appearance. The
     // main Atlas passes its explicit, saved selection.
     var appearance = AtlasMapAppearance(style: .night)
+    /// Вью-модель «Атласа». `nil` — карта со своим состоянием (публичная,
+    /// карта машины): подписка ей не нужна, а чужая привезла бы ей чужие
+    /// данные — `resync` кормит карту тем, на что подписан. Через подписку
+    /// доезжает всё, что SwiftUI на «Атласе» не довозит: камера, период,
+    /// туман и вид карты.
+    var model: MyMapViewModel?
 
     var onZoomLevelChange: (MapZoomLevel) -> Void
     var onSelectTrip: (UUID) -> Void
@@ -451,6 +483,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var onSelectHint: (String) -> Void = { _ in }
     /// Нажали булавку своего места (S8) — под ней встаёт карточка.
     var onSelectPlace: (UUID) -> Void = { _ in }
+    var onSelectHome: () -> Void = {}
     var onTapMap: (CLLocationCoordinate2D) -> Void
     /// One-shot camera command; the binding is cleared once applied.
     @Binding var cameraCommand: MapCameraCommand?
@@ -508,13 +541,13 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         map.register(TripPinView.self, forAnnotationViewWithReuseIdentifier: TripPinView.reuseID)
         map.register(TripClusterView.self, forAnnotationViewWithReuseIdentifier: TripClusterView.reuseID)
-        map.register(CityDotView.self, forAnnotationViewWithReuseIdentifier: CityDotView.reuseID)
         map.register(RegionLabelView.self, forAnnotationViewWithReuseIdentifier: RegionLabelView.reuseID)
         map.register(RouteEndpointView.self, forAnnotationViewWithReuseIdentifier: RouteEndpointView.reuseID)
         map.register(SealView.self, forAnnotationViewWithReuseIdentifier: SealView.reuseID)
         map.register(SealClusterView.self, forAnnotationViewWithReuseIdentifier: SealClusterView.reuseID)
         map.register(RiddleHintView.self, forAnnotationViewWithReuseIdentifier: RiddleHintView.reuseID)
         map.register(PlacePinView.self, forAnnotationViewWithReuseIdentifier: PlacePinView.reuseID)
+        map.register(HomePinView.self, forAnnotationViewWithReuseIdentifier: HomePinView.reuseID)
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -554,13 +587,18 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         coordinator.onSelectDiscovery = onSelectDiscovery
         coordinator.onSelectHint = onSelectHint
         coordinator.onSelectPlace = onSelectPlace
+        coordinator.onSelectHome = onSelectHome
         coordinator.onTapMap = onTapMap
 
         // Значения, которых нет у вью-модели (они живут в `@State` экрана).
         // Пересборка по подписке ниже берёт их отсюда.
         coordinator.lastLanguage = language
         coordinator.lastSelectedHintId = selectedHintId
-        coordinator.bindViewModel(map: map)
+        // Хозяин — ПОСЛЕДНИЙ увиденный, как и карта у `bindViewModel`:
+        // `makeUIViewController` отрабатывает дважды, и первый контроллер
+        // SwiftUI выбрасывает. Через него подписка ставит вид карты.
+        coordinator.host = controller
+        if let model { coordinator.bindViewModel(map: map, viewModel: model) }
 
         coordinator.syncData(map, exploration: exploration, revealed: revealed,
                              language: language, veil: veil, vein: vein)
@@ -590,10 +628,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onSelectDiscovery: ((UUID) -> Void)?
         var onSelectHint: ((String) -> Void)?
         var onSelectPlace: ((UUID) -> Void)?
+        var onSelectHome: (() -> Void)?
         /// Уже поставленные булавки мест — дифф по ним, а не по числу.
         private var installedPlaces: [AtlasPlacePin] = []
         private var installedPlaceLanguage: LanguageManager.Language?
         private var installedPlaceSelection: UUID?
+        private var installedHome: CLLocationCoordinate2D?
         var onTapMap: ((CLLocationCoordinate2D) -> Void)?
         private var appearance = AtlasMapAppearance()
 
@@ -675,7 +715,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Which trip the current pin set was built for.
         private var pinsSelection: UUID?
         private var selectedTripId: UUID?
-        private var cityAnnotations: [CityDotAnnotation] = []
         private var regionLabels: [RegionLabelAnnotation] = []
         private var exploration = MapExploration()
         private var installedLanguage: LanguageManager.Language?
@@ -808,19 +847,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 installedLanguage = language
                 installedUnit = unit
                 installedVisitedRegionIds = visitedRegionIds
-                // Только внутри коридоров: город, до которого ты не доезжал,
-                // на карте тумана не существует. `MapExploration` уже отдаёт
-                // лишь города с покрытием, но правило записано и здесь —
-                // источник у него может смениться, а правило нет.
-                cityAnnotations = exploration.regions.flatMap { region in
-                    region.cities.filter { $0.coverage > 0 }.map {
-                        CityDotAnnotation(
-                            coordinate: $0.coordinate,
-                            cityName: $0.localizedName(language),
-                            coverage: $0.coverage
-                        )
-                    }
-                }
                 // Только посещённые регионы. Подписи стоят на карте ВСЕГДА с
                 // этого момента: масштаб решает не добавление/удаление, а
                 // видимость каждой (`updateLabelVisibility`), как у
@@ -832,9 +858,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 )
                 // The annotations on screen are stale copies of what just
                 // changed underneath them.
-                map.removeAnnotations(map.annotations.filter {
-                    $0 is CityDotAnnotation || $0 is RegionLabelAnnotation
-                })
+                map.removeAnnotations(
+                    map.annotations.filter { $0 is RegionLabelAnnotation })
                 map.addAnnotations(regionLabels)
                 updateLabelVisibility(map)
             }
@@ -919,15 +944,37 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             }
         }
 
+        /// Метка дома (0.8.2). КРУГА ЗОНЫ здесь нет нарочно: мглу «Атласа»
+        /// рисует Metal-вуаль ПОВЕРХ карты, и оверлей круга лёг бы под неё —
+        /// человек видел бы его то ли есть, то ли нет, в зависимости от
+        /// выбранного стиля. Радиус выбирают на экране дома, и круг живёт
+        /// там же, на своей карте без тумана.
+        func syncHome(_ map: MKMapView, home: CLLocationCoordinate2D?) {
+            let same = installedHome?.latitude == home?.latitude
+                && installedHome?.longitude == home?.longitude
+            guard !same else { return }
+            installedHome = home
+            map.removeAnnotations(map.annotations.filter { $0 is HomeAnnotation })
+            guard let home else { return }
+            map.addAnnotation(HomeAnnotation(coordinate: home))
+        }
+
         /// Один и тот же код красит булавку и при создании вида, и при смене
         /// выбора: два места, решающих, как она выглядит, разошлись бы на
         /// первом же переиспользовании вида.
         func paint(_ view: PlacePinView, with annotation: AtlasPlaceAnnotation, selectedId: UUID?) {
             view.setKind(annotation.pin.inPeriod ? .place : .outOfPeriod)
+            // Подпись — ТОЛЬКО у выбранной булавки (владелец, 26 сен).
+            // Доска S8 рисовала её всегда, и на живой карте это дало два
+            // изъяна сразу: «Геленджик» нашей подписью лёг поверх
+            // «Gelendzhik» самой карты — одно и то же слово дважды, — а
+            // остальные чипы заняли карту прежде, чем человек о них
+            // попросил. Точка отвечает на «где», имя — на «что», и второй
+            // вопрос задают нажатием.
             view.setSelectedAppearance(annotation.pin.id == selectedId,
                                        name: annotation.pin.name ?? annotation.unnamed,
                                        detail: annotation.dateText,
-                                       alwaysLabelled: true)
+                                       alwaysLabelled: false)
         }
 
         func syncSeals(_ map: MKMapView, seals: [Discovery], language: LanguageManager.Language) {
@@ -1075,24 +1122,23 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard zoomScale > 0, zoomScale.isFinite else { return }
             let dot = userDotCentre(map)
 
+            // Булавки мест — тем же проходом и по тому же правилу, что
+            // подписи: видимость решает масштаб, а ставится она каждый кадр.
+            let placesOn = Self.placesVisible(span: map.region.span.latitudeDelta)
+            for annotation in map.annotations where annotation is AtlasPlaceAnnotation {
+                (map.view(for: annotation) as? PlacePinView)?.visible = placesOn
+            }
+
             for label in regionLabels {
                 guard let view = map.view(for: label) as? RegionLabelView else { continue }
                 let side = label.bounds.minSidePt(zoomScale: zoomScale)
                 let frame = labelFrame(of: view, at: label.coordinate, on: map)
                 view.visible = RegionLabelLOD.level(bboxMinSidePt: side)
                     && !RegionLabelLOD.yieldsToUserDot(labelFrame: frame, userDotCentre: dot)
+                    && !RegionLabelLOD.yieldsToStatusBar(labelFrame: frame,
+                                                         safeTop: map.safeAreaInsets.top)
             }
 
-            // Города — то же правило и по той же причине: подпись висит справа
-            // от кружка, ЗА рамкой вью, и ни столкновения MapKit, ни тем более
-            // синяя точка про неё не знают. Прячется вся аннотация: под синим
-            // кружком её оранжевую серединку всё равно не видно.
-            for annotation in map.annotations where annotation is CityDotAnnotation {
-                guard let view = map.view(for: annotation) as? CityDotView else { continue }
-                let frame = contentFrame(of: view, at: annotation.coordinate, on: map)
-                view.visible = !RegionLabelLOD.yieldsToUserDot(
-                    labelFrame: frame, userDotCentre: dot)
-            }
         }
 
         /// Синяя точка «я здесь» в точках экрана — или `nil`, если её нет на
@@ -1105,25 +1151,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             return map.convert(location.coordinate, toPointTo: map)
         }
 
-        /// Рамка подписи в той же системе координат, что и точка выше.
-        ///
-        /// Считается от КООРДИНАТЫ аннотации, а не берётся из `view.frame`:
-        /// та лежит в контейнере аннотаций MapKit, и складывать её с
-        /// `map.convert(_:toPointTo: map)` значило бы сравнивать два разных
-        /// пространства — сегодня они совпадают, а обещания на это нет.
-        /// Рамка ВСЕГО, что рисует точка города, в координатах карты: сам
-        /// кружок плюс подпись справа от него.
-        private func contentFrame(
-            of view: CityDotView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
-        ) -> CGRect {
-            let content = view.contentBounds
-            guard content.width > 0, content.height > 0 else { return .zero }
-            let centre = map.convert(coordinate, toPointTo: map)
-            let origin = CGPoint(
-                x: centre.x - view.bounds.width / 2 + view.centerOffset.x,
-                y: centre.y - view.bounds.height / 2 + view.centerOffset.y)
-            return content.offsetBy(dx: origin.x, dy: origin.y)
-        }
 
         private func labelFrame(
             of view: RegionLabelView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
@@ -1204,22 +1231,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         // MARK: Zoom level
 
         private func applyLevel(_ map: MKMapView, animated: Bool) {
-            // Cities: only from region zoom in — at far zoom they are noise.
-            let wantCities = appearance.showsCityLabels && level >= .region
-            let hasCities = map.annotations.contains { $0 is CityDotAnnotation }
-            if wantCities && !hasCities {
-                map.addAnnotations(cityAnnotations)
-                // Только что приехавшие города ещё не знают, стоит ли на них
-                // синяя точка: свою видимость каждая аннотация получает не при
-                // рождении, а этим проходом.
-                updateLabelVisibility(map)
-            } else if !wantCities && hasCities {
-                map.removeAnnotations(map.annotations.filter { $0 is CityDotAnnotation })
-            }
-
-            // Имена регионов и стран стоят на карте всегда с первой сборки;
-            // масштаб решает `updateLabelVisibility` — каждая подпись сама, по
-            // своему bbox, а не общий переключатель уровня, как у городов.
+            // Подписей ГОРОДОВ у нас больше нет вовсе (владелец, 26 сен):
+            // «Геленджик» нашим слоем ложился поверх «Gelendzhik», который
+            // рисует сама Apple. Имена городов знает карта — на всех языках и
+            // без нашей помощи. Подписи РЕГИОНОВ остались: они говорят «я тут
+            // был» и несут километры, чего у карты нет; масштаб решает
+            // `updateLabelVisibility` — каждая подпись сама, по своему bbox.
 
             syncTripPins(map)
         }
@@ -1285,6 +1302,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         @MainActor
         private func resync(map: MKMapView, viewModel vm: MyMapViewModel) {
+            // Вид карты — ПЕРВЫМ: палитра решает, чем рисуется всё
+            // остальное, и приехать после тумана она не имеет права.
+            host?.setAppearance(vm.appearance)
+            syncAppearance(vm.appearance, on: map)
             syncData(map, exploration: vm.exploration, revealed: vm.revealed,
                      language: lastLanguage,
                      veil: MyMapView.showsVeil ? vm.fogVeil : nil, vein: vm.routeVein)
@@ -1294,6 +1315,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             syncSelectedRoute(map, route: vm.selectedRoute, language: lastLanguage)
             syncSelection(map, selection: vm.selection)
             syncPlaces(map, pins: vm.placePins, selectedId: vm.selectedPlaceId, language: lastLanguage)
+            syncHome(map, home: vm.homePin)
             applyInitialCameraIfNeeded(map, exploration: vm.exploration)
             if let command = vm.cameraCommand {
                 apply(command, to: map)
@@ -1384,9 +1406,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: TripClusterView.reuseID, for: cluster)
                 return view
-            case let city as CityDotAnnotation:
-                return mapView.dequeueReusableAnnotationView(
-                    withIdentifier: CityDotView.reuseID, for: city)
             case let label as RegionLabelAnnotation:
                 return mapView.dequeueReusableAnnotationView(
                     withIdentifier: RegionLabelView.reuseID, for: label)
@@ -1401,6 +1420,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     fadeIn(view)
                 }
                 return view
+            case is HomeAnnotation:
+                return mapView.dequeueReusableAnnotationView(
+                    withIdentifier: HomePinView.reuseID, for: annotation)
             case let place as AtlasPlaceAnnotation:
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: PlacePinView.reuseID, for: place)
@@ -1499,11 +1521,23 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard let host, host.screenVeilAttached else { return }
             // Ловит движения, начавшиеся без `regionWillChange` (программный
             // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
-            // нет, и продлевает хвост, если есть. Своего `sync` здесь нет —
-            // привязку в том же кадре сделает тот же `CADisplayLink`, а два
-            // вызова подряд считают одно и то же дважды.
+            // нет, и продлевает хвост, если есть.
             host.screenVeil.startTracking()
             host.fogMetal.startTracking()
+            // И ПРИВЯЗЫВАЕМСЯ ПРЯМО ЗДЕСЬ, а не ждём своего тика.
+            //
+            // Здесь MapKit только что назвал новую камеру, и его плитки поедут
+            // в транзакции ЭТОГО витка главного цикла. Тик `CADisplayLink` —
+            // другой момент кадра, и всё, что нарисовано по камере, взятой в
+            // нём, отстаёт от карты на кадр: на жесте это видно как «туман и
+            // надписи плывут вместе с пальцем» (владелец на устройстве,
+            // 26 сен). Прежняя редакция этого комментария объясняла, почему
+            // `sync` здесь НЕ нужен («тот же кадр сделает `CADisplayLink`»), —
+            // и была неверна. Двойной работы нет: `redrawIfNeeded` и `sync`
+            // на неизменившейся камере считают то же самое и стоят десятки
+            // микросекунд, а расхождение стоило всей плавности.
+            host.fogMetal.followCamera()
+            host.screenVeil.sync(map: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -1544,6 +1578,25 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             handleTap(at: recognizer.location(in: map), on: map)
         }
 
+        /// Видны ли булавки МЕСТ на этом масштабе.
+        ///
+        /// С отдаления их нет вовсе (владелец 26 сен): булавка не
+        /// масштабируется вместе с картой, и на карте края десяток
+        /// одинаковых кружков спорил с самим открытым миром за внимание.
+        /// Место — это «поностальгировать», а не система координат экрана,
+        /// и появляться оно должно по мере приближения, вместе с дорогами,
+        /// которые к нему ведут. Порог — тот же `.region`, на котором
+        /// «Атлас» показывает остальную мелочь.
+        static func placesVisible(span: CLLocationDegrees) -> Bool {
+            MapZoomLevel.of(span) >= .region
+        }
+
+        /// Радиус цели у булавки места — половина минимальной цели HIG (44 pt).
+        ///
+        /// Круг, а не прямоугольник: булавка круглая, и палец, промахнувшийся
+        /// по диагонали, промахивается одинаково во все стороны.
+        static let placeTouchRadius: CGFloat = 22
+
         /// Тот же тап, но ТОЧКОЙ: распознаватель остаётся снаружи, и разбор
         /// «что под пальцем» проверяется тестом, а не открытым экраном
         /// (тот же приём, что у `AutoTripPolicy` и `JourneyEditSheet`).
@@ -1564,6 +1617,43 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // on:)` ниже. В общем списке она мерилась бы рамкой значка, и
                 // кольцо остались бы не нажать.
                 guard !(annotation is RiddleHintAnnotation) else { continue }
+                // Булавка МЕСТА меряется КООРДИНАТОЙ, а не рамкой вида.
+                //
+                // Рамка живёт в системе координат контейнера аннотаций
+                // MapKit, а не карты, и существует она только пока MapKit
+                // держит вид: `map.view(for:)` отдаёт `nil` у всего, что он
+                // решил не показывать. Тест `AtlasPlaceTapTests` ловил на
+                // этом промах даже РОВНО ПО ТОЧКЕ — то есть попадание
+                // зависело не от пальца, а от того, выдал ли MapKit вид.
+                // Координата же есть всегда и переводится в точку экрана той
+                // же проекцией, которой нарисована сама булавка.
+                // Дом меряется КООРДИНАТОЙ по той же причине, что и место:
+                // рамка вида живёт в контейнере аннотаций MapKit и исчезает
+                // вместе с видом, который MapKit решил не показывать.
+                if annotation is HomeAnnotation {
+                    let centre = map.convert(annotation.coordinate, toPointTo: map)
+                    let distance = hypot(centre.x - point.x, centre.y - point.y)
+                    guard distance <= Self.placeTouchRadius else { continue }
+                    if nearest == nil || distance < nearest!.distance {
+                        nearest = (annotation, distance)
+                    }
+                    continue
+                }
+                if let place = annotation as? AtlasPlaceAnnotation {
+                    // Невидимую булавку нельзя нажать: цель считается по
+                    // координате и рамки не спрашивает, поэтому без этого
+                    // гейта место открывалось бы с карты края, где самой
+                    // булавки на экране нет.
+                    guard Self.placesVisible(span: map.region.span.latitudeDelta)
+                    else { continue }
+                    let centre = map.convert(place.coordinate, toPointTo: map)
+                    let distance = hypot(centre.x - point.x, centre.y - point.y)
+                    guard distance <= Self.placeTouchRadius else { continue }
+                    if nearest == nil || distance < nearest!.distance {
+                        nearest = (annotation, distance)
+                    }
+                    continue
+                }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
                 let target = view.frame.insetBy(dx: -6, dy: -6)
                 guard target.contains(point) else { continue }
@@ -1585,6 +1675,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 } else if let place = hit as? AtlasPlaceAnnotation {
                     Haptics.tap()
                     onSelectPlace?(place.pin.id)
+                } else if hit is HomeAnnotation {
+                    Haptics.tap()
+                    onSelectHome?()
                 }
                 // Точка города — подпись, а не контрол: тап по ней не делает
                 // ничего (так было и до 0.7.0).

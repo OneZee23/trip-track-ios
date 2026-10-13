@@ -41,7 +41,7 @@ struct RecordingBanner: View {
                     .foregroundStyle(AppTheme.textTertiary)
 
                 Text(duration)
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.inter(13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(AppTheme.textPrimary)
             }
             .padding(.horizontal, 16)

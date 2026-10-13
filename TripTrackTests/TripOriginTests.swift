@@ -53,7 +53,7 @@ final class TripOriginTests: XCTestCase {
         var trip = Trip(id: UUID(), startDate: Date())
         trip.source = .manual
         let entity = TripEntity(context: PersistenceController(inMemory: true).container.viewContext)
-        let payload = TripSyncPayload(trip: trip, entity: entity)
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
 
         let json = try encode(payload)
         XCTAssertEqual(json["source"] as? String, "manual")
@@ -63,7 +63,7 @@ final class TripOriginTests: XCTestCase {
         var trip = Trip(id: UUID(), startDate: Date())
         trip.source = .recorded
         let entity = TripEntity(context: PersistenceController(inMemory: true).container.viewContext)
-        let payload = TripSyncPayload(trip: trip, entity: entity)
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
 
         let data = try { () -> Data in
             let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601

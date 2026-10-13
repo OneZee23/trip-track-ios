@@ -44,7 +44,7 @@ enum TripWorldEntry {
         SettingsManager.shared.earnedProgressDidChange()
         tripManager.saveBadgesJSON(tripId: trip.id, badgeIds: data.newBadges.map(\.id))
         var final = data
-        final.roadCard = roads.processTrip(trip)
+        final.roadCard = roads.processTrip(trip, history: allTrips)
         // Очередь синка — здесь, а не в `stopTrip`: у черновика её нет до «Моя».
         SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
         return final

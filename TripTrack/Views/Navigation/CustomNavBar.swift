@@ -71,7 +71,7 @@ struct CustomNavBar<Trailing: View>: View {
             // it from the content below.
             VStack(spacing: 1) {
                 Text(title)
-                    .font(.system(size: largeTitle ? 28 : 18, weight: .heavy))
+                    .font(.inter(largeTitle ? 28 : 18, weight: .heavy))
                     .tracking(largeTitle ? -0.56 : 0)
                     .foregroundStyle(c.text)
                     .lineLimit(1)

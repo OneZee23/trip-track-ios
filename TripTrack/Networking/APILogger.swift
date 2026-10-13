@@ -16,8 +16,36 @@ final class APILogger {
     func log(request: URLRequest, bodyPreview: String?) {
         let method = request.httpMethod ?? "?"
         let path = request.url?.path ?? "?"
-        let preview = bodyPreview.map { Self.redact($0) } ?? "-"
+        let preview = bodyPreview.map { Self.preview(of: $0) } ?? "-"
         logger.notice("→ \(method) \(path) body=\(preview, privacy: .public)")
+    }
+
+    /// Сколько символов тела запроса попадает в журнал. Ответ давно режется
+    /// до 2 КБ (ниже), а запрос шёл ЦЕЛИКОМ: `APIClient` — `@MainActor`, и
+    /// `redact` гонял ~25 регулярок по всему телу на главном потоке. Поездка
+    /// на 76 000 точек — 6,8 МБ, и запись одного запроса в журнал держала
+    /// экран секундами (Sentry APPLE-IOS-8; `APILoggerCostTests`: 2,4 с на
+    /// Mac). Для диагностики хватает начала: путь, ключи, первые точки.
+    static let previewLimit = 2048
+
+    /// Текст начала тела, не раскодируя его целиком. Срез по байтам может
+    /// разрезать многобайтовый символ: такой хвост отбрасывается
+    /// (`decoding:` заменил бы его знаком �, что для журнала тоже годится,
+    /// но размер тела в подписи берётся из полной длины).
+    static func previewText(of data: Data) -> String? {
+        guard data.count > previewLimit * 4 else { return String(data: data, encoding: .utf8) }
+        let head = String(decoding: data.prefix(previewLimit * 4), as: UTF8.self)
+        return String(head.prefix(previewLimit + 256)) + "…[\(data.count) bytes]"
+    }
+
+    /// Начало тела, вычищенное. Режем ДО `redact`, а не после — иначе цена
+    /// остаётся прежней. Секрет, разрезанный на границе, не утекает:
+    /// `redact` сначала чистит запас в 256 символов за границей, и только
+    /// потом строка обрезается окончательно.
+    static func preview(of body: String) -> String {
+        guard body.count > previewLimit else { return redact(body) }
+        let head = redact(String(body.prefix(previewLimit + 256)))
+        return String(head.prefix(previewLimit)) + "…[\(body.utf8.count) bytes]"
     }
 
     func log(response: URLResponse, data: Data, duration: TimeInterval) {

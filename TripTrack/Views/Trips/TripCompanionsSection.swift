@@ -275,7 +275,10 @@ struct TripCompanionsSection: View {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
+                        .accessibilityHidden(true)
                 }
+                // Decoration: the prompt beside it is the row.
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.companionsAddPrompt(lang.language))
                         .font(.inter(15, weight: .semibold))
@@ -313,7 +316,10 @@ struct TripCompanionsSection: View {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
+                        .accessibilityHidden(true)
                 }
+                // Decoration: the prompt beside it is the row.
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.companionsAddPrompt(lang.language))
                         .font(.inter(15, weight: .semibold))
@@ -348,7 +354,9 @@ struct TripCompanionsSection: View {
                 Image(systemName: "person.badge.plus")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
+                    .accessibilityHidden(true)
             }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.companionsAddPrompt(lang.language))
                     .font(.inter(15, weight: .semibold))

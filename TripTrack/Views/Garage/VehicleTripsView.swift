@@ -101,7 +101,7 @@ struct VehicleTripsView: View {
                     sort = s
                 } label: {
                     Text(title(s, l))
-                        .font(.system(size: 12, weight: sort == s ? .semibold : .medium))
+                        .font(.inter(12, weight: sort == s ? .semibold : .medium))
                         .foregroundStyle(sort == s ? c.text : c.textSecondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)
@@ -109,6 +109,10 @@ struct VehicleTripsView: View {
                             RoundedRectangle(cornerRadius: 999)
                                 .fill(sort == s ? c.card : Color.clear)
                         )
+                        // The whole segment takes the tap, not only the word
+                        // of the clear (inactive) one — the feed switcher's
+                        // bug, 0.8.9.
+                        .contentShape(RoundedRectangle(cornerRadius: 999))
                 }
                 .buttonStyle(.plain)
             }

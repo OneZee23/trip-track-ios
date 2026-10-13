@@ -164,6 +164,14 @@ struct PublicProfileView: View {
         pushPath.wrappedValue.cappedAppend(.publicStats(accountId, resolvedDisplayName))
     }
 
+    /// Есть ли у человека публичные маршруты. Счётчик сервера — первым:
+    /// превью приходят только у последних поездок, а публичная поездка
+    /// может быть и без превью.
+    private var hasPublicRoutes: Bool {
+        if let count = profile?.stats.publicTripCount { return count > 0 }
+        return !(profile?.recentTrips ?? []).isEmpty
+    }
+
     private func openMap() {
         guard let pushPath else { return }
         pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName))
@@ -383,7 +391,13 @@ struct PublicProfileView: View {
                                 statsEntryCard(c, lng: lng)
                                     .padding(.horizontal, 16)
                             }
-                            if visibility.map, canOpenHub {
+                            // Карта — только когда на ней есть что показать.
+                            // Без публичных поездок карточка была серым
+                            // прямоугольником со значком, открывала пустую
+                            // карту, а ниже то же самое уже говорит «Пока нет
+                            // публичных поездок». Правило путешествий ниже:
+                            // пустая карточка-хаб — ложное обещание.
+                            if visibility.map, canOpenHub, hasPublicRoutes {
                                 mapEntryCard(c, lng: lng)
                                     .padding(.horizontal, 16)
                             }
@@ -754,129 +768,146 @@ struct PublicProfileView: View {
 
     // MARK: - Hero
 
-    /// Avatar, name, level, flag, bio, action — centred straight on the page.
-    /// Canon (580:451, 580:579, 1635:119) has no header card and no cover
-    /// banner behind the avatar on either the preview or a stranger's profile;
-    /// the first surface on the screen is the stats card.
+    /// Avatar, name, level, bio and the follow action — one card, the same
+    /// card the owner sees on «Я» (`ProfileHeroCard`) and in the PRO
+    /// showcase.
+    ///
+    /// Until 0.8.9 the hero was centred straight on the page, and a chosen
+    /// background showed only as a ~60 pt strip behind the top of the avatar,
+    /// cut off at its middle. PRO sells the background under «Видно другим»
+    /// and shows it filling the whole card; other people saw a torn ribbon.
+    /// Owner's choice 11 Oct 2026 (variant A): the profile background is the
+    /// card itself here too, with the cover card's dark veil and white ink.
+    /// No background — the plain card, as on «Я».
     private func heroSection(_ c: AppTheme.Colors) -> some View {
-        let avatarSize: CGFloat = 84
         let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
         // «Сервер молчит» (`isPlus == nil`) читается как «подписки нет» — во
-        // всех трёх местах этой функции одинаково, включая значок
-        // (`PlusBadgeVisibility.shows` требует ровно `true`). Одна переменная
-        // с двумя правилами — это спор с самим собой в десяти строках: а
-        // побеждает в таком споре тот случай, когда сервер 0.8.0 прислал
-        // устаревшее премиум-значение истёкшему подписчику, но `isPlus` в
-        // этом ответе не прислал. Спека §2 на это отвечает однозначно:
+        // всех местах этой функции одинаково, включая значок
+        // (`PlusBadgeVisibility.shows` требует ровно `true`). Спека §2:
         // «Плюс» кончился — показывается бесплатное.
         let saidPlus = PlusBadgeVisibility.saysPlus(profile?.isPlus ?? preloaded?.isPlus)
         let background = ProfileBackground.effective(
             id: profile?.profileBackground, isPlus: saidPlus)
         let frame = AvatarFrame.effective(
             id: profile?.avatarFrame ?? preloaded?.avatarFrame, isPlus: saidPlus)
+        let cover = background != .none
+        let ink: Color = cover ? .white : c.text
+        let secondaryInk: Color = cover ? .white.opacity(0.85) : c.textSecondary
 
-        return VStack(spacing: 0) {
-            Text(emoji)
-                .font(.system(size: avatarSize * 0.52))
-                .frame(width: avatarSize, height: avatarSize)
-                .background(Circle().fill(c.cardAlt))
-                .avatarFrame(frame, lineWidth: 3)
-                // Фон профиля — ПОД аватаром и только когда он выбран.
-                // Канон рисует герой без обложки, и пустой баннер у всех
-                // остальных был бы полосой ни о чём; здесь он появляется
-                // ровно у того, кто его выбрал, и ровно за тем, за чем и
-                // выбирался, — чтобы его увидели чужие глаза.
-                .background(alignment: .top) {
-                    if background != .none {
-                        ProfileBackgroundBanner(background: background, height: avatarSize * 0.72)
-                            .frame(width: 600)
-                            .offset(y: -avatarSize * 0.34)
-                            .allowsHitTesting(false)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(emoji)
+                    .font(.system(size: 34))
+                    .frame(width: 64, height: 64)
+                    .background(cover ? .white.opacity(0.16) : c.cardAlt, in: Circle())
+                    .avatarFrame(frame, lineWidth: 3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    // Long-press copies the name. It is the one string that
+                    // can be pasted into Поиск and actually find this person
+                    // again: the server matches display names, and the
+                    // @handle is still device-local.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(resolvedDisplayName)
+                            .font(.interScaled(21, weight: .bold, relativeTo: .title3))
+                            .tracking(-0.3)
+                            .foregroundStyle(ink)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentShape(Rectangle())
+                            .onLongPressGesture {
+                                UIPasteboard.general.string = resolvedDisplayName
+                                Haptics.success()
+                                toastItem = ToastItem(
+                                    type: .success,
+                                    message: AppStrings.profileNameCopied(lang.language)
+                                )
+                            }
+                            // Идентификатор остаётся НА ИМЕНИ, а не на строке:
+                            // id на контейнере делает его одним элементом для
+                            // VoiceOver и для UI-тестов.
+                            .accessibilityIdentifier("profile_display_name")
+
+                        // Свой профиль в превью подчиняется тумблеру
+                        // приватности — иначе «как видят другие» показывало
+                        // бы не то, что видят.
+                        if PlusBadgeVisibility.shows(
+                            isPlus: saidPlus, isOwn: isOwnProfile,
+                            showsOwnBadge: settings.showPlusBadge) {
+                            ProBadge(height: 16)
+                        }
+                    }
+
+                    // Rank and flag on ONE line, the flag trailing: two chips
+                    // of the same kind — who this driver is.
+                    HStack(spacing: 8) {
+                        if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
+                            let rank = DriverRank.from(level: lvl).title(lang.language)
+                            if cover {
+                                // On the cover the gold capsule turns to mud;
+                                // «Я» draws the level in white Handjet here.
+                                HStack(spacing: 5) {
+                                    Text("LVL \(lvl)")
+                                        .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
+                                        .foregroundStyle(.white)
+                                    Text(rank)
+                                        .font(.interScaled(12, weight: .medium, relativeTo: .caption))
+                                        .foregroundStyle(secondaryInk)
+                                }
+                            } else {
+                                LvlPill(level: lvl, rankTitle: rank)
+                            }
+                        }
+
+                        // Country (canon 1717:135). Device-local like the
+                        // handle, so it renders in the owner's preview and
+                        // nowhere else — see `countryGlyph`.
+                        if let glyph = countryGlyph {
+                            Text(countryPillText(glyph))
+                                .font(.inter(13))
+                                .foregroundStyle(ink)
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(cover ? .white.opacity(0.16) : c.cardAlt, in: Capsule())
+                                .accessibilityIdentifier("profile_country")
+                        }
                     }
                 }
-
-            // Long-press copies the name. It is the one string that can be
-            // pasted into Поиск and actually find this person again: the
-            // server matches display names, and the @handle is still
-            // device-local (no profile field behind it).
-            HStack(spacing: 6) {
-                Text(resolvedDisplayName)
-                    .font(.inter(21, weight: .bold))
-                    .tracking(-0.21)
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
-                    .contentShape(Rectangle())
-                    .onLongPressGesture {
-                        UIPasteboard.general.string = resolvedDisplayName
-                        Haptics.success()
-                        toastItem = ToastItem(
-                            type: .success,
-                            message: AppStrings.profileNameCopied(lang.language)
-                        )
-                    }
-                    // Идентификатор остаётся НА ИМЕНИ, а не на строке: id на
-                    // контейнере делает его одним элементом для VoiceOver и
-                    // для UI-тестов, и значок рядом забрал бы у имени и то,
-                    // и другое.
-                    .accessibilityIdentifier("profile_display_name")
-
-                // Свой профиль в превью подчиняется тумблеру приватности —
-                // иначе «как видят другие» показывало бы не то, что видят.
-                if PlusBadgeVisibility.shows(
-                    isPlus: saidPlus, isOwn: isOwnProfile,
-                    showsOwnBadge: settings.showPlusBadge) {
-                    PlusBadge(size: 16)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 10)
 
-            // Rank and flag on ONE line, the flag trailing. They are two chips
-            // of the same kind — who this driver is — and stacking them put a
-            // third centred pill under the name, which made the hero read as a
-            // column of badges before the numbers even started.
-            HStack(spacing: 8) {
-                if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
-                    LvlPill(level: lvl, rankTitle: DriverRank.from(level: lvl).title(lang.language))
-                }
-
-                // Country (canon 1717:135). Device-local like the handle, so it
-                // renders in the owner's preview and nowhere else — see
-                // `countryGlyph`. «Не указывать» has no glyph and draws no pill.
-                if let glyph = countryGlyph {
-                    Text(countryPillText(glyph))
-                        .font(.inter(13))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(c.cardAlt, in: Capsule())
-                        .accessibilityIdentifier("profile_country")
-                }
-            }
-            .padding(.top, 8)
-
-            // Width-capped so a long line wraps into a centred block instead
-            // of running the full screen width.
             if let bio = resolvedBio {
                 Text(bio)
-                    .font(.inter(13.5))
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    // The editor accepts 140 characters; at 13.5pt over 290pt
-                    // that is three lines, and two clipped a full bio for
-                    // every viewer.
+                    .font(.interScaled(14, relativeTo: .subheadline))
+                    .foregroundStyle(cover ? .white.opacity(0.92) : c.text)
+                    .lineSpacing(3)
+                    // The editor accepts 140 characters: three lines at most.
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 290)
-                    .padding(.top, 12)
                     .accessibilityIdentifier("profile_bio")
             }
 
-            heroAction(c)
-                .padding(.top, 16)
+            heroAction(c, onCover: cover)
         }
-        .frame(maxWidth: .infinity)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if cover {
+                // The cover card's own recipe (`ProfileHeroCard`): the
+                // artwork under a dark veil, so white type reads on every one
+                // of the eight backgrounds, the light ones included.
+                background.view()
+                    .overlay(.black.opacity(0.64))
+            } else {
+                c.card
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(cover ? .clear : c.border, lineWidth: 1)
+        }
         .padding(.horizontal, 16)
     }
 
@@ -900,10 +931,10 @@ struct PublicProfileView: View {
     /// stands a dead pill of the same shape. Same chrome, same footprint, so
     /// switching between the two views doesn't move anything under the thumb.
     @ViewBuilder
-    private func heroAction(_ c: AppTheme.Colors) -> some View {
+    private func heroAction(_ c: AppTheme.Colors, onCover: Bool = false) -> some View {
         if isOwnProfile {
             Text(AppStrings.previewThisIsYou(lang.language))
-                .socialActionButton(.inert, colors: c, width: 130)
+                .socialActionButton(.inert, colors: c, width: 130, onCover: onCover)
                 .accessibilityIdentifier("profile_this_is_you")
                 .accessibilityAddTraits(.isStaticText)
         } else if !auth.isSignedIn || profile?.isFollowing != nil {
@@ -912,12 +943,13 @@ struct PublicProfileView: View {
             // on non-nil alone hid the primary Figma CTA (117:931) — and
             // its sign-in funnel — from every signed-out viewer. The
             // button's own guard routes guests to the sign-in prompt.
-            followButton(c, lng: lang.language)
+            followButton(c, lng: lang.language, onCover: onCover)
         }
     }
 
     @ViewBuilder
-    private func followButton(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
+    private func followButton(_ c: AppTheme.Colors, lng: LanguageManager.Language,
+                              onCover: Bool = false) -> some View {
         let isFollowing = profile?.isFollowing ?? false
         Button {
             Haptics.action()
@@ -933,7 +965,7 @@ struct PublicProfileView: View {
                         .scaleEffect(0.7)
                         // Matches the chrome it spins on: the done state is an
                         // accent tint with accent ink, not a grey chip.
-                        .tint(isFollowing ? AppTheme.accent : .white)
+                        .tint(isFollowing && !onCover ? AppTheme.accent : .white)
                 }
                 Text(isFollowing
                      ? (AppStrings.notificationsInboxFollowing(lng))
@@ -948,7 +980,7 @@ struct PublicProfileView: View {
             }
             // Pinned to canon's 130pt (117:969) so it keeps the footprint of
             // the «Это вы» pill that stands in its place on your own preview.
-            .socialActionButton(isFollowing ? .done : .primary, colors: c, width: 130)
+            .socialActionButton(isFollowing ? .done : .primary, colors: c, width: 130, onCover: onCover)
         }
         .buttonStyle(.plain)
         .disabled(isTogglingFollow)
@@ -1057,7 +1089,7 @@ struct PublicProfileView: View {
             // caption. `minimumScaleFactor` rather than a smaller size: only
             // «2 430» in a third of a 360pt phone ever needs to give way.
             Text(value)
-                .font(.system(size: 22, weight: .heavy).monospacedDigit())
+                .font(.inter(22, weight: .heavy).monospacedDigit())
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -1454,7 +1486,10 @@ struct PublicProfileView: View {
                                 Haptics.tap()
                                 selectedBadge = badge
                             } label: {
-                                badgeChip(badge, iconSize: 15)
+                                // Same tile as the strip on «Я» (0.8.2): the
+                                // engraving on its rarity fill. The SF glyph
+                                // in a disc predates the drawn badges.
+                                BadgeTile(badge: badge)
                             }
                             .buttonStyle(.plain)
                             .frame(maxWidth: .infinity)
@@ -1547,7 +1582,8 @@ struct PublicProfileView: View {
             selectedBadge = badge
         } label: {
             HStack(spacing: 10) {
-                badgeChip(badge, iconSize: 16)
+                // Featured — no tile, as on «Я»: the row is its own plate.
+                BadgeArt(badge: badge, side: 40)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(badge.title(lang.language))
@@ -1581,21 +1617,6 @@ struct PublicProfileView: View {
             parts.append(Badge.unlockShareText(percent, lang.language) + "%")
         }
         return parts.joined(separator: " · ")
-    }
-
-    /// The 30pt rarity disc (canon 1667:213). Two colours only — the glyph
-    /// takes the tier's ink, not `badge.color`, so a green glyph never lands
-    /// inside a purple ring.
-    private func badgeChip(_ badge: Badge, iconSize: CGFloat) -> some View {
-        let rarity = badge.displayRarity
-        return ZStack {
-            Circle().fill(rarity.chipTint)
-            Circle().strokeBorder(rarity.chipRing, lineWidth: 1.5)
-            Image(systemName: badge.icon)
-                .font(.system(size: iconSize))
-                .foregroundStyle(rarity.chipText)
-        }
-        .frame(width: 30, height: 30)
     }
 
     // MARK: - Находки (0.7.0)
@@ -1685,15 +1706,12 @@ struct PublicProfileView: View {
         return parts.joined(separator: ". ")
     }
 
-    /// Canon page header (580:490) — the 11pt uppercase tertiary label every
-    /// other social screen already uses. Note the achievements CARD titles
-    /// itself differently, in 16 heavy inside its own surface (1667:208).
+    /// The house section heading, the same as «Достижения» and «Находки» on
+    /// this screen (0.8.9). Until then the trips heading was 11 pt grey
+    /// capitals next to two headings in the house style — one screen, two
+    /// looks for one role.
     private func sectionHeader(_ title: String, c: AppTheme.Colors) -> some View {
-        Text(title)
-            .font(.inter(11, weight: .semibold))
-            .tracking(0.44)
-            .textCase(.uppercase)
-            .foregroundStyle(c.textTertiary)
+        ProfileSectionLabel(text: title)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

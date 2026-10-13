@@ -76,7 +76,16 @@ final class VehicleUnitsStayOutOfRewardsTests: XCTestCase {
     /// 0.6.7 ВЫВОДИТСЯ из приборки (`Vehicle.consumptionUnit(app:)`), то есть
     /// это та же единица машины, только под другим именем — и попасть в сводку
     /// она может, не написав ни разу слова «dashboard».
-    private static let tokens = ["dashboardUnit", "DashboardUnits", "consumptionUnit"]
+    /// Энергия (0.8.3) — четвёртым и по той же логике. `electricUnit` это
+    /// снова та же единица машины под третьим именем, а `EnergyEstimate` и
+    /// `powertrain` — дверь, через которую в наградный файл заходит машина
+    /// целиком: «посчитаем опыт по тому, сколько проехали на батарее» — ровно
+    /// то предложение, после которого уровень у половины гаража станет другим.
+    /// Награды считают `Trip.rewardKm` и больше ничего.
+    private static let tokens = [
+        "dashboardUnit", "DashboardUnits", "consumptionUnit",
+        "electricUnit", "ElectricUnit", "EnergyEstimate", "powertrain", "Powertrain",
+    ]
 
     /// Читает те же исходники и тем же инструментом, что `UnitsDisciplineTests`:
     /// комментарии сняты, литералы на месте. Единица, ОБЪЯСНЁННАЯ словами, —

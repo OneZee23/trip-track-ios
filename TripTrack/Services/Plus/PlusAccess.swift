@@ -50,6 +50,12 @@ final class PlusAccess: ObservableObject {
             isPlus = true
             storefrontHidesPlus = false
         }
+        // Витрина продаёт, прав НЕТ — состояния, которые смотрит ревью Apple.
+        // `isPlus` здесь не трогается нарочно: у подписчика продающих
+        // состояний не бывает.
+        if PlusStore.isDebugStorefront {
+            storefrontHidesPlus = false
+        }
         #endif
     }
 }

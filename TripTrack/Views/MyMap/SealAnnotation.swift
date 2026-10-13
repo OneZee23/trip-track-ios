@@ -105,7 +105,7 @@ final class SealClusterView: MKAnnotationView {
 
         label.frame = bounds
         label.textAlignment = .center
-        label.font = .systemFont(ofSize: 12, weight: .heavy)
+        label.font = .inter(12, weight: .heavy)
         addSubview(label)
         configure()
     }
