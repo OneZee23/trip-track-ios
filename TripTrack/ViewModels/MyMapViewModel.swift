@@ -1,5 +1,6 @@
 import Foundation
 import MapKit
+import OSLog
 import SwiftUI
 
 /// Data source for the 0.6.0 «Моя карта» screen (Figma page «🧭 Карта»).
@@ -174,6 +175,10 @@ final class MyMapViewModel: ObservableObject {
     /// «не удалось загрузить» — экран пишет разное.
     @Published private(set) var remoteFailed = false
 
+    /// Журнал чужой карты. Подсистема `com.triptrack` — её и берёт
+    /// «Отправить логи» (`DebugLogExporter`).
+    private static let mapLog = Logger(subsystem: "com.triptrack", category: "publicmap")
+
     /// Чужая карта (0.6.3). Обычный init, а НЕ `.shared`: синглтон переживает
     /// переключение табов и держит состояние карты владельца — чужой аккаунт,
     /// заехавший в него, стёр бы её.
@@ -195,11 +200,13 @@ final class MyMapViewModel: ObservableObject {
         let generation = loadGeneration
         if exploration.isEmpty { isLoading = true }
 
+        let started = CFAbsoluteTimeGetCurrent()
         await RegionAtlas.shared.loadIfNeeded()
 
         let result = await remoteSource.load()
         let trips = result.trips
         let atlas = RegionAtlas.shared
+        let fetched = CFAbsoluteTimeGetCurrent()
 
         let built = await Task.detached(priority: .userInitiated) {
             let hashes = TerritoryManager.geohashes(
@@ -214,6 +221,16 @@ final class MyMapViewModel: ObservableObject {
         }.value
 
         guard generation == loadGeneration else { return }
+        // «Карта зависает и греет телефон» (13 окт 2026) — чтобы следующий
+        // такой репорт приезжал с цифрами в «Отправить логи»: сколько ждали
+        // сеть и сколько считали, сколько поездок, точек и линий получила
+        // карта. Только числа — ни id, ни координат.
+        let done = CFAbsoluteTimeGetCurrent()
+        let points = trips.reduce(0) { $0 + ($1.previewPolyline?.count ?? 0) / 8 }
+        let lines = "\(built.1.fine.polylines.count)/\(built.1.mid.polylines.count)/\(built.1.far.polylines.count)"
+        let fetchMs = Int((fetched - started) * 1000)
+        let buildMs = Int((done - fetched) * 1000)
+        Self.mapLog.notice("public map: trips=\(trips.count, privacy: .public) points=\(points, privacy: .public) lines=\(lines, privacy: .public) fetch=\(fetchMs, privacy: .public)ms build=\(buildMs, privacy: .public)ms failed=\(result.failed, privacy: .public)")
 
         // Под тем же гейтом, что и всё остальное: обогнавшая устаревшая
         // загрузка иначе накрыла бы свежие маршруты сообщением об отказе.
