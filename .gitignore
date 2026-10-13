@@ -68,3 +68,5 @@ Tools/__pycache__/
 
 # Overpass/Wikidata response cache for Tools/build_secrets.py
 Tools/cache/
+# build_map_regions.py output; the bundled copy is TripTrack/Resources/MapRegions.json
+Tools/map_regions.json

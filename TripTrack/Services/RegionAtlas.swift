@@ -35,9 +35,17 @@ final class RegionAtlas {
         /// 35 000-vertex atlas out of per-coordinate allocations, which is
         /// what makes point-in-polygon cheap enough to run per track point.
         let rings: [[Double]]
+        /// Names in the other app languages, keyed by `Language.rawValue`
+        /// (0.9.0): «Bayern» for a German phone, not «Bavaria». Missing for
+        /// a language Natural Earth has no column for (kk, fil) — English then.
+        var localNames: [String: String] = [:]
 
         func localizedName(_ language: LanguageManager.Language) -> String {
-            language == .ru ? nameRu : nameEn
+            switch language {
+            case .ru: return nameRu
+            case .en: return nameEn
+            default: return localNames[language.rawValue] ?? nameEn
+            }
         }
     }
 
@@ -298,6 +306,8 @@ final class RegionAtlas {
             let c: [Double]
             let b: [Double]
             let r: [[Double]]
+            /// Other languages (0.9.0); absent in bundles built before it.
+            let l: [String: String]?
         }
         struct RawCountry: Decodable {
             let id: String
@@ -397,7 +407,8 @@ final class RegionAtlas {
                 nameEn: en,
                 center: CLLocationCoordinate2D(latitude: raw.c[0], longitude: raw.c[1]),
                 bounds: GeoBounds(minLat: raw.b[0], maxLat: raw.b[2], minLon: raw.b[1], maxLon: raw.b[3]),
-                rings: raw.r
+                rings: raw.r,
+                localNames: raw.l ?? [:]
             ))
             indexById[raw.id] = index
 

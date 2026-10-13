@@ -28,14 +28,17 @@ final class MapRegionsBundleTests: XCTestCase {
         throw XCTSkip("MapRegions.json not resolvable from the test bundle")
     }
 
-    /// 1.5 MB, not the earlier 4 MB: `countries[].r` (the world's country
-    /// outlines, drawn nowhere since 17 September — the owner's device showed
-    /// the border visibly offset near Japan/Philippines at world zoom, and
-    /// geopolitics has no place on this map besides) is gone from the bundle.
-    func testBundleSizeStaysUnderOnePointFiveMegabytes() throws {
+    /// 8.5 MB since 0.9.0: regions for every country Natural Earth splits,
+    /// not twenty (owner, 13 Oct 2026: «регионы надо добавить максимально
+    /// все»). The world is 4 273 regions and 7.6 MB of JSON — about 2.4 MB in
+    /// the compressed app download; it is parsed once, off the main actor, in
+    /// ~0.6 s (`WorldRegionsTests`). The ceiling is here so the NEXT growth
+    /// is a decision in a diff, not drift: 1.5 MB held the twenty-country
+    /// bundle after `countries[].r` was dropped on 17 September.
+    func testBundleSizeStaysUnderEightAndAHalfMegabytes() throws {
         let url = try Self.bundleURL()
         let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? .max
-        XCTAssertLessThanOrEqual(size, Int(1.5 * 1024 * 1024), "\(size) bytes")
+        XCTAssertLessThanOrEqual(size, Int(8.5 * 1024 * 1024), "\(size) bytes")
     }
 
     /// Below twelve points a LARGE region reads as an octagon, not a border —
@@ -66,12 +69,18 @@ final class MapRegionsBundleTests: XCTestCase {
             let latSpan = region.bounds.maxLat - region.bounds.minLat
             let lonSpan = region.bounds.maxLon - region.bounds.minLon
             let span = (latSpan * latSpan + lonSpan * lonSpan).squareRoot()
-            if span >= 0.25 {
+            if span >= 0.25, !Self.sparseInSource.contains(region.id) {
                 XCTAssertGreaterThanOrEqual(vertexCount, 12,
                     "\(region.id) spans \(span)° but has only \(vertexCount) vertices")
             }
         }
     }
+
+    /// Regions whose Natural Earth geometry ITSELF has under twelve points
+    /// (checked against the raw source on 13 Oct 2026: 5–10 points each) — the
+    /// world bundle brought them in. The floor guards against RDP throwing
+    /// detail away; demanding twelve here would mean inventing a border.
+    private static let sparseInSource: Set<String> = ["MR-NKC", "SO-BN", "QA-US", "BW-JW"]
 
     /// Frozen hit vectors. Batumi and Kobuleti sit on the same coast road,
     /// and both must resolve to the same region for «до моря N км» to agree

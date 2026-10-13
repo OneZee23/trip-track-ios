@@ -123,6 +123,41 @@ COUNTRIES = {
     "NOR": ("NO", "Норвегия", "Norway"),
 }
 
+# 0.9.0 (13 Oct 2026, owner: «регионы надо добавить максимально все»): every
+# OTHER country Natural Earth splits into at least two first-level regions is
+# added on top of the hand-picked twenty above. The twenty keep their entries
+# untouched — their region ids are already stored in people's data (visited
+# regions, kilometres per region), and their country names are product
+# decisions. Germany, Spain, the US and France were the first storefronts by
+# downloads 13 Sep – 10 Oct and showed «0 регионов» until now.
+def all_region_countries(admin1):
+    counts = {}
+    for f in admin1["features"]:
+        a3 = f["properties"].get("adm0_a3")
+        counts[a3] = counts.get(a3, 0) + 1
+    out = {}
+    for f in admin1["features"]:
+        p = f["properties"]
+        a3 = p.get("adm0_a3")
+        if a3 in COUNTRIES or a3 in out or counts.get(a3, 0) < 2:
+            continue
+        a2 = (p.get("iso_a2") or "").upper()
+        if len(a2) != 2 or not a2.isalpha():
+            a2 = (p.get("iso_3166_2") or "")[:2].upper()
+        if len(a2) != 2 or not a2.isalpha():
+            continue  # disputed or unassigned territory with no usable code
+        out[a3] = (a2, p.get("admin"), p.get("admin"))
+    return out
+
+
+# Region names in the app's languages (beyond ru/en), straight from Natural
+# Earth's `name_xx`. Kazakh and Filipino have no column there and fall back to
+# English in the app — an honest name, not a machine translation.
+NAME_LANGS = ("de", "es", "fr", "it", "pl", "id", "tr", "uk", "pt")
+
+# The original twenty, frozen before `all_region_countries` extends COUNTRIES.
+HAND_PICKED = dict(COUNTRIES)
+
 # Natural Earth swaps the two Moscow ISO codes (city ↔ oblast). Display names
 # are right, ids are not — and the id is what everything else keys on.
 ISO_FIXES = {("Москва", "RU-MOS"): "RU-MOW", ("Московская область", "RU-MOW"): "RU-MOS"}
@@ -215,7 +250,18 @@ def simplify_rings(rings, min_span, max_rings, detail=0.002, lo=0.003, hi=0.012,
             if len(ring) <= 24:
                 simple = ring
             else:
-                simple = rdp(ring, max(lo, min(hi, span * detail)) * scale)
+                eps = max(lo, min(hi, span * detail)) * scale
+                simple = rdp(ring, eps)
+                # 0.9.0: a large, nearly rectangular region (Colorado,
+                # Wyoming, Utah, Saskatchewan) RDP'd down to 5–8 corners of
+                # 170–200 source points. It still draws as a box, but its edges
+                # move far enough that a drive along the border lands in the
+                # wrong state. Tighten until the ring keeps the twelve vertices
+                # `MapRegionsBundleTests` holds every large region to — rings
+                # that already had them are never touched.
+                while len(simple) < 12 and eps > 1e-5:
+                    eps /= 2
+                    simple = rdp(ring, eps)
             if len(simple) < 4:
                 continue
             out.append((span, simple))
@@ -396,7 +442,9 @@ def build_countries(regions, include_rings=False):
     copy) and for a future label anchor, just no ring to trace.
     """
     admin0 = json.load(open(ADMIN0_PATH, encoding="utf-8"))
-    by_cc = {cc: (ru, en) for cc, ru, en in COUNTRIES.values()}
+    # Hand-picked names only for the original twenty; every added country
+    # takes NAME_RU/NAME_EN from admin-0, exactly as it did before 0.9.0.
+    by_cc = {cc: (ru, en) for cc, ru, en in HAND_PICKED.values()}
     centroids_by_cc = {}
     for region in regions:
         centroids_by_cc.setdefault(region["cc"], []).append(region["c"])
@@ -404,7 +452,7 @@ def build_countries(regions, include_rings=False):
     grouped = {}
     for feat in admin0["features"]:
         p = feat["properties"]
-        entry = COUNTRIES.get(p.get("ADM0_A3"))
+        entry = HAND_PICKED.get(p.get("ADM0_A3"))
         if entry is not None:
             code = entry[0]
         else:
@@ -454,6 +502,7 @@ def main():
     ensure_cached()
 
     admin1 = json.load(open(ADMIN1_PATH, encoding="utf-8"))
+    COUNTRIES.update(all_region_countries(admin1))
     cities_raw = json.load(open(RU_CITIES_PATH, encoding="utf-8"))
     english = english_city_names()
 
@@ -467,6 +516,7 @@ def main():
     # `RegionAtlas.regionIndexById` silently drop one of the two.
     grouped_geoms = {}
     meta = {}       # rid -> (cc, ru, en, raw point count of its biggest contributor)
+    local_names = {}  # rid -> {lang: name} for NAME_LANGS, from the same feature
     for feat in admin1["features"]:
         p = feat["properties"]
         entry = COUNTRIES.get(p.get("adm0_a3"))
@@ -486,6 +536,12 @@ def main():
         points = sum(len(r) for r in geoms)
         if rid not in meta or points > meta[rid][3]:
             meta[rid] = (cc, ru, en, points)
+            names = {}
+            for lang in NAME_LANGS:
+                value = (p.get(f"name_{lang}") or "").strip()
+                if value and value != en:
+                    names[lang] = value
+            local_names[rid] = names
 
     for rid, raw_rings in grouped_geoms.items():
         cc, ru, en, _ = meta[rid]
@@ -509,7 +565,7 @@ def main():
         if not rings:
             continue
         flat_rings = [flat(r) for r in rings]
-        regions.append({
+        row = {
             "id": rid,
             "cc": cc,
             "ru": ru,
@@ -517,7 +573,10 @@ def main():
             "c": centroid_of(flat_rings),
             "b": bbox_of(flat_rings),
             "r": flat_rings,
-        })
+        }
+        if local_names.get(rid):
+            row["l"] = local_names[rid]
+        regions.append(row)
 
     countries = build_countries(regions, include_rings=not args.no_country_rings)
 
