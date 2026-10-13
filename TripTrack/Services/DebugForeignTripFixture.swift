@@ -40,13 +40,26 @@ enum DebugForeignTripFixture {
     /// The author's public map, offline (12 Oct 2026). `-debug-foreign-map`
     /// picks the library: `france` (default) — two long drives through France,
     /// a country the region atlas does not split into regions, the case behind
-    /// «0 регионов»; `heavy` — hundreds of long drives across Russia, the
-    /// library that made the map hang on a real phone.
+    /// «0 регионов»; `heavy` — hundreds of long drives across Russia (a stress
+    /// load, nine times the points of any real map); `real` — the shape of the
+    /// heaviest real public map, the one that ran a phone hot on 13 Oct.
     static var mapVariant: String {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-debug-foreign-map"), i + 1 < args.count else { return "france" }
         return args[i + 1]
     }
+
+    /// Preview points and kilometres of each trip of the heaviest real public
+    /// map, read as counts only on 13 Oct 2026.
+    static let realShape: [(points: Int, km: Double)] = [
+        (7405, 1592), (6896, 1618), (5026, 1132), (4406, 1144), (3989, 873), (3934, 629),
+        (3322, 689), (3267, 770), (3223, 637), (3111, 781), (3080, 549), (3059, 571),
+        (2836, 863), (2828, 853), (2792, 639), (2733, 825), (2713, 572), (2618, 631),
+        (2570, 424), (2558, 638), (2537, 555), (2507, 552), (2006, 552), (1900, 253),
+        (1733, 592), (1687, 336), (1585, 386), (1578, 445), (1485, 659), (1480, 340),
+        (1426, 653), (1352, 359), (1311, 609), (1236, 401), (1227, 277), (1150, 278),
+        (1075, 599), (995, 274), (827, 123), (772, 405), (732, 277), (471, 142), (359, 94),
+    ]
 
     private static func publicTrips() -> [[String: Any]] {
         let iso = ISO8601DateFormatter()
@@ -68,6 +81,21 @@ enum DebugForeignTripFixture {
                 "region": region,
                 "previewPolyline": Trip.encodePolyline(coordinates).base64EncodedString(),
             ]
+        }
+        if mapVariant == "real" {
+            // The shape of the heaviest real public map (13 Oct 2026): 43
+            // trips, the same preview sizes and distances, 103 797 points,
+            // spread over 50–60° N and 48–130° E. Counts only — no person's
+            // coordinates are copied; the routes are synthetic.
+            return realShape.enumerated().map { i, t in
+                let a = Double(i)
+                let from = CLLocationCoordinate2D(latitude: 50 + (a * 3.7).truncatingRemainder(dividingBy: 10),
+                                                  longitude: 48 + (a * 19).truncatingRemainder(dividingBy: 82))
+                // ~1 degree per 70 km eastward, as a long drive goes.
+                let to = CLLocationCoordinate2D(latitude: from.latitude + sin(a) * 2,
+                                                longitude: from.longitude + t.km / 70)
+                return trip(i, from: from, to: to, points: t.points, wiggle: 0.04, km: t.km, region: "Russia")
+            }
         }
         if mapVariant == "heavy" {
             // A library like the heaviest real one: ~600 long drives criss-
