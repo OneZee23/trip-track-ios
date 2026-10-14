@@ -71,9 +71,13 @@ enum ProfileBackground: String, CaseIterable, Identifiable {
         from(raw).effective(isPlus: isPlus)
     }
 
+    /// Имя собственное, как «Gold» у рамки, и поэтому мимо `AppStrings`.
+    /// У `.none` имени нет: «Обычный» переводится и подставляется экраном
+    /// (`AppStrings.cosmeticDefaultOption`), иначе первая плитка витрины
+    /// говорила «Default» по-английски на всех языках.
     var displayName: String {
         switch self {
-        case .none:     return "Default"
+        case .none:     return ""
         case .sunset:   return "Sunset"
         case .ocean:    return "Ocean"
         case .forest:   return "Forest"

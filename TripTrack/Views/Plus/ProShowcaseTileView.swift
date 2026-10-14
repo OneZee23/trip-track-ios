@@ -12,6 +12,25 @@ struct ProShowcaseTileView: View {
     let isLocked: Bool
 
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject private var lang: LanguageManager
+
+    /// Подпись плитки. Имена вариантов — имена собственные («Sunset»,
+    /// «Gold») и не переводятся; переводится ровно одно — «без варианта», и
+    /// подставляет его экран (правило `AvatarFrame.displayName`). До 14 окт
+    /// 2026 фон профиля нарушал это правило и подписывал свою первую плитку
+    /// «Default» по-английски на всех тринадцати языках. Карточка машины
+    /// подписи не несёт вовсе — на ней уже написано имя машины.
+    static func label(
+        for tile: ProShowcase.Tile, kind: ProShowcaseKind, _ l: LanguageManager.Language
+    ) -> String? {
+        if tile.id.isEmpty {
+            switch kind {
+            case .profileBackground, .avatarFrame: return AppStrings.cosmeticDefaultOption(l)
+            case .vehicleCard, .routeLine: return nil
+            }
+        }
+        return tile.name.isEmpty ? nil : tile.name
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -33,8 +52,8 @@ struct ProShowcaseTileView: View {
                 }
             }
 
-            if !tile.name.isEmpty {
-                Text(tile.name)
+            if let name = Self.label(for: tile, kind: kind, lang.language) {
+                Text(name)
                     .font(.inter(11, weight: .medium))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.textSecondary)
                     .lineLimit(1)
