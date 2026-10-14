@@ -701,11 +701,37 @@ struct ManualTripSheet: View {
                     .foregroundStyle(c.textSecondary)
             }
         } else if let text = problemText {
-            Text(text)
-                .font(.interScaled(14, weight: .semibold))
-                .foregroundStyle(AppTheme.red)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("manual_trip_error")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(text)
+                    .font(.interScaled(14, weight: .semibold))
+                    .foregroundStyle(AppTheme.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("manual_trip_error")
+                // Сеть и сбой Apple проходят сами — у них есть «Повторить».
+                // «Нет дороги» повтором не лечится: там меняют точки, и
+                // кнопка, которая ничего не изменит, хуже отсутствующей.
+                if canRetryRoute {
+                    Button {
+                        Haptics.tap()
+                        model.recomputeRoute()
+                    } label: {
+                        Text(AppStrings.retry(lang.language))
+                            .font(.interScaled(15, weight: .semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityIdentifier("manual_trip_retry_route")
+                }
+            }
+        }
+    }
+
+    private var canRetryRoute: Bool {
+        switch model.routeError {
+        case .offline?, .failed?: return true
+        case .noRoute?, .tooManyStops?, nil: return false
         }
     }
 
