@@ -74,6 +74,22 @@
   (`…NeverReprocessedAsARecording`, `…RepairDropsStraightFills…`),
   `ManualTripShotTests`, `PublicMapSummaryTests`, `PublicMapRegionsTileTests`.
 
+## Админка и сборка 84 (14 окт)
+
+Владелец: «хочу админку, смотреть и управлять внутренне, под своим
+аккаунтом» — выбрано «в приложении», «смотреть + флаги».
+
+- Сервер `f60c1f3` (`feat: admin endpoints`) выкачен 14 окт в 07:30 МСК
+  штатным CI: `POST /admin/{summary,subscriptions,events,flags,flag}` под
+  `JwtAuthGuard` + `AdminGuard` (`is_admin` из базы на каждом запросе).
+  Ошибок в логе с запуска — ноль; без токена — `USER_NOT_AUTH`; запросы
+  проверены на проде в транзакции только на чтение. Откат —
+  `trip-track-backend:rollback-before-admin-20261014` и `rollback.sh` в
+  `~/trip-track-deployments/` на сервере.
+- Приложение: Настройки → «Админ» → «Админка» (`AdminPanelView`).
+- Сборка 84 — исходник `5e590301`, архив проверен `verify.py`, загружена
+  14 окт в 07:37 МСК.
+
 ## Сборка 83 для TestFlight
 
 Владелец 13 окт: «Конечно собери сборку». Исходник `cdcd60fa` (ветка
