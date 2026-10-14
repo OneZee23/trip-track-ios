@@ -13,6 +13,8 @@ struct ProPaywallView: View {
     /// единственная кнопка, и ведёт она обратно к набранной поездке, а не в
     /// витрину фонов (состояние 36б).
     var origin: ProBoughtView.Origin = .storefront
+    /// Какую витрину открывает «Вы в PRO» (`PlusPaywallSheet.nextKind`).
+    var nextKind: ProShowcaseKind? = .profileBackground
     let onPickBackground: () -> Void
     let onClose: () -> Void
 
@@ -66,6 +68,7 @@ struct ProPaywallView: View {
                               until: store.displayExpiry,
                               isTrial: store.state == .trial,
                               yearlyPrice: plans.first { $0.period == .yearly }?.displayPrice,
+                              nextKind: nextKind,
                               onPickBackground: onPickBackground,
                               onClose: onClose)
             } else {

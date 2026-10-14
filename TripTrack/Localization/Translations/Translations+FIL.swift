@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Naghihintay ang mga background, frame at kulay ng linya sa kani-kanilang showcase. Ang mga manu-manong biyahe ay maaari nang idagdag mula sa Kasaysayan.",
         "proBoughtBadge": "Ang badge na PRO sa tabi ng inyong pangalan ay maaaring patayin sa Privacy",
         "proBoughtPickBg": "Pumili ng background ng profile",
+        "proBoughtPickFrame": "Pumili ng frame ng avatar",
+        "proBoughtPickLine": "Pumili ng kulay ng ruta",
         "proBoughtBackToTrip": "Bumalik sa biyahe",
         "proCtxM1Title": "Sampung biyahe na. Puwedeng magkaitsura ang inyong profile",
         "proCtxM1Text": "8 background at 6 frame sa PRO: sa profile ang background, sa feed din ang frame",

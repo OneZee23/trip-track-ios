@@ -21,6 +21,9 @@ struct ProBoughtView: View {
     let isTrial: Bool
     /// Цена года напечатанной витриной.
     let yearlyPrice: String?
+    /// Витрина того, ради чего купили (`PlusPaywallSheet.nextKind`). `nil` —
+    /// купленное правят там, откуда пришли (машина), и кнопка закрывает.
+    var nextKind: ProShowcaseKind? = .profileBackground
     let onPickBackground: () -> Void
     let onClose: () -> Void
 
@@ -89,22 +92,39 @@ struct ProBoughtView: View {
             primary(AppStrings.proBoughtBackToTrip(l), action: onClose)
                 .accessibilityIdentifier("pro_bought_back_to_trip")
         case .storefront:
-            primary(AppStrings.proBoughtPickBg(l), action: onPickBackground)
-                .accessibilityIdentifier("pro_bought_pick_bg")
-            Button {
-                Haptics.tap()
-                onClose()
-            } label: {
-                Text(AppStrings.commonLater(l))
-                    .font(AppType.action)
-                    .foregroundStyle(c.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
+            if let kind = nextKind {
+                primary(Self.pickTitle(kind, l), action: onPickBackground)
+                    .accessibilityIdentifier("pro_bought_pick_bg")
+                Button {
+                    Haptics.tap()
+                    onClose()
+                } label: {
+                    Text(AppStrings.commonLater(l))
+                        .font(AppType.action)
+                        .foregroundStyle(c.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+                .accessibilityIdentifier("pro_bought_later")
+            } else {
+                // Купленное уже под рукой — одна кнопка, и она закрывает.
+                primary(AppStrings.commonOk(l), action: onClose)
+                    .accessibilityIdentifier("pro_bought_done")
             }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
-            .accessibilityIdentifier("pro_bought_later")
+        }
+    }
+
+    /// «Выбрать фон профиля» / «…рамку аватара» / «…цвет линии» — тем самым,
+    /// что купили.
+    static func pickTitle(_ kind: ProShowcaseKind, _ l: LanguageManager.Language) -> String {
+        switch kind {
+        case .profileBackground: return AppStrings.proBoughtPickBg(l)
+        case .avatarFrame: return AppStrings.proBoughtPickFrame(l)
+        case .routeLine: return AppStrings.proBoughtPickLine(l)
+        case .vehicleCard: return AppStrings.commonOk(l)
         }
     }
 

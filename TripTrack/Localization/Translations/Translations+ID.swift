@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Latar, bingkai dan warna garis menunggu di etalasenya masing-masing. Perjalanan manual sekarang bisa ditambahkan dari Riwayat.",
         "proBoughtBadge": "Lencana PRO di samping nama Anda bisa dimatikan di Privasi",
         "proBoughtPickBg": "Pilih latar profil",
+        "proBoughtPickFrame": "Pilih bingkai avatar",
+        "proBoughtPickLine": "Pilih warna rute",
         "proBoughtBackToTrip": "Kembali ke perjalanan",
         "proCtxM1Title": "Sudah sepuluh perjalanan. Profil Anda bisa punya tampilan",
         "proCtxM1Text": "8 latar dan 6 bingkai di PRO: latar tampil di profil, bingkai juga di feed",

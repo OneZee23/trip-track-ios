@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Hintergründe, Rahmen und die Linienfarbe warten in ihren Auslagen. Nachgetragene Fahrten lassen sich jetzt aus der Historie hinzufügen.",
         "proBoughtBadge": "Das PRO-Zeichen neben Ihrem Namen lässt sich in der Privatsphäre abschalten",
         "proBoughtPickBg": "Profilhintergrund wählen",
+        "proBoughtPickFrame": "Avatar-Rahmen wählen",
+        "proBoughtPickLine": "Routenfarbe wählen",
         "proBoughtBackToTrip": "Zurück zur Fahrt",
         "proCtxM1Title": "Schon zehn Fahrten. Ihr Profil kann einen Look haben",
         "proCtxM1Text": "8 Hintergründe und 6 Rahmen in PRO: Hintergründe im Profil, Rahmen auch im Feed",

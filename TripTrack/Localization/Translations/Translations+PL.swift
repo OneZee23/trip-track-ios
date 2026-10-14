@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Tła, ramki i kolor linii czekają w swoich witrynach. Przejazdy dopisane ręcznie można teraz dodawać z Historii.",
         "proBoughtBadge": "Odznakę PRO przy imieniu można wyłączyć w Prywatności",
         "proBoughtPickBg": "Wybierz tło profilu",
+        "proBoughtPickFrame": "Wybierz ramkę awatara",
+        "proBoughtPickLine": "Wybierz kolor trasy",
         "proBoughtBackToTrip": "Wróć do przejazdu",
         "proCtxM1Title": "Już dziesięć przejazdów. Profil może mieć swój styl",
         "proCtxM1Text": "8 teł i 6 ramek w PRO: tło widać w profilu, ramkę także w feedzie",

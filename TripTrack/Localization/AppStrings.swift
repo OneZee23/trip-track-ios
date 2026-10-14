@@ -8128,6 +8128,12 @@ enum AppStrings {
         tr(lang, "proBoughtPickBg",
            ru: "Выбрать фон профиля", en: "Pick a profile background")
     }
+    static func proBoughtPickFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtPickFrame", ru: "Выбрать рамку аватара", en: "Pick an avatar frame")
+    }
+    static func proBoughtPickLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtPickLine", ru: "Выбрать цвет линии", en: "Pick a route colour")
+    }
     /// Купил из листа ручной поездки (состояние 36б) — возвращаемся к нему со
     /// всем набранным, а не на витрину и не в «Историю».
     static func proBoughtBackToTrip(_ lang: LanguageManager.Language) -> String {

@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Los fondos, los marcos y el color de la línea le esperan en sus escaparates. Los viajes añadidos a mano ya se pueden crear desde el Historial.",
         "proBoughtBadge": "La insignia PRO junto a su nombre se puede desactivar en Privacidad",
         "proBoughtPickBg": "Elegir fondo del perfil",
+        "proBoughtPickFrame": "Elegir marco de avatar",
+        "proBoughtPickLine": "Elegir color de ruta",
         "proBoughtBackToTrip": "Volver al viaje",
         "proCtxM1Title": "Ya diez viajes. Su perfil puede tener estilo",
         "proCtxM1Text": "8 fondos y 6 marcos en PRO: el fondo se ve en su perfil, el marco también en el feed",

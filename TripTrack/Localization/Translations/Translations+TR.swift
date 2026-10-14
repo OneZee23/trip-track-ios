@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Arka planlar, çerçeveler ve çizgi rengi kendi vitrinlerinde bekliyor. Elle eklenen geziler artık Geçmiş’ten eklenebilir.",
         "proBoughtBadge": "Adınızın yanındaki PRO işareti Gizlilik’te kapatılabilir",
         "proBoughtPickBg": "Profil arka planı seçin",
+        "proBoughtPickFrame": "Avatar çerçevesi seç",
+        "proBoughtPickLine": "Rota rengi seç",
         "proBoughtBackToTrip": "Geziye dön",
         "proCtxM1Title": "Zaten on gezi. Profiliniz bir görünüm kazanabilir",
         "proCtxM1Text": "PRO'da 8 arka plan ve 6 çerçeve: arka plan profilde, çerçeve akışta da görünür",

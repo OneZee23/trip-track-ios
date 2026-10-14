@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Fundos, molduras e a cor da linha esperam nas suas vitrines. As viagens lançadas à mão já podem ser criadas pelo Histórico.",
         "proBoughtBadge": "A medalha PRO ao lado do seu nome pode ser desligada na Privacidade",
         "proBoughtPickBg": "Escolher fundo do perfil",
+        "proBoughtPickFrame": "Escolher moldura do avatar",
+        "proBoughtPickLine": "Escolher cor da rota",
         "proBoughtBackToTrip": "Voltar à viagem",
         "proCtxM1Title": "Já são dez viagens. Seu perfil pode ter um visual",
         "proCtxM1Text": "8 fundos e 6 molduras no PRO: o fundo aparece no perfil, a moldura também no feed",

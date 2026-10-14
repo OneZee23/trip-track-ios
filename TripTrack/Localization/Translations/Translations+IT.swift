@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Sfondi, cornici e colore della linea La aspettano nelle loro vetrine. I viaggi inseriti a mano ora si aggiungono dalla Cronologia.",
         "proBoughtBadge": "Il distintivo PRO accanto al Suo nome si può spegnere in Privacy",
         "proBoughtPickBg": "Scelga lo sfondo del profilo",
+        "proBoughtPickFrame": "Scegli una cornice",
+        "proBoughtPickLine": "Scegli il colore del percorso",
         "proBoughtBackToTrip": "Tornare al viaggio",
         "proCtxM1Title": "Già dieci viaggi. Il Suo profilo può avere uno stile",
         "proCtxM1Text": "8 sfondi e 6 cornici in PRO: lo sfondo nel profilo, la cornice anche nel feed",

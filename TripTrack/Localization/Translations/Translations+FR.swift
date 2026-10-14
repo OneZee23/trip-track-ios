@@ -1485,6 +1485,8 @@ extension Translations {
         "proBoughtText": "Les fonds, les cadres et la couleur du tracé vous attendent dans leurs vitrines. Les trajets ajoutés à la main se créent maintenant depuis l’Historique.",
         "proBoughtBadge": "Le badge PRO à côté de votre nom peut se désactiver dans Confidentialité",
         "proBoughtPickBg": "Choisir un fond de profil",
+        "proBoughtPickFrame": "Choisir un cadre d’avatar",
+        "proBoughtPickLine": "Choisir la couleur du tracé",
         "proBoughtBackToTrip": "Revenir au trajet",
         "proCtxM1Title": "Déjà dix trajets. Votre profil peut avoir du style",
         "proCtxM1Text": "8 fonds et 6 cadres dans PRO : le fond sur votre profil, le cadre aussi dans le fil",

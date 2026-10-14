@@ -27,3 +27,23 @@ final class PublicCosmeticsTests: XCTestCase {
         XCTAssertFalse(try profile("").showsPaidCosmetics)
     }
 }
+
+/// «Вы в PRO» ведёт туда, ради чего купили (14 окт 2026).
+final class ProBoughtNextStepTests: XCTestCase {
+    func testLeadsToWhatWasBought() {
+        XCTAssertEqual(PlusPaywallSheet.nextKind(after: .avatarFrame), .avatarFrame)
+        XCTAssertEqual(PlusPaywallSheet.nextKind(after: .routeLineStyle), .routeLine)
+        XCTAssertEqual(PlusPaywallSheet.nextKind(after: .profileBackgrounds), .profileBackground)
+    }
+
+    /// Общий вход («Я», настройки) — фон, как раньше.
+    func testGeneralEntryStillOffersTheBackground() {
+        XCTAssertEqual(PlusPaywallSheet.nextKind(after: nil), .profileBackground)
+    }
+
+    /// Машину и вписанную поездку правят там, откуда пришли.
+    func testCarAndManualTripJustClose() {
+        XCTAssertNil(PlusPaywallSheet.nextKind(after: .vehicleCardStyle))
+        XCTAssertNil(PlusPaywallSheet.nextKind(after: .manualTrip))
+    }
+}
