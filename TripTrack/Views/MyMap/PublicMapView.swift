@@ -197,7 +197,7 @@ struct PublicMapView: View {
         var columns: [AtlasStatTrio.Column] = [
             .init(id: "trips", value: "\(trips)", unit: nil,
                   caption: AppStrings.tripsGenitive(l, count: trips)),
-            .init(id: "km", value: distance.value, unit: distance.unit,
+            .init(id: "distance", value: distance.value, unit: distance.unit,
                   caption: AppStrings.atlasTotalShort(l))
         ]
         // Ноль при непустых маршрутах — не число, а «мы не умеем считать
