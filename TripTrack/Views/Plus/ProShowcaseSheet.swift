@@ -170,7 +170,7 @@ struct ProShowcaseSheet: View {
                     id: settings.profileBackground, isPlus: plus.isPlus),
                 frame: AvatarFrame.from(shown))
         case .vehicleCard:
-            ProShowcasePreview.vehicle(style: VehicleCardStyle.from(shown))
+            ProShowcasePreview.vehicle(style: VehicleCardStyle.from(shown), vehicleID: vehicleID)
         case .routeLine:
             ProShowcasePreview.route(style: RouteLineStyle.from(shown), c)
         }
@@ -291,11 +291,23 @@ struct ProShowcaseSheet: View {
     ///
     /// У фона профиля и рамки аватара сноски нет: они видны в ленте и в
     /// профиле, то есть там же, где сам человек, и объяснять это нечем.
+    /// Под витриной — ПРАВДА о том, кто увидит выбор (14 окт 2026). Фон и
+    /// рамка уезжают с профилем, а профиль — только после входа; карточка
+    /// машины уезжает с гаражом, а гараж — только с облачной синхронизацией.
+    /// Обещать «видят другие» тому, у кого не видит никто, — то же, что
+    /// продать невидимую вещь.
     private func footnote(_ l: LanguageManager.Language) -> String? {
+        let signedIn = AuthService.shared.isSignedIn
         switch kind {
-        case .routeLine:   return AppStrings.routeLinePickerFootnote(l)
-        case .vehicleCard: return AppStrings.vehicleCardStylePickerFootnote(l)
-        case .profileBackground, .avatarFrame: return nil
+        case .routeLine:
+            return AppStrings.routeLinePickerFootnote(l)
+        case .vehicleCard:
+            guard signedIn, SettingsManager.shared.cloudSyncEnabled else {
+                return AppStrings.showcaseVisibleAfterSync(l)
+            }
+            return AppStrings.vehicleCardStylePickerFootnote(l)
+        case .profileBackground, .avatarFrame:
+            return signedIn ? nil : AppStrings.showcaseVisibleAfterSignIn(l)
         }
     }
 

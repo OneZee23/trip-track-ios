@@ -145,7 +145,21 @@ struct TipJarSheet: View {
             Haptics.action()
             Task {
                 await jar.buy(product)
-                guard jar.phase == .succeeded else { return }
+                // Неудача и «ждём подтверждения» больше не молчат (14 окт
+                // 2026): кнопка просто оживала, и понять, ушли ли деньги,
+                // было нечем. Отмену человек сделал сам — ей тост не нужен.
+                switch jar.phase {
+                case .failed:
+                    toastItem = ToastItem(type: .error, message: AppStrings.proFailed(lang.language))
+                    return
+                case .deferred:
+                    toastItem = ToastItem(type: .info, message: AppStrings.tipsAwaitingApproval(lang.language))
+                    return
+                case .succeeded:
+                    break
+                default:
+                    return
+                }
                 Haptics.success()
                 // Состояние 20 — СОСТОЯНИЕ листа, а не тост.
                 //

@@ -568,7 +568,10 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                renderer.strokeColor = UIColor(red: 194/255, green: 69/255, blue: 43/255, alpha: 0.8)
+                // Выбранный цвет PRO — и на записи: линия «на карте каждой
+                // поездки» начинается здесь.
+                renderer.strokeColor = RouteLineStyle.currentUIColor
+                    ?? UIColor(red: 194/255, green: 69/255, blue: 43/255, alpha: 0.8)
                 renderer.lineWidth = 4
                 renderer.lineCap = .round
                 renderer.lineJoin = .round

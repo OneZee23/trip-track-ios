@@ -8046,6 +8046,12 @@ enum AppStrings {
            ru: "Карточка машины стоит в вашем гараже и в публичном профиле. Пока машины нет, показываем пример.",
            en: "Your car card shows in your garage and on your public profile. There's no car yet, so this is an example.")
     }
+    /// Чаевые ждут одобрения (Ask To Buy / банк): деньги ещё не списаны.
+    static func tipsAwaitingApproval(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsAwaitingApproval",
+           ru: "Ждём подтверждения покупки — спасибо!",
+           en: "Waiting for the purchase to be approved — thank you!")
+    }
     static func proDemoCarEmptyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarEmptyTitle", ru: "Ваша машина", en: "Your car")
     }
@@ -8473,6 +8479,19 @@ enum AppStrings {
     }
 
     /// Подпись под пикером фона карточки: где именно он виден.
+    /// Под витриной фона и рамки, пока человек не вошёл: выбор работает у
+    /// него, а другим уезжает только с профилем.
+    static func showcaseVisibleAfterSignIn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseVisibleAfterSignIn",
+           ru: "Сейчас это видите только вы. Другие увидят после входа в аккаунт.",
+           en: "Only you see this for now. Others will see it once you sign in.")
+    }
+    /// Под витриной карточки машины без облака: гараж уезжает только с ним.
+    static func showcaseVisibleAfterSync(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseVisibleAfterSync",
+           ru: "Сейчас это видите только вы. Другие увидят после входа и включения синхронизации.",
+           en: "Only you see this for now. Others will see it once you sign in and turn on sync.")
+    }
     static func vehicleCardStylePickerFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleCardStylePickerFootnote",
            ru: "Фон видно на карточке этой машины — в гараже и в публичном профиле.",

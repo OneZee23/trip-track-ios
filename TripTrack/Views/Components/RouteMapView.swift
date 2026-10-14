@@ -1767,7 +1767,12 @@ struct RouteMapView: UIViewRepresentable {
             }
             if let polyline = overlay as? MKPolyline {
                 let renderer = routeRenderer(for: polyline)
-                renderer.strokeColor = UIColor(red: 252/255, green: 76/255, blue: 2/255, alpha: 0.9) // accent
+                // Линия без скоростей — чужая поездка, превью из синка, плечо
+                // путешествия. Выбранный цвет PRO красит и её: подпись выбора
+                // обещает «в том числе на чужих маршрутах» (14 окт 2026 —
+                // раньше здесь стоял один акцент, и обещание было неправдой).
+                renderer.strokeColor = RouteLineStyle.currentUIColor
+                    ?? UIColor(red: 252/255, green: 76/255, blue: 2/255, alpha: 0.9) // accent
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
