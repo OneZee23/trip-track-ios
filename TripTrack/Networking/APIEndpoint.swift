@@ -119,6 +119,13 @@ enum APIEndpoint {
     static let notificationsUnreadCount = "/notifications/unread-count"
     static let notificationsMarkRead    = "/notifications/mark-read"
 
+    /// Админка (0.9.0) — сервер пускает только `is_admin` (`ADMIN_ONLY`).
+    static let adminSummary            = "/admin/summary"
+    static let adminSubscriptions      = "/admin/subscriptions"
+    static let adminEvents             = "/admin/events"
+    static let adminFlags              = "/admin/flags"
+    static let adminFlag               = "/admin/flag"
+
     static let notificationPrefsGet     = "/auth/notification-prefs/get"
     static let notificationPrefsUpdate  = "/auth/notification-prefs/update"
 
