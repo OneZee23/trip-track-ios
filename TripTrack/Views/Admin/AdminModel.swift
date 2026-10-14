@@ -50,7 +50,16 @@ struct AdminFlag: Decodable, Identifiable, Equatable {
     let name: String
     /// `nil` — на сервере значения нет, действует вшитое в приложение.
     let enabled: Bool?
+    /// Вшитое в приложение значение. Переключатель «по умолчанию» стоит в
+    /// нём, а не в «выключено»: иначе включённый по умолчанию `fogMetal`
+    /// рисовался бы выключенным, и «включить и выключить обратно» гасило бы
+    /// туман у всех. Сервер без этого поля — `nil`, и тогда переключатель не
+    /// угадывает, а запрещён (`AdminPanelView`).
+    let builtIn: Bool?
     var id: String { name }
+
+    /// То, что сейчас видят люди: значение сервера, иначе вшитое.
+    var effective: Bool? { enabled ?? builtIn }
 }
 
 private struct AdminItems<T: Decodable>: Decodable { let items: [T] }
@@ -101,7 +110,7 @@ final class AdminModel: ObservableObject {
     /// отказ возвращает прежнее — и экран честно говорит, что не вышло.
     func setFlag(_ name: String, enabled: Bool) async {
         let before = flags
-        flags = flags.map { $0.name == name ? AdminFlag(name: name, enabled: enabled) : $0 }
+        flags = flags.map { $0.name == name ? AdminFlag(name: name, enabled: enabled, builtIn: $0.builtIn) : $0 }
         savingFlag = name
         defer { savingFlag = nil }
         do {

@@ -270,12 +270,14 @@ struct AdminPanelView: View {
                         Spacer(minLength: 8)
                         if model.savingFlag == flag.name { ProgressView().controlSize(.small) }
                         Toggle(flag.name, isOn: Binding(
-                            get: { flag.enabled ?? false },
+                            get: { flag.effective ?? false },
                             set: { value in Task { await model.setFlag(flag.name, enabled: value) } }
                         ))
                         .labelsHidden()
                         .tint(AppTheme.accent)
-                        .disabled(model.savingFlag != nil)
+                        // Не знаем, что видят люди, — не даём переключать
+                        // вслепую: первое же касание записало бы угаданное.
+                        .disabled(model.savingFlag != nil || flag.effective == nil)
                         .accessibilityIdentifier("admin_flag_\(flag.name)")
                     }
                     .padding(.horizontal, 16)
