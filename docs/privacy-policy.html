@@ -81,7 +81,7 @@
         <div class="lang-switch">English · <a href="privacy-policy-ru.html">Русский</a></div>
 
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated: October 12, 2026</p>
+        <p class="updated">Last updated: October 14, 2026</p>
 
         <h2>1. Overview</h2>
         <p>TripTrack is an iOS application for recording personal car trips. This Privacy Policy explains what information we collect, how we use it, and the choices you have. It applies to the TripTrack mobile app and any server infrastructure we operate ("Service").</p>
@@ -146,6 +146,11 @@
         <p>A new random code groups these counters; the server stores its SHA-256 hash. We do not attach an account ID, advertising ID, route, coordinates, distance, photos, notes or vehicle data. This is pseudonymous first-party analytics, not advertising tracking. As with any request, our infrastructure sees the connecting IP address (see 3.3).</p>
         <p>Turning the option off immediately clears the local counters and queues deletion of the server counters for the next connection. A deletion marker prevents delayed uploads from restoring them. Inactive records and deletion markers expire after 90 days. Opting in again creates a new code and starts fresh; uninstalling the app alone cannot send a deletion request. The legal basis for these optional counters is your consent, which you can withdraw at any time without affecting app features.</p>
 
+        <h3>3.7 PRO subscription and tips (from 0.8.4)</h3>
+        <p>PRO and tips are bought through the App Store. Only Apple sees your payment method, card and receipt; we never receive them. Apple sends our server a notification about each purchase, renewal, cancellation, billing problem and refund. If you are signed in, the app also sends us the purchase confirmation signed by Apple, and the purchase is linked to your account; if you are not signed in, the purchase stays anonymous and is not linked to anyone.</p>
+        <p>For a subscription we keep: the plan, whether it is a free trial, the end date, whether auto-renew is on, the status (active, grace period, expired or refunded) and Apple's transaction number. We use them so that PRO works on your second phone and so that people you share your profile with can see the paid look you chose. We keep no card, address or payment details.</p>
+        <p>The developer can see these records in an internal section of the app that is available only to the developer's own account: how many people are on a trial or paid, when a period ends and whether auto-renew is on. There are no names or e-mails there — only the last digits of the transaction number, the app language, the account creation date and the number of trips. For each subscription event the developer's phone also receives a notification with the plan, the price and the store country, without a name or e-mail. This is not advertising and is not shared with third parties.</p>
+
         <h2>4. Location Data — Detail</h2>
         <ul>
             <li>Location is accessed <strong>only during active trip recording</strong> that you start manually, or when you opt in to automatic recording via Bluetooth/motion triggers.</li>
@@ -163,6 +168,7 @@
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">GPS trips (uploaded on opt-in)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Photos (file metadata stripped)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Public profile, follows, reactions, trip shares</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver social features you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">PRO subscription records and App Store notifications (§3.7)</td><td style="padding:8px; border:1px solid #d2d2d7;">Provide the subscription you bought on all your devices; answer billing questions</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Crash, performance and session diagnostics (§3.5)</td><td style="padding:8px; border:1px solid #d2d2d7;">Find and fix defects; keep the app working</td><td style="padding:8px; border:1px solid #d2d2d7;">Legitimate interests — Art. 6(1)(f)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Server access logs, IP addresses, abuse-report records</td><td style="padding:8px; border:1px solid #d2d2d7;">Security, abuse prevention, accountability</td><td style="padding:8px; border:1px solid #d2d2d7;">Legitimate interests — Art. 6(1)(f), Recital 49</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Account-deletion audit record (timestamp + opaque hash only)</td><td style="padding:8px; border:1px solid #d2d2d7;">Demonstrate compliance with Art. 17 requests</td><td style="padding:8px; border:1px solid #d2d2d7;">Legal obligation + legitimate interests — Art. 6(1)(c)+(f)</td></tr>
@@ -190,6 +196,7 @@
             <li><strong>Trips, photos and vehicles you delete</strong> — marked as deleted and hidden everywhere immediately; physically erased from our primary database and from Cloudflare R2 within 30 days.</li>
             <li><strong>Account deletion</strong> — when you confirm it in the app, the account and the server-side data belonging to it are erased at once, not on the 30-day schedule above.</li>
             <li><strong>Encrypted database backups</strong> — retained for no more than 30 days. Deleted user data is purged from backups within this window by backup rotation.</li>
+            <li><strong>PRO subscription records</strong> — when you delete your account they are unlinked from it at once. The unlinked record (plan, dates, status and Apple's transaction number, with no name or e-mail) is kept so we can answer Apple and you about a payment and so a refund can still be processed. The log of App Store notifications is deleted after 180 days.</li>
             <li><strong>Server access logs</strong> — up to 14 days, then deleted.</li>
             <li><strong>Account-deletion audit record</strong> — a non-identifying record (timestamp + opaque hash, no name, email, or content) may be retained indefinitely to demonstrate compliance with deletion requests.</li>
             <li><strong>Abuse reports and moderation actions</strong> — retained for up to 2 years for safety and enforcement, then deleted.</li>
