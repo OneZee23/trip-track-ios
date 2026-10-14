@@ -525,6 +525,16 @@ struct SocialProfile: Codable, Hashable {
     /// Рамка аватара владельца профиля. Сервер отдаёт её только у аккаунта с
     /// живой подпиской — клиент эту проверку не повторяет и не обязан.
     var avatarFrame: String? = nil
+    /// Живая подписка — отдельно от значка (0.9.0). `isPlus` сервер отдаёт
+    /// как «показать значок», и пока по нему решались фон с рамкой,
+    /// выключенный значок гасил оплаченную косметику у всех. `nil` — старый
+    /// сервер, и тогда решает `isPlus`, как раньше.
+    var hasPlus: Bool? = nil
+
+    /// Рисовать ли оплаченные фон и рамку.
+    var showsPaidCosmetics: Bool {
+        PlusBadgeVisibility.saysPlus(hasPlus ?? isPlus)
+    }
 }
 
 /// Одна печать в блоке «Находки» публичного профиля (спека §4).
@@ -637,7 +647,8 @@ extension SocialProfile {
             finds: try c.decodeIfPresent([LossySocialFind].self, forKey: .finds)?
                 .compactMap(\.value),
             isPlus: try c.decodeIfPresent(Bool.self, forKey: .isPlus),
-            avatarFrame: try c.decodeIfPresent(String.self, forKey: .avatarFrame)
+            avatarFrame: try c.decodeIfPresent(String.self, forKey: .avatarFrame),
+            hasPlus: try c.decodeIfPresent(Bool.self, forKey: .hasPlus)
         )
     }
 }
