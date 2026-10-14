@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Чекаємо підтвердження",
         "proDeferredText": "Покупку схвалить власник сімейної групи. PRO увімкнеться відразу після цього.",
         "proFailed": "Не вийшло. Спробуйте ще раз",
+        "proRestored": "PRO відновлено",
         "proRestoreNone": "Активної підписки на цьому Apple ID немає. Якщо PRO на іншому, увійдіть у нього в App Store",
         "commonOk": "Зрозуміло",
         "proDemoBgTitle": "8 фонів, які бачать усі",

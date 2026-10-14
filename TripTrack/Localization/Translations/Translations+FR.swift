@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "En attente de validation",
         "proDeferredText": "L’achat sera validé par l’organisateur familial. PRO s’activera juste après.",
         "proFailed": "Ça n’a pas marché. Réessayez",
+        "proRestored": "PRO restauré",
         "proRestoreNone": "Aucun abonnement actif sur cet identifiant Apple. Si PRO est sur un autre, connectez-vous avec dans l'App Store",
         "commonOk": "Compris",
         "proDemoBgTitle": "8 fonds que tout le monde voit",

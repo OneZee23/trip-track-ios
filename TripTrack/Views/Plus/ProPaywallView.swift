@@ -531,8 +531,19 @@ struct ProPaywallView: View {
                 Button {
                     Haptics.tap()
                     Task {
+                        let hadPlus = store.isPlus
                         notice = .none
                         notice = await store.restore()
+                        // Нашлась — сказать это и уйти с витрины: молча
+                        // оставленная кнопка «Оформить» читалась как «не
+                        // вышло», и человек покупал второй раз (14 окт 2026).
+                        if notice == .none, store.isPlus, !hadPlus {
+                            toast = ToastItem(type: .success,
+                                              message: AppStrings.proRestored(l))
+                            try? await Task.sleep(for: .seconds(1.2))
+                            onClose()
+                            return
+                        }
                         // `.none` от восстановления означает две разные вещи:
                         // «подписка нашлась» и «на этом Apple ID её нет».
                         // Различает их `isPlus` — и это состояние 10, у

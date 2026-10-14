@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "In attesa di conferma",
         "proDeferredText": "L’acquisto sarà approvato dall’organizzatore della famiglia. PRO si attiverà subito dopo.",
         "proFailed": "Non è andata. Riprovi",
+        "proRestored": "PRO ripristinato",
         "proRestoreNone": "Nessun abbonamento attivo su questo ID Apple. Se PRO è su un altro, acceda con quello nell'App Store",
         "commonOk": "Ho capito",
         "proDemoBgTitle": "8 sfondi che vedono tutti",

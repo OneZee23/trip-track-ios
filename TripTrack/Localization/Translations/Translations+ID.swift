@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Menunggu persetujuan",
         "proDeferredText": "Pembelian akan disetujui oleh pengelola keluarga. PRO langsung aktif setelah itu.",
         "proFailed": "Tidak berhasil. Coba lagi",
+        "proRestored": "PRO dipulihkan",
         "proRestoreNone": "Tidak ada langganan aktif di Apple ID ini. Jika PRO ada di akun lain, masuk ke akun itu di App Store",
         "commonOk": "Mengerti",
         "proDemoBgTitle": "8 latar yang dilihat semua orang",

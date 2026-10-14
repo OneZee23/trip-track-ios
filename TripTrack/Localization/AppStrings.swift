@@ -7976,6 +7976,10 @@ enum AppStrings {
     /// Восстановление не нашло покупок. Говорит и про второй Apple ID: это
     /// самая частая причина, и без неё человек решает, что мы потеряли оплату.
     /// Не «покупок нет»: так отвечает и бывшему подписчику с истёкшим PRO.
+    /// Восстановление нашло подписку — коротко, тост.
+    static func proRestored(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proRestored", ru: "PRO восстановлен", en: "PRO restored")
+    }
     static func proRestoreNone(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proRestoreNone",
            ru: "Активной подписки на этом Apple ID нет. Если PRO на другом, войдите в него в App Store",

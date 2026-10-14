@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Warten auf Bestätigung",
         "proDeferredText": "Der Kauf wird von der Familienorganisation bestätigt. PRO ist danach sofort aktiv.",
         "proFailed": "Hat nicht funktioniert. Versuchen Sie es noch einmal",
+        "proRestored": "PRO wiederhergestellt",
         "proRestoreNone": "Kein aktives Abo auf dieser Apple-ID. Ist PRO auf einer anderen, melden Sie sich im App Store damit an",
         "commonOk": "Verstanden",
         "proDemoBgTitle": "8 Hintergründe, die alle sehen",

@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Растауды күтіп отырмыз",
         "proDeferredText": "Сатып алуды отбасы тобының иесі растайды. PRO содан кейін бірден қосылады.",
         "proFailed": "Болмады. Қайта көріңіз",
+        "proRestored": "PRO қалпына келтірілді",
         "proRestoreNone": "Бұл Apple ID-де белсенді жазылым жоқ. PRO басқасында болса, App Store-да соған кіріңіз",
         "commonOk": "Түсінікті",
         "proDemoBgTitle": "Барлығы көретін 8 фон",

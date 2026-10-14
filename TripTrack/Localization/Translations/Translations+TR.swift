@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Onay bekleniyor",
         "proDeferredText": "Satın alma, aile yöneticisi tarafından onaylanacak. PRO hemen ardından açılacak.",
         "proFailed": "Olmadı. Bir daha deneyin",
+        "proRestored": "PRO geri yüklendi",
         "proRestoreNone": "Bu Apple Kimliğinde etkin abonelik yok. PRO başka bir kimlikteyse App Store'da ona giriş yapın",
         "commonOk": "Anladım",
         "proDemoBgTitle": "Herkesin gördüğü 8 arka plan",

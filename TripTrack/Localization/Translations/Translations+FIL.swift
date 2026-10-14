@@ -1461,6 +1461,7 @@ extension Translations {
         "proDeferredTitle": "Hinihintay ang pag-apruba",
         "proDeferredText": "Aaprubahan ang pagbili ng organizer ng pamilya. Bubukas agad ang PRO pagkatapos.",
         "proFailed": "Hindi natuloy. Pakisubukan muli",
+        "proRestored": "Naibalik ang PRO",
         "proRestoreNone": "Walang aktibong subscription sa Apple ID na ito. Kung nasa iba ang PRO, mag-sign in po doon sa App Store",
         "commonOk": "Naiintindihan",
         "proDemoBgTitle": "8 background na nakikita ng lahat",
