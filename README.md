@@ -1,23 +1,60 @@
-# TripTrack — road trip diary for iPhone
+<p align="center">
+  <img src="docs/assets/readme/icon.png" width="96" alt="TripTrack icon">
+</p>
 
-**TripTrack — Road Journal** is a free iPhone app that keeps a diary of your car
-trips. It records each drive with GPS — in the background, from the Lock Screen,
-or automatically when your car's Bluetooth stereo connects — and keeps the route,
-speed, distance, photos, notes and stops. The **Atlas** is a fog of war map: the
-world starts under fog and clears along the roads you have actually driven.
+<h1 align="center">TripTrack — Road Journal</h1>
 
-- Free: recording, trip history, photos, statistics, the Atlas, places, journeys
-  and a garage of vehicles with their own odometer, fuel or electric use and costs.
-- Optional **TripTrack PRO** subscription: profile and car card styles, avatar
-  frames, route colours and manually added trips. Not offered on the Russian
-  App Store storefront.
-- No account needed to record. Sign in with Apple adds cloud sync, public
-  profiles and a web viewer for your synced trips at
-  [trip-track.app](https://trip-track.app).
-- iPhone, iOS 17 or later. 13 languages. No Android version yet.
+<p align="center">
+  <b>Every road you drive clears the fog on your own map.</b><br>
+  A road trip diary for iPhone that records your drives and turns them into an atlas.
+</p>
 
-[App Store](https://apps.apple.com/us/app/triptrack-road-journal/id6760650361) ·
-[Website](https://trip-track.app) · [Changelog](CHANGELOG.md)
+<p align="center">
+  <a href="https://apps.apple.com/app/apple-store/id6760650361?pt=128553974&ct=github&mt=8"><img src="https://img.shields.io/itunes/v/6760650361?label=App%20Store&logo=apple&color=0D96F6" alt="App Store version"></a>
+  <a href="https://apps.apple.com/ru/app/id6760650361"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fitunes.apple.com%2Flookup%3Fid%3D6760650361%26country%3Dru&query=%24.results%5B0%5D.averageUserRating&label=rating&suffix=%20%E2%98%85&color=F5A623" alt="App Store rating"></a>
+  <img src="https://img.shields.io/badge/iOS-17%2B-black?logo=apple" alt="iOS 17+">
+  <img src="https://img.shields.io/badge/languages-13-6E56CF" alt="13 languages">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+  <a href="https://github.com/OneZee23/trip-track-ios/releases"><img src="https://img.shields.io/github/v/release/OneZee23/trip-track-ios?label=release" alt="Latest release"></a>
+</p>
+
+<p align="center">
+  <a href="https://apps.apple.com/app/apple-store/id6760650361?pt=128553974&ct=github&mt=8"><img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" height="48" alt="Download on the App Store"></a>
+</p>
+
+<p align="center">
+  <a href="https://trip-track.app">Website</a> ·
+  <a href="https://apps.apple.com/app/apple-store/id6760650361?pt=128553974&ct=github&mt=8">App Store</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/OneZee23/trip-track-ios/releases">Releases</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme/screens.jpg" width="860" alt="TripTrack screenshots: trip route, Atlas, photos and moments, shared journeys">
+</p>
+
+## What it does
+
+- **Records every drive.** Swipe to start, or let it start by itself when your phone connects to the car stereo. Works in the background, from the Lock Screen and with Live Activities.
+- **Builds your Atlas.** The world starts under fog; every road you drive clears it. See exactly where you have been and how many kilometres of new roads you opened.
+- **Remembers places.** Pass the same spot again and the app tells you how many times you have been there and how long the drive usually takes.
+- **Keeps the story.** Photos, checkpoints, notes, speed and elevation on one trip page; multi-day trips fold into one journey.
+- **Garage.** Several vehicles with their own odometer, fuel or electric consumption and cost per trip.
+- **Private by default.** No account needed to record. A home privacy zone trims the start and end of anything you share.
+
+Recording, history, the Atlas, places and sync are free. Optional **TripTrack PRO** adds profile and car card styles, avatar frames, route colours and manually added trips.
+
+## Built with
+
+SwiftUI and UIKit · MapKit · Metal (the fog layer) · Core Location and Core Motion · Core Data · StoreKit 2 · ActivityKit and WidgetKit · Sign in with Apple · Sentry. No third-party maps, no analytics SDKs.
+
+About 610 Swift source files and 430 test files, built with XcodeGen — setup steps are in the Russian section below («Локальная разработка»).
+
+## Status
+
+**0.9.0** is live on the App Store (15 October 2026). Release history: [Releases](https://github.com/OneZee23/trip-track-ios/releases) and [CHANGELOG](CHANGELOG.md) (in Russian).
+
+Made by one developer, [OneZee](https://github.com/OneZee23). Ideas and bug reports are welcome in [Issues](https://github.com/OneZee23/trip-track-ios/issues).
 
 ---
 
@@ -31,10 +68,8 @@ TripTrack сохраняет поездки, маршруты, фотограф�
 
 ## Статус
 
-В App Store — **0.8.6 (75)**, выпущена 8 октября 2026. **0.8.9 (78)** отправлена
-на проверку Apple 11 октября и заменила заявку 0.8.8, включая все её изменения;
-выпуск ручной. Состав и проверки —
-[документ кандидата](docs/releases/0.8.9/candidate-78.md).
+В App Store — **0.9.0 (88)**, выпущена 15 октября 2026.
+[История изменений](CHANGELOG.md) · [релизы на GitHub](https://github.com/OneZee23/trip-track-ios/releases)
 
 ## Возможности
 
@@ -81,7 +116,7 @@ Français, Italiano, Polski, Türkçe, Bahasa Indonesia, Українська, P
 | Интерфейс | SwiftUI, UIKit для карт и переходов |
 | Карты и атлас | MapKit, Metal |
 | Запись | Core Location, Core Motion |
-| Локальные данные | Core Data, схема v23 в 0.8.9 (78) |
+| Локальные данные | Core Data, схема v23 |
 | Аккаунт и синхронизация | Sign in with Apple, HTTP API, локальная очередь изменений |
 | Подписка и чаевые | StoreKit 2 |
 | Виджеты записи | ActivityKit, WidgetKit, App Intents |
@@ -90,8 +125,8 @@ Français, Italiano, Polski, Türkçe, Bahasa Indonesia, Українська, P
 
 ## Локальная разработка
 
-Нужны macOS, Xcode с установленным iOS SDK и XcodeGen. Для кандидата 0.8.4
-использовался SDK iOS 26.5; минимальная версия системы приложения — iOS 17.
+Нужны macOS, Xcode с установленным iOS SDK и XcodeGen. Минимальная версия
+системы приложения — iOS 17.
 
 1. Установите XcodeGen, например через Homebrew: `brew install xcodegen`.
 2. Скопируйте `Local.xcconfig.example` в `Local.xcconfig` и задайте свои
@@ -124,8 +159,8 @@ docs/                   архитектура, тексты стора и до�
 project.yml             конфигурация XcodeGen
 ```
 
-- [Кандидат 0.8.4 (73)](docs/releases/0.8.4/candidate-73.md) — состав,
-  выполненные проверки и известные ограничения.
+- [План и проверки 0.9.0](docs/releases/0.9.0/plan.md) — состав последнего
+  релиза и выполненные проверки.
 - [Чек-лист релиза](docs/releases/0.8.4/checklist.md) — подготовка и выпуск.
 - [Навигация по документации](docs/README.md) — расположение материалов.
 - [CHANGELOG](CHANGELOG.md) — история изменений; старые разделы описывают
