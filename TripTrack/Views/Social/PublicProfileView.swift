@@ -85,6 +85,8 @@ struct PublicProfileView: View {
     /// rebuilding the whole profile to bump a tally would redraw the hero,
     /// the stats and the achievements with it.
     @State private var tripCards: [SocialFeedTrip] = []
+    /// Страницы после десяти превью (0.9.1) — см. `ProfileTripsPager`.
+    @State private var tripsPager = ProfileTripsPager()
     /// Путешествия аккаунта (S7, 0.6.8) — одна страница лимитом 50
     /// (`loadJourneysPreview`), не только три: хаб-карточка показывает
     /// первые три, а `recomputeProfileRows` схлопывает «Историю» по ВСЕМ.
@@ -1740,8 +1742,9 @@ struct PublicProfileView: View {
                         columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
                         spacing: 10
                     ) {
-                        ForEach(tripCards) { t in
+                        ForEach(Array(tripCards.enumerated()), id: \.element.id) { idx, t in
                             openable(t) { tripGridCell(t, c: c, lng: lng) }
+                                .onAppear { loadMoreTripsIfNeeded(appearedIndex: idx, of: tripCards.count) }
                         }
                     }
                 } else {
@@ -1752,10 +1755,21 @@ struct PublicProfileView: View {
                     // «Моих», сюда не перенесённое сознательно — своей сетки
                     // путешествий на профиле нет.
                     LazyVStack(spacing: 12) {
-                        ForEach(profileRows) { row in
+                        ForEach(Array(profileRows.enumerated()), id: \.element.id) { idx, row in
                             historyRowView(row, c: c)
+                                // Строки схлопнуты в путешествия, поэтому порог
+                                // считается по СТРОКАМ: последняя строка видна —
+                                // пора за следующей страницей поездок.
+                                .onAppear {
+                                    loadMoreTripsIfNeeded(appearedIndex: idx, of: profileRows.count)
+                                }
                         }
                     }
+                }
+                if tripsPager.isLoading {
+                    CarLoadingView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                 }
             }
         } else if let err = loadError {
@@ -2130,6 +2144,7 @@ struct PublicProfileView: View {
                 profileLevel: p.profileLevel
             )
             tripCards = p.recentTrips.map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
+            tripsPager.reset(preview: tripCards, publicCount: p.stats.publicTripCount)
             // Trips that arrived without an author came from a server that
             // still sends the old six-field summary — fetch the real items.
             let legacy = p.recentTrips.filter { $0.author == nil }
@@ -2146,6 +2161,31 @@ struct PublicProfileView: View {
             loadError = msg
             loadFailure = error as? APIError
             profileLog.error("profile load failed: \(msg)")
+        }
+    }
+
+    /// Следующая страница поездок, когда до конца осталось несколько карточек.
+    /// `count` — сколько элементов в ТОМ списке, где появилась ячейка: в
+    /// сетке это карточки, в списке — строки, где путешествие схлопывает
+    /// несколько поездок в одну.
+    private func loadMoreTripsIfNeeded(appearedIndex: Int, of count: Int) {
+        guard tripsPager.shouldLoad(appearedIndex: appearedIndex, loadedCount: count),
+              let cursor = tripsPager.cursor else { return }
+        tripsPager.begin()
+        Task { @MainActor in
+            do {
+                let page: SocialFeedResponse = try await APIClient.shared.get(
+                    APIEndpoint.userProfileTrips(
+                        accountId.uuidString, cursor: cursor, limit: ProfileTripsPager.pageSize),
+                    requiresAuth: AuthService.shared.isSignedIn)
+                // Профиль обновили, пока страница ехала: её курсор принадлежит
+                // прежнему списку, и дописывать её к новому нельзя.
+                guard tripsPager.cursor == cursor else { return }
+                tripsPager.apply(page, to: &tripCards)
+            } catch {
+                profileLog.error("profile trips page failed: \(error.localizedDescription)")
+                if tripsPager.cursor == cursor { tripsPager.fail() }
+            }
         }
     }
 

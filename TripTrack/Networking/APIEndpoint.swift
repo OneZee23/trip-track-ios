@@ -162,6 +162,32 @@ enum APIEndpoint {
         return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
     }
 
+    /// Карточки поездок профиля постранично (0.9.1) — продолжение десяти
+    /// `recentTrips`, та же форма, что у ленты, тот же курсор.
+    static func userProfileTrips(_ id: String, cursor: String? = nil, limit: Int? = nil) -> String {
+        var query: [String] = []
+        if let limit { query.append("limit=\(limit)") }
+        if let cursor, !cursor.isEmpty {
+            let escaped = cursor.addingPercentEncoding(
+                withAllowedCharacters: .alphanumerics) ?? cursor
+            query.append("cursor=\(escaped)")
+        }
+        let base = "/users/\(id)/profile-trips"
+        return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
+    }
+
+    /// Курсор ленты для поездки — точь-в-точь `encodeFeedCursor` сервера:
+    /// `toISOString()` (UTC, миллисекунды) и id в нижнем регистре. Сервер
+    /// сравнивает кортеж `(start_date, id)` в базе, где uuid строчный, — и
+    /// продолжить список с последней карточки профиля можно без лишнего
+    /// запроса.
+    static func feedCursor(startDate: Date, id: UUID) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.timeZone = TimeZone(identifier: "UTC")
+        return "\(f.string(from: startDate))|\(id.uuidString.lowercased())"
+    }
+
     /// Список путешествий чужого профиля (0.6.8) — та же курсорная форма,
     /// что у `userTrips`.
     static func userJourneys(_ id: String, cursor: String? = nil, limit: Int? = nil) -> String {
