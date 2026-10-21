@@ -35,6 +35,24 @@ final class MonthCaseTests: XCTestCase {
             "В гараже с апреля 2026")
     }
 
+    /// Третья такая строка, найдена на кадре статистики 21 окт 2026: плашка
+    /// внизу экрана писала «С TripTrack с декабрь 2025 г.». Экран звал
+    /// `monthYearInline`, хотя доккомментарий строки обещает дату, уже
+    /// стоящую в падеже.
+    func testStatsPlaqueSinceTakesTheGenitive() {
+        let december = Calendar(identifier: .gregorian)
+            .date(from: DateComponents(year: 2025, month: 12, day: 5))!
+        XCTAssertEqual(
+            AppStrings.statsWithTripTrackSince(.ru, date: StatsPeriodFormat.monthYearGenitive(december, .ru)),
+            "С TripTrack с декабря 2025")
+        let source = try! String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("TripTrack/Views/Profile/StatsScreenView.swift"), encoding: .utf8)
+        XCTAssertFalse(source.contains("statsWithTripTrackSince(\n                    l, date: StatsPeriodFormat.monthYearInline"),
+                       "плашка снова получает месяц в именительном падеже")
+        XCTAssertTrue(source.contains("date: StatsPeriodFormat.monthYearGenitive(first, l)"))
+    }
+
     // MARK: - Предложный: «в сентябре 2026»
 
     func testPrepositionalIsNotTheGenitive() {

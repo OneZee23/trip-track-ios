@@ -903,7 +903,7 @@ struct StatsScreenView: View {
         if let first = agg.firstTripDate {
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppStrings.statsWithTripTrackSince(
-                    l, date: StatsPeriodFormat.monthYearInline(first, l)
+                    l, date: StatsPeriodFormat.monthYearGenitive(first, l)
                 ))
                 .font(.inter(14, weight: .semibold))
                 .foregroundStyle(c.text)
