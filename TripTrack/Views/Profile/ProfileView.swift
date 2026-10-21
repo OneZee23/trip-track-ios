@@ -1561,7 +1561,11 @@ struct ProfileView: View {
             manualTripPreset = nil
             showManualTrip = true
         } label: {
-            Image(systemName: ManualTripEntry.isLocked ? "lock" : "plus")
+            // «+» у всех, и с PRO, и без (0.9.1). Замок без подписи не говорил,
+            // что за ним: человек видел запертую кнопку, а не действие. Цена
+            // — на витрине PRO, которую это же нажатие и открывает
+            // (`ManualTripEntry` показывает её вместо листа без подписки).
+            Image(systemName: "plus")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(c.text)
                 .frame(width: 44, height: 44)
@@ -2091,9 +2095,11 @@ struct ProfileView: View {
             showManualTrip = true
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: ManualTripEntry.isLocked ? "lock.fill" : "square.and.pencil")
+                // Без замка и без серого — по той же причине, что у «+» в
+                // шапке «Истории»: о подписке говорит витрина за нажатием.
+                Image(systemName: "square.and.pencil")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
+                    .foregroundStyle(AppTheme.accent)
                 Text(AppStrings.manualTripEntry(lang.language))
                     .font(.inter(14, weight: .semibold))
                     .foregroundStyle(c.text)
