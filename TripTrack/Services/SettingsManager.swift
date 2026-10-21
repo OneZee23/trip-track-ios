@@ -46,6 +46,9 @@ final class SettingsManager: ObservableObject {
         let normalized = (raw?.isEmpty == true) ? nil : raw
         guard normalized != avatarFrame else { return }
         avatarFrame = normalized
+        // Выбор на этом телефоне — уже ответ: «без рамки» дальше уезжает как
+        // «стереть», а не прячется как «ещё не знаю».
+        markCosmeticsReconciled(for: TokenStore.shared.accountId)
         saveSettings()
         // `SettingsManager` не главноактёрный целиком, `AuthService` —
         // главноактёрный: тот же хоп, что у `SyncEnqueuer.enqueue` строкой
@@ -64,7 +67,10 @@ final class SettingsManager: ObservableObject {
     /// Ответ `/auth/me`: аккаунт — источник правды для этой пары, потому что
     /// он единственный, кто её хранит. `nil` — «сервер молчит» (старая
     /// сборка бэкенда), и тогда локальное не трогается: правило 0.6.7.
-    func applyRemotePlusCosmetics(avatarFrame remoteFrame: String?, showPlusBadge remoteBadge: Bool?) {
+    func applyRemotePlusCosmetics(
+        avatarFrame remoteFrame: String?, showPlusBadge remoteBadge: Bool?,
+        profileBackground remoteBackground: String? = nil
+    ) {
         var changed = false
         if let remoteFrame {
             let normalized = remoteFrame.isEmpty ? nil : remoteFrame
@@ -74,10 +80,30 @@ final class SettingsManager: ObservableObject {
             showPlusBadge = remoteBadge
             changed = true
         }
+        // Фон приезжает отсюда же (0.9.0): своего пула у него нет, и на
+        // свежем телефоне он иначе оставался пустым навсегда. Без пуша назад —
+        // это значение сервера, его незачем отправлять обратно.
+        if let remoteBackground, remoteBackground != profileBackground {
+            profileBackground = remoteBackground
+        }
         guard changed, let entity = settingsEntity else { return }
         entity.avatarFrame = avatarFrame
         entity.showPlusBadge = showPlusBadge
         persistenceController.save()
+    }
+
+    /// Для какого аккаунта телефон уже сверил оформление с сервером (0.9.0).
+    /// До сверки пустые фон и рамка — «не знаю», а не «стереть».
+    private static let cosmeticsReconciledKey = "com.triptrack.settings.cosmeticsReconciledAccount"
+
+    func cosmeticsReconciled(for accountId: UUID?) -> Bool {
+        guard let accountId else { return false }
+        return UserDefaults.standard.string(forKey: Self.cosmeticsReconciledKey) == accountId.uuidString
+    }
+
+    func markCosmeticsReconciled(for accountId: UUID?) {
+        guard let accountId else { return }
+        UserDefaults.standard.set(accountId.uuidString, forKey: Self.cosmeticsReconciledKey)
     }
 
     // User identity (local UUID, persisted in UserSettingsEntity.id)
@@ -107,6 +133,7 @@ final class SettingsManager: ObservableObject {
     ) {
         guard value != profileBackground else { return }
         profileBackground = value
+        markCosmeticsReconciled(for: TokenStore.shared.accountId)
         Task { @MainActor in pushCosmetics() }
     }
 

@@ -19,6 +19,8 @@ final class ProfileProgressSyncTests: XCTestCase {
     private var accountId: UUID!
     private let nameLatch = "com.triptrack.profile.syncConfirmed"
     private let profileBackgroundKey = "com.triptrack.settings.profileBackground"
+    private let reconciledKey = "com.triptrack.settings.cosmeticsReconciledAccount"
+    private var savedReconciled: Any?
     private nonisolated(unsafe) static var profileBodies: [[String: Any]] = []
 
     override func setUp() async throws {
@@ -28,6 +30,7 @@ final class ProfileProgressSyncTests: XCTestCase {
         KeychainHelper.service = "com.triptrack.profile-progress-tests.\(UUID())"
         savedNameLatch = UserDefaults.standard.object(forKey: nameLatch)
         savedProfileBackground = UserDefaults.standard.object(forKey: profileBackgroundKey)
+        savedReconciled = UserDefaults.standard.object(forKey: reconciledKey)
         ProfileSyncLatch.markConfirmed()
         accountId = UUID()
         TokenStore.shared.setAccountId(accountId)
@@ -71,6 +74,12 @@ final class ProfileProgressSyncTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: profileBackgroundKey)
         }
+        if let savedReconciled {
+            UserDefaults.standard.set(savedReconciled, forKey: reconciledKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: reconciledKey)
+        }
+        savedReconciled = nil
         AuthService.shared.loadFromKeychain()
         settings = nil
         pc = nil
@@ -215,6 +224,28 @@ final class ProfileProgressSyncTests: XCTestCase {
         redundantPush.isInverted = true
         settings.setProfileBackground("") { redundantPush.fulfill() }
         await fulfillment(of: [redundantPush], timeout: 0.1)
+    }
+
+    /// Свежий телефон (переустановка, новый iPhone): пустой фон и рамку
+    /// человек здесь не выбирал. Уйди они на сервер — пустая строка там
+    /// «стереть», и оплаченное оформление пропало бы у всех (14 окт 2026).
+    func testFreshPhoneDoesNotWipeTheAccountsLook() async throws {
+        UserDefaults.standard.removeObject(forKey: "com.triptrack.settings.cosmeticsReconciledAccount")
+        settings.profileBackground = ""
+        serve()
+        await AuthService.shared.syncProfileToServer(refreshFeedAfter: false, client: client, settings: settings)
+        let body = try XCTUnwrap(Self.profileBodies.last)
+        XCTAssertNil(body["profileBackground"], "an unknown empty background must not clear the server copy")
+        XCTAssertNil(body["avatarFrame"], "an unknown empty frame must not clear the server copy")
+    }
+
+    /// `/auth/me` возвращает оформление аккаунта на свежий телефон.
+    func testAccountReadBringsTheBackgroundBack() {
+        settings.profileBackground = ""
+        settings.applyRemotePlusCosmetics(avatarFrame: "frame_gold", showPlusBadge: true,
+                                          profileBackground: "plus_nebula")
+        XCTAssertEqual(settings.profileBackground, "plus_nebula")
+        XCTAssertEqual(settings.avatarFrame, "frame_gold")
     }
 
     func testExpiredCosmeticsStayStoredAndPublishedThenReturnAfterRenewal() async throws {

@@ -22,5 +22,10 @@ enum FogMetalAvailability {
 
     static var isEnabledOverride: Bool?
 
-    static var isActive: Bool { isEnabledOverride ?? isEnabled }
+    /// Порядок: тест → сервер (0.9.0, `RemoteConfigStore`, флаг
+    /// «fogMetal») → вшитое значение. Без сети и без кэша — вшитое, то есть
+    /// поведение до 0.9.0.
+    static var isActive: Bool {
+        isEnabledOverride ?? RemoteConfigStore.shared.flag("fogMetal") ?? isEnabled
+    }
 }

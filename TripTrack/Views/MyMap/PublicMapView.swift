@@ -60,11 +60,13 @@ struct PublicMapView: View {
             VStack(spacing: 0) {
                 header(c, l)
                 Spacer(minLength: 0)
-                summary(c, l)
+                summary(l)
                     // Высота сводки тут переменная (загрузка, отказ, пусто,
                     // числа), поэтому она измеряется, а не вписана числом:
                     // логотип Apple и «Legal» обязаны остаться видны над ней.
                     .measuredBottomOverlay($summaryHeight)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("public_map_summary")
             }
 
             if vm.isLoading { CarLoadingView() }
@@ -75,6 +77,10 @@ struct PublicMapView: View {
 
     // MARK: - Шапка
 
+    /// Над картой — только «назад» (13 окт 2026, вариант A). Плашка с именем
+    /// и подписью терракотой повторяла шторку под ней: имя дважды,
+    /// «публичные» трижды, а подпись цветом действия не нажималась. Имя
+    /// теперь — первая строка шторки, как «Атлас» у своей карты.
     private func header(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
             // Домовая кнопка, а не своя: она предпочитает `\.previewPop`
@@ -84,43 +90,29 @@ struct PublicMapView: View {
             NavBackButton()
                 .accessibilityLabel(AppStrings.back(l))
                 .accessibilityIdentifier("public_map_back")
-
             Spacer(minLength: 0)
-            titlePill(c, l)
-            Spacer(minLength: 0)
-
-            // Балансир под кнопку, чтобы пилюля стояла по центру.
-            Color.clear.frame(width: 44, height: 44)
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)
     }
 
-    private func titlePill(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        VStack(spacing: 1) {
-            Text(ownerName ?? AppStrings.profileMapEntryTitle(l))
-                .font(.inter(13, weight: .semibold))
-                .foregroundStyle(c.text)
-            // Рамка обязательна: счётчики профиля считаются по ВСЕМ поездкам,
-            // а карта рисует только публичные. Без подписи расхождение между
-            // «47 поездок» в профиле и дюжиной маршрутов здесь читается как баг.
-            Text(AppStrings.publicRoutesCaption(l))
-                .font(.inter(10, weight: .medium))
-                .foregroundStyle(AppTheme.accent)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(c.glass, in: Capsule())
-    }
-
     // MARK: - Нижний лист
 
-    private func summary(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+    /// The same sheet and tiles as one's own «Атлас» (12 Oct 2026). It used to
+    /// be a white card of its own: three centred columns split by hairlines,
+    /// a grey plate inside the white, and a grab handle on a sheet that does
+    /// not move — a second drawing of the question «how far has this person
+    /// driven», next to the first. And the card stopped short of the bottom
+    /// edge: the map behind showed through under it on every iPhone with a
+    /// home indicator.
+    private func summary(_ l: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
-            Capsule()
-                .fill(c.border)
-                .frame(width: 36, height: 4)
-
+            // Первая строка шторки — чья это карта, как «Атлас» у своей
+            // (`AtlasSheetTitleRow`, эррата 1). Без известного имени — «Карта».
+            AtlasSheetTitleRow(title: ownerTitle(l)) { EmptyView() }
+                .padding(.horizontal, -AtlasTheme.sideInset)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("public_map_title")
             if vm.isLoading {
                 // Иначе сводка утверждает «0 маршрутов · 0 км · 0 регионов» про
                 // другого человека всё время загрузки — то есть врёт точными
@@ -133,7 +125,7 @@ struct PublicMapView: View {
                 //утверждение о другом человеке, которого мы не проверяли.
                 Text(AppStrings.publicDataLoadFailed(l))
                     .font(.inter(14, weight: .semibold))
-                    .foregroundStyle(c.text)
+                    .foregroundStyle(AtlasTheme.ink)
                 Button { Task { await vm.loadRemote() } } label: {
                     Text(AppStrings.retry(l))
                         .font(.inter(13, weight: .bold))
@@ -145,73 +137,82 @@ struct PublicMapView: View {
                 // загрузки: человек просто ничего не опубликовал.
                 Text(AppStrings.publicMapEmptyTitle(l))
                     .font(.inter(14, weight: .semibold))
-                    .foregroundStyle(c.text)
+                    .foregroundStyle(AtlasTheme.ink)
                 Text(AppStrings.publicMapEmptyBody(l))
                     .font(.inter(11.5))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(c.textTertiary)
+                    .foregroundStyle(AtlasTheme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                // Вне блока с именем: неизвестное имя не повод молчать о том,
-                // что числа под ним занижены.
+                // Вне итога: неизвестное имя не повод молчать о том, что
+                // числа под ним занижены.
                 if vm.remoteFailed {
                     Text(AppStrings.publicDataPartial(l))
-                        .font(.inter(11, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .multilineTextAlignment(.center)
+                        .font(AppType.meta)
+                        .foregroundStyle(AtlasTheme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                HStack(spacing: 0) {
-                    cell(String(vm.exploration.trips.count),
-                         AppStrings.publicRoutesCaption(l), c)
-                    rule(c)
-                    cell(Measure.distanceValue(km: vm.exploration.totalKm, unit: distanceUnit, lang: l),
-                         Measure.distanceParts(km: vm.exploration.totalKm, unit: distanceUnit, lang: l).unit, c)
-                    rule(c)
-                    cell(String(vm.exploration.regions.count),
-                         AppStrings.statsRegions(l), c)
-                }
-                // Только когда имя известно: с пустой подстановкой фраза
-                // разваливается в «Здесь только те поездки, которые  сделал
-                // публичными». Подпись под заголовком всё равно сказала главное.
-                if let name = ownerName?.trimmingCharacters(in: .whitespaces),
-                   !name.isEmpty {
-                    Text(AppStrings.publicRoutesExplainer(l, name: name))
-                        .font(.inter(11))
-                        .foregroundStyle(c.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(10)
-                        .frame(maxWidth: .infinity)
-                        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
-                }
+                // Одна карточка на три числа, как итог своего «Атласа»
+                // (`AtlasStatTrio`): это один итог, прочитанный с трёх сторон.
+                AtlasStatTrio(columns: summaryColumns(l))
+                // Одна строка вместо подписи в плашке и абзаца с именем: имя
+                // уже стоит заголовком, а «публичные» — единственное, что
+                // отличает эти числа от счётчиков профиля.
+                Text(AppStrings.publicMapOnlyPublic(l))
+                    .font(AppType.meta)
+                    .foregroundStyle(AtlasTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("public_map_only_public")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 22)
+        .padding(.horizontal, AtlasTheme.sideInset)
+        .padding(.top, 4)
+        .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
+        // Down to the physical bottom: the map is full-bleed, so a sheet that
+        // stops at the safe area leaves a strip of map under the home
+        // indicator. Only the BACKGROUND runs into the safe area — the content
+        // keeps its inset, and the sheet's top (measured for Apple's logo)
+        // does not move.
         .background(
-            c.card,
-            in: UnevenRoundedRectangle(
-                topLeadingRadius: 28, bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0, topTrailingRadius: 28)
+            UnevenRoundedRectangle(
+                topLeadingRadius: AtlasTheme.sheetRadius, bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0, topTrailingRadius: AtlasTheme.sheetRadius,
+                style: .continuous)
+            .fill(AtlasTheme.background)
+            .ignoresSafeArea(edges: .bottom)
         )
     }
 
-    private func cell(_ value: String, _ label: String, _ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.inter(20, weight: .semibold))
-                .foregroundStyle(c.text)
-            Text(label)
-                .font(.inter(10.5, weight: .medium))
-                .foregroundStyle(c.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
+    private func ownerTitle(_ l: LanguageManager.Language) -> String {
+        let name = ownerName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return name.isEmpty ? AppStrings.profileMapEntryTitle(l) : name
     }
 
-    private func rule(_ c: AppTheme.Colors) -> some View {
-        Rectangle().fill(c.border).frame(width: 1, height: 26)
+    private func summaryColumns(_ l: LanguageManager.Language) -> [AtlasStatTrio.Column] {
+        let trips = vm.exploration.trips.count
+        let distance = Measure.distanceParts(km: vm.exploration.totalKm, unit: distanceUnit, lang: l)
+        var columns: [AtlasStatTrio.Column] = [
+            .init(id: "trips", value: "\(trips)", unit: nil,
+                  caption: AppStrings.tripsGenitive(l, count: trips)),
+            .init(id: "distance", value: distance.value, unit: distance.unit,
+                  caption: AppStrings.atlasTotalShort(l))
+        ]
+        // Ноль при непустых маршрутах — не число, а «мы не умеем считать
+        // там»: утверждение о другом человеке, которое было бы неправдой.
+        let regions = vm.exploration.regions.count
+        if !Self.hidesRegions(regions: regions, trips: trips) {
+            columns.append(.init(id: "regions", value: "\(regions)", unit: nil,
+                                 caption: AppStrings.nounRegions(l, regions)))
+        }
+        return columns
+    }
+
+    /// «0 регионов» при непустых маршрутах — не ноль, а страна, которой нет в
+    /// атласе регионов: тогда ячейка не показывается вовсе.
+    nonisolated static func hidesRegions(regions: Int, trips: Int) -> Bool {
+        regions == 0 && trips > 0
     }
 }

@@ -17,6 +17,16 @@ enum ManualTripDateDefaults {
         return min(nineAM, now)
     }
 
+    /// Старт, который человек не трогал: «час назад», но поездка обязана
+    /// уже закончиться — финиш не позже, чем за пять минут до «сейчас».
+    /// Сдвигается только НАЗАД: короткий маршрут не тащит выезд вперёд.
+    static func untouchedStart(
+        current: Date, duration: TimeInterval, now: Date = Date()
+    ) -> Date {
+        let latest = now.addingTimeInterval(-duration - 5 * 60)
+        return min(current, latest)
+    }
+
     /// Границы `DatePicker`. Верхняя — не меньше уже выбранного значения,
     /// нижняя — не больше него: перевернуть `a...b` этой парой нельзя по
     /// построению, что бы ни лежало в `current`.

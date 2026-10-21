@@ -852,10 +852,16 @@ final class AuthService: ObservableObject {
         // their weekly-recap push to match what they see in the app.
         let preferredLanguage = LanguageManager.currentLanguage.rawValue
 
+        // Пустое оформление, которого человек на ЭТОМ телефоне не выбирал,
+        // на сервер не уходит: пустая строка там значит «стереть». Свежий
+        // телефон или переустановка иначе первым же пушем после входа стирали
+        // оплаченный фон и рамку у всех — а обратно они не приезжали никогда.
+        let knowsCosmetics = settings.cosmeticsReconciled(for: accountId)
         var req = ProfileUpdateRequest(
             displayName: userName,
             avatarEmoji: settings.avatarEmoji,
-            profileBackground: settings.profileBackground,
+            profileBackground: knowsCosmetics || !settings.profileBackground.isEmpty
+                ? settings.profileBackground : nil,
             profileLevel: progress?.level,
             profileXp: progress?.xp,
             currentStreak: progress?.currentStreak,
@@ -869,7 +875,7 @@ final class AuthService: ObservableObject {
         // `profileBackground` — тот же класс данных, тот же аккаунт, тот же
         // единственный писатель. Пустая строка рамки уезжает как `nil`:
         // «без рамки» на сервере это отсутствие значения, а не строка "".
-        req.avatarFrame = settings.avatarFrame ?? ""
+        req.avatarFrame = knowsCosmetics || settings.avatarFrame != nil ? (settings.avatarFrame ?? "") : nil
         req.showPlusBadge = settings.showPlusBadge
         do {
             let _: EmptyResponse = try await client.post(
@@ -990,7 +996,11 @@ final class AuthService: ObservableObject {
             // отскочила бы на прежнюю.
             if gen == publicProfileGeneration {
                 SettingsManager.shared.applyRemotePlusCosmetics(
-                    avatarFrame: res.avatarFrame, showPlusBadge: res.showPlusBadge)
+                    avatarFrame: res.avatarFrame, showPlusBadge: res.showPlusBadge,
+                    profileBackground: res.profileBackground)
+                // С этой минуты телефон знает оформление аккаунта: пустое
+                // значение дальше — выбор человека, и оно уезжает как есть.
+                SettingsManager.shared.markCosmeticsReconciled(for: accountId)
             }
             if userEmail == nil, let email = res.email,
                !email.trimmingCharacters(in: .whitespaces).isEmpty {

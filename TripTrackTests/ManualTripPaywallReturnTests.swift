@@ -120,14 +120,4 @@ final class ManualTripPaywallReturnTests: XCTestCase {
         }
     }
 
-    /// Строка честности стоит под кнопкой и на всех языках говорит про
-    /// награды: вписанная поездка даёт километры, но не опыт и не значки
-    /// (правило 0.8.0). Узнать об этом ПОСЛЕ покупки хуже, чем не купить.
-    func testTheHonestyLineIsThereInEveryLanguage() {
-        for lang in LanguageManager.Language.allCases {
-            let line = AppStrings.manualHonesty(lang)
-            XCTAssertFalse(line.isEmpty, lang.rawValue)
-            XCTAssertFalse(line.contains("{"), lang.rawValue)
-        }
-    }
 }

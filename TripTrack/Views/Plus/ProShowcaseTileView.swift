@@ -12,6 +12,25 @@ struct ProShowcaseTileView: View {
     let isLocked: Bool
 
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject private var lang: LanguageManager
+
+    /// Подпись плитки. Имена вариантов — имена собственные («Sunset»,
+    /// «Gold») и не переводятся; переводится ровно одно — «без варианта», и
+    /// подставляет его экран (правило `AvatarFrame.displayName`). До 14 окт
+    /// 2026 фон профиля нарушал это правило и подписывал свою первую плитку
+    /// «Default» по-английски на всех тринадцати языках. Карточка машины
+    /// подписи не несёт вовсе — на ней уже написано имя машины.
+    static func label(
+        for tile: ProShowcase.Tile, kind: ProShowcaseKind, _ l: LanguageManager.Language
+    ) -> String? {
+        if tile.id.isEmpty {
+            switch kind {
+            case .profileBackground, .avatarFrame: return AppStrings.cosmeticDefaultOption(l)
+            case .vehicleCard, .routeLine: return nil
+            }
+        }
+        return tile.name.isEmpty ? nil : tile.name
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -33,8 +52,8 @@ struct ProShowcaseTileView: View {
                 }
             }
 
-            if !tile.name.isEmpty {
-                Text(tile.name)
+            if let name = Self.label(for: tile, kind: kind, lang.language) {
+                Text(name)
                     .font(.inter(11, weight: .medium))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.textSecondary)
                     .lineLimit(1)
@@ -112,8 +131,10 @@ enum ProShowcasePreview {
         ProShowcaseProfilePreview(background: background, frame: frame)
     }
 
-    static func vehicle(style: VehicleCardStyle) -> some View {
-        ProShowcaseVehiclePreview(style: style)
+    /// `vehicleID` — машина, чей фон правят (форма машины). Без него — первая
+    /// в гараже, как раньше (витрина открыта не из формы).
+    static func vehicle(style: VehicleCardStyle, vehicleID: UUID? = nil) -> some View {
+        ProShowcaseVehiclePreview(style: style, vehicleID: vehicleID)
     }
 
     static func route(style: RouteLineStyle, _ c: AppTheme.Colors) -> some View {
@@ -162,13 +183,18 @@ private struct ProShowcaseProfilePreview: View {
 
 private struct ProShowcaseVehiclePreview: View {
     let style: VehicleCardStyle
+    var vehicleID: UUID? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var settings = SettingsManager.shared
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let vehicle = settings.vehicles.first
+        // Та машина, чей фон правят, а не первая в гараже: иначе человек
+        // примерял фон на чужую карточку.
+        let vehicle = vehicleID.flatMap { id in settings.vehicles.first { $0.id == id } }
+            ?? settings.vehicles.first
         return ZStack {
             if style == .none { c.cardAlt } else {
                 VehicleCardStyleWash(style: style, cornerRadius: 0)
@@ -177,7 +203,7 @@ private struct ProShowcaseVehiclePreview: View {
                 Image(systemName: "car.side.fill")
                     .font(.system(size: 28))
                     .foregroundStyle(style == .none ? c.textSecondary : .white.opacity(0.92))
-                Text(vehicle?.name ?? AppStrings.proDemoCarEmptyTitle(.en))
+                Text(vehicle?.name ?? AppStrings.proDemoCarEmptyTitle(lang.language))
                     .font(.inter(15, weight: .semibold))
                     .foregroundStyle(style == .none ? c.text : .white)
                     .lineLimit(1)

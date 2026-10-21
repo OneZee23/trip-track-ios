@@ -2621,7 +2621,7 @@ enum AppStrings {
     /// когда все плечи уже публичны.
     ///
     /// Отклонение от брифа: имя вставляется плейсхолдером `{title}` ПОСЛЕ
-    /// `tr()` (как `publicRoutesExplainer`), а не живой интерполяцией
+    /// `tr()` (как `placeTowards`), а не живой интерполяцией
     /// `\(title)` внутри `ru:`/`en:` — `tr()` для остальных одиннадцати
     /// языков читает ГОТОВУЮ строку из таблицы и не умеет получать `title` в
     /// момент вызова; интерполяция внутри аргументов `tr()` молча теряла бы
@@ -7115,15 +7115,12 @@ enum AppStrings {
     static func publicRoutesCaption(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicRoutesCaption", ru: "публичные маршруты", en: "public routes")
     }
-    /// Через `tr` с плейсхолдером, а НЕ инлайновым `switch lang`: инлайн
-    /// невидим для одиннадцати таблиц и для `LocalizationTests`, и на немецком
-    /// телефоне навсегда остался бы английским. Правило дома, нарушенное здесь
-    /// при первом заходе.
-    static func publicRoutesExplainer(_ lang: LanguageManager.Language, name: String) -> String {
-        tr(lang, "publicRoutesExplainer",
-           ru: "Здесь только те поездки, которые {name} сделал публичными. Приватные на карту не попадают.",
-           en: "Only the trips {name} made public are drawn here. Private ones never reach the map.")
-            .replacingOccurrences(of: "{name}", with: name)
+    /// Подпись под итогом чужой карты: числа здесь — только публичные
+    /// поездки, а не все, что в профиле. Без имени: оно уже заголовок.
+    static func publicMapOnlyPublic(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicMapOnlyPublic",
+           ru: "Только публичные поездки",
+           en: "Public trips only")
     }
     static func publicMapEmptyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "publicMapEmptyTitle", ru: "Пока нечего показать", en: "Nothing to show yet")
@@ -7979,6 +7976,10 @@ enum AppStrings {
     /// Восстановление не нашло покупок. Говорит и про второй Apple ID: это
     /// самая частая причина, и без неё человек решает, что мы потеряли оплату.
     /// Не «покупок нет»: так отвечает и бывшему подписчику с истёкшим PRO.
+    /// Восстановление нашло подписку — коротко, тост.
+    static func proRestored(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proRestored", ru: "PRO восстановлен", en: "PRO restored")
+    }
     static func proRestoreNone(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proRestoreNone",
            ru: "Активной подписки на этом Apple ID нет. Если PRO на другом, войдите в него в App Store",
@@ -8044,6 +8045,12 @@ enum AppStrings {
         tr(lang, "proDemoCarTextNoVehicle",
            ru: "Карточка машины стоит в вашем гараже и в публичном профиле. Пока машины нет, показываем пример.",
            en: "Your car card shows in your garage and on your public profile. There's no car yet, so this is an example.")
+    }
+    /// Чаевые ждут одобрения (Ask To Buy / банк): деньги ещё не списаны.
+    static func tipsAwaitingApproval(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipsAwaitingApproval",
+           ru: "Ждём подтверждения покупки — спасибо!",
+           en: "Waiting for the purchase to be approved — thank you!")
     }
     static func proDemoCarEmptyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proDemoCarEmptyTitle", ru: "Ваша машина", en: "Your car")
@@ -8126,6 +8133,12 @@ enum AppStrings {
     static func proBoughtPickBg(_ lang: LanguageManager.Language) -> String {
         tr(lang, "proBoughtPickBg",
            ru: "Выбрать фон профиля", en: "Pick a profile background")
+    }
+    static func proBoughtPickFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtPickFrame", ru: "Выбрать рамку аватара", en: "Pick an avatar frame")
+    }
+    static func proBoughtPickLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "proBoughtPickLine", ru: "Выбрать цвет линии", en: "Pick a route colour")
     }
     /// Купил из листа ручной поездки (состояние 36б) — возвращаемся к нему со
     /// всем набранным, а не на витрину и не в «Историю».
@@ -8336,14 +8349,6 @@ enum AppStrings {
            ru: "Что-то с базой. Попробуйте ещё раз, набранное на месте.",
            en: "Something\'s wrong with the database. Try again, everything is kept.")
     }
-    /// Строка под кнопкой «Записать». Говорит ВСЛУХ и ДО записи, что
-    /// вписанная поездка даёт километры, но не награды (правило 0.8.0):
-    /// узнать об этом после — хуже, чем не купить.
-    static func manualHonesty(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualHonesty",
-           ru: "Пойдёт в километры, одометр и атлас. Опыт и значки только за записанные поездки",
-           en: "Counts toward distance, the odometer and the atlas. XP and badges only for recorded trips")
-    }
 
     static func plusRestore(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusRestore", ru: "Восстановить покупки", en: "Restore purchases")
@@ -8474,6 +8479,19 @@ enum AppStrings {
     }
 
     /// Подпись под пикером фона карточки: где именно он виден.
+    /// Под витриной фона и рамки, пока человек не вошёл: выбор работает у
+    /// него, а другим уезжает только с профилем.
+    static func showcaseVisibleAfterSignIn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseVisibleAfterSignIn",
+           ru: "Сейчас это видите только вы. Другие увидят после входа в аккаунт.",
+           en: "Only you see this for now. Others will see it once you sign in.")
+    }
+    /// Под витриной карточки машины без облака: гараж уезжает только с ним.
+    static func showcaseVisibleAfterSync(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "showcaseVisibleAfterSync",
+           ru: "Сейчас это видите только вы. Другие увидят после входа и включения синхронизации.",
+           en: "Only you see this for now. Others will see it once you sign in and turn on sync.")
+    }
     static func vehicleCardStylePickerFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleCardStylePickerFootnote",
            ru: "Фон видно на карточке этой машины — в гараже и в публичном профиле.",
@@ -8627,16 +8645,7 @@ enum AppStrings {
         tr(lang, "manualTripChipHome", ru: "Дом", en: "Home")
     }
 
-    /// Чип «Точка на карте» — взводит тап по герою листа; то же имя ставится
-    /// точке, пока обратный геокодер не ответил.
-    static func manualTripChipMapPoint(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripChipMapPoint", ru: "Точка на карте", en: "Point on map")
-    }
 
-    /// На кнопке «Записать», пока не заданы обе точки.
-    static func manualTripNeedPoints(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripNeedPoints", ru: "Укажите, откуда и куда", en: "Set where from and where to")
-    }
 
     /// Заголовок тоста после успешной записи.
     static func manualTripSuccessMessage(_ lang: LanguageManager.Language) -> String {
@@ -8644,14 +8653,20 @@ enum AppStrings {
     }
 
     /// Первая кнопка тоста.
-    static func manualTripSuccessOpen(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripSuccessOpen", ru: "Открыть поездку", en: "Open trip")
+    /// Строка списка точек: поставить точку пальцем по карте.
+    static func manualTripPointOnMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripPointOnMap", ru: "Указать на карте", en: "Pick on the map")
+    }
+    /// Подсказка над картой, пока точку ставят пальцем.
+    static func manualTripTapMapHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripTapMapHint", ru: "Коснитесь точки на карте", en: "Tap a spot on the map")
+    }
+    /// Действие тоста «Поездка добавлена» — вписать обратную дорогу тем же
+    /// листом, с концами наоборот. Одно короткое слово: тост — пилюля.
+    static func manualTripReturnShort(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripReturnShort", ru: "Обратно", en: "Return trip")
     }
 
-    /// Вторая кнопка тоста — открывает тот же лист с перевёрнутыми точками.
-    static func manualTripSuccessReturn(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "manualTripSuccessReturn", ru: "Добавить обратную дорогу", en: "Add the way back")
-    }
 
     // MARK: - Экспорт GPX и CSV (0.8.0)
 

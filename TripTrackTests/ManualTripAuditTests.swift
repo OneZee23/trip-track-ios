@@ -119,7 +119,6 @@ final class ManualTripAuditTests: XCTestCase {
             ("manualFailedProText", AppStrings.manualFailedProText),
             ("manualFailedDbTitle", AppStrings.manualFailedDbTitle),
             ("manualFailedDbText", AppStrings.manualFailedDbText),
-            ("manualHonesty", AppStrings.manualHonesty),
         ]
         for (name, fn) in strings {
             let en = fn(.en)

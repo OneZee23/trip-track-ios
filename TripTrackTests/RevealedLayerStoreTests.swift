@@ -268,7 +268,10 @@ final class RevealedLayerStoreTests: XCTestCase {
 
         let layer = await store.layer()
         XCTAssertFalse(layer.fine.polylines.isEmpty)
-        XCTAssertEqual(layer.mid.polylines.count, layer.fine.polylines.count)
+        // `.mid` склеивает прогоны, стоящие встык (`RevealedLayer.stitch`):
+        // линий там не больше, чем на `.fine`, и ни одна не потеряна.
+        XCTAssertFalse(layer.mid.polylines.isEmpty)
+        XCTAssertLessThanOrEqual(layer.mid.polylines.count, layer.fine.polylines.count)
         XCTAssertEqual(layer.openedKm, 3.0, accuracy: 0.4)
         XCTAssertGreaterThan(layer.cellCount, 30)
     }

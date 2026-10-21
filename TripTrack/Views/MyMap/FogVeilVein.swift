@@ -72,7 +72,17 @@ enum FogVeilVein {
                 zoomScale: zoomScale)
             if !paths.isEmpty {
                 let net = CGMutablePath()
-                for path in paths { net.addPath(path, transform: transform) }
+                for path in paths {
+                    Self.appendThinned(path, to: net, transform: transform, minStep: Self.minStepPoints)
+                }
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-trace-vein") {
+                    var before = 0, after = 0, runs = 0
+                    for path in paths { path.applyWithBlock { _ in before += 1 } }
+                    net.applyWithBlock { e in after += 1; if e.pointee.type == .moveToPoint { runs += 1 } }
+                    NSLog("VEINTRACE lod=\(lod) zoom=\(zoomScale) before=\(before) after=\(after) runs=\(runs)")
+                }
+                #endif
                 // Ореол — первым: сердцевина ложится поверх него.
                 if let halo = RouteVeinRenderer.halo(for: lod) {
                     let metre = MKMapPointsPerMeterAtLatitude(
@@ -110,6 +120,63 @@ enum FogVeilVein {
             }
         }
         return out
+    }
+
+    /// Шаг, ближе которого соседние вершины сети не рисуются, в точках экрана.
+    ///
+    /// Сеть хранится на шаге своего уровня детали (75 м, 250 м, 1 км), и на
+    /// масштабе страны километровый шаг — 0.17 экранной точки: чужая карта на
+    /// 25 тысяч км (13 окт 2026) отдавала слою `CAShapeLayer` 53 тысячи
+    /// вершин, которые система заново раскладывала на каждом растре во время
+    /// щипка, — отсюда рывки и нагрев. Линия сети толщиной 2.2–3 точки, ореол
+    /// 8–10: излом короче точки глаз на ней не различает, поэтому картинка
+    /// та же, а вершин в разы меньше.
+    static let minStepPoints: CGFloat = 1
+
+    /// Переносит `path` в `net`, отбрасывая вершины ближе `minStep` к
+    /// предыдущей оставленной. Начало и конец каждой линии остаются всегда:
+    /// иначе короткая поездка на масштабе страны исчезла бы целиком, а не
+    /// стала точкой.
+    ///
+    /// И ШЬЁТ: прогон, который начинается там же, где кончился прошлый (на
+    /// экране ближе шага), продолжает ту же линию, а не открывает новую, —
+    /// в том числе через границу двух вызовов, то есть двух бакетов индекса.
+    /// Каждая отдельная линия — это ещё пара круглых концов на кадр.
+    static func appendThinned(
+        _ path: CGPath, to net: CGMutablePath,
+        transform: CGAffineTransform, minStep: CGFloat
+    ) {
+        let limit = minStep * minStep
+        var last = net.isEmpty ? CGPoint.zero : net.currentPoint
+        var pending: CGPoint?
+        path.applyWithBlock { element in
+            let e = element.pointee
+            switch e.type {
+            case .moveToPoint:
+                if let p = pending { net.addLine(to: p); last = p; pending = nil }
+                let start = e.points[0].applying(transform)
+                let dx = start.x - last.x, dy = start.y - last.y
+                if net.isEmpty || dx * dx + dy * dy >= limit {
+                    net.move(to: start)
+                    last = start
+                }
+            case .addLineToPoint:
+                let p = e.points[0].applying(transform)
+                let dx = p.x - last.x, dy = p.y - last.y
+                if dx * dx + dy * dy >= limit {
+                    net.addLine(to: p)
+                    last = p
+                    pending = nil
+                } else {
+                    pending = p
+                }
+            default:
+                // Сеть собирается только из `move`/`addLine`
+                // (`MapPathChunks.bucket`); остальное не переносится.
+                if let p = pending { net.addLine(to: p); last = p; pending = nil }
+            }
+        }
+        if let p = pending { net.addLine(to: p) }
     }
 }
 

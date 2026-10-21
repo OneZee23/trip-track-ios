@@ -13,6 +13,8 @@ struct ProPaywallView: View {
     /// единственная кнопка, и ведёт она обратно к набранной поездке, а не в
     /// витрину фонов (состояние 36б).
     var origin: ProBoughtView.Origin = .storefront
+    /// Какую витрину открывает «Вы в PRO» (`PlusPaywallSheet.nextKind`).
+    var nextKind: ProShowcaseKind? = .profileBackground
     let onPickBackground: () -> Void
     let onClose: () -> Void
 
@@ -43,6 +45,8 @@ struct ProPaywallView: View {
     /// он не покупал сейчас ничего. «Куплено» показывается тому, кто нажал
     /// кнопку, а не тому, у кого есть подписка.
     @State private var justBought = false
+    /// Показ витрины уже посчитан в добровольной аналитике (0.9.0).
+    @State private var countedOffer = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -64,6 +68,7 @@ struct ProPaywallView: View {
                               until: store.displayExpiry,
                               isTrial: store.state == .trial,
                               yearlyPrice: plans.first { $0.period == .yearly }?.displayPrice,
+                              nextKind: nextKind,
                               onPickBackground: onPickBackground,
                               onClose: onClose)
             } else {
@@ -87,6 +92,14 @@ struct ProPaywallView: View {
         .accessibilityIdentifier("plus_paywall")
         .toast(item: $toast)
         .task { await load() }
+        .onAppear {
+            // Предложение — это витрина у того, у кого PRO ещё нет, и одна на
+            // открытие листа: подписчик, заглянувший в «Ваш PRO», и возврат из
+            // демо-экрана воронку не раздувают.
+            guard !countedOffer, !store.isPlus else { return }
+            countedOffer = true
+            ProductAnalytics.shared.proOfferShown()
+        }
     }
 
     // MARK: - Состояние
@@ -413,9 +426,11 @@ struct ProPaywallView: View {
             guard let product else { return }
             Haptics.action()
             notice = .none
+            ProductAnalytics.shared.proBuyTapped()
             Task {
                 let outcome = await store.purchase(product)
                 notice = PlusStore.message(for: outcome)
+                if case .success = outcome { ProductAnalytics.shared.proPurchased() }
                 // Отмену человеком тостом НЕ сопровождаем: он закрыл
                 // системный лист сам, и сообщать ему об этом — то же, что
                 // спорить.
@@ -519,8 +534,19 @@ struct ProPaywallView: View {
                 Button {
                     Haptics.tap()
                     Task {
+                        let hadPlus = store.isPlus
                         notice = .none
                         notice = await store.restore()
+                        // Нашлась — сказать это и уйти с витрины: молча
+                        // оставленная кнопка «Оформить» читалась как «не
+                        // вышло», и человек покупал второй раз (14 окт 2026).
+                        if notice == .none, store.isPlus, !hadPlus {
+                            toast = ToastItem(type: .success,
+                                              message: AppStrings.proRestored(l))
+                            try? await Task.sleep(for: .seconds(1.2))
+                            onClose()
+                            return
+                        }
                         // `.none` от восстановления означает две разные вещи:
                         // «подписка нашлась» и «на этом Apple ID её нет».
                         // Различает их `isPlus` — и это состояние 10, у

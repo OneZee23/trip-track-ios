@@ -71,10 +71,10 @@ final class HistoryManualFlowTests: XCTestCase {
             reveal(add, upwards: false)
             add.tap()
         }
-        let save = app.buttons["manual_trip_create"].firstMatch
-        XCTAssertTrue(save.waitForExistence(timeout: 8))
-        XCTAssertEqual(save.label, "Сохранить поездку")
-        XCTAssertFalse(save.isEnabled)
+        // Лист открывается на выборе точек: сохранять ещё нечего, и кнопки
+        // сохранения нет вовсе, а не серая.
+        XCTAssertTrue(app.textFields["manual_trip_search"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["manual_trip_create"].exists)
         snapshot("manual-explicit-save")
         tap("manual_trip_cancel")
         XCTAssertTrue(day.exists, "Closing manual entry returns to the selected history day")

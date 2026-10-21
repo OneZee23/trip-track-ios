@@ -14,24 +14,48 @@ struct PlusPaywallSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = SettingsManager.shared
-    @State private var choosingBackground = false
+    @State private var choosing: ProShowcaseKind?
+
+    /// Куда ведёт «Вы в PRO» (14 окт 2026): туда, ради чего купили. Прежде
+    /// кнопка вела к фону профиля даже того, кто пришёл с рамки или цвета
+    /// линии, — и купленное приходилось искать самому. Фон машины правит
+    /// только её форма, вписанную поездку — её лист: там кнопка просто
+    /// возвращает обратно (`nil`).
+    static func nextKind(after feature: PlusFeature?) -> ProShowcaseKind? {
+        switch feature {
+        case .avatarFrame: return .avatarFrame
+        case .routeLineStyle: return .routeLine
+        case .vehicleCardStyle, .manualTrip: return nil
+        case .profileBackgrounds, nil: return .profileBackground
+        }
+    }
 
     var body: some View {
         // Меняем содержимое того же листа: закрытие пейвола и одновременный
         // показ второго sheet могут потерять переход в SwiftUI.
-        if choosingBackground {
+        if let kind = choosing {
             ProShowcaseSheet(
-                kind: .profileBackground,
-                current: settings.profileBackground,
-                onPick: { settings.selectCosmetic(.profileBackground, id: $0,
+                kind: kind,
+                current: current(kind),
+                onPick: { settings.selectCosmetic(kind, id: $0,
                                                   isPlus: PlusAccess.shared.isPlus) },
-                onOpenPro: { choosingBackground = false })
+                onOpenPro: { choosing = nil })
         } else {
             ProPaywallView(
                 feature: feature,
                 origin: origin,
-                onPickBackground: { choosingBackground = true },
+                nextKind: Self.nextKind(after: feature),
+                onPickBackground: { choosing = Self.nextKind(after: feature) },
                 onClose: { dismiss() })
+        }
+    }
+
+    private func current(_ kind: ProShowcaseKind) -> String {
+        switch kind {
+        case .profileBackground: return settings.profileBackground
+        case .avatarFrame: return settings.avatarFrame ?? ""
+        case .routeLine: return RouteLineStyle.stored.rawValue
+        case .vehicleCard: return ""
         }
     }
 }

@@ -37,6 +37,89 @@ enum DebugForeignTripFixture {
         return Trip.encodePolyline(coordinates).base64EncodedString()
     }()
 
+    /// The author's public map, offline (12 Oct 2026). `-debug-foreign-map`
+    /// picks the library: `france` (default) — two long drives through France,
+    /// the case behind «0 регионов» while the atlas split twenty countries (the
+    /// world atlas of 13 Oct splits France too; the rule now lives in
+    /// `PublicMapRegionsTileTests`); `heavy` — hundreds of long drives across Russia (a stress
+    /// load, nine times the points of any real map); `real` — the shape of the
+    /// heaviest real public map, the one that ran a phone hot on 13 Oct.
+    static var mapVariant: String {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-debug-foreign-map"), i + 1 < args.count else { return "france" }
+        return args[i + 1]
+    }
+
+    /// Preview points and kilometres of each trip of the heaviest real public
+    /// map, read as counts only on 13 Oct 2026.
+    static let realShape: [(points: Int, km: Double)] = [
+        (7405, 1592), (6896, 1618), (5026, 1132), (4406, 1144), (3989, 873), (3934, 629),
+        (3322, 689), (3267, 770), (3223, 637), (3111, 781), (3080, 549), (3059, 571),
+        (2836, 863), (2828, 853), (2792, 639), (2733, 825), (2713, 572), (2618, 631),
+        (2570, 424), (2558, 638), (2537, 555), (2507, 552), (2006, 552), (1900, 253),
+        (1733, 592), (1687, 336), (1585, 386), (1578, 445), (1485, 659), (1480, 340),
+        (1426, 653), (1352, 359), (1311, 609), (1236, 401), (1227, 277), (1150, 278),
+        (1075, 599), (995, 274), (827, 123), (772, 405), (732, 277), (471, 142), (359, 94),
+    ]
+
+    private static func publicTrips() -> [[String: Any]] {
+        let iso = ISO8601DateFormatter()
+        func trip(_ index: Int, from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+                  points: Int, wiggle: Double, km: Double, region: String) -> [String: Any] {
+            let coordinates = (0..<points).map { i in
+                let p = Double(i) / Double(points - 1)
+                return CLLocationCoordinate2D(
+                    latitude: from.latitude + (to.latitude - from.latitude) * p + sin(p * 40 + Double(index)) * wiggle,
+                    longitude: from.longitude + (to.longitude - from.longitude) * p + cos(p * 33 + Double(index)) * wiggle)
+            }
+            let start = Date(timeIntervalSince1970: 1_790_000_000 - Double(index) * 86_400)
+            return [
+                "id": String(format: "D37A2001-0000-4000-8000-%012d", index),
+                "startDate": iso.string(from: start),
+                "endDate": iso.string(from: start.addingTimeInterval(km * 40)),
+                "distance": km * 1000,
+                "duration": Int(km * 40),
+                "region": region,
+                "previewPolyline": Trip.encodePolyline(coordinates).base64EncodedString(),
+            ]
+        }
+        if mapVariant == "real" {
+            // The shape of the heaviest real public map (13 Oct 2026): 43
+            // trips, the same preview sizes and distances, 103 797 points,
+            // spread over 50–60° N and 48–130° E. Counts only — no person's
+            // coordinates are copied; the routes are synthetic.
+            return realShape.enumerated().map { i, t in
+                let a = Double(i)
+                let from = CLLocationCoordinate2D(latitude: 50 + (a * 3.7).truncatingRemainder(dividingBy: 10),
+                                                  longitude: 48 + (a * 19).truncatingRemainder(dividingBy: 82))
+                // ~1 degree per 70 km eastward, as a long drive goes.
+                let to = CLLocationCoordinate2D(latitude: from.latitude + sin(a) * 2,
+                                                longitude: from.longitude + t.km / 70)
+                return trip(i, from: from, to: to, points: t.points, wiggle: 0.04, km: t.km, region: "Russia")
+            }
+        }
+        if mapVariant == "heavy" {
+            // A library like the heaviest real one: ~600 long drives criss-
+            // crossing European Russia, 1 500 preview points each.
+            return (0..<600).map { i in
+                let a = Double(i)
+                let from = CLLocationCoordinate2D(latitude: 45 + (a * 7).truncatingRemainder(dividingBy: 15),
+                                                  longitude: 30 + (a * 11).truncatingRemainder(dividingBy: 30))
+                let to = CLLocationCoordinate2D(latitude: 45 + (a * 13).truncatingRemainder(dividingBy: 15),
+                                                longitude: 30 + (a * 5).truncatingRemainder(dividingBy: 30))
+                return trip(i, from: from, to: to, points: 1500, wiggle: 0.05, km: 400 + a, region: "Russia")
+            }
+        }
+        return [
+            trip(0, from: CLLocationCoordinate2D(latitude: 43.4, longitude: 1.0),
+                 to: CLLocationCoordinate2D(latitude: 50.65, longitude: 3.1),
+                 points: 2400, wiggle: 0.03, km: 896.3, region: "Occitanie"),
+            trip(1, from: CLLocationCoordinate2D(latitude: 50.6, longitude: 3.0),
+                 to: CLLocationCoordinate2D(latitude: 45.8, longitude: 1.3),
+                 points: 2400, wiggle: 0.03, km: 945.7, region: "Hauts-de-France"),
+        ]
+    }
+
     private static func trip(refreshed: Bool) -> [String: Any] {
         [
             "id": "D37A1000-0000-4000-8000-000000000081",
@@ -54,7 +137,11 @@ enum DebugForeignTripFixture {
             "maxSpeed": 28, "drivingTime": 13500, "stoppedTime": 900,
             "isPrivate": false, "previewPolyline": preview,
             "photoCount": 0, "reactionCount": 0, "reactionBreakdown": [],
-            "badgeIds": [], "commentCount": 0
+            "badgeIds": [], "commentCount": 0,
+            // The car the trip was driven in — the same one the garage holds,
+            // with its id, so the chip opens its page (0.9.0).
+            "vehicle": ["id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+                        "avatarEmoji": "🚙", "avatarStyle": NSNull()]
         ]
     }
 
@@ -133,8 +220,12 @@ enum DebugForeignTripFixture {
             payload = ["comments": []]
         } else if path.hasSuffix("/profile"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = profile()
+        } else if path.contains("/vehicles/"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            return try JSONSerialization.data(withJSONObject: ["status": "ok", "payload": garageVehicle()])
         } else if path.contains("/garage"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["vehicles": profileVariant == "new" ? [] : [garageVehicle()]]
+        } else if path.hasSuffix("/trips"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            payload = ["trips": publicTrips(), "nextCursor": NSNull()]
         } else if path.contains("/journeys"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["journeys": [], "nextCursor": NSNull()]
         } else if path.hasSuffix(APIEndpoint.companionsList) {

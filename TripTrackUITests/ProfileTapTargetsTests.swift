@@ -29,7 +29,16 @@ final class ProfileTapTargetsTests: XCTestCase {
         let toggle = app.buttons["profile_sections_toggle"].firstMatch
         if toggle.waitForExistence(timeout: 5) { toggle.tap() }
         let link = app.buttons["profile_achievements_all"].firstMatch
-        for _ in 0..<4 where !(link.exists && link.isHittable) { app.swipeUp() }
+        XCTAssertTrue(link.waitForExistence(timeout: 8))
+        let window = app.windows.firstMatch
+        // Slow drags, not swipeUp: see the month test below.
+        for _ in 0..<12 where !link.isHittable
+            || link.frame.minY < 140 || link.frame.maxY > window.frame.height - 160 {
+            let from = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            let step: CGFloat = link.frame.minY < 140 ? 160 : -160
+            from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: step)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
         XCTAssertTrue(link.isHittable)
         tapAbove(link)
         XCTAssertTrue(app.descendants(matching: .any)["achievements_screen"].firstMatch.waitForExistence(timeout: 5))
@@ -37,7 +46,21 @@ final class ProfileTapTargetsTests: XCTestCase {
 
     func testMonthLinkTakesATapAboveItsText() {
         let month = app.buttons["profile_calendar_month"].firstMatch
-        for _ in 0..<6 where !(month.exists && month.isHittable) { app.swipeUp() }
+        XCTAssertTrue(month.waitForExistence(timeout: 8))
+        let window = app.windows.firstMatch
+        // Small, slow drags, as for the search card below. A full swipeUp
+        // flings past the target, and the hittable check runs mid-fling: the
+        // page kept coasting after it, the button ended under the status bar,
+        // and the edge tap landed on the status bar — iOS scrolls to top
+        // (12 Oct 2026, seen once the status-bar backdrop on «Я» stopped
+        // drawing the button over the clock).
+        for _ in 0..<12 where !month.isHittable
+            || month.frame.minY < 140 || month.frame.maxY > window.frame.height - 160 {
+            let from = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            let step: CGFloat = month.frame.minY < 140 ? 160 : -160
+            from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: step)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
         XCTAssertTrue(month.isHittable)
         tapAbove(month)
         XCTAssertTrue(app.buttons["profile_calendar_clear"].firstMatch.waitForExistence(timeout: 3)

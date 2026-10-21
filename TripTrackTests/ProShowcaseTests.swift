@@ -362,3 +362,33 @@ final class ProShowcaseTests: XCTestCase {
         }
     }
 }
+
+/// Подпись «без варианта» на витрине — на языке человека, а не «Default».
+@MainActor
+final class ProShowcaseTileLabelTests: XCTestCase {
+    func testTheEmptyOptionIsLabelledInThePersonsLanguage() {
+        for kind in [ProShowcaseKind.profileBackground, .avatarFrame] {
+            let none = ProShowcase.tiles(for: kind).first { $0.id.isEmpty }!
+            XCTAssertEqual(ProShowcaseTileView.label(for: none, kind: kind, .ru), "Обычный", "\(kind)")
+            XCTAssertEqual(ProShowcaseTileView.label(for: none, kind: kind, .de),
+                           AppStrings.cosmeticDefaultOption(.de), "\(kind)")
+            XCTAssertNotEqual(ProShowcaseTileView.label(for: none, kind: kind, .de), "Default", "\(kind)")
+        }
+    }
+
+    /// Карточка машины несёт имя машины, а «по скорости» рисуется строкой —
+    /// у обеих подписи под плиткой нет.
+    func testVehicleCardAndSpeedLineCarryNoTileLabel() {
+        for kind in [ProShowcaseKind.vehicleCard, .routeLine] {
+            let none = ProShowcase.tiles(for: kind).first { $0.id.isEmpty }!
+            XCTAssertNil(ProShowcaseTileView.label(for: none, kind: kind, .ru), "\(kind)")
+        }
+    }
+
+    /// Имена вариантов — имена собственные и не переводятся.
+    func testNamedOptionsKeepTheirOwnNames() {
+        let gold = ProShowcase.tiles(for: .avatarFrame).first { $0.id == AvatarFrame.gold.rawValue }!
+        XCTAssertEqual(ProShowcaseTileView.label(for: gold, kind: .avatarFrame, .ru), "Gold")
+        XCTAssertEqual(ProfileBackground.none.displayName, "")
+    }
+}

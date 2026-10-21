@@ -485,6 +485,10 @@ final class PlusStore: ObservableObject {
         if Self.isDebugPlus { state = .active }
         #endif
         PlusAccess.shared.isPlus = isPlus
+        // Зеркало для рендереров карт — в момент смены прав, а не только при
+        // открытии карты: иначе истёкшая или продлённая на открытой карте
+        // подписка красила линию по-старому до следующей карты.
+        RouteLineStyle.rememberPlus(isPlus)
         SettingsManager.shared.restoreRetainedCosmetics(isPlus: isPlus)
         // Право приехало — ждать больше нечего. Одобренный Ask To Buy доезжает
         // через `Transaction.updates` и попадает сюда же.
@@ -570,6 +574,15 @@ final class PlusStore: ObservableObject {
                     return .failed(error)
                 }
                 await handle(verification, source: "purchase")
+                // Проверенная покупка, а права ещё не видны: StoreKit отдаёт
+                // `currentEntitlements` с опозданием в доли секунды, и «не
+                // получилось» после настоящего списания пугало бы человека,
+                // у которого PRO через миг откроется сам. Два коротких
+                // перечитывания, прежде чем объявлять неудачу.
+                for delay in [0.4, 1.2] where !isPlus {
+                    try? await Task.sleep(for: .seconds(delay))
+                    await refreshEntitlements()
+                }
                 return isPlus ? .success : .failed(PurchaseError.entitlementDidNotArrive)
             case .userCancelled:
                 plusLog.notice("purchase cancelled")

@@ -785,7 +785,11 @@ struct PublicProfileView: View {
         // всех местах этой функции одинаково, включая значок
         // (`PlusBadgeVisibility.shows` требует ровно `true`). Спека §2:
         // «Плюс» кончился — показывается бесплатное.
-        let saidPlus = PlusBadgeVisibility.saysPlus(profile?.isPlus ?? preloaded?.isPlus)
+        //
+        // Фон и рамку решает ПОДПИСКА (`showsPaidCosmetics`), а не значок:
+        // значок человек вправе спрятать, а оплаченный вид — нет.
+        let saidPlus = profile.map(\.showsPaidCosmetics)
+            ?? PlusBadgeVisibility.saysPlus(preloaded?.isPlus)
         let background = ProfileBackground.effective(
             id: profile?.profileBackground, isPlus: saidPlus)
         let frame = AvatarFrame.effective(

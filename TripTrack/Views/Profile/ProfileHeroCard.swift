@@ -1,7 +1,14 @@
 import SwiftUI
 
-/// Identity and trip totals on «Me». Chosen covers keep their own artwork;
-/// the default follows the app theme so the history remains the main content.
+/// Identity and trip totals on «Me». A chosen profile background is shown
+/// here as others see it; without one the card is light.
+///
+/// The default is a warm tint with an accent edge (owner, 13 Oct 2026,
+/// variant C). Variant A, a dark card with a glow, shipped in 0.9.0 (79) and
+/// was rolled back the next day: «Me» gave everyone a striking cover without
+/// choosing one, so the profile background setting (eleven free, eight PRO)
+/// looked like it did nothing. Only a chosen background darkens this card, so
+/// what people see here is what others see on their profile.
 struct ProfileHeroCard: View {
     let background: ProfileBackground
     let avatarEmoji: String
@@ -25,11 +32,17 @@ struct ProfileHeroCard: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var plus = PlusAccess.shared
 
-    private var hasCover: Bool { background.effective(isPlus: plus.isPlus) != .none }
+    /// The background as others see it; `nil` for the light default. An
+    /// expired PRO falls back here too (`effective`), never to a dark card.
+    private var chosenCover: ProfileBackground? {
+        let effective = background.effective(isPlus: plus.isPlus)
+        return effective == .none ? nil : effective
+    }
+    private var hasCover: Bool { chosenCover != nil }
     private var colors: AppTheme.Colors { AppTheme.colors(for: scheme) }
     private var ink: Color { hasCover ? .white : colors.text }
     private var secondaryInk: Color { hasCover ? .white.opacity(0.85) : colors.textSecondary }
-    private var rule: Color { hasCover ? .white.opacity(0.22) : colors.borderBright }
+    private var rule: Color { hasCover ? .white.opacity(0.22) : AppTheme.accent.opacity(0.18) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -41,17 +54,26 @@ struct ProfileHeroCard: View {
         }
         .padding(20)
         .background {
-            if hasCover {
-                background.effective(isPlus: plus.isPlus).view()
+            if let chosenCover {
+                chosenCover.view()
                     .overlay(.black.opacity(0.64))
             } else {
-                colors.card
+                defaultBackdrop
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(hasCover ? .clear : colors.border, lineWidth: 1)
+                .strokeBorder(hasCover ? .clear : AppTheme.accent.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    /// The card with a warm accent tint: set apart from the white cards under
+    /// it, but still lighter than any paid cover.
+    private var defaultBackdrop: some View {
+        ZStack {
+            colors.card
+            AppTheme.accent.opacity(scheme == .dark ? 0.16 : 0.08)
         }
     }
 

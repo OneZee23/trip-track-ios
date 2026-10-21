@@ -114,6 +114,47 @@ final class ProductAnalyticsTests: XCTestCase {
         XCTAssertEqual(Set(object.keys), Set(["schema", "token", "revision", "cohortDay", "observedDay",
             "hadTrips", "starts", "saves", "saveFailures", "atlasOpens", "fastSaves", "mediumSaves", "slowSaves"]))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains(id.uuidString))
+        // The PRO funnel (0.9.0) adds three counts and nothing else: no
+        // product, price, screen or feature.
+        analytics.proOfferShown()
+        let withFunnel = try JSONEncoder().encode(XCTUnwrap(state().snapshot))
+        let funnelKeys = try XCTUnwrap(JSONSerialization.jsonObject(with: withFunnel) as? [String: Any]).keys
+        XCTAssertEqual(Set(funnelKeys).subtracting(object.keys), Set(["proOffers"]))
+    }
+
+    func testProFunnelCountsOnlyAfterConsentAndNeverNarrowsBackwards() throws {
+        let analytics = service()
+        analytics.proOfferShown()
+        analytics.proBuyTapped()
+        analytics.proPurchased()
+        XCTAssertNil(defaults.data(forKey: "productAnalytics.v1"), "Nothing before consent")
+
+        analytics.setEnabled(true)
+        // A purchase confirmed without a tap counted (restored, or consent
+        // given mid-purchase) must not make purchases exceed taps.
+        analytics.proPurchased()
+        analytics.proBuyTapped()
+        XCTAssertEqual(try state().snapshot?.proPurchases ?? 0, 0)
+        XCTAssertEqual(try state().snapshot?.proBuyTaps ?? 0, 0)
+
+        analytics.proOfferShown()
+        analytics.proOfferShown()
+        analytics.proBuyTapped()
+        analytics.proPurchased()
+        let snapshot = try XCTUnwrap(state().snapshot)
+        XCTAssertEqual(snapshot.proOffers, 2)
+        XCTAssertEqual(snapshot.proBuyTaps, 1)
+        XCTAssertEqual(snapshot.proPurchases, 1)
+    }
+
+    func testSnapshotSavedBy089StillDecodes() throws {
+        let old = #"{"snapshot":{"schema":1,"token":"a","revision":3,"cohortDay":"2026-10-01","observedDay":"2026-10-02","hadTrips":true,"starts":1,"saves":1,"saveFailures":0,"atlasOpens":2,"fastSaves":1,"mediumSaves":0,"slowSaves":0,"firstSaveDay":"2026-10-01"},"pendingErase":[],"acknowledgedRevision":2}"#
+        defaults.set(Data(old.utf8), forKey: "productAnalytics.v1")
+        let analytics = service()
+        XCTAssertTrue(analytics.enabled)
+        analytics.proOfferShown()
+        XCTAssertEqual(try state().snapshot?.atlasOpens, 2)
+        XCTAssertEqual(try state().snapshot?.proOffers, 1)
     }
 
     func testNetworkFailureRetriesSameRevisionAndRevocationDeletesInsteadOfUploading() async throws {

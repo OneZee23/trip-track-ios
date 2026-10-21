@@ -44,24 +44,49 @@ final class ManualTripShotTests: XCTestCase {
         me.tap(); sleep(3)
     }
 
-    /// Форма: точки, дата, длительность, машина, название, «Создать».
-    func test_manual_form() {
-        normalise()
-        openProfile()
-
+    private func openSheet() {
         let add = app.buttons.matching(identifier: "profile_history_add").firstMatch
         for _ in 0..<10 where !(add.exists && add.isHittable) {
             app.swipeUp(); sleep(1)
         }
         XCTAssertTrue(add.exists && add.isHittable, "нет «+» в шапке «Истории»")
         add.tap(); sleep(3)
+    }
 
-        XCTAssertTrue(
-            app.buttons.matching(identifier: "manual_trip_create").firstMatch
-                .waitForExistence(timeout: 5),
-            "лист «Вписать поездку» не открылся — гейт отдал пейвол?"
-        )
-        snap("w080_manual_form")
+    /// Первая стадия (13 окт 2026): «Откуда → Куда», клавиатура сразу, под
+    /// строкой — дом, частые места и концы недавних поездок.
+    func test_manual_form() {
+        normalise()
+        openProfile()
+        // Частые места приходят штатной сверкой `PlaceManager.reconcile()` на
+        // запуске — на богатом сиде она не всегда успевает до листа.
+        sleep(8)
+        openSheet()
+
+        let field = app.textFields.matching(identifier: "manual_trip_search").firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "лист не открылся — гейт отдал пейвол?")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5),
+                      "клавиатура обязана приехать сама — набор и есть первый шаг")
+        XCTAssertTrue(app.buttons.matching(identifier: "manual_trip_suggestion").firstMatch
+                        .waitForExistence(timeout: 5), "под строкой нет ни одной подсказки")
+        snap("w090_manual_places")
+    }
+
+    /// Выбор «Откуда» сам переводит фокус в «Куда», и поле остаётся одним.
+    func test_manual_focus_moves_to_destination() {
+        normalise()
+        openProfile()
+        sleep(8)
+        openSheet()
+
+        let first = app.buttons.matching(identifier: "manual_trip_suggestion").firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 5), "нет подсказок")
+        first.tap(); sleep(2)
+        XCTAssertTrue(app.buttons.matching(identifier: "manual_trip_point_from").firstMatch.exists,
+                      "выбранное «Откуда» обязано стать словом, а не полем")
+        XCTAssertTrue(app.textFields.matching(identifier: "manual_trip_search").firstMatch.exists,
+                      "поле обязано переехать в «Куда»")
+        snap("w090_manual_destination")
     }
 
     /// Карточка вписанной поездки в «Мои» — с карандашом у даты.
@@ -90,57 +115,6 @@ final class ManualTripShotTests: XCTestCase {
         XCTAssertTrue(card.exists && card.isHittable, "в «Мои» нет ни одной карточки поездки")
         card.tap(); sleep(5)
         snap("w080_manual_route")
-    }
-
-    /// Редизайн 20 сен: чипы («Дом»/частые места/«Точка на карте») заполняют
-    /// поле, карта-герой сразу показывает точку.
-    func test_manual_chips() {
-        normalise()
-        openProfile()
-        // Чипы частых мест зависят от штатной сверки `PlaceManager.reconcile()`
-        // на запуске (комментарий `-seed-places-rich`) — на богатом сиде она
-        // не всегда успевает до того, как открылся лист.
-        sleep(8)
-
-        let add = app.buttons.matching(identifier: "profile_history_add").firstMatch
-        for _ in 0..<10 where !(add.exists && add.isHittable) {
-            app.swipeUp(); sleep(1)
-        }
-        XCTAssertTrue(add.exists && add.isHittable, "нет «+» в шапке «Истории»")
-        add.tap(); sleep(3)
-
-        let quickRow = app.scrollViews.matching(identifier: "manual_trip_quick_points").firstMatch
-        XCTAssertTrue(quickRow.waitForExistence(timeout: 5), "нет ряда чипов над точками")
-        // Первый чип — «Дом», если он известен, иначе первое частое место:
-        // оба ведут в первое пустое поле («Откуда»), поэтому просто первый.
-        let firstChip = quickRow.buttons.firstMatch
-        if firstChip.exists && firstChip.isHittable {
-            firstChip.tap(); sleep(2)
-        }
-        snap("w080_manual_chips")
-    }
-
-    /// Вторая стадия того же листа: поиск, а не второй лист поверх первого.
-    func test_manual_search_stage() {
-        normalise()
-        openProfile()
-
-        let add = app.buttons.matching(identifier: "profile_history_add").firstMatch
-        for _ in 0..<10 where !(add.exists && add.isHittable) {
-            app.swipeUp(); sleep(1)
-        }
-        XCTAssertTrue(add.exists && add.isHittable, "нет «+» в шапке «Истории»")
-        add.tap(); sleep(3)
-
-        let to = app.buttons.matching(identifier: "manual_trip_point_to").firstMatch
-        XCTAssertTrue(to.waitForExistence(timeout: 5), "нет поля «Куда»")
-        to.tap(); sleep(2)
-        XCTAssertTrue(
-            app.textFields.matching(identifier: "manual_trip_search").firstMatch
-                .waitForExistence(timeout: 5),
-            "стадия поиска не открылась"
-        )
-        snap("w080_manual_search")
     }
 }
 

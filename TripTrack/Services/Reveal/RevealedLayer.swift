@@ -184,6 +184,53 @@ struct RevealedLayer {
     /// Шаг прореживания дальнего уровня (≈1 км).
     static let farDegrees = 1_000.0 / 111_320.0
 
+    /// Склеивает прогоны, у которых конец одного — начало другого, в одну
+    /// линию. Только для `.mid` и `.far`.
+    ///
+    /// Слой режет дорогу по тайлам geohash-5 (≈5 км), и следующий прогон
+    /// начинается ровно на той точке, где кончился прошлый (`RevealBuilder`).
+    /// На масштабе страны чужая карта на 25 тысяч км (13 окт 2026) приходила
+    /// 9 735 огрызками по две вершины: столько же отдельных линий получали
+    /// жилка (`CAShapeLayer`, каждая со своими круглыми концами) и индекс
+    /// путей, и телефон грелся, перерисовывая их на каждом щипке. Склейка не
+    /// трогает ни одного отрезка: стык двух прогонов — общая вершина, и она
+    /// остаётся одна, так что туман, ширина и километры те же.
+    ///
+    /// `.fine` не склеивается: на нём рисуют улицы, и прогон там — ровно то,
+    /// что открыла одна поездка в одном тайле.
+    static func stitch(_ runs: [[CLLocationCoordinate2D]]) -> [[CLLocationCoordinate2D]] {
+        guard runs.count > 1 else { return runs }
+        struct Key: Hashable {
+            let lat: Double, lon: Double
+            init(_ c: CLLocationCoordinate2D) { lat = c.latitude; lon = c.longitude }
+        }
+        // Чьё начало лежит в этой точке — в порядке прогонов, поэтому ответ
+        // детерминирован.
+        var startsAt: [Key: [Int]] = [:]
+        for (i, run) in runs.enumerated() { startsAt[Key(run[0]), default: []].append(i) }
+        var used = [Bool](repeating: false, count: runs.count)
+        var hasPredecessor = [Bool](repeating: false, count: runs.count)
+        for run in runs {
+            for j in startsAt[Key(run[run.count - 1])] ?? [] { hasPredecessor[j] = true }
+        }
+
+        var out: [[CLLocationCoordinate2D]] = []
+        out.reserveCapacity(runs.count)
+        func chain(from first: Int) {
+            used[first] = true
+            var line = runs[first]
+            while let next = startsAt[Key(line[line.count - 1])]?.first(where: { !used[$0] }) {
+                used[next] = true
+                line.append(contentsOf: runs[next].dropFirst())
+            }
+            out.append(line)
+        }
+        // Сначала цепочки с настоящим началом, потом то, что осталось (кольца).
+        for i in runs.indices where !used[i] && !hasPredecessor[i] { chain(from: i) }
+        for i in runs.indices where !used[i] { chain(from: i) }
+        return out
+    }
+
     static let empty = RevealedLayer(
         fine: MKMultiPolyline(), mid: MKMultiPolyline(), far: MKMultiPolyline(),
         cellCount: 0, openedKm: 0, regionIds: []
@@ -235,13 +282,15 @@ struct RevealedLayer {
         var centroidSums: [String: (lat: Double, lon: Double, count: Double)] = [:]
         var centroidSamples: [String: [CLLocationCoordinate2D]] = [:]
 
+        var midRuns: [[CLLocationCoordinate2D]] = []
+        var farRuns: [[CLLocationCoordinate2D]] = []
         for run in runs where run.count > 1 {
             fine.append(MKPolyline(coordinates: run, count: run.count))
 
             let midRun = RoadFog.decimate(run, minDegrees: midDegrees)
-            if midRun.count > 1 { mid.append(MKPolyline(coordinates: midRun, count: midRun.count)) }
+            if midRun.count > 1 { midRuns.append(midRun) }
             let farRun = RoadFog.decimate(run, minDegrees: farDegrees)
-            if farRun.count > 1 { far.append(MKPolyline(coordinates: farRun, count: farRun.count)) }
+            if farRun.count > 1 { farRuns.append(farRun) }
 
             // Длина, регионы, подпись и километры по регионам — ОДНИМ проходом
             // и одним якорем. Второй цикл со своим порогом однажды разошёлся бы
@@ -279,6 +328,9 @@ struct RevealedLayer {
                 anchor = point
             }
         }
+
+        mid = stitch(midRuns).map { MKPolyline(coordinates: $0, count: $0.count) }
+        far = stitch(farRuns).map { MKPolyline(coordinates: $0, count: $0.count) }
 
         return RevealedLayer(
             fine: MKMultiPolyline(fine), mid: MKMultiPolyline(mid), far: MKMultiPolyline(far),

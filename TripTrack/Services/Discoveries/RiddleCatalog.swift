@@ -198,6 +198,14 @@ final class BundleRiddleCatalog: RiddleCatalog {
     }
 
     static func bundledURL() -> URL? {
+        // Свежий каталог с сервера (0.9.0) — раньше бандла. Не разобрался —
+        // `init` получит пустой список; поэтому файл с сервера сначала
+        // проверяется разбором здесь же.
+        if let remote = RemoteCatalogs.fileURL(for: .riddles),
+           let data = try? Data(contentsOf: remote),
+           (try? JSONDecoder().decode(Payload.self, from: data))?.riddles.isEmpty == false {
+            return remote
+        }
         var candidates = [Bundle(for: BundleRiddleCatalog.self), Bundle.main]
         candidates.append(contentsOf: Bundle.allBundles)
         candidates.append(contentsOf: Bundle.allFrameworks)

@@ -77,6 +77,7 @@ struct ProfileSettingsSheet: View {
     @State private var showDebugLogs = false
     /// «Приватность» — the three visibility switches, one level down.
     @State private var showPrivacy = false
+    @State private var showAdminPanel = false
     @State private var didOpenPrivacy = false
     #if DEBUG
     @State private var showTipJar = false
@@ -168,6 +169,10 @@ struct ProfileSettingsSheet: View {
             PrivacySettingsView(notifications: notifications)
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $showAdminPanel) {
+            AdminPanelView()
+                .environmentObject(lang)
         }
         .sheet(isPresented: $showAppPrefs) {
             AppPreferencesView()
@@ -334,6 +339,16 @@ struct ProfileSettingsSheet: View {
                 .padding(.top, 6)
 
             VStack(spacing: 0) {
+                // Вход в админку (0.9.0): права всё равно решает сервер на
+                // каждом запросе — строка здесь вход, а не защита.
+                SettingsLinkRow(
+                    icon: "chart.bar.xaxis",
+                    title: AppStrings.adminPanelTitle(l),
+                    subtitle: AppStrings.adminPanelSubtitle(l),
+                    action: { showAdminPanel = true }
+                )
+                .accessibilityIdentifier("settings_admin_panel")
+                rowDivider(c)
                 SettingsToggleRow(
                     icon: "person.badge.plus",
                     title: AppStrings.adminNotifyNewUsers(l),

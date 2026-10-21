@@ -10,6 +10,10 @@ struct ManualTripPoint: Identifiable, Equatable {
     let id = UUID()
     var name: String
     var coordinate: CLLocationCoordinate2D
+    /// Населённый пункт точки, если он известен (поиск Apple, кэш
+    /// геокодера). Из него собирается заголовок поездки — тем же словом, каким
+    /// названы записанные: «Краснодар → Джубга», а не «ул. Красная, 120 → …».
+    var locality: String? = nil
 
     static func == (a: ManualTripPoint, b: ManualTripPoint) -> Bool { a.id == b.id }
 
@@ -78,6 +82,9 @@ final class ManualTripModel: ObservableObject {
     /// `suggestedDuration` (`ManualTripDurationPolicy`), а тронутое рукой
     /// пересчёт больше не трогает.
     @Published private(set) var durationTouched = false
+    /// Время выезда выбрал человек или пресет (день календаря, обратная
+    /// дорога) — тогда его не двигает ничто, кроме него самого.
+    @Published private(set) var startTouched = false
 
     // MARK: - Поиск
 
@@ -101,11 +108,18 @@ final class ManualTripModel: ObservableObject {
     /// секунды не помнит никто: поездка вписывается спустя дни.
     static let durationStep: TimeInterval = 15 * 60
 
-    init(startDate: Date = Date()) {
+    init(startDate: Date = Date(), vehicleId: UUID? = nil) {
         // Поездка вписывается ЗАДНИМ числом, поэтому «сейчас» — плохое
         // умолчание: оно предлагает будущее в тот же час. Час назад — самое
-        // близкое прошлое, которое уже прошло.
+        // близкое прошлое, которое уже прошло. Пока человек время не трогал,
+        // оно ещё и сдвигается назад за длиной маршрута (`apply`): иначе
+        // любая дорога дольше часа встречала его красным «ещё не
+        // закончилась» на верном вводе.
         self.startDate = startDate.addingTimeInterval(-3600)
+        // Машина — та, на которую пишется следующая поездка. «Без
+        // транспорта» по умолчанию отнимал у вписанной поездки единственное,
+        // что она даёт, — одометр.
+        self.vehicleId = vehicleId
         completer.resultTypes = [.address, .pointOfInterest]
         completer.delegate = completerBox
         completerBox.onResults = { [weak self] results in
@@ -118,12 +132,15 @@ final class ManualTripModel: ObservableObject {
     /// «Добавить обратную дорогу» после успешной записи. `startDate:` у
     /// обычного `init` сдвигает «сейчас» на час назад — здесь дата пресета
     /// уже прошедшая и трогать её не нужно, поэтому она ставится ПОСЛЕ.
-    convenience init(preset: ManualTripPreset) {
-        self.init()
+    convenience init(preset: ManualTripPreset, defaultVehicleId: UUID? = nil) {
+        self.init(vehicleId: defaultVehicleId)
         from = preset.from
         to = preset.to
-        vehicleId = preset.vehicleId
-        if let startDate = preset.startDate { self.startDate = startDate }
+        if let vehicleId = preset.vehicleId { self.vehicleId = vehicleId }
+        if let startDate = preset.startDate {
+            self.startDate = startDate
+            startTouched = true
+        }
         if let duration = preset.duration { self.duration = duration }
         if from != nil || to != nil { recomputeRoute() }
     }
@@ -151,7 +168,7 @@ final class ManualTripModel: ObservableObject {
         guard let item = try? await MKLocalSearch(request: request).start().mapItems.first,
               let coord = item.placemark.location?.coordinate else { return nil }
         let name = item.name ?? completion.title
-        return ManualTripPoint(name: name, coordinate: coord)
+        return ManualTripPoint(name: name, coordinate: coord, locality: item.placemark.locality)
     }
 
     /// Точка, поставленная пальцем по карте. Имя спрашивается у геокодера, но
@@ -160,7 +177,7 @@ final class ManualTripModel: ObservableObject {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first
         let name = placemark?.name ?? placemark?.locality ?? placemark?.administrativeArea
-        return ManualTripPoint(name: name ?? "", coordinate: coordinate)
+        return ManualTripPoint(name: name ?? "", coordinate: coordinate, locality: placemark?.locality)
     }
 
     // MARK: - Маршрут
@@ -211,6 +228,10 @@ final class ManualTripModel: ObservableObject {
             current: duration, suggested: suggestedDuration,
             touched: durationTouched, step: Self.durationStep
         ))
+        if !startTouched {
+            startDate = ManualTripDateDefaults.untouchedStart(
+                current: startDate, duration: duration)
+        }
     }
 
     private func fail(_ error: Error) {
@@ -268,6 +289,34 @@ final class ManualTripModel: ObservableObject {
     /// трогал, поэтому переписывать нечего.
     func setStartDay(_ day: Date) {
         startDate = ManualTripDateDefaults.defaultStartDate(forDay: day)
+        startTouched = true
+    }
+
+    /// Время выезда поставил человек — дальше его не двигает маршрут.
+    func setStart(_ date: Date) {
+        startDate = date
+        startTouched = true
+    }
+
+    /// Заголовок будущей поездки — тем же правилом, что
+    /// `TripManager.buildTitle` у записанной: населённые пункты концов, одно
+    /// имя без стрелки, если они совпали. Набранное имя побеждает. Лист
+    /// сохраняет ровно этот заголовок, поэтому показанное и записанное не
+    /// расходятся.
+    var displayTitle: String? {
+        let typed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        guard let from, let to else { return nil }
+        let start = Self.label(from)
+        let end = Self.label(to)
+        if start.isEmpty { return end.isEmpty ? nil : end }
+        if end.isEmpty || end == start { return start }
+        return "\(start) → \(end)"
+    }
+
+    private static func label(_ point: ManualTripPoint) -> String {
+        if let locality = point.locality, !locality.isEmpty { return locality }
+        return point.name
     }
 
     /// Убрать заготовку промежуточной точки, за которой человек так и не
@@ -282,16 +331,6 @@ final class ManualTripModel: ObservableObject {
         guard index >= 0, index < via.count, via[index].isPlaceholder else { return false }
         via.remove(at: index)
         return true
-    }
-
-    /// Точка от чипа («Дом», частое место, тап по карте) — в активное поле:
-    /// сначала «Откуда», потом «Куда» (`ManualTripActiveField`).
-    func assignQuickPoint(_ point: ManualTripPoint) {
-        switch ManualTripActiveField.resolve(from: from, to: to) {
-        case .from: from = point
-        case .to: to = point
-        }
-        recomputeRoute()
     }
 
     /// Дорога, которую нельзя проехать даже за верхний предел длительности.
