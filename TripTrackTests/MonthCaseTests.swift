@@ -53,6 +53,30 @@ final class MonthCaseTests: XCTestCase {
         XCTAssertTrue(source.contains("date: StatsPeriodFormat.monthYearGenitive(first, l)"))
     }
 
+    // MARK: - Сравнение под итогом статистики (0.9.1)
+
+    /// «Меньше, чем месяцем раньше — 610 км»: месяц по имени не называется,
+    /// поэтому падежа, который ICU не умеет, в строке нет ни на одном языке.
+    /// Число прошлого периода приезжает вместе с единицей и стоит в строке
+    /// ровно один раз; «больше» и «меньше» обязаны различаться.
+    func testStatsComparisonNamesNoMonthAndCarriesTheNumber() {
+        XCTAssertEqual(AppStrings.statsVsPrevious(.ru, more: false, year: false, previous: "610 км"),
+                       "Меньше, чем месяцем раньше — 610 км")
+        XCTAssertEqual(AppStrings.statsVsPrevious(.ru, more: true, year: true, previous: "4 210 км"),
+                       "Больше, чем годом раньше — 4 210 км")
+        for lang in LanguageManager.Language.allCases {
+            for year in [false, true] {
+                let more = AppStrings.statsVsPrevious(lang, more: true, year: year, previous: "{n}")
+                let less = AppStrings.statsVsPrevious(lang, more: false, year: year, previous: "{n}")
+                XCTAssertEqual(more.components(separatedBy: "{n}").count, 2, "\(lang.rawValue): \(more)")
+                XCTAssertNotEqual(more, less, "\(lang.rawValue): «больше» и «меньше» совпали")
+            }
+            XCTAssertNotEqual(AppStrings.statsVsPrevious(lang, more: true, year: false, previous: "{n}"),
+                              AppStrings.statsVsPrevious(lang, more: true, year: true, previous: "{n}"),
+                              "\(lang.rawValue): месяц и год читаются одинаково")
+        }
+    }
+
     // MARK: - Предложный: «в сентябре 2026»
 
     func testPrepositionalIsNotTheGenitive() {

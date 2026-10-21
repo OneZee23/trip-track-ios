@@ -149,7 +149,10 @@ final class MeAggregatesTests: XCTestCase {
             trip(start: date(year: year, month: 4, day: 1), region: "Ярославская обл."),
         ]
         let a = MeAggregates.compute(trips: trips, now: now, calendar: cal)
-        XCTAssertEqual(a.newRegion, "Ярославская обл.")
+        // Ключ региона — английское имя из `RegionDisplay` (0.9.1): показ
+        // переводит его обратно на язык приложения.
+        XCTAssertEqual(a.newRegion, "Yaroslavl Oblast")
+        XCTAssertEqual(RegionDisplay.localized(a.newRegion, language: .ru), "Ярославская обл.")
     }
 
     func testRegionFirstVisitedLastYearIsNotNew() {
@@ -210,5 +213,50 @@ final class MeAggregatesTests: XCTestCase {
         let a = MeAggregates.compute(trips: trips, now: now, calendar: cal)
         XCTAssertEqual(a.maxDayKm, 60, accuracy: 0.001)
         XCTAssertEqual(a.maxDayDuration, 5 * 3600, accuracy: 1)
+    }
+
+    // MARK: - Один регион на двух языках (0.9.1)
+
+    /// Телефон записывает регион на том языке, на котором ответил геокодер, и
+    /// в одной библиотеке живут «Krasnodar Krai» и «Краснодарский край».
+    /// Статистика 0.9.1 вывела их двумя строками «Новых мест»; счёт обязан
+    /// видеть один регион — и в «Новых местах», и в счётчиках.
+    func testOneRegionInTwoLanguagesCountsOnce() {
+        let year = cal.component(.year, from: now)
+        let trips = [
+            trip(start: date(year: year, month: 3, day: 1), region: "Krasnodar Krai"),
+            trip(start: date(year: year, month: 3, day: 9), region: "Краснодарский край"),
+            trip(start: date(year: year, month: 4, day: 2), region: "Adjara"),
+        ]
+        let a = MeAggregates.compute(trips: trips, now: now, calendar: cal)
+        XCTAssertEqual(a.regionsAllTime, 2)
+        XCTAssertEqual(a.yearRegions, 2)
+        XCTAssertEqual(Set(a.regionFirstVisit.keys), ["Krasnodar Krai", "Adjara"])
+        XCTAssertEqual(a.regionFirstVisit["Krasnodar Krai"], date(year: year, month: 3, day: 1))
+        XCTAssertEqual(a.topRegion, "Krasnodar Krai")
+        let march = MeAggregates.monthKey(date(year: year, month: 3, day: 1), cal)
+        XCTAssertEqual(a.monthRegions[march], ["Krasnodar Krai"])
+    }
+
+    // MARK: - Статистика: регионы по месяцам (0.9.1)
+
+    /// Плитка «регионов» под фразой статистики считает РАЗНЫЕ регионы
+    /// периода объединением месячных наборов, без второго прохода по
+    /// библиотеке. Повтор региона в месяце — один регион, поездка без
+    /// региона — ни одного.
+    func testMonthRegionsAreDistinctPerMonth() {
+        let year = cal.component(.year, from: now)
+        let trips = [
+            trip(start: date(year: year, month: 3, day: 1), region: "A"),
+            trip(start: date(year: year, month: 3, day: 2), region: "A"),
+            trip(start: date(year: year, month: 3, day: 3), region: "B"),
+            trip(start: date(year: year, month: 3, day: 4)),
+            trip(start: date(year: year, month: 4, day: 1), region: "A"),
+        ]
+        let a = MeAggregates.compute(trips: trips, now: now, calendar: cal)
+        let march = MeAggregates.monthKey(date(year: year, month: 3, day: 1), cal)
+        XCTAssertEqual(a.monthRegions[march], ["A", "B"])
+        XCTAssertEqual(a.monthRegions[march + 1], ["A"])
+        XCTAssertNil(a.monthRegions[march - 1], "пустой месяц не заводит набор")
     }
 }

@@ -13,6 +13,18 @@ enum RegionDisplay {
         return language == .ru ? entry.ruShort : entry.en
     }
 
+    /// Один ключ на один регион, на каком бы языке его ни записал геокодер.
+    ///
+    /// Нужен там, где регионы СЧИТАЮТСЯ: поездки, записанные телефоном на
+    /// разных языках, хранят «Krasnodar Krai» и «Краснодарский край» рядом, и
+    /// счёт по сырой строке видел два региона там, где был один, — статистика
+    /// 0.9.1 так и вывела один край дважды в «Новых местах». Известный регион
+    /// сводится к английскому имени из таблицы, незнакомый остаётся собой
+    /// (без пробелов по краям): склеить его не с чем.
+    static func canonical(_ raw: String) -> String {
+        Self.index[normalize(raw)]?.en ?? raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: - Table
 
     private struct Entry { let en: String; let ruShort: String }

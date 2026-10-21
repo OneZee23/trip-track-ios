@@ -30,18 +30,12 @@ struct StatsScreenView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var agg: MeAggregates?
-    /// Atlas-derived lifetime counters behind «Всего: N городов · N регионов».
-    /// Lands a beat after `agg` — the pass that produces it is the Моя карта
-    /// build, and the line is below the fold anyway.
-    @State private var places: StatsPlaces?
     @State private var range: StatsRange = .month
     /// Which month/year the stepper is parked on. Starts on the last month
     /// that actually holds a trip, not on `now`: opening a screen whose whole
     /// job is showing real numbers on a column of zeroes (because the user
     /// last drove in April and it is August) is the one thing it must not do.
     @State private var anchor = Date()
-    /// Column the user tapped in the bar chart (0…11) — canon 1821:6866.
-    @State private var pickedMonth: Int?
 
     /// Чужой экран. Две секции при нём отсутствуют, и обе по своей причине:
     ///  - «В этот день год назад» — личный крючок памяти, у постороннего он
@@ -122,7 +116,15 @@ struct StatsScreenView: View {
             }
         }
         .toast(item: $toastItem)
-        .accessibilityIdentifier("stats_screen")
+        // Имя экрана — на МАРКЕРЕ, а не на корне (то же правило, что у
+        // `HomeSheet`): на корне SwiftUI раздавал «stats_screen» ВСЕМ детям,
+        // и кнопка «Назад» теряла свой «stats_back» — тур выходил с экрана
+        // тапом по координате.
+        .overlay(alignment: .topLeading) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("stats_screen")
+        }
     }
 
     @ViewBuilder
@@ -137,27 +139,15 @@ struct StatsScreenView: View {
             memoryCard(trip, c, l)
         }
 
-        rangeSegment(c, l)
+        // Вариант B (владелец 21 окт 2026): экран начинается с ответа на
+        // «как прошёл месяц» — фразой, а не таблицей трёх равных чисел.
+        // Полоса года под ней И ЕСТЬ выбор месяца: тап по столбику ставит
+        // период, отдельной вкладки «Месяц» и стрелок «‹ Октябрь ›» нет.
+        headline(current: current, previous: previous, c: c, l: l, calendar: cal)
 
-        if range != .all {
-            periodStepper(agg, c, l, calendar: cal)
-        }
+        yearStrip(agg, c, l, calendar: cal)
 
-        totalsCard(current, c, l)
-
-        // Never «больше на 100%» against nothing: the line exists only when a
-        // comparable period was actually driven. Its SLOT, though, is always
-        // there — stepping through months used to shove the chart and both
-        // sections up and down by this row's height on every tap.
-        Group {
-            if let previous, previous.km > 0 {
-                compareLine(current: current, previous: previous, c: c, l: l)
-            }
-        }
-        .frame(height: 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-
-        chartCard(agg, c, l, calendar: cal)
+        factsRow(current, agg: agg, c: c, l: l, calendar: cal)
 
         newPlacesSection(agg, c, l, calendar: cal)
 
@@ -282,10 +272,11 @@ struct StatsScreenView: View {
             openTrip(trip.id)
         } label: {
             VStack(alignment: .leading, spacing: 10) {
+                // Не красный: мелкий акцент на тёмной карточке — 3.3 : 1.
                 Text(AppStrings.statsYearAgoToday(l))
-                    .font(.inter(10, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(AppTheme.accent)
+                    .font(AppType.statCaption)
+                    .tracking(AppType.statCaptionTracking)
+                    .foregroundStyle(c.textSecondary)
 
                 HStack(spacing: 12) {
                     // Real tiles, not a flat plate: this card's whole claim is
@@ -314,11 +305,11 @@ struct StatsScreenView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tripName(trip, l))
-                            .font(.inter(15, weight: .semibold))
+                            .font(AppType.itemTitle)
                             .foregroundStyle(c.text)
                             .lineLimit(1)
                         Text(memoryMeta(trip, l))
-                            .font(.inter(12))
+                            .font(AppType.caption)
                             .foregroundStyle(c.textSecondary)
                             .lineLimit(1)
                     }
@@ -333,7 +324,7 @@ struct StatsScreenView: View {
             .surfaceCard(cornerRadius: 16)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier("stats_memory_card")
     }
 
@@ -344,396 +335,448 @@ struct StatsScreenView: View {
         return "\(km) · \(AppStrings.photosCount(l, n: trip.photos.count))"
     }
 
-    // MARK: - Range segment (canon 1764:148)
+    // MARK: - Вариант B: фраза-итог (владелец 21 окт 2026)
 
-    private func rangeSegment(
-        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    /// «Октябрь 2026» мелко, под ним «393 км · 18 поездок» — ответ первой
+    /// строкой. Предлога нет нарочно: «за 1 поездку» требует винительного,
+    /// а `nounTrips` отдаёт именительную форму на всех тринадцати языках, —
+    /// точка между двумя числами грамматики не требует. Красное здесь ОДНО —
+    /// километры, крупно: на тёмном фоне акцент даёт 3.7 : 1 (на карточке
+    /// 3.3 : 1), то есть проходит только как КРУПНЫЙ текст, и мелким он на
+    /// этом экране не стоит нигде.
+    private func headline(
+        current: StatsSlice, previous: StatsSlice?,
+        c: AppTheme.Colors, l: LanguageManager.Language, calendar cal: Calendar
     ) -> some View {
-        HStack(spacing: 8) {
-            rangeChip(.month, AppStrings.statsRangeMonth(l), "stats_range_month", c)
-            rangeChip(.year, AppStrings.statsRangeYear(l), "stats_range_year", c)
-            rangeChip(.all, AppStrings.statsRangeAll(l), "stats_range_all", c)
-            Spacer(minLength: 0)
+        let distance = Measure.distance(km: current.km, unit: distanceUnit, lang: l)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(headlinePeriod(l, calendar: cal))
+                .font(AppType.meta)
+                .foregroundStyle(c.textSecondary)
+            (Text(distance).foregroundColor(AppTheme.accent)
+                + Text(" · ").foregroundColor(c.textTertiary)
+                + Text(AppStrings.tripsCount(l, n: current.trips)).foregroundColor(c.text))
+                .font(AppType.title)
+                .tracking(AppType.titleTracking)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+            // У «Всего» сравнивать не с чем, и слота нет. У месяца и года
+            // слот держится всегда: смена месяца иначе дёргала бы всё ниже
+            // на высоту этой строки.
+            if range != .all {
+                Group {
+                    if let line = comparisonLine(current: current, previous: previous, l) {
+                        Text(line)
+                            .font(AppType.meta)
+                            .foregroundStyle(c.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(minHeight: 18, alignment: .topLeading)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 2)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("stats_summary")
     }
 
+    /// «Октябрь 2026» / «2026» / «Всё время».
+    private func headlinePeriod(_ l: LanguageManager.Language, calendar cal: Calendar) -> String {
+        switch range {
+        case .month: return StatsPeriodFormat.monthYear(anchor, l)
+        case .year: return String(cal.component(.year, from: anchor))
+        case .all: return AppStrings.statsRangeAll(l)
+        }
+    }
+
+    /// «Меньше, чем месяцем раньше — 610 км». Нет прошлого периода или в нём
+    /// ноль — строки нет: «больше, чем ничего» ничего не сообщает. Совпали
+    /// напечатанные числа — тоже нет: «больше — 393 км» под «393 км»
+    /// читалось бы сбоем.
+    private func comparisonLine(
+        current: StatsSlice, previous: StatsSlice?, _ l: LanguageManager.Language
+    ) -> String? {
+        guard let previous, previous.km > 0 else { return nil }
+        let shown = Measure.distance(km: previous.km, unit: distanceUnit, lang: l)
+        guard shown != Measure.distance(km: current.km, unit: distanceUnit, lang: l) else { return nil }
+        return AppStrings.statsVsPrevious(
+            l, more: current.km > previous.km, year: range == .year, previous: shown)
+    }
+
+    // MARK: - Вариант B: полоса года И ЕСТЬ выбор месяца
+
+    /// Двенадцать столбиков года. Тап по столбику ставит месячный диапазон на
+    /// этот месяц; «Год» и «Всё время» — кнопками под полосой, повторный тап
+    /// по выбранной возвращает к месяцу. Отдельной вкладки «Месяц» и стрелок
+    /// «‹ Октябрь ›» нет: месяц выбирают там, где его видно.
+    ///
+    /// Год листается стрелками в шапке карточки, справа — как в календаре.
+    /// Рядом с «Октябрь 2026» над фразой они читались бы стрелками МЕСЯЦА, а
+    /// это ровно та механика, которую вариант B убрал.
+    ///
+    /// На «Всё время» столбик — «все октябри сразу», выбирать в нём нечего:
+    /// столбики не нажимаются и все стоят в цвете, как у года.
+    private func yearStrip(
+        _ agg: MeAggregates, _ c: AppTheme.Colors, _ l: LanguageManager.Language,
+        calendar cal: Calendar
+    ) -> some View {
+        let model = chartModel(agg, calendar: cal)
+        let maxKm = model.km.max() ?? 0
+        // Dim bars need more alpha in dark or they vanish against the card.
+        let dimFill = AppTheme.accent.opacity(scheme == .dark ? 0.22 : 0.12)
+        let plotHeight: CGFloat = 104
+        // Hoisted: inside the ForEach this would rebuild the symbol table
+        // twelve times per render.
+        let labels = StatsPeriodFormat.shortMonths(l)
+        let year = cal.component(.year, from: anchor)
+        let nowKey = MeAggregates.monthKey(Date(), cal)
+        let firstKey = agg.firstTripDate.map { MeAggregates.monthKey($0, cal) } ?? nowKey
+
+        return VStack(spacing: 10) {
+            stripHeader(agg, year: year, c: c, l: l, calendar: cal)
+
+            // Без промежутков: столбик рисуется с полями внутри своей кнопки,
+            // и по полосе нет мёртвых мест между месяцами.
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(0..<12, id: \.self) { i in
+                    let km = model.km[i]
+                    let selected = range == .month && model.highlight == i
+                    let lit = range == .month ? selected : true
+                    let key = year * 12 + i
+                    // `lower...upper` would trap on a future-dated import —
+                    // compare the bounds instead of building a range.
+                    let pickable = range != .all && key <= nowKey && key >= firstKey
+                    let h: CGFloat = maxKm > 0 && km > 0
+                        ? max(4, CGFloat(km / maxKm) * plotHeight)
+                        : 4
+                    Button {
+                        guard pickable else { return }
+                        Haptics.selection()
+                        range = .month
+                        anchor = cal.date(from: DateComponents(year: year, month: i + 1, day: 1)) ?? anchor
+                    } label: {
+                        VStack(spacing: 6) {
+                            // Столбик живёт в поле своей высоты: в общем
+                            // стеке самый высокий съедал место у подписи, и
+                            // «Сен» под ним выходила мельче соседей.
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(lit ? AppTheme.accent : dimFill)
+                                .opacity(km > 0 ? 1 : 0.35)
+                                .frame(height: h)
+                                .frame(height: plotHeight, alignment: .bottom)
+                            // Подпись выбранного месяца — НЕ красная: мелкий
+                            // акцент на тёмной карточке не дотягивает до
+                            // 4.5 : 1. Выбор говорят жирность и чернила,
+                            // красное остаётся у самого столбика.
+                            Text(labels[i])
+                                .font(.inter(11, weight: selected ? .bold : .medium))
+                                .foregroundStyle(selected ? c.text : c.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                                .frame(height: 16)
+                        }
+                        .padding(.horizontal, 2.5)
+                        .frame(maxWidth: .infinity, alignment: .bottom)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(StatsBarPressStyle())
+                    .disabled(!pickable)
+                    .accessibilityLabel(StatsPeriodFormat.monthName(i, l))
+                    .accessibilityValue("\(Measure.distance(km: km, unit: distanceUnit, lang: l)), \(AppStrings.tripsCount(l, n: model.trips[i]))")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("stats_month_\(i)")
+                }
+            }
+            .frame(height: plotHeight + 22, alignment: .bottom)
+            // Подписи на столбиках нет, поэтому полосе нужно имя для
+            // VoiceOver: «Километры по месяцам», с единицей человека.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(AppStrings.statsKmByMonth(l, unit: distanceUnit))
+
+            HStack(spacing: 6) {
+                rangeChip(.year, AppStrings.statsRangeYear(l), "stats_range_year", c, agg: agg, calendar: cal)
+                rangeChip(.all, AppStrings.statsRangeAll(l), "stats_range_all", c, agg: agg, calendar: cal)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
+        .surfaceCard(cornerRadius: 16)
+        .animation(.easeOut(duration: 0.2), value: anchor)
+        .animation(.easeOut(duration: 0.2), value: range)
+        // На маркере: на карточке имя досталось бы стрелкам года, столбикам
+        // и кнопкам «Год»/«Всё время», и тест не нашёл бы ни одной.
+        .overlay(alignment: .topLeading) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("stats_chart")
+        }
+    }
+
+    /// «2026» слева и «‹ ›» справа. У «Всё время» стрелок нет: листать там
+    /// нечего, а подпись говорит, что столбики — сумма всех лет.
+    private func stripHeader(
+        _ agg: MeAggregates, year: Int, c: AppTheme.Colors,
+        l: LanguageManager.Language, calendar cal: Calendar
+    ) -> some View {
+        HStack(spacing: 0) {
+            Text(stripTitle(agg, year: year, calendar: cal))
+                .font(AppType.itemValue.monospacedDigit())
+                .foregroundStyle(c.text)
+                .padding(.leading, 2)
+            Spacer(minLength: 0)
+            if range != .all {
+                yearButton("chevron.left", target: stepYear(-1, agg, calendar: cal),
+                           c: c, id: "stats_year_back", calendar: cal)
+                yearButton("chevron.right", target: stepYear(1, agg, calendar: cal),
+                           c: c, id: "stats_year_forward", calendar: cal)
+            }
+        }
+        .frame(height: 44)
+    }
+
+    /// «2026», а у «Всё время» — «2024–2026»: столбик там сумма всех лет, и
+    /// подпись говорит, каких.
+    private func stripTitle(_ agg: MeAggregates, year: Int, calendar cal: Calendar) -> String {
+        guard range == .all else { return String(year) }
+        let now = cal.component(.year, from: Date())
+        let first = agg.firstTripDate.map { cal.component(.year, from: $0) } ?? now
+        return first >= now ? String(now) : "\(first)–\(now)"
+    }
+
+    private func yearButton(
+        _ icon: String, target: Date?, c: AppTheme.Colors, id: String, calendar cal: Calendar
+    ) -> some View {
+        Button {
+            guard let target else { return }
+            Haptics.tap()
+            anchor = target
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(StatsBarPressStyle())
+        .disabled(target == nil)
+        .opacity(target == nil ? 0.3 : 1)
+        // Год словами нечем назвать без новой строки на тринадцать языков,
+        // а число года VoiceOver читает и так: «2025, кнопка».
+        .accessibilityLabel(target.map { String(cal.component(.year, from: $0)) } ?? "")
+        .accessibilityIdentifier(id)
+    }
+
+    /// Год назад или вперёд, не выходя из записанной библиотеки. На месячном
+    /// диапазоне месяц сохраняется, но прижимается к границам: шаг из декабря
+    /// прошлого года в текущий иначе встал бы на месяц, которого ещё не было.
+    private func stepYear(_ delta: Int, _ agg: MeAggregates, calendar cal: Calendar) -> Date? {
+        guard let first = agg.firstTripDate,
+              let candidate = cal.date(byAdding: .year, value: delta, to: anchor) else { return nil }
+        let year = cal.component(.year, from: candidate)
+        guard year >= cal.component(.year, from: first),
+              year <= cal.component(.year, from: Date()) else { return nil }
+        return range == .month ? clampedMonth(candidate, agg, calendar: cal) : candidate
+    }
+
+    /// Месяц, прижатый к [первая поездка … сейчас].
+    private func clampedMonth(_ date: Date, _ agg: MeAggregates, calendar cal: Calendar) -> Date {
+        let key = MeAggregates.monthKey(date, cal)
+        if key > MeAggregates.monthKey(Date(), cal) { return Date() }
+        if let first = agg.firstTripDate, key < MeAggregates.monthKey(first, cal) { return first }
+        return date
+    }
+
+    /// Выбранная кнопка — чернилами на подложке, без красного: красное на
+    /// этом экране — только итог и столбики. Повторный тап по выбранной
+    /// возвращает к месяцу, иначе с «Года» назад к месяцу вёл бы только
+    /// столбик, а о нём ещё надо догадаться.
     private func rangeChip(
-        _ value: StatsRange, _ title: String, _ id: String, _ c: AppTheme.Colors
+        _ value: StatsRange, _ title: String, _ id: String, _ c: AppTheme.Colors,
+        agg: MeAggregates, calendar cal: Calendar
     ) -> some View {
         let isOn = range == value
-        // `accentBg` is 8% — enough over the warm light background, invisible
-        // over a dark one. Same correction the bar chart below already makes.
-        let fill = scheme == .dark ? AppTheme.accent.opacity(0.18) : AppTheme.accentBg
         return Button {
             Haptics.tap()
-            pickedMonth = nil
-            range = value
+            if isOn {
+                anchor = clampedMonth(anchor, agg, calendar: cal)
+                range = .month
+            } else {
+                range = value
+            }
         } label: {
             Text(title)
-                .font(.inter(13, weight: isOn ? .semibold : .medium))
-                .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
+                .font(isOn ? AppType.chipActive : AppType.chip)
+                .foregroundStyle(isOn ? c.text : c.textSecondary)
+                .lineLimit(1)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(isOn ? fill : .clear, in: Capsule())
-                .contentShape(Capsule())
+                .frame(height: 32)
+                .background(isOn ? c.cardAlt : .clear, in: Capsule())
+                // Нарисована 32, палец получает 44.
+                .frame(height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
-    // MARK: - Period stepper (canon 1825:129)
+    // MARK: - Вариант B: числа периода в ролях «Я»
 
-    private func periodStepper(
-        _ agg: MeAggregates, _ c: AppTheme.Colors, _ l: LanguageManager.Language,
-        calendar cal: Calendar
+    /// То, чего нет во фразе: время за рулём и регионы периода. Поездок здесь
+    /// нет — они уже стоят во фразе, и одно число дважды подряд просит его
+    /// сравнить, а сравнивать нечего. Ноль не печатается: пустой месяц ряда
+    /// не получает вовсе, регион без единого названия — без своей плитки.
+    @ViewBuilder
+    private func factsRow(
+        _ current: StatsSlice, agg: MeAggregates, c: AppTheme.Colors,
+        l: LanguageManager.Language, calendar cal: Calendar
     ) -> some View {
-        let canBack = step(-1, agg, calendar: cal) != nil
-        let canForward = step(1, agg, calendar: cal) != nil
-
-        return HStack(spacing: 18) {
-            stepButton("chevron.left", enabled: canBack, c: c) {
-                if let next = step(-1, agg, calendar: cal) { anchor = next }
+        let regions = regionsInRange(agg, calendar: cal)
+        if current.trips > 0 {
+            HStack(alignment: .top, spacing: 0) {
+                drivingTile(current.hours, c: c, l: l)
+                if regions > 0 {
+                    factTile(value: AppStrings.groupedNumber(regions, l), unit: nil,
+                             caption: AppStrings.nounRegions(l, regions), c: c, divider: true)
+                }
             }
-            Text(periodLabel(l, calendar: cal))
-                .font(.inter(15, weight: .semibold).monospacedDigit())
-                .foregroundStyle(c.text)
-                // FIXED, not minimum: at `minWidth` the label grew for a long
-                // month and shoved both chevrons outward, so the arrows moved
-                // under your thumb between «Май» and «Сентябрь». The label
-                // scales inside a constant slot instead.
-                .frame(width: 170)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .multilineTextAlignment(.center)
-            stepButton("chevron.right", enabled: canForward, c: c) {
-                if let next = step(1, agg, calendar: cal) { anchor = next }
-            }
+            .padding(.vertical, 14)
+            .surfaceCard(cornerRadius: 16)
+            .accessibilityIdentifier("stats_facts")
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 2)
-        .animation(.easeOut(duration: 0.15), value: anchor)
     }
 
-    private func stepButton(
-        _ icon: String, enabled: Bool, c: AppTheme.Colors, action: @escaping () -> Void
+    /// «8 ч» — и «42 мин», когда за весь период не набралось часа: «0 ч» под
+    /// живой поездкой читалось бы как «ничего».
+    private func drivingTile(_ hours: Double, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let caption = AppStrings.journeyDrivingLabel(l)
+        if hours < 1 {
+            return factTile(value: "\(max(1, Int((hours * 60).rounded())))",
+                            unit: AppStrings.minutesUnitShort(l), caption: caption, c: c, divider: false)
+        }
+        return factTile(value: AppStrings.groupedNumber(Int(hours.rounded()), l),
+                        unit: AppStrings.hoursUnitShort(l), caption: caption, c: c, divider: false)
+    }
+
+    private func factTile(
+        value: String, unit: String?, caption: String, c: AppTheme.Colors, divider: Bool
     ) -> some View {
-        Button {
-            Haptics.tap()
-            pickedMonth = nil
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.25)
-    }
-
-    /// One step in the current range, or nil when it would walk out of the
-    /// recorded library (before the first trip) or into the future.
-    private func step(_ delta: Int, _ agg: MeAggregates, calendar cal: Calendar) -> Date? {
-        guard let first = agg.firstTripDate else { return nil }
-        let unit: Calendar.Component = range == .year ? .year : .month
-        guard let candidate = cal.date(byAdding: unit, value: delta, to: anchor) else { return nil }
-        let lower = range == .year
-            ? MeAggregates.yearKey(first, cal)
-            : MeAggregates.monthKey(first, cal)
-        let upper = range == .year
-            ? MeAggregates.yearKey(Date(), cal)
-            : MeAggregates.monthKey(Date(), cal)
-        let value = range == .year
-            ? MeAggregates.yearKey(candidate, cal)
-            : MeAggregates.monthKey(candidate, cal)
-        // `lower...upper` would trap if a trip carried a future date (clock
-        // skew on import). Compare the bounds instead of building a range.
-        return value >= lower && value <= upper ? candidate : nil
-    }
-
-    private func periodLabel(_ l: LanguageManager.Language, calendar cal: Calendar) -> String {
-        range == .year
-            ? String(cal.component(.year, from: anchor))
-            : StatsPeriodFormat.monthYear(anchor, l)
-    }
-
-    // MARK: - Totals (canon 580:325)
-
-    private func totalsCard(
-        _ slice: StatsSlice, _ c: AppTheme.Colors, _ l: LanguageManager.Language
-    ) -> some View {
-        HStack(spacing: 0) {
-            totalsColumn(
-                value: Measure.distanceValue(km: slice.km, unit: distanceUnit, lang: l),
-                label: Measure.distanceParts(km: slice.km, unit: distanceUnit, lang: l).unit,
-                valueColor: AppTheme.accent, size: 26, c: c
-            )
-            totalsColumn(
-                value: "\(slice.trips)",
-                label: AppStrings.tripsGenitive(l, count: slice.trips),
-                valueColor: c.text, size: 20, c: c, leadingBorder: true
-            )
-            totalsColumn(
-                value: "\(Int(slice.hours.rounded()))",
-                label: AppStrings.statsHoursOnRoad(l),
-                valueColor: c.text, size: 20, c: c, leadingBorder: true
-            )
-        }
-        .padding(.vertical, 16)
-        .surfaceCard(cornerRadius: 16)
-        .accessibilityIdentifier("stats_summary")
-    }
-
-    private func totalsColumn(
-        value: String, label: String, valueColor: Color, size: CGFloat,
-        c: AppTheme.Colors, leadingBorder: Bool = false
-    ) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.inter(size, weight: .heavy).monospacedDigit())
-                .foregroundStyle(valueColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(label)
-                .font(.inter(10, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .leading) {
-            if leadingBorder {
-                Rectangle().fill(c.border).frame(width: 1)
-            }
-        }
-    }
-
-    // MARK: - Comparison line (canon 1765:119)
-
-    private func compareLine(
-        current: StatsSlice, previous: StatsSlice,
-        c: AppTheme.Colors, l: LanguageManager.Language
-    ) -> some View {
-        // Strictly greater: two identical periods are not «больше».
-        let more = current.km > previous.km
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: more ? "arrow.up" : "arrow.down")
-                .font(.system(size: 11, weight: .bold))
-                // Driving less isn't a failure — only «more» gets a colour.
-                .foregroundStyle(more ? AppTheme.green : c.textTertiary)
-            Text(AppStrings.statsVsLastPeriod(
-                l, more: more,
-                period: comparisonPeriod(l),
-                current: Measure.distance(km: current.km, unit: distanceUnit, lang: l),
-                previous: Measure.distanceValue(km: previous.km, unit: distanceUnit, lang: l)
-            ))
-            .font(.inter(12))
-            .foregroundStyle(c.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 2)
-        .accessibilityIdentifier("stats_compare")
-    }
-
-    /// `statsVsLastPeriod` wants the period already declined («в прошлом
-    /// июне», «в прошлом году») and AppStrings ships no declension helper.
-    /// Months come out of ICU (see `StatsPeriodFormat.monthPrepositional`);
-    /// the year noun has no ICU source, so it is the one literal that has to
-    /// live here. Reported for a follow-up move into `AppStrings`.
-    private func comparisonPeriod(_ l: LanguageManager.Language) -> String {
-        range == .year
-            ? (AppStrings.statsYear(l))
-            : StatsPeriodFormat.monthPrepositional(anchor, l)
-    }
-
-    // MARK: - Monthly chart (canon 580:335)
-
-    private func chartCard(
-        _ agg: MeAggregates, _ c: AppTheme.Colors, _ l: LanguageManager.Language,
-        calendar cal: Calendar
-    ) -> some View {
-        let model = chartModel(agg, l, calendar: cal)
-        let maxKm = model.km.max() ?? 0
-        // Dim bars need more alpha in dark or they vanish against the card.
-        let dimFill = AppTheme.accent.opacity(scheme == .dark ? 0.22 : 0.12)
-        let plotHeight: CGFloat = 130
-        // Hoisted: inside the ForEach this would rebuild the symbol table
-        // twelve times per render.
-        let labels = StatsPeriodFormat.shortMonths(l)
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(AppStrings.statsKmByMonth(l, unit: distanceUnit))
-                    .font(.inter(14, weight: .bold))
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(AppType.statValue.monospacedDigit())
+                    .tracking(AppType.statValueTracking)
                     .foregroundStyle(c.text)
-                Spacer()
-                Text(model.badge)
-                    .font(.system(size: 11, weight: .bold).monospacedDigit())
-                    .foregroundStyle(c.textSecondary)
-            }
-
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach(0..<12, id: \.self) { i in
-                    let km = model.km[i]
-                    let isOn = model.highlight == i
-                    let h: CGFloat = maxKm > 0 && km > 0
-                        ? max(4, CGFloat(km / maxKm) * plotHeight)
-                        : 4
-                    VStack(spacing: 6) {
-                        Spacer(minLength: 0)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isOn ? AppTheme.accent : dimFill)
-                            .opacity(km > 0 ? 1 : 0.35)
-                            .frame(height: h)
-                        Text(labels[i])
-                            .font(.inter(10, weight: isOn ? .heavy : .semibold))
-                            .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .bottom)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        Haptics.tap()
-                        pickedMonth = pickedMonth == i ? nil : i
-                    }
-                    .overlay(alignment: popoverAlignment(i)) {
-                        if pickedMonth == i {
-                            monthPopover(index: i, model: model, c: c, l: l)
-                        }
-                    }
+                if let unit {
+                    Text(unit)
+                        .font(AppType.statUnit)
+                        .foregroundStyle(c.textSecondary)
                 }
             }
-            .frame(height: plotHeight + 22)
-            // A rule at last year's level for the same month — the one number
-            // that says whether this bar is good or not.
-            .overlay(alignment: .bottomLeading) {
-                if let reference = model.reference, maxKm > 0, reference > 0 {
-                    referenceRule(
-                        value: reference, maxKm: maxKm, plotHeight: plotHeight,
-                        label: model.referenceLabel, c: c
-                    )
-                }
-            }
-        }
-        .padding(14)
-        .surfaceCard(cornerRadius: 16)
-        .animation(.easeOut(duration: 0.2), value: pickedMonth)
-        .accessibilityIdentifier("stats_chart")
-    }
-
-    private func referenceRule(
-        value: Double, maxKm: Double, plotHeight: CGFloat,
-        label: String?, c: AppTheme.Colors
-    ) -> some View {
-        // 22pt of month labels sit under the plot, so the rule is lifted by
-        // that much before it is raised to its own value.
-        let y = plotHeight * CGFloat(min(1, value / maxKm))
-        return VStack(alignment: .trailing, spacing: 2) {
-            if let label {
-                Text(label)
-                    .font(.inter(9))
-                    .foregroundStyle(c.textTertiary)
-            }
-            Rectangle()
-                .fill(c.textTertiary.opacity(0.75))
-                .frame(height: 1.5)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .offset(y: -(22 + y))
-        .allowsHitTesting(false)
-    }
-
-    /// Keeps the 128pt card inside the chart without measuring anything: the
-    /// edge columns anchor by their own edge, everything between centres.
-    private func popoverAlignment(_ i: Int) -> Alignment {
-        if i <= 1 { return .topLeading }
-        if i >= 10 { return .topTrailing }
-        return .top
-    }
-
-    private func monthPopover(
-        index: Int, model: ChartModel, c: AppTheme.Colors, l: LanguageManager.Language
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(StatsPeriodFormat.monthName(index, l))
-                .font(.inter(13, weight: .semibold))
-                .foregroundStyle(c.text)
-            Text(popoverMeta(index: index, model: model, l: l))
-                .font(.inter(11))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // A quantity's caption, not a heading: the one place capitals
+            // stay (`AppType.statCaption`).
+            Text(caption)
+                .font(AppType.statCaption)
+                .tracking(AppType.statCaptionTracking)
+                .textCase(.uppercase)
                 .foregroundStyle(c.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(c.card)
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 6)
-        )
-        .fixedSize()
-        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-        .allowsHitTesting(false)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .overlay(alignment: .leading) {
+            if divider { Rectangle().fill(c.border).frame(width: 1) }
+        }
+        .accessibilityElement(children: .combine)
     }
 
-    /// «780 км · 11 поездок» — the tapped column, spelled out.
-    private func popoverMeta(
-        index: Int, model: ChartModel, l: LanguageManager.Language
-    ) -> String {
-        let km = Measure.distance(km: model.km[index], unit: distanceUnit, lang: l)
-        return "\(km) · \(AppStrings.tripsCount(l, n: model.trips[index]))"
+    /// Сколько разных регионов в периоде — по месячным наборам, без второго
+    /// прохода по библиотеке.
+    private func regionsInRange(_ agg: MeAggregates, calendar cal: Calendar) -> Int {
+        switch range {
+        case .all:
+            return agg.regionsAllTime
+        case .month:
+            return agg.monthRegions[MeAggregates.monthKey(anchor, cal)]?.count ?? 0
+        case .year:
+            let year = cal.component(.year, from: anchor)
+            var seen = Set<String>()
+            for m in 0..<12 { seen.formUnion(agg.monthRegions[year * 12 + m] ?? []) }
+            return seen.count
+        }
     }
 
-    // MARK: - «Новые места» (canon 1766:128)
+    // MARK: - «Новые места»: регионы периода с датой первого въезда
 
+    /// Регион стоит отдельной строкой и в ИМЕНИТЕЛЬНОМ падеже: геокодер
+    /// хранит «Ростовская область», и склонять её на устройстве нечем, —
+    /// поэтому фразы «первый раз в …» здесь больше нет, есть дата и имя. У
+    /// «Всего» секции нет: за всё время новое всё, и список повторял бы
+    /// счётчик регионов «Я».
+    ///
+    /// Дороги — только у своего экрана: `RoadEntity` локальная, у чужого её
+    /// нет вовсе.
     @ViewBuilder
     private func newPlacesSection(
         _ agg: MeAggregates, _ c: AppTheme.Colors, _ l: LanguageManager.Language,
         calendar cal: Calendar
     ) -> some View {
-        let roads = newRoads(agg, calendar: cal)
-        let totals = places
-        if totals != nil || roads > 0 {
-            sectionLabel(AppStrings.statsNewPlaces(l), c)
-            VStack(alignment: .leading, spacing: 8) {
-                // Reserved, not conditional: a month that opened no new road
-                // used to collapse this line and pull the two sections below
-                // the chart up with it.
-                Group {
+        if range != .all {
+            let regions = newRegionsInRange(agg, calendar: cal)
+            let roads = isRemote ? 0 : newRoads(agg, calendar: cal)
+            if !regions.isEmpty || roads > 0 {
+                sectionLabel(AppStrings.statsNewPlaces(l), c)
+                VStack(spacing: 0) {
+                    ForEach(Array(regions.enumerated()), id: \.element.name) { index, item in
+                        if index > 0 { rowDivider(c) }
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(StatsPeriodFormat.dayMonthShort(item.date, l))
+                                .font(AppType.caption.monospacedDigit())
+                                .foregroundStyle(c.textSecondary)
+                                .lineLimit(1)
+                                .frame(minWidth: 56, alignment: .leading)
+                            Text(RegionDisplay.localized(item.name, language: l) ?? item.name)
+                                .font(AppType.itemTitle)
+                                .foregroundStyle(c.text)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 13)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("stats_new_region")
+                    }
                     if roads > 0 {
+                        if !regions.isEmpty { rowDivider(c) }
                         Text(AppStrings.statsNewPlacesLine(
                             l, period: newPlacesPeriod(l, calendar: cal),
-                            roads: roads, firstPlace: firstPlace(agg, l, calendar: cal)
+                            roads: roads, firstPlace: nil
                         ))
-                        .font(.inter(13, weight: .semibold))
-                        .foregroundStyle(c.text)
+                        .font(AppType.meta)
+                        .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 13)
                     }
                 }
-                .frame(minHeight: 17, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if let totals {
-                    Text(AppStrings.statsTotalsLine(
-                        l, cities: totals.cities, regions: totals.regions
-                    ))
-                    .font(.inter(12))
-                    .foregroundStyle(c.textSecondary)
-                }
+                .surfaceCard(cornerRadius: 16)
+                .accessibilityIdentifier("stats_new_places")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .surfaceCard(cornerRadius: 16)
-            .accessibilityIdentifier("stats_new_places")
         }
     }
 
-    /// «За июнь» / «За 2024» / «За всё время» — accusative, which for RU month
-    /// nouns and for a bare year is the nominative, so no declension is needed.
+    /// «За июнь» / «За 2024» — accusative, which for RU month nouns and for a
+    /// bare year is the nominative, so no declension is needed.
     private func newPlacesPeriod(_ l: LanguageManager.Language, calendar cal: Calendar) -> String {
         switch range {
         case .month: return StatsPeriodFormat.monthLower(anchor, l)
@@ -742,41 +785,42 @@ struct StatsScreenView: View {
         }
     }
 
-    /// Region first seen inside the selected range.
-    ///
-    /// RU only ever gets nil: the copy reads «первый раз в …» and needs the
-    /// prepositional case, while the geocoder stores nominative admin areas
-    /// («Тульская область») that nothing on device can decline. A wrong case
-    /// in the primary language is worse than a shorter line, so the clause is
-    /// dropped there and kept in English, where the nominative is correct.
-    private func firstPlace(
-        _ agg: MeAggregates, _ l: LanguageManager.Language, calendar cal: Calendar
-    ) -> String? {
-        guard l != .ru else { return nil }
-        return agg.regionFirstVisit
+    /// Регионы, впервые увиденные внутри выбранного периода, по порядку въезда.
+    private func newRegionsInRange(_ agg: MeAggregates, calendar cal: Calendar) -> [(name: String, date: Date)] {
+        agg.regionFirstVisit
             .filter { contains($0.value, calendar: cal) }
-            .max { $0.value < $1.value }?
-            .key
+            .map { (name: $0.key, date: $0.value) }
+            .sorted { $0.date == $1.date ? $0.name < $1.name : $0.date < $1.date }
     }
 
     private func newRoads(_ agg: MeAggregates, calendar cal: Calendar) -> Int {
         agg.roadFirstDriven.filter { contains($0, calendar: cal) }.count
     }
 
-    // MARK: - «Доска почета» (canon 580:389)
+    private func rowDivider(_ c: AppTheme.Colors) -> some View {
+        Rectangle().fill(c.border).frame(height: 1).padding(.leading, 16)
+    }
 
-    /// Lifetime records, not range-scoped — canon shows the identical five
-    /// rows under «Июнь 2026» and under «Год · 2024».
+    // MARK: - Рекорды
+
+    /// Lifetime records, not range-scoped — canon shows the identical rows
+    /// under «Июнь 2026» and under «Год · 2024». Одной карточкой-списком, как
+    /// регионы выше, и без цветных плиток со значками: пять разных цветов
+    /// подряд спорили с единственным красным итогом наверху.
     @ViewBuilder
     private func hallOfFame(
         _ agg: MeAggregates, _ c: AppTheme.Colors, _ l: LanguageManager.Language
     ) -> some View {
         let rows = records(agg, l)
         if !rows.isEmpty {
-            sectionLabel(AppStrings.statsHallOfFame(l), c)
-            ForEach(rows) { row in
-                recordRow(row, c)
+            sectionLabel(AppStrings.statsRecords(l), c)
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { rowDivider(c) }
+                    recordRow(row, c)
+                }
             }
+            .surfaceCard(cornerRadius: 16)
         }
     }
 
@@ -787,7 +831,7 @@ struct StatsScreenView: View {
 
         if agg.longestTripKm > 0 {
             rows.append(RecordRow(
-                id: "longest", icon: "arrow.up.right", tint: AppTheme.green,
+                id: "longest",
                 label: AppStrings.statsRecordLongest(l),
                 subject: longestTripName(agg, l),
                 value: Measure.distance(km: agg.longestTripKm, unit: distanceUnit, lang: l),
@@ -796,7 +840,7 @@ struct StatsScreenView: View {
         }
         if agg.bestDayKm > 0, let date = agg.bestDayDate {
             rows.append(RecordRow(
-                id: "bestDay", icon: "clock.fill", tint: AppTheme.accent,
+                id: "bestDay",
                 label: AppStrings.statsRecordBestDay(l, unit: distanceUnit),
                 subject: StatsPeriodFormat.dayMonth(date, l),
                 value: Measure.distance(km: agg.bestDayKm, unit: distanceUnit, lang: l),
@@ -805,9 +849,9 @@ struct StatsScreenView: View {
         }
         if agg.photoPlaceCount > 0, let place = agg.photoPlace {
             rows.append(RecordRow(
-                id: "photos", icon: "camera.fill", tint: AppTheme.red,
+                id: "photos",
                 label: AppStrings.statsRecordMostPhotos(l),
-                subject: place,
+                subject: RegionDisplay.localized(place, language: l) ?? place,
                 value: AppStrings.photosCount(l, n: agg.photoPlaceCount),
                 tripId: nil
             ))
@@ -815,7 +859,7 @@ struct StatsScreenView: View {
         // A road driven once is not a champion — «47 раз» needs a repeat.
         if agg.championRoadDrives >= 2, let road = agg.championRoadName {
             rows.append(RecordRow(
-                id: "road", icon: "arrow.triangle.2.circlepath", tint: AppTheme.green,
+                id: "road",
                 label: AppStrings.statsRecordChampionRoad(l),
                 subject: road,
                 value: AppStrings.timesCount(l, n: agg.championRoadDrives),
@@ -824,7 +868,7 @@ struct StatsScreenView: View {
         }
         if agg.farthestKm > 0, let place = agg.farthestPlace {
             rows.append(RecordRow(
-                id: "farthest", icon: "mappin.and.ellipse", tint: AppTheme.green,
+                id: "farthest",
                 label: AppStrings.statsRecordFarthest(l),
                 subject: place,
                 value: Measure.distance(km: agg.farthestKm, unit: distanceUnit, lang: l),
@@ -835,44 +879,43 @@ struct StatsScreenView: View {
     }
 
     private func recordRow(_ row: RecordRow, _ c: AppTheme.Colors) -> some View {
-        let card = HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10).fill(row.tint.opacity(0.14))
-                Image(systemName: row.icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(row.tint)
-            }
-            .frame(width: 38, height: 38)
-
+        let line = HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.label)
-                    .font(.inter(10.5, weight: .semibold))
-                                                            .foregroundStyle(c.textTertiary)
+                    .font(AppType.caption)
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
                 Text(row.subject)
-                    .font(.inter(13, weight: .bold))
+                    .font(AppType.itemTitle)
                     .foregroundStyle(c.text)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .truncationMode(.tail)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(row.value)
-                .font(.inter(15, weight: .heavy).monospacedDigit())
-                .foregroundStyle(AppTheme.accent)
+                .font(AppType.itemValue.monospacedDigit())
+                .foregroundStyle(c.text)
                 .lineLimit(1)
+                .layoutPriority(1)
 
-            if loadingRecordId == row.id {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(width: 12)
-            } else if row.tripId != nil {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+            // Слот шеврона держится и у строки без перехода: иначе числа
+            // соседних строк стояли бы вразнобой.
+            // `ZStack`, а не `Group`: пустой `Group` не занимает места вовсе,
+            // и рамка в 14 pt у строки без перехода схлопывалась.
+            ZStack {
+                if loadingRecordId == row.id {
+                    ProgressView().controlSize(.small)
+                } else if row.tripId != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
             }
+            .frame(width: 14)
         }
-        .padding(13)
-        .surfaceCard(cornerRadius: 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
 
         return Group {
             // Шеврон обещает, что строка открывается, — и обещание держат оба
@@ -883,10 +926,10 @@ struct StatsScreenView: View {
             if let tripId = row.tripId {
                 Button {
                     if isRemote { openForeignTrip(tripId, recordId: row.id) } else { openTrip(tripId) }
-                } label: { card.contentShape(Rectangle()) }
+                } label: { line.contentShape(Rectangle()) }
                     .buttonStyle(PressableCardStyle())
             } else {
-                card
+                line.accessibilityElement(children: .combine)
             }
         }
         // On the outside: a Button swallows identifiers set on its label, and
@@ -905,7 +948,7 @@ struct StatsScreenView: View {
                 Text(AppStrings.statsWithTripTrackSince(
                     l, date: StatsPeriodFormat.monthYearGenitive(first, l)
                 ))
-                .font(.inter(14, weight: .semibold))
+                .font(AppType.itemTitle)
                 .foregroundStyle(c.text)
                 Text(AppStrings.statsMemoriesLine(
                     l,
@@ -915,14 +958,14 @@ struct StatsScreenView: View {
                     // count answers a different question.
                     trips: agg.tripsWithMemories
                 ))
-                .font(.inter(12))
+                .font(AppType.meta)
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .surfaceCard(cornerRadius: 16)
-            .padding(.top, 4)
+            .padding(.top, 10)
             .accessibilityIdentifier("stats_archive")
         }
     }
@@ -1003,8 +1046,9 @@ struct StatsScreenView: View {
     ) -> StatsSlice? {
         switch range {
         case .month:
-            // Same month a year earlier — what the chart's reference rule marks.
-            return agg.monthTotals[MeAggregates.monthKey(anchor, cal) - 12]
+            // The month before — the bar right next to the selected one, and
+            // what the line under the headline compares against.
+            return agg.monthTotals[MeAggregates.monthKey(anchor, cal) - 1]
         case .year:
             return sum(agg, year: cal.component(.year, from: anchor) - 1)
         case .all:
@@ -1031,16 +1075,11 @@ struct StatsScreenView: View {
         }
     }
 
-    private func chartModel(
-        _ agg: MeAggregates, _ l: LanguageManager.Language, calendar cal: Calendar
-    ) -> ChartModel {
+    private func chartModel(_ agg: MeAggregates, calendar cal: Calendar) -> ChartModel {
         var model = ChartModel()
-        let nowKey = MeAggregates.monthKey(Date(), cal)
-
         switch range {
         case .month, .year:
             let year = cal.component(.year, from: anchor)
-            model.badge = String(year)
             for m in 0..<12 {
                 let bucket = agg.monthTotals[year * 12 + m] ?? StatsSlice()
                 model.km[m] = bucket.km
@@ -1048,27 +1087,15 @@ struct StatsScreenView: View {
             }
             if range == .month {
                 model.highlight = cal.component(.month, from: anchor) - 1
-                // Only draw the rule when there is a real month behind it.
-                let lastYear = agg.monthTotals[MeAggregates.monthKey(anchor, cal) - 12]
-                if let lastYear, lastYear.km > 0 {
-                    model.reference = lastYear.km
-                    model.referenceLabel = StatsPeriodFormat.monthYearLower(
-                        cal.date(byAdding: .year, value: -1, to: anchor) ?? anchor, l
-                    )
-                }
-            } else if year == cal.component(.year, from: Date()) {
-                model.highlight = cal.component(.month, from: Date()) - 1
             }
         case .all:
-            // A column is «every June there has ever been» — the badge says so,
-            // so nobody reads it as one particular year.
-            model.badge = AppStrings.statsRangeAll(l)
+            // A column is «every June there has ever been» — the strip's
+            // title spells out the span, so nobody reads it as one year.
             for (key, bucket) in agg.monthTotals {
                 let m = ((key % 12) + 12) % 12
                 model.km[m] += bucket.km
                 model.trips[m] += bucket.trips
             }
-            model.highlight = ((nowKey % 12) + 12) % 12
         }
         return model
     }
@@ -1157,48 +1184,16 @@ struct StatsScreenView: View {
         agg = computed
         // Park on the newest month that holds a trip, not on an empty «now».
         if let last = computed.lastTripDate { anchor = last }
-
-        await loadPlaces(trips: trips, count: count, lastDate: lastDate, generation: generation)
     }
+}
 
-    /// «Всего: N городов · N регионов». Cities exist only as atlas coverage —
-    /// `TripEntity.region` is the geocoder's admin area, so the count has to
-    /// come from the same build Моя карта uses, or the two screens would
-    /// disagree. Cached against the library fingerprint: this is the slowest
-    /// thing on the screen and it does not move between range changes.
-    private func loadPlaces(trips: [Trip], count: Int, lastDate: Date?, generation: Int) async {
-        if !isRemote, let cached = StatsPlacesCache.value(count: count, lastDate: lastDate) {
-            places = cached
-            return
-        }
-        guard !trips.isEmpty else { return }
-        await RegionAtlas.shared.loadIfNeeded()
-        // Таблица владельца читается здесь (main-actor viewContext), а вот
-        // ЧУЖОЙ туман считается уже в detached: у человека с сотнями публичных
-        // поездок это сотни декодов полилиний плюс геохеш на каждые 300 м
-        // пути — на главном акторе это многосекундная заморозка. `MyMapViewModel`
-        // делает ровно то же внутри detached, и расхождение было случайным.
-        let ownHashes = isRemote ? nil : TerritoryManager().visitedGeohashes
-        let remote = isRemote
-        let atlas = RegionAtlas.shared
-        let built = await Task.detached(priority: .utility) { () -> StatsPlaces in
-            let hashes = remote
-                ? TerritoryManager.geohashes(
-                    fromTrips: trips.map { $0.previewCoordinates }, precision: 6)
-                : (ownHashes ?? [])
-            let exploration = MapExploration.build(
-                trips: trips, visitedHashes: hashes, atlas: atlas
-            )
-            return StatsPlaces(
-                cities: exploration.regions.reduce(0) { $0 + $1.visitedCityCount },
-                regions: exploration.regions.count
-            )
-        }.value
-        // Тот же гейт, что у `agg`: обогнавший старый прогон иначе накрыл бы
-        // свежие города и регионы урезанными.
-        guard !Task.isCancelled, generation == loadGeneration else { return }
-        if !isRemote { StatsPlacesCache.store(built, count: count, lastDate: lastDate) }
-        places = built
+/// Отклик под пальцем у столбика и стрелок года: притухание без сжатия —
+/// столбик в ряду из двенадцати, сжатый на два процента, не виден вовсе.
+private struct StatsBarPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -1215,8 +1210,6 @@ extension StatsScreenView {
     /// so the aggregate stays raw numbers.
     struct RecordRow: Identifiable {
         let id: String
-        let icon: String
-        let tint: Color
         let label: String
         let subject: String
         let value: String
@@ -1228,34 +1221,7 @@ extension StatsScreenView {
     struct ChartModel {
         var km = [Double](repeating: 0, count: 12)
         var trips = [Int](repeating: 0, count: 12)
-        var badge = ""
         var highlight: Int?
-        var reference: Double?
-        var referenceLabel: String?
-    }
-
-    struct StatsPlaces {
-        let cities: Int
-        let regions: Int
-    }
-}
-
-/// Lives beside `StatsCache` in spirit but not in file: it caches the atlas
-/// pass, not the trips, and only this screen asks for it.
-private enum StatsPlacesCache {
-    private static var cached: StatsScreenView.StatsPlaces?
-    private static var cachedCount = -1
-    private static var cachedLastDate: Date?
-
-    static func value(count: Int, lastDate: Date?) -> StatsScreenView.StatsPlaces? {
-        guard cachedCount == count, cachedLastDate == lastDate else { return nil }
-        return cached
-    }
-
-    static func store(_ value: StatsScreenView.StatsPlaces, count: Int, lastDate: Date?) {
-        cached = value
-        cachedCount = count
-        cachedLastDate = lastDate
     }
 }
 
@@ -1274,6 +1240,7 @@ enum StatsPeriodFormat {
     private static let genitiveMonths = LocalizedDateFormatter.patterns("MMMM")
     private static let monthYearInlineFmt = LocalizedDateFormatter.templates("MMMMyyyy")
     private static let dayMonthFmt = LocalizedDateFormatter.templates("dMMMM")
+    private static let dayMonthShortFmt = LocalizedDateFormatter.templates("dMMM")
     private static let ruLocale = LanguageManager.Language.ru.locale
 
     /// ICU's standalone (nominative) month — «Июнь», "June".
@@ -1335,11 +1302,6 @@ enum StatsPeriodFormat {
         return "\(table[idx]) \(yearText(date))"
     }
 
-    /// «июнь 2025» / "June 2025" — the chart's reference-rule label.
-    static func monthYearLower(_ date: Date, _ l: LanguageManager.Language) -> String {
-        "\(monthLower(date, l)) \(yearText(date))"
-    }
-
     /// «июнь» / "June" — reads after «За …», where the RU accusative of every
     /// month noun is identical to its nominative.
     static func monthLower(_ date: Date, _ l: LanguageManager.Language) -> String {
@@ -1347,20 +1309,15 @@ enum StatsPeriodFormat {
         return l == .ru ? name.lowercased(with: ruLocale) : name.capitalized
     }
 
-    /// «июне» / "June" — reads after «в прошлом …».
-    static func monthPrepositional(_ date: Date, _ l: LanguageManager.Language) -> String {
-        guard l == .ru else { return standalone(date, l).capitalized }
-        // Genitive → prepositional: «января» → «январе», «мая» → «мае». The
-        // final -а/-я becomes -е for all twelve, so the case comes out of ICU
-        // plus one rule instead of a table of month names written in Swift.
-        let genitive = (genitiveMonths[.ru]?.string(from: date) ?? "").lowercased(with: ruLocale)
-        guard let last = genitive.last, last == "а" || last == "я" else { return genitive }
-        return String(genitive.dropLast()) + "е"
-    }
-
     /// «12 октября» / "October 12" — the best-day record's subject.
     static func dayMonth(_ date: Date, _ l: LanguageManager.Language) -> String {
         dayMonthFmt[l]?.string(from: date) ?? ""
+    }
+
+    /// «7 окт.» / "Oct 7" — the date column of the new-regions list, the same
+    /// template the Places screens print a pass with.
+    static func dayMonthShort(_ date: Date, _ l: LanguageManager.Language) -> String {
+        dayMonthShortFmt[l]?.string(from: date) ?? ""
     }
 
     /// «Сентябрь» / "September" for a bare 0-based column index.
@@ -1443,8 +1400,11 @@ struct MeAggregates {
     /// period before each — is a lookup or a 12-term sum over this, so the
     /// segment and the stepper never trigger a second pass over the library.
     var monthTotals: [Int: StatsSlice] = [:]
-    /// When each region was first driven — feeds «первый раз в …».
+    /// When each region was first driven — feeds «Новые места».
     var regionFirstVisit: [String: Date] = [:]
+    /// Distinct regions per calendar month, keyed by `monthKey` — the
+    /// «регионов» tile of any range is a union over these, not a second pass.
+    var monthRegions: [Int: Set<String>] = [:]
     /// First-drive dates of collected roads — feeds «+2 новые дороги».
     var roadFirstDriven: [Date] = []
 
@@ -1513,7 +1473,11 @@ struct MeAggregates {
                 a.tripsWithMemories += 1
             }
             a.totalHours += t.duration / 3600
-            if let r = t.region, !r.isEmpty { regionsAll.insert(r) }
+            // Один регион — один ключ, на каком бы языке его ни записал
+            // геокодер (`RegionDisplay.canonical`); показ — на языке
+            // приложения, у экрана.
+            let region = t.region.flatMap { $0.isEmpty ? nil : RegionDisplay.canonical($0) }
+            if let region { regionsAll.insert(region) }
             let day = cal.startOfDay(for: t.startDate)
             durationByDay[day, default: 0] += t.duration
             kmByDayAll[day, default: 0] += t.distance / 1000
@@ -1531,7 +1495,8 @@ struct MeAggregates {
             if a.lastTripDate == nil || t.startDate > (a.lastTripDate ?? t.startDate) {
                 a.lastTripDate = t.startDate
             }
-            if let r = t.region, !r.isEmpty {
+            if let r = region {
+                a.monthRegions[monthKey(t.startDate, cal), default: []].insert(r)
                 if let seen = a.regionFirstVisit[r] {
                     a.regionFirstVisit[r] = min(seen, t.startDate)
                 } else {
@@ -1541,7 +1506,7 @@ struct MeAggregates {
             // Photos are grouped by place, per canon («Карелия · 14 фото»);
             // a trip with no region still counts, under its own name.
             if !t.photos.isEmpty {
-                let place = (t.region?.isEmpty == false ? t.region : t.title) ?? ""
+                let place = region ?? t.title ?? ""
                 if !place.isEmpty { photosByPlace[place, default: 0] += t.photos.count }
             }
         }
@@ -1601,8 +1566,9 @@ struct MeAggregates {
             }
             kmByDay[cal.startOfDay(for: t.startDate), default: 0] += t.distance / 1000
             if let r = t.region, !r.isEmpty {
-                yearRegionSet.insert(r)
-                regionCounts[r, default: 0] += 1
+                let key = RegionDisplay.canonical(r)
+                yearRegionSet.insert(key)
+                regionCounts[key, default: 0] += 1
             }
         }
         a.yearRegions = yearRegionSet.count

@@ -38,6 +38,14 @@ final class RegionDisplayTests: XCTestCase {
         XCTAssertEqual(RegionDisplay.localized("Bavaria", language: .en), "Bavaria")
     }
 
+    /// Один ключ на регион, на каком бы языке его ни записали (0.9.1).
+    func testCanonicalJoinsBothLanguages() {
+        XCTAssertEqual(RegionDisplay.canonical("Краснодарский край"), "Krasnodar Krai")
+        XCTAssertEqual(RegionDisplay.canonical("Krasnodar Krai"), "Krasnodar Krai")
+        XCTAssertEqual(RegionDisplay.canonical("  Краснодар. край "), "Krasnodar Krai")
+        XCTAssertEqual(RegionDisplay.canonical(" Bavaria "), "Bavaria", "незнакомый — собой, без краёв")
+    }
+
     func testNilAndEmptyPassThrough() {
         XCTAssertNil(RegionDisplay.localized(nil, language: .ru))
         XCTAssertEqual(RegionDisplay.localized("", language: .ru), "")

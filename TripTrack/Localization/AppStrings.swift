@@ -4826,11 +4826,6 @@ enum AppStrings {
     static func statsRegions(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRegions", ru: "регионов", en: "regions")
     }
-    /// Older name for the same metric tile — canon settled on `statsHoursOnRoad`,
-    /// so this forwards instead of keeping a second English wording alive.
-    static func statsHours(_ lang: LanguageManager.Language) -> String {
-        statsHoursOnRoad(lang)
-    }
     /// «Километры по месяцам» / «Мили по месяцам» — заголовок над графиком.
     ///
     /// Переехал из таблиц в switch, потому что единица тут не приписка в
@@ -6163,56 +6158,53 @@ enum AppStrings {
     }
     /// The range segment reuses the app-wide period words — a second copy would
     /// drift the moment one of them is retranslated.
-    static func statsRangeMonth(_ lang: LanguageManager.Language) -> String {
-        month(lang)
-    }
     static func statsRangeYear(_ lang: LanguageManager.Language) -> String {
         year(lang)
     }
     static func statsRangeAll(_ lang: LanguageManager.Language) -> String {
         total(lang)
     }
-    static func statsHoursOnRoad(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsHoursOnRoad", ru: "ч в пути", en: "h on road")
-    }
-    /// «Больше, чем в прошлом июне — 840 км против 610». The caller owns the
-    /// declined period («июне», «году») and both already-grouped numbers; the
-    /// arrow glyph is the view's, not the copy's.
-    /// - Parameter current: расстояние текущего периода вместе с подписью, из
-    ///   `Measure`. `previous` — только число: единица у них одна, и повторять
-    ///   её дважды в одной строке незачем.
-    static func statsVsLastPeriod(
-        _ lang: LanguageManager.Language, more: Bool, period: String,
-        current: String, previous: String
+    /// «Больше, чем месяцем раньше — 610 км» / «Меньше, чем годом раньше —
+    /// 4 210 км» — строка под итогом статистики (0.9.1, вариант B).
+    ///
+    /// Сравнение с СОСЕДНИМ периодом, а не с тем же месяцем год назад: фраза
+    /// отвечает на «как прошёл месяц», и человек сравнивает его с прошлым, а
+    /// не с прошлогодним октябрём. Месяц по имени не называется нарочно —
+    /// «чем в сентябре» требует предложного падежа в русском, украинском,
+    /// польском и казахском, а склонять названия месяцев ICU не умеет. Текущий
+    /// итог стоит строкой выше крупно и сюда не повторяется.
+    /// - Parameter previous: расстояние прошлого периода вместе с единицей,
+    ///   из `Measure`.
+    static func statsVsPrevious(
+        _ lang: LanguageManager.Language, more: Bool, year: Bool, previous: String
     ) -> String {
-        let numbers = current
         switch lang {
         case .ru:
-            return "\(more ? "Больше" : "Меньше"), чем в прошлом \(period) — \(numbers) против \(previous)"
+            return "\(more ? "Больше" : "Меньше"), чем \(year ? "годом" : "месяцем") раньше — \(previous)"
         case .en:
-            return "\(more ? "More" : "Less") than last \(period) — \(numbers) vs \(previous)"
+            return "\(more ? "More" : "Less") than the \(year ? "year" : "month") before — \(previous)"
         case .de:
-            return "\(more ? "Mehr" : "Weniger") als \(period) davor — \(numbers) gegenüber \(previous)"
+            return "\(more ? "Mehr" : "Weniger") als \(year ? "im Vorjahr" : "im Vormonat") — \(previous)"
         case .es:
-            return "\(more ? "Más" : "Menos") que el \(period) pasado — \(numbers) frente a \(previous)"
+            return "\(more ? "Más" : "Menos") que \(year ? "el año anterior" : "el mes anterior") — \(previous)"
         case .fr:
-            return "\(more ? "Plus" : "Moins") que \(period) dernier — \(numbers) contre \(previous)"
+            return "\(more ? "Plus" : "Moins") que \(year ? "l’année précédente" : "le mois précédent") — \(previous)"
         case .it:
-            return "\(more ? "Più" : "Meno") del \(period) scorso — \(numbers) contro \(previous)"
+            return "\(more ? "Più" : "Meno") \(year ? "dell’anno precedente" : "del mese precedente") — \(previous)"
         case .pl:
-            return "\(more ? "Więcej" : "Mniej") niż w poprzednim okresie (\(period)) — \(numbers) wobec \(previous)"
+            return "\(more ? "Więcej" : "Mniej") niż \(year ? "rok wcześniej" : "miesiąc wcześniej") — \(previous)"
         case .id:
-            return "\(more ? "Lebih banyak" : "Lebih sedikit") dari \(period) lalu — \(numbers) berbanding \(previous)"
+            return "\(more ? "Lebih banyak" : "Lebih sedikit") dari \(year ? "tahun sebelumnya" : "bulan sebelumnya") — \(previous)"
         case .tr:
-            return "Geçen \(period) dönemine göre \(more ? "daha fazla" : "daha az") — \(numbers), önceki \(previous)"
+            return "\(year ? "Önceki yıldan" : "Önceki aydan") \(more ? "fazla" : "az") — \(previous)"
         case .fil:
-            return "\(more ? "Mas marami" : "Mas kaunti") kaysa noong nakaraang \(period) — \(numbers) kumpara sa \(previous)"
+            return "\(more ? "Mas marami" : "Mas kaunti") kaysa \(year ? "noong nakaraang taon" : "noong nakaraang buwan") — \(previous)"
         case .uk:
-            return "\(more ? "Більше" : "Менше"), ніж у минулому \(period) — \(numbers) проти \(previous)"
+            return "\(more ? "Більше" : "Менше"), ніж \(year ? "роком" : "місяцем") раніше — \(previous)"
         case .kk:
-            return "Өткен \(period) кезеңімен салыстырғанда \(more ? "көбірек" : "азырақ") — \(numbers), бұрын \(previous)"
+            return "\(year ? "Алдыңғы жылдан" : "Алдыңғы айдан") \(more ? "көп" : "аз") — \(previous)"
         case .pt:
-            return "\(more ? "Mais" : "Menos") que \(period) passado — \(numbers) contra \(previous)"
+            return "\(more ? "Mais" : "Menos") \(year ? "do que no ano anterior" : "do que no mês anterior") — \(previous)"
         }
     }
     static func statsNewPlaces(_ lang: LanguageManager.Language) -> String {
@@ -6272,18 +6264,6 @@ enum AppStrings {
         case .kk: return "\(head) · алғаш рет \(firstPlace)"
         case .pt: return "\(head) · pela primeira vez em \(firstPlace)"
         }
-    }
-    /// «Всего: 14 городов · 8 регионов» — lifetime counters under the period line.
-    static func statsTotalsLine(
-        _ lang: LanguageManager.Language, cities: Int, regions: Int
-    ) -> String {
-        let c = "\(groupedNumber(cities, lang)) \(nounCities(lang, cities))"
-        let r = "\(groupedNumber(regions, lang)) \(nounRegions(lang, regions))"
-        let head = tr(lang, "statsTotalsHead", ru: "Всего", en: "Total")
-        return "\(head): \(c) · \(r)"
-    }
-    static func statsHallOfFame(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsHallOfFame", ru: "Доска почёта", en: "Hall of fame")
     }
     static func statsRecordLongest(_ lang: LanguageManager.Language) -> String {
         recordLongest(lang)
@@ -6632,9 +6612,6 @@ enum AppStrings {
         tr(lang, "profileYourKilometersStreaks",
            ru: "Здесь будут ваши поездки, пробег и достижения.",
            en: "Your trips, distance and achievements will appear here.")
-    }
-    static func statsYear(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsYear", ru: "году", en: "year")
     }
     static func syncStatusMarkerOff(_ lang: LanguageManager.Language) -> String {
         tr(lang, "syncStatusMarkerOff", ru: "Выкл.", en: "Off")

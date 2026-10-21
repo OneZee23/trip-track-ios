@@ -44,3 +44,31 @@ final class StatsRecordRowTapTests: XCTestCase {
                       "чужая поездка рекорда должна открываться")
     }
 }
+
+/// Вариант B статистики (0.9.1): красное на экране — только итог и
+/// столбики. Мелкий акцент на тёмной карточке даёт 3.3 : 1 и не проходит
+/// 4.5 : 1 для текста, поэтому выбранный месяц, выбранная кнопка, числа
+/// рекордов и подпись «год назад» идут чернилами. Сторож читает исходник: экранный цвет мелкой
+/// подписи тестом не задать без кадра.
+final class StatsAccentDisciplineTests: XCTestCase {
+
+    func testSmallTextOnTheStatsScreenIsNeverAccent() throws {
+        let stats = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("TripTrack/Views/Profile/StatsScreenView.swift")
+        let text = try String(contentsOf: stats, encoding: .utf8)
+
+        XCTAssertFalse(text.contains("foregroundStyle(isOn ? AppTheme.accent"),
+                       "выбранная кнопка периода снова красная мелким текстом")
+        XCTAssertFalse(text.contains("foregroundStyle(selected ? AppTheme.accent"),
+                       "подпись выбранного месяца снова красная")
+        XCTAssertTrue(text.contains("Text(distance).foregroundColor(AppTheme.accent)"),
+                      "крупный итог потерял свой единственный красный")
+        // Красный текст на экране ровно один — итог. Остальные
+        // `AppTheme.accent` — столбики, кнопка пустого экрана и «Повторить».
+        let accentText = text.components(separatedBy: "foregroundStyle(AppTheme.accent)").count - 1
+        XCTAssertLessThanOrEqual(accentText, 3,
+                                 "появился новый мелкий красный текст — проверь его контраст на тёмной теме")
+    }
+}
