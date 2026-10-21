@@ -289,13 +289,10 @@ final class APIClient {
                 // attempt's response was lost to -1005 mid-re-send).
                 return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true, singleAttempt: singleAttempt)
             }
-            // Post-refresh USER_NOT_AUTH means our freshly-rotated access
-            // token is itself invalid (server-side JWT secret rotation,
-            // race with a concurrent revoke). No more refresh attempts —
-            // soft-expire the session so SIWA can re-establish it.
+            // Post-refresh USER_NOT_AUTH does NOT prove the session dead —
+            // only `/auth/refresh` can say that. See `revalidateAfterRejectedRetry`.
             if code == "USER_NOT_AUTH", requiresAuth, isRetry {
-                apiAuthLog.error("POST \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
-                sessionDeathHandler()
+                await revalidateAfterRejectedRetry("POST \(path)")
             }
             // UNKNOWN_SERVER_ERROR is the catch-all when the backend's
             // JsonRpcExceptionFilter sees a non-AppError exception (DB
@@ -391,10 +388,9 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
             }
-            // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
+            // Mirrors performPost: ask `/auth/refresh`, don't conclude.
             if code == "USER_NOT_AUTH", requiresAuth, isRetry {
-                apiAuthLog.error("GET \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
-                sessionDeathHandler()
+                await revalidateAfterRejectedRetry("GET \(path)")
             }
             // See performPost: retry-once on transient server errors.
             if code == "UNKNOWN_SERVER_ERROR", !isRetry {
@@ -455,10 +451,9 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performMultipart(path: path, fields: fields, file: file, isRetry: true)
             }
-            // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
+            // Mirrors performPost: ask `/auth/refresh`, don't conclude.
             if code == "USER_NOT_AUTH", isRetry {
-                apiAuthLog.error("MULTIPART \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
-                sessionDeathHandler()
+                await revalidateAfterRejectedRetry("MULTIPART \(path)")
             }
             // See performPost: retry-once on transient server errors.
             if code == "UNKNOWN_SERVER_ERROR", !isRetry {
@@ -469,6 +464,24 @@ final class APIClient {
             postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
+    }
+
+    /// A request re-sent after a refresh still came back USER_NOT_AUTH.
+    ///
+    /// That used to soft-expire the session on the spot, and it signed the
+    /// owner out on 21 Oct 2026: the re-sent `/sync/pull` hung 24 minutes on
+    /// a weak network, its access token (15 min) expired in flight, and the
+    /// late USER_NOT_AUTH was read as «the fresh token is rejected» — while a
+    /// new refresh for the same session was already on the wire and was
+    /// cancelled by the expiry (-999). The access token proves nothing about
+    /// the session; the refresh token does. So the verdict belongs to
+    /// `/auth/refresh` alone: ask it once more (single-flight, joins any
+    /// refresh already in flight). A rejected refresh soft-expires the
+    /// session inside `refreshIfNeeded`; a network failure keeps it and arms
+    /// recovery. Nothing here signs anyone out by itself.
+    private func revalidateAfterRejectedRetry(_ label: String) async {
+        apiAuthLog.notice("\(label, privacy: .public) USER_NOT_AUTH after refresh — asking /auth/refresh again")
+        try? await refreshIfNeeded()
     }
 
     /// Fan-out ban detection to any observer (notably `AuthService`, which

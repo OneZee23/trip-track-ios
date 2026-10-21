@@ -109,6 +109,63 @@ final class APIClientTokenRefreshTests: XCTestCase {
         XCTAssertEqual(deathFired.refresh, 1, "session death seam should fire exactly once")
     }
 
+    /// The 21 Oct 2026 sign-out: the re-sent request comes back
+    /// USER_NOT_AUTH anyway (it hung past the access token's lifetime), but
+    /// the refresh token is perfectly good. That is not a dead session — the
+    /// client must ask `/auth/refresh` again and stay signed in.
+    func testRejectedRetryWithLiveRefreshTokenKeepsSession() async throws {
+        let deathFired = Counter()
+        let refreshes = Counter()
+        client.sessionDeathHandler = { deathFired.incrementRefresh() }
+        client.refreshRecoveryDelays = []
+
+        MockURLProtocol.requestHandler = { req in
+            if req.url!.path == "/auth/refresh" {
+                refreshes.incrementRefresh()
+                let data = Data(#"{"status":"ok","payload":{"accessToken":"new","refreshToken":"newRefresh"}}"#.utf8)
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+            }
+            // Every authed call bounces — as the stale in-flight one did.
+            let data = Data(#"{"status":"error","code":"USER_NOT_AUTH","message":"expired"}"#.utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+        }
+
+        do {
+            let _: Payload = try await client.post("/sync/pull", body: Req(x: 1), requiresAuth: true)
+            XCTFail("expected the call to fail")
+        } catch { /* the call itself fails; the session must not */ }
+        XCTAssertEqual(deathFired.refresh, 0, "a live refresh token means a live session")
+        XCTAssertEqual(refreshes.refresh, 2, "the second USER_NOT_AUTH must be checked with /auth/refresh")
+        XCTAssertEqual(TokenStore.shared.refreshToken, "newRefresh")
+    }
+
+    /// The other half: when `/auth/refresh` itself rejects the token on that
+    /// second check, the session IS dead and soft-expires exactly once.
+    func testRejectedRetryWithDeadRefreshTokenExpiresSessionOnce() async throws {
+        let deathFired = Counter()
+        let refreshes = Counter()
+        client.sessionDeathHandler = { deathFired.incrementRefresh() }
+        client.refreshRecoveryDelays = []
+
+        MockURLProtocol.requestHandler = { req in
+            if req.url!.path == "/auth/refresh" {
+                refreshes.incrementRefresh()
+                let body = refreshes.refresh == 1
+                    ? #"{"status":"ok","payload":{"accessToken":"new","refreshToken":"newRefresh"}}"#
+                    : #"{"status":"error","code":"INVALID_REFRESH_TOKEN","message":"revoked"}"#
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+            }
+            let data = Data(#"{"status":"error","code":"USER_NOT_AUTH","message":"expired"}"#.utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+        }
+
+        do {
+            let _: Payload = try await client.post("/sync/pull", body: Req(x: 1), requiresAuth: true)
+            XCTFail("expected the call to fail")
+        } catch { /* expected */ }
+        XCTAssertEqual(deathFired.refresh, 1, "only a rejected refresh may expire the session")
+    }
+
     /// A transient refresh failure must NOT fire the session-death seam.
     func testTransientRefreshFailureKeepsSession() async throws {
         let deathFired = Counter()
