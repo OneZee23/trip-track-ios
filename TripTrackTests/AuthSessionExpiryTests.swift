@@ -70,6 +70,25 @@ final class AuthSessionExpiryTests: XCTestCase {
                        "pending sync ops must survive session expiry")
     }
 
+    /// The owner's 21 Oct 2026 state: soft-expired, app relaunched, refresh
+    /// token still good. A successful refresh after the relaunch must bring the
+    /// session back and take the re-login card away — the card stayed up
+    /// because, after a relaunch, nothing ever attempted that refresh.
+    func testRefreshAfterRelaunchRevivesSoftExpiredSession() {
+        AuthService.shared.sessionExpired()
+        AuthService.shared.loadFromKeychain()  // relaunch
+        XCTAssertTrue(AuthService.shared.needsReauth)
+        XCTAssertFalse(AuthService.shared.isSignedIn)
+
+        // What a successful `/auth/refresh` stores before firing recovery.
+        TokenStore.shared.set(accessToken: "back", refreshToken: "back-refresh")
+        AuthService.shared.sessionRecovered()
+
+        XCTAssertTrue(AuthService.shared.isSignedIn)
+        XCTAssertFalse(AuthService.shared.needsReauth)
+        XCTAssertNil(KeychainHelper.loadString(key: kSessionExpired), "the expiry flag must not survive the next launch")
+    }
+
     func testSessionExpiredIsIdempotent() {
         AuthService.shared.sessionExpired()
         AuthService.shared.sessionExpired() // second call must be a no-op

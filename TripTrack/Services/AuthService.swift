@@ -1226,6 +1226,14 @@ final class AuthService: ObservableObject {
         needsReauth = false
     }
 
+    /// «Войдите снова» висит, а refresh-токен цел — спросить сервер молча.
+    /// Зовётся на запуске и на каждом возврате в приложение; ответ приходит
+    /// через `sessionRecovered()`, и карточка уходит без единого нажатия.
+    func reviveSessionIfPossible() {
+        guard needsReauth, !isSignedIn, !signOutInProgress, userIdentifier != nil else { return }
+        Task { await APIClient.shared.reviveSoftExpiredSession() }
+    }
+
     // MARK: - Auth Status Check (called on app launch)
 
     func checkAuthStatus() {

@@ -723,6 +723,22 @@ final class APIClient {
         try await task.value
     }
 
+    /// The silent way back from a soft expiry: one `/auth/refresh` with the
+    /// refresh token the expiry deliberately kept. `sessionExpired()` wipes the
+    /// access token and the signed-in marker, so after it NO authed call ever
+    /// runs again — and the documented promise «the first successful refresh
+    /// brings the session back without a tap» had nothing to keep it. On
+    /// 21 Oct 2026 the owner sat on «Please sign in again» with a perfectly
+    /// good refresh token in the keychain. Called on launch and on every
+    /// return to the foreground while the re-login card is up; success goes
+    /// through `sessionRecoveryHandler`, a rejection soft-expires (no-op, it is
+    /// already expired), a network failure arms the usual recovery loop.
+    func reviveSoftExpiredSession() async {
+        guard case .value = tokenStore.refreshTokenRead else { return }
+        apiAuthLog.notice("refresh: reviving a soft-expired session")
+        try? await refreshIfNeeded()
+    }
+
     /// Arms a background loop that re-posts `/auth/refresh` on a short
     /// backoff after a TRANSIENT refresh failure, instead of waiting for the
     /// next authed call (which, mid-recording, never comes). This is the

@@ -166,6 +166,43 @@ final class APIClientTokenRefreshTests: XCTestCase {
         XCTAssertEqual(deathFired.refresh, 1, "only a rejected refresh may expire the session")
     }
 
+    /// After a soft expiry nothing authed ever runs again, so the session must
+    /// be revived explicitly: one refresh with the kept refresh token, and the
+    /// recovery seam fires — the re-login card goes away without a tap.
+    func testReviveSoftExpiredSessionRefreshesAndFiresRecovery() async throws {
+        let recovered = Counter()
+        let refreshes = Counter()
+        client.sessionRecoveryHandler = { recovered.incrementRefresh() }
+        TokenStore.shared.clearAccessToken()  // what sessionExpired() leaves behind
+
+        MockURLProtocol.requestHandler = { req in
+            XCTAssertEqual(req.url!.path, "/auth/refresh")
+            refreshes.incrementRefresh()
+            let data = Data(#"{"status":"ok","payload":{"accessToken":"back","refreshToken":"backRefresh"}}"#.utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+        }
+
+        await client.reviveSoftExpiredSession()
+
+        XCTAssertEqual(refreshes.refresh, 1)
+        XCTAssertEqual(recovered.refresh, 1)
+        XCTAssertEqual(TokenStore.shared.accessToken, "back")
+    }
+
+    /// Nothing to revive without a refresh token: no request at all.
+    func testReviveWithoutRefreshTokenSendsNothing() async throws {
+        let requests = Counter()
+        TokenStore.shared.clear()
+        MockURLProtocol.requestHandler = { req in
+            requests.incrementRefresh()
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        await client.reviveSoftExpiredSession()
+
+        XCTAssertEqual(requests.refresh, 0)
+    }
+
     /// A transient refresh failure must NOT fire the session-death seam.
     func testTransientRefreshFailureKeepsSession() async throws {
         let deathFired = Counter()

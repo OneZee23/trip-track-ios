@@ -169,6 +169,7 @@ struct TripTrackApp: App {
                         // sweep below is the one that catches a kill.
                         await LogArchive.shared.startPeriodicSweep()
                         AuthService.shared.checkAuthStatus()
+                        AuthService.shared.reviveSessionIfPossible()
                         // Replay APNs registration each cold launch — iOS rotates
                         // device tokens on rare occasions, and the only way to
                         // catch that is to ask for a fresh one. Idempotent;
@@ -196,6 +197,7 @@ struct TripTrackApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 ProductAnalytics.shared.flush()
+                AuthService.shared.reviveSessionIfPossible()
                 // Удалённая конфигурация (0.9.0) — на каждом возврате, но не
                 // чаще `RemoteConfigStore.refreshInterval`; вне главного
                 // актёра, как каталог секретов.
