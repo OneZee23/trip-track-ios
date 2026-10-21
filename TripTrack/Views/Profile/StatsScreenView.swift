@@ -56,6 +56,16 @@ struct StatsScreenView: View {
     /// Поколение загрузки: обе кнопки «Повторить» плодят независимые задачи, и
     /// без гейта обогнавшая старая перезаписала бы результат новой урезанным.
     @State private var loadGeneration = 0
+    /// Чужая поездка из «Зала славы», уже скачанная и открытая поверх экрана
+    /// (0.9.1). Своя открывается в стеке хоста; чужую большинство хостов
+    /// («Поиск», карточка профиля, «Входящие») показать в стеке не умеют, а
+    /// `.openTripDetail` ищет поездку в ЛОКАЛЬНОЙ базе — поэтому экран
+    /// скачивает её сам и показывает своим слоем, где бы он ни стоял.
+    @State private var openedForeignTrip: SocialFeedTrip?
+    /// Какая строка сейчас скачивает свою поездку — спиннер вместо шеврона и
+    /// защита от второго нажатия.
+    @State private var loadingRecordId: String?
+    @State private var toastItem: ToastItem?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -102,6 +112,16 @@ struct StatsScreenView: View {
         .task {
             await load()
         }
+        .fullScreenCover(item: $openedForeignTrip) { trip in
+            NavigationStack {
+                TripDetailView(
+                    tripId: trip.id,
+                    viewModel: TripsViewModel(tripManager: tripManager),
+                    social: trip
+                )
+            }
+        }
+        .toast(item: $toastItem)
         .accessibilityIdentifier("stats_screen")
     }
 
@@ -841,7 +861,11 @@ struct StatsScreenView: View {
                 .foregroundStyle(AppTheme.accent)
                 .lineLimit(1)
 
-            if row.tripId != nil {
+            if loadingRecordId == row.id {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 12)
+            } else if row.tripId != nil {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
@@ -851,12 +875,16 @@ struct StatsScreenView: View {
         .surfaceCard(cornerRadius: 16)
 
         return Group {
-            // У чужого экрана строка НЕ тапабельна: `openTrip` шлёт
-            // `.openTripDetail`, а тот ищет поездку в ЛОКАЛЬНОЙ базе. С чужим
-            // UUID это прыжок на «Дом» и пустой экран вместо поездки.
-            if let tripId = row.tripId, !isRemote {
-                Button { openTrip(tripId) } label: { card.contentShape(Rectangle()) }
-                    .buttonStyle(.plain)
+            // Шеврон обещает, что строка открывается, — и обещание держат оба
+            // экрана. Чужая поездка скачивается и открывается поверх
+            // (`openForeignTrip`): `.openTripDetail` ищет её в ЛОКАЛЬНОЙ базе,
+            // и чужой UUID увёл бы на «Дом» к пустому экрану. До 0.9.1 строка
+            // у чужого была глухой при живом шевроне.
+            if let tripId = row.tripId {
+                Button {
+                    if isRemote { openForeignTrip(tripId, recordId: row.id) } else { openTrip(tripId) }
+                } label: { card.contentShape(Rectangle()) }
+                    .buttonStyle(PressableCardStyle())
             } else {
                 card
             }
@@ -1053,6 +1081,26 @@ struct StatsScreenView: View {
             onOpenTrip(id)
         } else {
             NotificationCenter.default.post(name: .openTripDetail, object: id)
+        }
+    }
+
+    /// Чужая поездка рекорда: та же дверь, что у профиля (`/social/trip`),
+    /// — сервер сам решает, видна ли она смотрящему.
+    private func openForeignTrip(_ id: UUID, recordId: String) {
+        guard loadingRecordId == nil else { return }
+        Haptics.tap()
+        loadingRecordId = recordId
+        Task { @MainActor in
+            defer { loadingRecordId = nil }
+            do {
+                let res: SocialTripResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialTrip,
+                    body: SocialTripRequest(tripId: id, includeTrack: false),
+                    requiresAuth: AuthService.shared.isSignedIn)
+                openedForeignTrip = res.item
+            } catch {
+                toastItem = ToastItem(type: .error, message: AppStrings.tripLoadFailed(lang.language))
+            }
         }
     }
 
