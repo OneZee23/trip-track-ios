@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: TripTrack website
+    url: https://trip-track.app
+    about: Download links and the web viewer for your synced trips.
+  - name: Privacy questions
+    url: https://onezee23.github.io/trip-track-ios/privacy-policy.html
+    about: What TripTrack stores and how to delete your data.

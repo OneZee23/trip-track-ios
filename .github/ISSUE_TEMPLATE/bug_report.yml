@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in TripTrack does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please do not paste trip
+        coordinates, your home address or account e-mail here — this repository
+        is public.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → bottom of the screen, for example «v0.9.0 · OneZee».
+      placeholder: "0.9.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone model and iOS version
+      placeholder: "iPhone 15 Pro, iOS 18.6"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Atlas
+        2. …
+  - type: textarea
+    id: screens
+    attributes:
+      label: Screenshots or screen recording
+      description: Optional. Crop out anything private.
