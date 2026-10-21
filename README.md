@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://apps.apple.com/app/apple-store/id6760650361?pt=128553974&ct=github&mt=8"><img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" height="48" alt="Download on the App Store"></a>
+  <a href="https://apps.apple.com/app/apple-store/id6760650361?pt=128553974&ct=github&mt=8"><img src="docs/assets/readme/app-store-badge.svg" height="48" alt="Download on the App Store"></a>
 </p>
 
 <p align="center">
