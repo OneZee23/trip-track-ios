@@ -11,9 +11,10 @@ import UIKit
 /// left in place for their current callers; this one is the pushed screen the
 /// Я tab links to, so it carries the nav bar rather than a grabber.
 ///
-/// Read-only, and parameterless on purpose — the level and XP are global facts
-/// about the account (`SettingsManager`), not something a caller gets to hand
-/// in and get wrong.
+/// Read-only. Your own level and XP are global facts about the account
+/// (`SettingsManager`), not something a caller gets to hand in and get wrong,
+/// so `init()` takes nothing. Somebody else's (0.9.1) come from their profile
+/// — `init(other:)` — and the screen is otherwise the same.
 ///
 /// Every number here is mirrored from `GamificationManager.calculateXP`. If
 /// that formula changes, the «Как получать опыт» card is a lie until it is
@@ -23,6 +24,22 @@ struct LevelsView: View {
     @Environment(\.colorScheme) private var scheme
 
     @ObservedObject private var settings = SettingsManager.shared
+
+    /// Somebody else's level (0.9.1), from their profile. `xp` is `nil` on a
+    /// server older than 0.9.1 — the bar is then left out rather than drawn
+    /// empty; the name goes under the title, as on somebody else's Stats.
+    struct Other: Hashable {
+        let level: Int
+        let xp: Int?
+        let ownerName: String?
+    }
+
+    /// `nil` — the viewer's own level.
+    private let other: Other?
+
+    init() { other = nil }
+
+    init(other: Other) { self.other = other }
 
     /// A rule as the card draws it: the multiplier chip is notation (a sign and
     /// a number, identical in both languages and taken straight from
@@ -38,8 +55,8 @@ struct LevelsView: View {
     /// Stored level is trusted (it is what the rest of the app shows) but
     /// clamped: `DriverRank.from` falls back to «Новичок» for anything outside
     /// 1…110, which would paint a level-0 profile as rank 1 of 14 with a full bar.
-    private var level: Int { min(max(settings.profileLevel, 1), LevelSystem.maxLevel) }
-    private var xp: Int { settings.profileXP }
+    private var level: Int { min(max(other?.level ?? settings.profileLevel, 1), LevelSystem.maxLevel) }
+    private var xp: Int? { other == nil ? settings.profileXP : other?.xp }
     private var rank: DriverRank { DriverRank.from(level: level) }
     private var isMaxLevel: Bool { level >= LevelSystem.maxLevel }
 
@@ -72,7 +89,8 @@ struct LevelsView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             // The app's own bar. The id rides on it because the back circle is
             // shared code and the only button in there — same as Статистика.
-            CustomNavBar(title: AppStrings.levelsTitle(l), largeTitle: true)
+            CustomNavBar(title: AppStrings.levelsTitle(l), largeTitle: true,
+                         subtitle: other?.ownerName)
                 .accessibilityIdentifier("levels_back")
         }
         .accessibilityIdentifier("levels_screen")
@@ -109,7 +127,9 @@ struct LevelsView: View {
                 }
             }
 
-            progressBlock(c, l, ink: ink)
+            if let xp {
+                progressBlock(c, l, ink: ink, xp: xp)
+            }
             nextRankPill(c, l)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,7 +164,8 @@ struct LevelsView: View {
     private func progressBlock(
         _ c: AppTheme.Colors,
         _ l: LanguageManager.Language,
-        ink: Color
+        ink: Color,
+        xp: Int
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             VehicleXPBar(

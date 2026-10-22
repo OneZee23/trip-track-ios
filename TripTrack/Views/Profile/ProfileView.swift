@@ -75,6 +75,8 @@ struct ProfileView: View {
         case publicJourneys(UUID, String?)
         /// Все достижения чужого профиля (0.9.1) — тот же мост.
         case publicAchievements(UUID, String?, [String])
+        /// Уровень чужого профиля (0.9.1) — тот же мост.
+        case publicLevels(UUID, String?, level: Int, xp: Int?)
         /// «Мой профиль» — the hub behind the header (avatar + name/handle/bio
         /// /level/stats rows). Its five row editors are NOT cases here: four
         /// of them are sheets this view presents, and the fifth is Статистика,
@@ -543,6 +545,9 @@ struct ProfileView: View {
                 case .publicAchievements(_, let name, let badgeIds):
                     PublicAchievementsView(badgeIds: badgeIds, ownerName: name)
                         .hideAppTabBar()
+                case .publicLevels(_, let name, let level, let xp):
+                    LevelsView(other: .init(level: level, xp: xp, ownerName: name))
+                        .hideAppTabBar()
                 case .trip(let id):
                     // Same construction FeedView uses; TripDetailView manages
                     // its own chrome and hides the tab bar itself.
@@ -832,6 +837,7 @@ struct ProfileView: View {
         case .publicJourney(let id): return .publicJourney(id)
         case .publicJourneys(let id, let name): return .publicJourneys(id, name)
         case .publicAchievements(let id, let name, let ids): return .publicAchievements(id, name, ids)
+        case .publicLevels(let id, let name, let level, let xp): return .publicLevels(id, name, level: level, xp: xp)
         case .drafts, .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .journey, .companionTrip,
              .clubs, .clubsCatalog, .club:
@@ -856,6 +862,7 @@ struct ProfileView: View {
         case .publicJourney(let id): return .publicJourney(id)
         case .publicJourneys(let id, let name): return .publicJourneys(id, name)
         case .publicAchievements(let id, let name, let ids): return .publicAchievements(id, name, ids)
+        case .publicLevels(let id, let name, let level, let xp): return .publicLevels(id, name, level: level, xp: xp)
         }
     }
 

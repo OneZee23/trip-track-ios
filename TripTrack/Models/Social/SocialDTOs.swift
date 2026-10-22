@@ -536,6 +536,10 @@ struct SocialProfile: Codable, Hashable {
     /// выключенный значок гасил оплаченную косметику у всех. `nil` — старый
     /// сервер, и тогда решает `isPlus`, как раньше.
     var hasPlus: Bool? = nil
+    /// Опыт владельца (0.9.1) — для экрана «Уровни» чужого профиля, полосы
+    /// «6 100 / 6 600 XP». `nil` — сервер старше 0.9.1: экран покажет уровень
+    /// и звание без полосы.
+    var profileXp: Int? = nil
 
     /// Рисовать ли оплаченные фон и рамку.
     var showsPaidCosmetics: Bool {
@@ -654,7 +658,8 @@ extension SocialProfile {
                 .compactMap(\.value),
             isPlus: try c.decodeIfPresent(Bool.self, forKey: .isPlus),
             avatarFrame: try c.decodeIfPresent(String.self, forKey: .avatarFrame),
-            hasPlus: try c.decodeIfPresent(Bool.self, forKey: .hasPlus)
+            hasPlus: try c.decodeIfPresent(Bool.self, forKey: .hasPlus),
+            profileXp: try c.decodeIfPresent(Int.self, forKey: .profileXp)
         )
     }
 }

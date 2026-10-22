@@ -72,6 +72,9 @@ enum ProfilePreviewDest: Hashable {
     /// `/users/:id/badges`, и экран рисует ровно тот список, по которому
     /// карточка напечатала «N из M». Имя — подпись в шапке, как у статистики.
     case publicAchievements(UUID, String?, [String])
+    /// Уровень чужого профиля (0.9.1) — тот же экран «Уровни», что на «Я»:
+    /// уровень и опыт из профиля, имя — подпись в шапке.
+    case publicLevels(UUID, String?, level: Int, xp: Int?)
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".

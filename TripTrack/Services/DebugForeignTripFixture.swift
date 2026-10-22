@@ -170,6 +170,8 @@ enum DebugForeignTripFixture {
             "displayName": isNew ? "Vixor66" : "Test Traveller",
             "avatarEmoji": isNew ? "🤠" : "🚙",
             "profileLevel": isNew ? 1 : 21,
+            // Inside level 21 (25 000 … 28 500): «Уровни» draws its bar (0.9.1).
+            "profileXp": isNew ? 0 : 26_400,
             "profileBackground": variant == "free" ? NSNull() : "plus_nebula",
             "currentStreak": isNew ? 0 : 4, "bestStreak": isNew ? 0 : 12,
             "stats": [

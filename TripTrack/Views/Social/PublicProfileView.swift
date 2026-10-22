@@ -197,6 +197,14 @@ struct PublicProfileView: View {
         pushPath.wrappedValue.cappedAppend(.publicJourneys(accountId, resolvedDisplayName))
     }
 
+    /// Уровень чужого человека (0.9.1) — тот же экран «Уровни», что на «Я»,
+    /// с опытом из профиля: без него (сервер старше) экран обойдётся без полосы.
+    private func openLevels(_ level: Int) {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(
+            .publicLevels(accountId, resolvedDisplayName, level: level, xp: profile?.profileXp))
+    }
+
     /// Все достижения чужого человека (0.9.1) — тем списком, по которому
     /// карточка напечатала «N из M».
     private func openAchievements() {
@@ -865,19 +873,42 @@ struct PublicProfileView: View {
                     HStack(spacing: 8) {
                         if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
                             let rank = DriverRank.from(level: lvl).title(lang.language)
-                            if cover {
-                                // On the cover the gold capsule turns to mud;
-                                // «Я» draws the level in white Handjet here.
-                                HStack(spacing: 5) {
-                                    Text("LVL \(lvl)")
-                                        .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
-                                        .foregroundStyle(.white)
-                                    Text(rank)
-                                        .font(.interScaled(12, weight: .medium, relativeTo: .caption))
-                                        .foregroundStyle(secondaryInk)
+                            let pill = Group {
+                                if cover {
+                                    // On the cover the gold capsule turns to mud;
+                                    // «Я» draws the level in white Handjet here.
+                                    HStack(spacing: 5) {
+                                        Text("LVL \(lvl)")
+                                            .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
+                                            .foregroundStyle(.white)
+                                        Text(rank)
+                                            .font(.interScaled(12, weight: .medium, relativeTo: .caption))
+                                            .foregroundStyle(secondaryInk)
+                                    }
+                                } else {
+                                    LvlPill(level: lvl, rankTitle: rank)
                                 }
+                            }
+                            // The level opens «Уровни», as on «Я» (0.9.1): the
+                            // same chevron says it leads somewhere. No path to
+                            // push on — no button, a dead one is worse.
+                            if pushPath != nil {
+                                Button {
+                                    Haptics.tap()
+                                    openLevels(lvl)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        pill
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundStyle(secondaryInk)
+                                    }
+                                    .tapTarget()
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("public_lvl_pill")
                             } else {
-                                LvlPill(level: lvl, rankTitle: rank)
+                                pill
                             }
                         }
 
