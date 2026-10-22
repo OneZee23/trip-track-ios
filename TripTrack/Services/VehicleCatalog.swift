@@ -125,6 +125,17 @@ enum VehicleCatalog {
     /// Силуэт, который подставляется при выборе модели. Он всё равно
     /// проходит через `VehicleAvatar.resolveStyle(_:forType:)` — каталог
     /// предлагает, тип решает.
+    static func defaultBody(forCatalogBody body: String?, type: String) -> String {
+        let style: String
+        switch body {
+        case "sedan", "liftback": style = "car"
+        case "wagon": style = "hatchback"
+        case "suv": style = "crossover"
+        default: style = body ?? VehicleAvatar.defaultStyle(forType: type)
+        }
+        return defaultBody(for: Model(name: "", bodies: [style], aliases: nil), type: type)
+    }
+
     static func defaultBody(for model: Model, type: String) -> String {
         let allowed = VehicleAvatar.styles(forType: type)
         return model.bodies.first(where: { allowed.contains($0) })

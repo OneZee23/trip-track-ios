@@ -42,6 +42,7 @@ struct VehicleCatalogCaption: View {
             }
             if showsCapsule, let line = variant?.specLine(lang.language) {
                 Text(line)
+                    .accessibilityIdentifier("vehicle_catalog_spec")
                     .font(.inter(12, weight: .semibold))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)

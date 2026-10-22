@@ -19,6 +19,11 @@ extension Translations {
         table.merge(fil6) { _, new in new }
         table.merge(filGarage) { _, new in new }
         table.merge(filProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Iba pang modelo — walang detalye"
+        table["catalogGeneration"] = "Henerasyon"
+        table["catalogVariant"] = "Makina at transmisyon"
+        table["catalogUnknownEngine"] = "Hindi ko alam ang makina"
+        table["catalogHasYear"] = "May {year}"
         return table
     }()
 

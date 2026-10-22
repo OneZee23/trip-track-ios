@@ -19,6 +19,11 @@ extension Translations {
         table.merge(kk6) { _, new in new }
         table.merge(kkGarage) { _, new in new }
         table.merge(kkProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Басқа модельдер — сипаттамасыз"
+        table["catalogGeneration"] = "Буын"
+        table["catalogVariant"] = "Қозғалтқыш пен беріліс қорабы"
+        table["catalogUnknownEngine"] = "Қозғалтқышты білмеймін"
+        table["catalogHasYear"] = "{year} бар"
         return table
     }()
 

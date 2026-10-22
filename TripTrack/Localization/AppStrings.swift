@@ -3872,6 +3872,27 @@ enum AppStrings {
            ru: "Ничего не нашлось — впишите своими словами",
            en: "Nothing found — type it in yourself")
     }
+    static func catalogOtherModels(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogOtherModels", ru: "Другие модели — без характеристик", en: "Other models — without specs")
+    }
+
+    static func catalogGeneration(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogGeneration", ru: "Поколение", en: "Generation")
+    }
+
+    static func catalogVariant(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogVariant", ru: "Двигатель и коробка", en: "Engine and gearbox")
+    }
+
+    static func catalogUnknownEngine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogUnknownEngine", ru: "Не знаю двигатель", en: "I don’t know the engine")
+    }
+
+    static func catalogHasYear(_ lang: LanguageManager.Language, year: Int) -> String {
+        tr(lang, "catalogHasYear", ru: "есть {year}", en: "{year} available")
+            .replacingOccurrences(of: "{year}", with: String(year))
+    }
+
     static func catalogUseTyped(_ lang: LanguageManager.Language) -> String {
         tr(lang, "catalogUseTyped", ru: "Оставить как есть", en: "Use what I typed")
     }

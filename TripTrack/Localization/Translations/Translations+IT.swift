@@ -19,6 +19,11 @@ extension Translations {
         table.merge(it6) { _, new in new }
         table.merge(itGarage) { _, new in new }
         table.merge(itProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Altri modelli — senza specifiche"
+        table["catalogGeneration"] = "Generazione"
+        table["catalogVariant"] = "Motore e cambio"
+        table["catalogUnknownEngine"] = "Non conosco il motore"
+        table["catalogHasYear"] = "Disponibile nel {year}"
         return table
     }()
 

@@ -18,17 +18,18 @@ struct VehicleCatalogPickerView: View {
     let initialQuery: String
     /// Отдаёт марку, модель и кузов. Кузов подставляется из справочника, но
     /// проходит через `VehicleAvatar.resolveStyle` — каталог предлагает, тип решает.
-    let onPick: (String, String, String) -> Void
+    let onPick: (VehicleCatalogSelection) -> Void
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
+    @State private var catalogHits: [CarCatalog.ModelHit] = []
     @State private var query: String = ""
     @FocusState private var searchFocused: Bool
 
     init(type: String, initialQuery: String = "",
-         onPick: @escaping (String, String, String) -> Void) {
+         onPick: @escaping (VehicleCatalogSelection) -> Void) {
         self.type = type
         self.initialQuery = initialQuery
         self.onPick = onPick
@@ -43,17 +44,21 @@ struct VehicleCatalogPickerView: View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
-        VStack(spacing: 0) {
-            header(c: c, l: l)
-            searchField(c: c, l: l)
-
-            if results.isEmpty {
-                emptyState(c: c, l: l)
-            } else {
+        NavigationStack {
+            VStack(spacing: 0) {
+                header(c: c, l: l)
+                searchField(c: c, l: l)
                 list(c: c)
             }
+            .background(c.bg.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .task(id: query) {
+                let requestedQuery = query
+                let hits = type == "car" ? await CarCatalog.shared.search(requestedQuery) : []
+                guard !Task.isCancelled, requestedQuery == query else { return }
+                catalogHits = hits
+            }
         }
-        .background(c.bg.ignoresSafeArea())
     }
 
     // MARK: - Шапка
@@ -70,6 +75,7 @@ struct VehicleCatalogPickerView: View {
                         .font(.inter(15, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
+                .buttonStyle(PressableCardStyle())
             }
         }
         .padding(.horizontal, 16)
@@ -90,6 +96,7 @@ struct VehicleCatalogPickerView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.words)
                 .focused($searchFocused)
+                .accessibilityIdentifier("catalog_search")
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -110,6 +117,34 @@ struct VehicleCatalogPickerView: View {
     private func list(c: AppTheme.Colors) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(catalogHits, id: \.model.id) { hit in
+                    NavigationLink {
+                        VehicleCatalogModelSteps(hit: hit, type: type) { selection in
+                            onPick(selection)
+                            dismiss()
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(hit.make.name + " " + hit.model.name)
+                                    .font(.inter(15, weight: .semibold)).foregroundStyle(c.text)
+                                Text(modelYears(hit))
+                                    .font(.inter(12)).foregroundStyle(c.textSecondary)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right").foregroundStyle(c.textTertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityIdentifier("catalog_model_" + hit.model.id)
+                }
+                if !results.isEmpty {
+                    GarageSectionLabel(text: AppStrings.catalogOtherModels(lang.language), color: c.textSecondary)
+                        .padding(16)
+                }
                 ForEach(results, id: \.name) { make in
                     GarageSectionLabel(text: make.name, color: c.textSecondary)
                         .padding(.horizontal, 16)
@@ -119,7 +154,7 @@ struct VehicleCatalogPickerView: View {
                     ForEach(make.models, id: \.name) { model in
                         Button {
                             let body = VehicleCatalog.defaultBody(for: model, type: type)
-                            onPick(make.name, model.name, body)
+                            onPick(VehicleCatalogSelection(make: make.name, model: model.name, body: body))
                             dismiss()
                         } label: {
                             HStack(spacing: 10) {
@@ -137,45 +172,34 @@ struct VehicleCatalogPickerView: View {
                             .frame(height: 44)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableCardStyle())
                     }
+                }
+                if results.isEmpty && catalogHits.isEmpty {
+                    Text(AppStrings.catalogNothingFound(lang.language))
+                        .font(.inter(13)).foregroundStyle(c.textSecondary).padding(16)
+                }
+                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        onPick(VehicleCatalogSelection(make: query.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                       model: "", body: VehicleAvatar.defaultStyle(forType: type)))
+                        dismiss()
+                    } label: {
+                        Text(AppStrings.catalogUseTyped(lang.language))
+                            .font(.inter(14, weight: .semibold)).foregroundStyle(AppTheme.accent)
+                            .frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableCardStyle())
                 }
             }
             .padding(.bottom, 24)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
-    // MARK: - Пусто
-
-    private func emptyState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(spacing: 12) {
-            Text(AppStrings.catalogNothingFound(l))
-                .font(.inter(13))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            // Свободный ввод — не запасной путь, а полноправный: каталог
-            // никогда не будет полным, и упереться в него нельзя.
-            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button {
-                    onPick(query.trimmingCharacters(in: .whitespaces), "",
-                           VehicleAvatar.defaultStyle(forType: type))
-                    dismiss()
-                } label: {
-                    Text(AppStrings.catalogUseTyped(l))
-                        .font(.inter(14, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .padding(.horizontal, 18)
-                        .frame(height: 44)
-                        .background(RoundedRectangle(cornerRadius: 14)
-                            .fill(AppTheme.accent.opacity(0.1)))
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
+    private func modelYears(_ hit: CarCatalog.ModelHit) -> String {
+        let span = VehicleCatalogModelSteps.yearSpan(start: hit.yearStart, end: hit.yearEnd)
+        guard let year = hit.matchedYear else { return span }
+        return span + " · " + AppStrings.catalogHasYear(lang.language, year: year)
     }
 }
