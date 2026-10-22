@@ -61,6 +61,16 @@ final class ProfileJournalRulesTests: XCTestCase {
         XCTAssertTrue(settings.pinnedTripsDirty)
     }
 
+    func testDeletingATripUnpinsIt() {
+        let remote = [UUID(), UUID()]
+        settings.applyRemoteJournal(bio: nil, pinnedTripIds: remote)
+        settings.unpinTrip(remote[0])
+        XCTAssertEqual(settings.pinnedTripIds, [remote[1]])
+        XCTAssertTrue(settings.pinnedTripsDirty)
+        settings.unpinTrip(UUID())
+        XCTAssertEqual(settings.pinnedTripIds, [remote[1]], "an unknown id changes nothing")
+    }
+
     func testAnEmptyLibraryKeepsPinsFromAnotherPhone() {
         let remote = [UUID(), UUID()]
         settings.applyRemoteJournal(bio: nil, pinnedTripIds: remote)

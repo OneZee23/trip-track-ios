@@ -193,6 +193,15 @@ final class SettingsManager: ObservableObject {
         if !pinnedTripsDirty, let pinnedTripIds { self.pinnedTripIds = Array(pinnedTripIds.prefix(3)) }
     }
 
+    /// Drops one pin, if it is there (the trip was deleted on this phone).
+    func unpinTrip(_ id: UUID) {
+        guard pinnedTripIds.contains(id) else { return }
+        pinnedTripIds.removeAll { $0 == id }
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+    }
+
     @discardableResult
     func togglePinnedTrip(_ id: UUID) -> Bool {
         if pinnedTripIds.contains(id) { pinnedTripIds.removeAll { $0 == id } }
