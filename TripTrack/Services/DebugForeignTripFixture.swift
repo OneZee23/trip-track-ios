@@ -217,7 +217,7 @@ enum DebugForeignTripFixture {
             "paintFinish": profileVariant == "pro" ? "matte" : "gloss",
             "modTags": profileVariant == "pro" ? ["CarPlay"] : [],
             "catalogModelId": "haval-jolion", "catalogGenerationId": "haval-jolion-2021",
-            "catalogVariantId": "haval-jolion-2021-15-143-dct7",
+            "catalogVariantId": "haval-jolion-2021-15t-143-dct7",
             "mods": [
                 ["id": "D37A9100-0000-4000-8000-000000000001", "title": "CarPlay", "date": "2026-03-12", "odometerKm": 12000, "photos": []],
                 ["id": "D37A9100-0000-4000-8000-000000000002", "title": "Зимние шины", "date": "2025-11-03", "odometerKm": 9000, "photos": []]

@@ -26,7 +26,7 @@ struct VehicleCatalogCaption: View {
         var parts = [[make, modelWithBody].filter { !$0.isEmpty }.joined(separator: " ")].filter { !$0.isEmpty }
         if year > 0 { parts.append(String(year)) }
         if !showsCapsule, let hp = variant?.powerHp {
-            parts.append(AppStrings.garagePower(lang.language, value: String(hp)))
+            parts.append(AppStrings.garagePower(lang.language, value: UnitNumber.upToTenth(hp, code: lang.language.rawValue)))
         }
         return parts.joined(separator: " · ")
     }

@@ -209,4 +209,27 @@ final class GarageDataTests: XCTestCase {
             XCTAssertFalse(AppStrings.garageDrive2Title(l).isEmpty)
         }
     }
+
+    /// The bundled catalog is the real one (50 models, schema 2), not a
+    /// placeholder, and the ids the debug seeds use resolve in it. A DHT hybrid
+    /// ships `transmission: null` — it must still decode and simply drop the
+    /// gearbox from the spec line.
+    func testBundledCatalogIsTheFullOneAndSeedIdsResolve() async throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "CarCatalog", withExtension: "json"))
+        let document = try CarCatalog.decode(Data(contentsOf: url))
+        let models = document.makes.flatMap(\.models)
+        XCTAssertEqual(models.count, 50)
+        let ids = models.flatMap { m in m.generations.flatMap { g in [g.id] + g.variants.map(\.id) } } + models.map(\.id)
+        XCTAssertEqual(Set(ids).count, ids.count, "Catalog ids are stored in people's cars and must be unique")
+        let jolion = await CarCatalog.shared.resolve(
+            modelID: "haval-jolion", generationID: "haval-jolion-2021",
+            variantID: "haval-jolion-2021-15t-143-dct7")
+        XCTAssertEqual(jolion?.powerHp, 143)
+        let niva = models.flatMap { $0.generations.flatMap(\.variants) }.first { $0.powerHp == 79.6 }
+        XCTAssertEqual(niva?.specLine(.ru)?.contains("79.6"), true, "Fractional horsepower is shown as published")
+        let dht = models.flatMap { $0.generations.flatMap(\.variants) }.first { $0.transmission == nil && $0.id.hasSuffix("-dht") }
+        if let dht, let line = dht.specLine(.ru) {
+            XCTAssertFalse(line.contains("АКПП") || line.contains("вариатор"), line)
+        }
+    }
 }

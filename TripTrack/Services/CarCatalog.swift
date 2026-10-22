@@ -38,7 +38,10 @@ actor CarCatalog {
         let label: String?
         let fuel: String?
         let displacementCc: Double?
-        let powerHp: Int?
+        /// Double, not Int: Russian makers publish fractional horsepower
+        /// (Niva 79.6, UAZ 134.6 л.с.), and one such value decoded as Int
+        /// failed the WHOLE catalog. Shown up to a tenth, as published.
+        let powerHp: Double?
         let torqueNm: Double?
         let transmission: String?
         let gears: Int?
@@ -55,7 +58,7 @@ actor CarCatalog {
         func specLine(_ l: LanguageManager.Language) -> String? {
             var engine: [String] = []
             if let cc = displacementCc, cc > 0 { engine.append(UnitNumber.tenths(cc / 1000, code: l.rawValue)) }
-            if let hp = powerHp, hp > 0 { engine.append(AppStrings.garagePower(l, value: String(hp))) }
+            if let hp = powerHp, hp > 0 { engine.append(AppStrings.garagePower(l, value: UnitNumber.upToTenth(hp, code: l.rawValue))) }
             var parts: [String] = []
             if !engine.isEmpty { parts.append(engine.joined(separator: " ")) }
             if let transmission, ["manual", "automatic", "cvt", "amt", "dct"].contains(transmission) {
