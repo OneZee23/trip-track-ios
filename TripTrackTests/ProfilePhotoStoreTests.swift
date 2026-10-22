@@ -116,6 +116,18 @@ final class ProfilePhotoStoreTests: XCTestCase {
         XCTAssertTrue(store.photos.isEmpty, "photos that only ever came from the server leave with it")
     }
 
+    func testASnapshotFromBeforeAReorderCannotUndoIt() async throws {
+        let first = try await store.add(jpeg())
+        let second = try await store.add(jpeg())
+        let requested = store.uploadRevision
+        store.makeFirst(second)
+        store.acknowledgeOrderForTesting()
+        store.restore([ProfilePhotoDTO(id: first, thumbnailUrl: "https://example.invalid/1.jpg"),
+                       ProfilePhotoDTO(id: second, thumbnailUrl: "https://example.invalid/2.jpg")],
+                      revision: requested)
+        XCTAssertEqual(store.photos.map(\.id), [second, first])
+    }
+
     func testImportFromAPreviousSessionIsRefused() async throws {
         let session = store.session
         store.wipe()

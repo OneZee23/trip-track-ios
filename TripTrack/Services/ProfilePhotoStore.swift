@@ -107,6 +107,10 @@ final class ProfilePhotoStore: ObservableObject {
         photos.insert(photo, at: 0)
         metadata.orderDirty = true
         mutationRevision &+= 1
+        // A reorder also makes older snapshots stale: once the server has
+        // acknowledged it, a late `/auth/me` from before would put the old
+        // order back.
+        uploadRevision &+= 1
         save()
         Task { await sync() }
     }
@@ -228,6 +232,12 @@ final class ProfilePhotoStore: ObservableObject {
             log.error("profile photo sync failed: \(error.localizedDescription)")
         }
     }
+
+    #if DEBUG
+    /// What a successful `/profile/photos/order` does to local state, for the
+    /// stale-snapshot test (the store under test has sync disabled).
+    func acknowledgeOrderForTesting() { metadata.orderDirty = false; save() }
+    #endif
 
     func wipe() {
         generation = UUID()

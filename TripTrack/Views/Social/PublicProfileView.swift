@@ -42,6 +42,10 @@ struct PublicProfileView: View {
     /// список не приехал, обещать содержимое нечем.
     @State private var headerVehicleID: UUID?
     @State private var garagePreviewVehicles: [PublicVehicle] = []
+    /// Only the latest garage request may write the snapshot: an older one
+    /// finishing after a refresh would bring back a car photo the owner has
+    /// hidden in between.
+    @State private var garageLoadGeneration = 0
     @State private var isLoading = false
     @State private var isTogglingFollow = false
     @State private var loadError: String?
@@ -1247,9 +1251,12 @@ struct PublicProfileView: View {
 
     private func loadGaragePreview(force: Bool = false) async {
         guard force || garagePreviewVehicles.isEmpty else { return }
+        garageLoadGeneration &+= 1
+        let generation = garageLoadGeneration
         let res: PublicGarageResponse? = try? await APIClient.shared.get(
             APIEndpoint.userGarage(accountId.uuidString),
             requiresAuth: AuthService.shared.isSignedIn)
+        guard generation == garageLoadGeneration else { return }
         // Отказ сети — молчание, а не пустая заглушка: строка остаётся тем,
         // чем была, и ведёт внутрь, где ошибку покажут словами. При
         // обновлении (`force`) отказ оставляет прежний снимок.
