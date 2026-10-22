@@ -587,6 +587,9 @@ struct PublicProfileView: View {
             else { return }
             let updated = max(0, tripCards[idx].commentCount + delta)
             tripCards[idx] = tripCards[idx].with(commentCount: updated)
+            if let pinned = pinnedTripCards.firstIndex(where: { $0.id == tripCards[idx].id }) {
+                pinnedTripCards[pinned] = pinnedTripCards[pinned].with(commentCount: updated)
+            }
         }
         .sheet(item: $signInPrompt, onDismiss: {
             guard resumeFollowAfterAuth else { return }

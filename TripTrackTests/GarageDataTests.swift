@@ -138,19 +138,30 @@ final class GarageDataTests: XCTestCase {
             e.modTagsJSON = "[\"CarPlay\"]"
             e.modsJSON = "[]"
             e.catalogModelId = "old"
+            e.make = "Volkswagen"
+            e.model = "Polo"
+            e.year = 2018
             e.syncStatus = pending ? SyncStatus.pendingUpload.rawValue : SyncStatus.synced.rawValue
             e.lastModifiedAt = Date()
             try pc.container.viewContext.save()
             repo.applyRemoteVehicle(payload(id))
             XCTAssertEqual(e.paintFinish, "matte")
             XCTAssertEqual(e.catalogModelId, "old")
-            var p = payload(id)
+            var p = VehicleSyncPayload(
+                id: id, name: "Car", avatarEmoji: "🚗", odometerKm: 0, level: 1, stickersJson: nil, cityConsumption: 10,
+                highwayConsumption: 6, fuelPrice: 1, conflictVersion: 1, lastModifiedAt: Date(),
+                make: "Lada", model: "Vesta", year: 2016)
             p.drive2Url = ""
             p.modTags = []
             p.paintFinish = "gloss"
             p.mods = [VehicleMod(title: "Fresh", date: "2026-01-01")]
             p.catalogModelId = "new"
             repo.applyRemoteVehicle(p)
+            // Passport and catalog ids are one edit: a pull must not return
+            // the old make/year under the new, still unsent catalog ids.
+            XCTAssertEqual(e.make, pending ? "Volkswagen" : "Lada")
+            XCTAssertEqual(e.model, pending ? "Polo" : "Vesta")
+            XCTAssertEqual(e.year, pending ? 2018 : 2016)
             XCTAssertEqual(e.drive2URL, pending ? "https://www.drive2.ru/r/vw/polo/123/" : "")
             XCTAssertEqual(e.paintFinish, pending ? "matte" : "gloss")
             XCTAssertEqual(e.catalogModelId, pending ? "old" : "new")

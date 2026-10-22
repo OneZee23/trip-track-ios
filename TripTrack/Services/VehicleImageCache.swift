@@ -92,11 +92,17 @@ enum VehicleImageCache {
     }
 
     private static func writeDisk(_ image: UIImage, _ key: String, generation: Int) {
-        guard generation == Self.generation else { return }
-        try? FileManager.default.createDirectory(
-            at: diskDirectory, withIntermediateDirectories: true)
         guard let data = image.jpegData(compressionQuality: 0.85) else { return }
-        try? data.write(to: diskURL(key))
+        writeIfCurrent(data, to: diskURL(key), generation: generation)
+    }
+
+    /// The check and the write under the purge's own lock: checked first and
+    /// written after a purge, the file would come back for the next account.
+    private static func writeIfCurrent(_ data: Data, to url: URL, generation: Int) {
+        generationLock.lock(); defer { generationLock.unlock() }
+        guard generation == purgeGeneration else { return }
+        try? FileManager.default.createDirectory(at: diskDirectory, withIntermediateDirectories: true)
+        try? data.write(to: url)
     }
 
     // MARK: - Уменьшенная копия из файла
@@ -146,9 +152,7 @@ enum VehicleImageCache {
         let originalFile = diskURL(originalKey)
         if !FileManager.default.fileExists(atPath: originalFile.path) {
             guard let data = try? await download(url), started == generation else { return nil }
-            try? FileManager.default.createDirectory(
-                at: diskDirectory, withIntermediateDirectories: true)
-            try? data.write(to: originalFile)
+            writeIfCurrent(data, to: originalFile, generation: started)
         }
         return await sized(fileURL: originalFile, key: key, maxSize: maxSize)
     }
@@ -172,9 +176,9 @@ enum VehicleImageCache {
     static func purgeDisk() {
         generationLock.lock()
         purgeGeneration &+= 1
-        generationLock.unlock()
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: diskDirectory)
+        generationLock.unlock()
     }
 
     /// Снимок удалили — его копии всех размеров становятся мусором. Точечно

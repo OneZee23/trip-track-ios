@@ -1794,11 +1794,18 @@ final class CoreDataTripRepository: TripRepository {
         if !hasLocalEdits, let range = p.electricRangeKm { entity.electricRangeKm = range }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
-        if let about = p.about { entity.about = about }
-        if let make = p.make { entity.make = make }
-        if let model = p.model { entity.model = model }
-        if let year = p.year { entity.year = Int32(year) }
-        if let body = p.bodyType { entity.bodyType = body }
+        //
+        // И под тем же гейтом правки (0.9.1): с выбором из каталога паспорт и
+        // три ID каталога — ОДНА правка. Пул, вернувший прежние марку и год
+        // поверх ещё не уехавших новых, оставил бы машину с чужой строкой
+        // характеристик: ID защищены гейтом, а паспорт — нет.
+        if !hasLocalEdits {
+            if let about = p.about { entity.about = about }
+            if let make = p.make { entity.make = make }
+            if let model = p.model { entity.model = model }
+            if let year = p.year { entity.year = Int32(year) }
+            if let body = p.bodyType { entity.bodyType = body }
+        }
         if !hasLocalEdits, let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
         if !hasLocalEdits, let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
         if let archived = p.isArchived { entity.isArchived = archived }
