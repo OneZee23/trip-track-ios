@@ -10,6 +10,10 @@ enum DebugForeignTripFixture {
         ProcessInfo.processInfo.arguments.contains("-debug-foreign-trip")
     }
 
+    static var slowTrips: Bool {
+        ProcessInfo.processInfo.arguments.contains("-debug-slow-foreign-trips")
+    }
+
     /// The author's public profile, offline, for reviewing it in every state:
     /// `-debug-foreign-profile pro|free|new` (default `pro`). `pro` wears a
     /// premium background and frame; `new` is the zero-trip newcomer.
@@ -286,7 +290,12 @@ private final class ForeignTripURLProtocol: URLProtocol {
         work = job
         // A separate response after presentation must update the title; a
         // frozen SwiftUI graph can otherwise look like a successful render.
-        let delay = request.url?.path.hasSuffix(APIEndpoint.socialTrip) == true ? 0.5 : 0.05
+        // `-debug-slow-foreign-trips` holds the public trips (Stats, map) for
+        // four seconds: offline they arrive within the push, and the loading
+        // screen behind them could not be looked at at all.
+        let path = request.url?.path ?? ""
+        let delay = path.hasSuffix(APIEndpoint.socialTrip) ? 0.5
+            : DebugForeignTripFixture.slowTrips && path.hasSuffix("/trips") ? 4 : 0.05
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay, execute: job)
     }
 
