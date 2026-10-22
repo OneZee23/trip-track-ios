@@ -91,6 +91,15 @@ enum VehicleImageCache {
         return purgeGeneration
     }
 
+    /// Memory, like disk, is filled only if no purge happened since the work
+    /// began — checked and inserted under the purge's lock.
+    private static func rememberIfCurrent(_ image: UIImage, _ key: String, generation: Int) -> Bool {
+        generationLock.lock(); defer { generationLock.unlock() }
+        guard generation == purgeGeneration else { return false }
+        remember(image, key)
+        return true
+    }
+
     private static func writeDisk(_ image: UIImage, _ key: String, generation: Int) {
         guard let data = image.jpegData(compressionQuality: 0.85) else { return }
         writeIfCurrent(data, to: diskURL(key), generation: generation)
@@ -128,7 +137,7 @@ enum VehicleImageCache {
             writeDisk(made, key, generation: started)
             return made
         }.value
-        if let image, started == generation { remember(image, key) }
+        guard let image, rememberIfCurrent(image, key, generation: started) else { return nil }
         return image
     }
 
@@ -142,8 +151,7 @@ enum VehicleImageCache {
         if let fromDisk = await Task.detached(priority: .userInitiated, operation: {
             readDisk(key)
         }).value {
-            guard started == generation else { return nil }
-            remember(fromDisk, key)
+            guard rememberIfCurrent(fromDisk, key, generation: started) else { return nil }
             return fromDisk
         }
         // Оригинал кладём отдельным файлом — он же нужен другим размерам того

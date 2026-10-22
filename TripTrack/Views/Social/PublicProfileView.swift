@@ -582,13 +582,15 @@ struct PublicProfileView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tripCommentCountChanged)) { note in
             guard
                 let tripId = note.userInfo?["tripId"] as? UUID,
-                let delta = note.userInfo?["delta"] as? Int,
-                let idx = tripCards.firstIndex(where: { $0.id == tripId })
+                let delta = note.userInfo?["delta"] as? Int
             else { return }
-            let updated = max(0, tripCards[idx].commentCount + delta)
-            tripCards[idx] = tripCards[idx].with(commentCount: updated)
-            if let pinned = pinnedTripCards.firstIndex(where: { $0.id == tripCards[idx].id }) {
-                pinnedTripCards[pinned] = pinnedTripCards[pinned].with(commentCount: updated)
+            // Each list on its own: a trip pinned to «Витрина» is often older
+            // than anything in the recent list, and lives only there.
+            if let idx = tripCards.firstIndex(where: { $0.id == tripId }) {
+                tripCards[idx] = tripCards[idx].with(commentCount: max(0, tripCards[idx].commentCount + delta))
+            }
+            if let idx = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+                pinnedTripCards[idx] = pinnedTripCards[idx].with(commentCount: max(0, pinnedTripCards[idx].commentCount + delta))
             }
         }
         .sheet(item: $signInPrompt, onDismiss: {
