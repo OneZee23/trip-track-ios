@@ -1245,13 +1245,15 @@ struct PublicProfileView: View {
         }
     }
 
-    private func loadGaragePreview() async {
-        guard garagePreviewVehicles.isEmpty else { return }
+    private func loadGaragePreview(force: Bool = false) async {
+        guard force || garagePreviewVehicles.isEmpty else { return }
         let res: PublicGarageResponse? = try? await APIClient.shared.get(
             APIEndpoint.userGarage(accountId.uuidString),
             requiresAuth: AuthService.shared.isSignedIn)
         // Отказ сети — молчание, а не пустая заглушка: строка остаётся тем,
-        // чем была, и ведёт внутрь, где ошибку покажут словами.
+        // чем была, и ведёт внутрь, где ошибку покажут словами. При
+        // обновлении (`force`) отказ оставляет прежний снимок.
+        if force, res == nil { return }
         garagePreviewVehicles = res?.vehicles ?? []
     }
 
@@ -2056,6 +2058,11 @@ struct PublicProfileView: View {
             }
             if Task.isCancelled { return }
             await loadProfile()
+            // The header car comes from the garage snapshot: a pull-to-refresh
+            // must replace it too, or a car photo the owner has since hidden
+            // stays on screen after a «successful» refresh.
+            if Task.isCancelled { return }
+            await loadGaragePreview(force: true)
         }
         loadTask = task
         await task.value
