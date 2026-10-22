@@ -40,6 +40,12 @@ final class AchievementsSecretShotTests: XCTestCase {
         profile.tap()
         usleep(2_000_000)
 
+        // Since 2 Oct 2026 the cards under «История» sit behind one
+        // disclosure on a populated «Я» — the same step `ProfileTapTargetsTests`
+        // takes first.
+        let toggle = app.buttons["profile_sections_toggle"].firstMatch
+        if toggle.waitForExistence(timeout: 5) { toggle.tap() }
+
         let all = app.buttons.matching(identifier: "profile_achievements_all").firstMatch
         XCTAssertTrue(all.waitForExistence(timeout: 8), "строка «Достижения» в профиле")
         all.tap()
