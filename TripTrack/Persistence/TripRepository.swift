@@ -1707,7 +1707,10 @@ final class CoreDataTripRepository: TripRepository {
         // pull that immediately follows uploading it: pick a scooter, sync,
         // watch it turn back into a saloon. No backend has the column yet, so
         // that was every pull for every signed-in person.
-        if let style = p.avatarStyle { entity.avatarStyle = style }
+        // And, like the passport, not over an unsent local edit (0.9.1): the
+        // exact car picker sets body and silhouette together, and a pull that
+        // returned the old silhouette under the new car would ship that mix.
+        if !hasLocalEdits, let style = p.avatarStyle { entity.avatarStyle = style }
         entity.odometerKm = p.odometerKm
         // Только когда ключ пришёл: сервер без колонки его не шлёт, и `?? nil`
         // стёр бы введённое человеком число. Без этой строки ручной пробег

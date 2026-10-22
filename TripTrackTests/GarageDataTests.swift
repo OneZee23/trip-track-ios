@@ -141,6 +141,7 @@ final class GarageDataTests: XCTestCase {
             e.make = "Volkswagen"
             e.model = "Polo"
             e.year = 2018
+            e.avatarStyle = "crossover"
             e.syncStatus = pending ? SyncStatus.pendingUpload.rawValue : SyncStatus.synced.rawValue
             e.lastModifiedAt = Date()
             try pc.container.viewContext.save()
@@ -150,7 +151,7 @@ final class GarageDataTests: XCTestCase {
             var p = VehicleSyncPayload(
                 id: id, name: "Car", avatarEmoji: "🚗", odometerKm: 0, level: 1, stickersJson: nil, cityConsumption: 10,
                 highwayConsumption: 6, fuelPrice: 1, conflictVersion: 1, lastModifiedAt: Date(),
-                make: "Lada", model: "Vesta", year: 2016)
+                avatarStyle: "car", make: "Lada", model: "Vesta", year: 2016)
             p.drive2Url = ""
             p.modTags = []
             p.paintFinish = "gloss"
@@ -162,6 +163,7 @@ final class GarageDataTests: XCTestCase {
             XCTAssertEqual(e.make, pending ? "Volkswagen" : "Lada")
             XCTAssertEqual(e.model, pending ? "Polo" : "Vesta")
             XCTAssertEqual(e.year, pending ? 2018 : 2016)
+            XCTAssertEqual(e.avatarStyle, pending ? "crossover" : "car")
             XCTAssertEqual(e.drive2URL, pending ? "https://www.drive2.ru/r/vw/polo/123/" : "")
             XCTAssertEqual(e.paintFinish, pending ? "matte" : "gloss")
             XCTAssertEqual(e.catalogModelId, pending ? "old" : "new")
