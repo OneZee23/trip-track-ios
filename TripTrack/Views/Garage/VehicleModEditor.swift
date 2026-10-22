@@ -38,6 +38,9 @@ struct VehicleModEditor: View {
 
     /// The entry's photos missing from this phone's album, kept as they are.
     private let notHere: [UUID]
+    /// Slots left for photos picked HERE: the unrestored ones still count,
+    /// or adding one would push an existing attachment out of the six.
+    private var room: Int { max(0, VehicleMod.photoLimit - notHere.count) }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -86,7 +89,7 @@ struct VehicleModEditor: View {
                         Button {
                             if selected.contains(photo.id) {
                                 selected.removeAll { $0 == photo.id }
-                            } else if selected.count < VehicleMod.photoLimit {
+                            } else if selected.count < room {
                                 selected.append(photo.id)
                             }
                             Haptics.tap()
@@ -104,12 +107,12 @@ struct VehicleModEditor: View {
                             .accessibilityAddTraits(selected.contains(photo.id) ? .isSelected : [])
                     }
                     PhotosPicker(
-                        selection: $picking, maxSelectionCount: max(1, VehicleMod.photoLimit - selected.count),
+                        selection: $picking, maxSelectionCount: max(1, room - selected.count),
                         matching: .images
                     ) {
                         Image(systemName: "plus").font(.system(size: 19)).foregroundStyle(AppTheme.accent)
                             .frame(width: 64, height: 64).background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
-                    }.disabled(selected.count >= VehicleMod.photoLimit || importing).accessibilityLabel(
+                    }.disabled(selected.count >= room || importing).accessibilityLabel(
                         AppStrings.addPhotos(l))
                 }
             }
@@ -159,7 +162,7 @@ struct VehicleModEditor: View {
         updated.title = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
         updated.date = VehicleMod.day(date)
         updated.odometerKm = parsed
-        updated.photoIds = Array((selected + notHere.filter { !selected.contains($0) }).prefix(VehicleMod.photoLimit))
+        updated.photoIds = selected + notHere.filter { !selected.contains($0) }
         var mods = settings.vehicle(for: vehicle.id)?.mods ?? vehicle.mods
         if let index = mods.firstIndex(where: { $0.id == updated.id }) {
             mods[index] = updated
@@ -178,7 +181,7 @@ struct VehicleModEditor: View {
             importing = false
             picking = []
         }
-        for item in items where selected.count < VehicleMod.photoLimit {
+        for item in items where selected.count < room {
             // The picker can take seconds; a sign-out with a wipe in between
             // deletes this car, and a photo added after that would be an
             // orphan of the previous account.
