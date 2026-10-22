@@ -18,6 +18,7 @@ extension Translations {
         table.merge(fil5) { _, new in new }
         table.merge(fil6) { _, new in new }
         table.merge(filGarage) { _, new in new }
+        table.merge(filProfileJournal) { _, new in new }
         return table
     }()
 
@@ -1714,5 +1715,20 @@ extension Translations {
         "garageTransmissionCvt": "CVT",
         "garageTransmissionAmt": "AMT",
         "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let filProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} sa {max}",
+        "profilePhotosSignIn": "Mag-sign in para makita ng iba ang mga larawan",
+        "profilePhotosEmpty": "Magdagdag ng mga larawan — makikita sa iyong card",
+        "profilePhotosLimit": "May siyam na larawan na ang profile mo",
+        "profilePhotoFirst": "Gawing una",
+        "profileShowcase": "Tampok",
+        "profileShowcaseEmpty": "Mag-pin ng hanggang tatlong biyahe gamit ang “…” sa isang biyahe — unang makikita sa iyong card",
+        "profilePin": "I-pin sa profile",
+        "profileUnpin": "Alisin sa profile",
+        "profileShowcaseLimit": "May tatlong biyahe na sa tampok — alisin ang isa",
     ]
 }

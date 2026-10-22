@@ -87,6 +87,8 @@ struct PublicProfileView: View {
     /// the stats and the achievements with it.
     @State private var tripCards: [SocialFeedTrip] = []
     /// Страницы после десяти превью (0.9.1) — см. `ProfileTripsPager`.
+    @State private var pinnedTripCards: [SocialFeedTrip] = []
+    @State private var visibleTripCards: [SocialFeedTrip] = []
     @State private var tripsPager = ProfileTripsPager()
     /// Все достижения профиля (0.9.1, `/users/:id/badges`): `recentBadges` —
     /// превью из последних поездок. `nil` — список ещё не пришёл или сервер
@@ -413,6 +415,11 @@ struct PublicProfileView: View {
                             // Карточка рисуется всегда: внутри неё тумблер
                             // гасит только дорожные числа, а счётчики подписок
                             // остаются входом в списки.
+                            if let photos = profile?.photos, !photos.isEmpty {
+                                ProfilePhotosCard(remotePhotos: photos).padding(.horizontal, 16)
+                            }
+                            showcaseSection(c)
+                                .padding(.horizontal, 16)
                             statsGrid(c, lng: lng)
                                 .padding(.horizontal, 16)
 
@@ -559,6 +566,7 @@ struct PublicProfileView: View {
             // instead of leaving it stuck on the previous account's data.
             profile = nil
             tripCards = []
+            pinnedTripCards = []
             Task { await refresh() }
         }
         // Схлопывание «Истории» (S7, 0.6.8) — строки и словарь id → карточка
@@ -1637,6 +1645,18 @@ struct PublicProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var showcaseIds: Set<UUID> { Set((profile?.pinnedTrips ?? []).map(\.id)) }
+
+    @ViewBuilder
+    private func showcaseSection(_ c: AppTheme.Colors) -> some View {
+        if !pinnedTripCards.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(AppStrings.profileShowcase(lang.language)).font(AppType.section).foregroundStyle(c.text)
+                ForEach(pinnedTripCards) { trip in tripCard(trip) }
+            }
+        }
+    }
+
     // MARK: - Recent trips
 
     @ViewBuilder
@@ -1658,9 +1678,9 @@ struct PublicProfileView: View {
                         columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
                         spacing: 10
                     ) {
-                        ForEach(Array(tripCards.enumerated()), id: \.element.id) { idx, t in
+                        ForEach(Array(visibleTripCards.enumerated()), id: \.element.id) { idx, t in
                             openable(t) { tripGridCell(t, c: c, lng: lng) }
-                                .onAppear { loadMoreTripsIfNeeded(appearedIndex: idx, of: tripCards.count) }
+                                .onAppear { loadMoreTripsIfNeeded(appearedIndex: idx, of: visibleTripCards.count) }
                         }
                     }
                 } else {
@@ -1768,7 +1788,8 @@ struct PublicProfileView: View {
 
     /// Считается вне `body` — см. `@State private var profileRows`.
     private func recomputeProfileRows() {
-        let trips = tripCards.map(Trip.init(social:))
+        visibleTripCards = tripCards.filter { !showcaseIds.contains($0.id) }
+        let trips = visibleTripCards.map(Trip.init(social:))
         let journeys = publicJourneys.map { Journey(publicJourney: $0, ownerId: accountId) }
         // `range` не передаём — на этом экране нет отрезка календаря, каким
         // «Мои» отличает «плечи отрезал фильтр» от «плеч не осталось», и без
@@ -1799,9 +1820,14 @@ struct PublicProfileView: View {
     /// put the card back if the server refuses.
     @MainActor
     private func toggleReaction(_ tripId: UUID, emoji: String) async {
-        guard let idx = tripCards.firstIndex(where: { $0.id == tripId }) else { return }
-        let before = tripCards[idx]
-        tripCards[idx] = before.togglingReaction(emoji)
+        guard let before = tripCards.first(where: { $0.id == tripId })
+            ?? pinnedTripCards.first(where: { $0.id == tripId }) else { return }
+        if let index = tripCards.firstIndex(where: { $0.id == tripId }) {
+            tripCards[index] = before.togglingReaction(emoji)
+        }
+        if let index = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+            pinnedTripCards[index] = before.togglingReaction(emoji)
+        }
         do {
             try await SocialReactions.send(
                 tripId: tripId, previous: before.myReaction, emoji: emoji
@@ -1812,6 +1838,9 @@ struct PublicProfileView: View {
             // card over a DIFFERENT trip's slot.
             if let current = tripCards.firstIndex(where: { $0.id == tripId }) {
                 tripCards[current] = before
+            }
+            if let index = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+                pinnedTripCards[index] = before
             }
             profileLog.error("profile react failed: \(error.localizedDescription)")
         }
@@ -2059,8 +2088,10 @@ struct PublicProfileView: View {
                 avatarEmoji: p.avatarEmoji,
                 profileLevel: p.profileLevel
             )
+            pinnedTripCards = (p.pinnedTrips ?? []).map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
             tripCards = p.recentTrips.map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
             tripsPager.reset(preview: tripCards, publicCount: p.stats.publicTripCount)
+            recomputeProfileRows()
             // Trips that arrived without an author came from a server that
             // still sends the old six-field summary — fetch the real items.
             let legacy = p.recentTrips.filter { $0.author == nil }
@@ -2250,6 +2281,7 @@ private struct PublicProfileLocalDestination: ViewModifier {
 private extension SocialProfile {
     func with(isFollowing: Bool, followerCount: Int) -> SocialProfile {
         SocialProfile(
+            photos: photos, pinnedTrips: pinnedTrips,
             id: id, displayName: displayName, avatarEmoji: avatarEmoji,
             profileLevel: profileLevel, profileBackground: profileBackground,
             currentStreak: currentStreak, bestStreak: bestStreak,
@@ -2261,7 +2293,7 @@ private extension SocialProfile {
             // Косметику надо ПЕРЕНОСИТЬ, а не ронять на умолчание: подписка
             // с кнопки «Подписаться» пересобирает профиль, и забытое поле
             // сняло бы с чужого профиля рамку и значок на глазах.
-            isPlus: isPlus, avatarFrame: avatarFrame
+            isPlus: isPlus, avatarFrame: avatarFrame, hasPlus: hasPlus, profileXp: profileXp
         )
     }
 }

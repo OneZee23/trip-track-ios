@@ -18,6 +18,7 @@ extension Translations {
         table.merge(kk5) { _, new in new }
         table.merge(kk6) { _, new in new }
         table.merge(kkGarage) { _, new in new }
+        table.merge(kkProfileJournal) { _, new in new }
         return table
     }()
 
@@ -1714,5 +1715,20 @@ extension Translations {
         "garageTransmissionCvt": "Вариатор",
         "garageTransmissionAmt": "Робот",
         "garageTransmissionDct": "Робот",
+    ]
+}
+
+extension Translations {
+    private static let kkProfileJournal: [String: String] = [
+        "profilePhotoCount": "{max} ішінен {n}",
+        "profilePhotosSignIn": "Фотоларды басқалар көруі үшін кіріңіз",
+        "profilePhotosEmpty": "Фото қосыңыз — олар картаңызда көрінеді",
+        "profilePhotosLimit": "Профильде тоғыз фото бар",
+        "profilePhotoFirst": "Бірінші ету",
+        "profileShowcase": "Көрме",
+        "profileShowcaseEmpty": "Сапар экранындағы «…» арқылы үш сапарға дейін бекітіңіз — олар картаңызда бірінші көрінеді",
+        "profilePin": "Профильге бекіту",
+        "profileUnpin": "Профильден босату",
+        "profileShowcaseLimit": "Көрмеде үш сапар бар — біреуін босатыңыз",
     ]
 }

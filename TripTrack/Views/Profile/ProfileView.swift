@@ -192,6 +192,8 @@ struct ProfileView: View {
     /// Every completed trip, newest first. `agg.recentTrips` stops at 10,
     /// which made a date filter over История meaningless.
     @State private var historyLibrary = ProfileHistoryLibrary(trips: [])
+    @State private var showcaseTrips: [Trip] = []
+    @State private var hasShowcaseCandidates = false
     private var allTrips: [Trip] { historyLibrary.trips }
     /// Черновики — отдельно от `allTrips`: в мир они не вошли, и ни
     /// статистика, ни путешествия, ни календарь их не видят (спека §3.2).
@@ -345,11 +347,6 @@ struct ProfileView: View {
                     RemoteNoticeStack(placement: .me, outerPadding: EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
 
                     if mapVM.cachedTripCount == 0 {
-                        // First-launch welcome — zeros read as broken, so the
-                        // strip/achievements/history stay hidden until ≥1 trip.
-                        firstTripWelcomeCard(c)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
                         if !auth.isSignedIn {
                             guestSignInCard(c)
                                 .padding(.horizontal, 16)
@@ -363,6 +360,10 @@ struct ProfileView: View {
                         // where a new user names the thing they drive, and
                         // it is the one section here that has something to
                         // do before the first kilometre.
+                        journalCards
+                        firstTripWelcomeCard(c)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
                         garageSection(c)
 
                         plusSection()
@@ -379,6 +380,7 @@ struct ProfileView: View {
                                 .padding(.bottom, 12)
                         }
 
+                        journalCards
                         profileSections(c)
 
                         // Над «Историей», а не под ней: подсказка про только
@@ -721,7 +723,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showAboutEditor) {
             AboutEditorSheet(
                 initialText: settings.profileBio,
-                onSave: { settings.profileBio = $0 }
+                onSave: { settings.profileBio = $0; Task { await auth.syncProfileToServer(refreshFeedAfter: false) } }
             )
             .environmentObject(lang)
         }
@@ -909,6 +911,37 @@ struct ProfileView: View {
     /// SwiftUI treat it as ONE element and swallow the buttons inside it, which
     /// takes the avatar, the pill and the gear away from VoiceOver and from the
     /// UI tests alike. The ids live on those buttons.
+    private func prepareShowcase() {
+        let eligible = allTrips.filter { !$0.isPrivate && !$0.isDraft && $0.endDate != nil }
+        let byId = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        showcaseTrips = settings.pinnedTripIds.compactMap { byId[$0] }
+        hasShowcaseCandidates = !eligible.isEmpty
+    }
+
+    private var journalCards: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ProfilePhotosCard(isOwn: true)
+            if !showcaseTrips.isEmpty || hasShowcaseCandidates {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(AppStrings.profileShowcase(lang.language)).font(AppType.section)
+                    if showcaseTrips.isEmpty {
+                        Text(AppStrings.profileShowcaseEmpty(lang.language))
+                            .font(.interScaled(14, relativeTo: .subheadline))
+                            .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
+                    }
+                    ForEach(showcaseTrips) { trip in
+                        ProfileTripCardView(trip: trip, level: settings.profileLevel) {
+                            Haptics.tap()
+                            push(.trip(trip.id))
+                        }
+                    }
+                }.padding(16).surfaceCard()
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 12)
+        .onChange(of: settings.pinnedTripIds) { _, _ in prepareShowcase() }
+    }
+
     private func hero() -> some View {
         ProfileHeroCard(
             background: ProfileBackground.from(settings.profileBackground),
@@ -924,6 +957,7 @@ struct ProfileView: View {
             km: mapVM.cachedTotalKm,
             regions: agg?.regionsAllTime ?? 0,
             showsStats: mapVM.cachedTripCount > 0,
+            bio: settings.profileBio,
             onTapVehicle: { headerVehicleID = $0 },
             onAddVehicle: { showHeaderAddVehicle = true },
             // Guests included, and on purpose: the avatar on the hub is local
@@ -2190,6 +2224,8 @@ struct ProfileView: View {
         guard !Task.isCancelled else { return }
         agg = crunched.aggregates
         historyLibrary = crunched.history.library
+        settings.reconcilePinnedTrips(historyLibrary.trips)
+        prepareShowcase()
         kmByDay = crunched.history.kmByDay
         maxKmDay = crunched.history.maxKmDay
         // Every path that reloads the library lands here — a deleted trip has

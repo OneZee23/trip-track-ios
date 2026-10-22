@@ -166,7 +166,64 @@ final class SettingsManager: ObservableObject {
 
     // «О себе» — free text, ≤140 chars (capped by the editor). "" = not set.
     @Published var profileBio: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBio") ?? "" {
-        didSet { UserDefaults.standard.set(profileBio, forKey: "com.triptrack.settings.profileBio") }
+        didSet {
+            UserDefaults.standard.set(profileBio, forKey: "com.triptrack.settings.profileBio")
+            if !applyingJournalSnapshot && oldValue != profileBio { profileBioDirty = true; profileJournalRevision &+= 1 }
+        }
+    }
+
+    private(set) var profileJournalRevision = 0
+    private var applyingJournalSnapshot = false
+    var profileBioDirty: Bool = (UserDefaults.standard.object(forKey: "profileBioDirty") as? Bool)
+        ?? !(UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBio") ?? "").isEmpty {
+        didSet { UserDefaults.standard.set(profileBioDirty, forKey: "profileBioDirty") }
+    }
+    var pinnedTripsDirty: Bool = UserDefaults.standard.bool(forKey: "pinnedTripsDirty") {
+        didSet { UserDefaults.standard.set(pinnedTripsDirty, forKey: "pinnedTripsDirty") }
+    }
+    @Published private(set) var pinnedTripIds: [UUID] =
+        (UserDefaults.standard.stringArray(forKey: "profilePinnedTrips") ?? []).compactMap(UUID.init(uuidString:)) {
+        didSet { UserDefaults.standard.set(pinnedTripIds.map(\.uuidString), forKey: "profilePinnedTrips") }
+    }
+
+    func applyRemoteJournal(bio: String?, pinnedTripIds: [UUID]?, bioProvided: Bool = false) {
+        applyingJournalSnapshot = true
+        defer { applyingJournalSnapshot = false }
+        if !profileBioDirty, bioProvided || bio != nil { profileBio = bio ?? "" }
+        if !pinnedTripsDirty, let pinnedTripIds { self.pinnedTripIds = Array(pinnedTripIds.prefix(3)) }
+    }
+
+    @discardableResult
+    func togglePinnedTrip(_ id: UUID) -> Bool {
+        if pinnedTripIds.contains(id) { pinnedTripIds.removeAll { $0 == id } }
+        else {
+            guard pinnedTripIds.count < 3 else { return false }
+            pinnedTripIds.append(id)
+        }
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+        return true
+    }
+
+    func reconcilePinnedTrips(_ trips: [Trip]) {
+        let eligible = Set(trips.filter { !$0.isPrivate && !$0.isDraft && $0.endDate != nil }.map(\.id))
+        let valid = pinnedTripIds.filter { eligible.contains($0) }
+        guard valid != pinnedTripIds else { return }
+        pinnedTripIds = valid
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+    }
+
+    func wipeProfileJournal() {
+        profileJournalRevision &+= 1
+        applyingJournalSnapshot = true
+        profileBio = ""
+        pinnedTripIds = []
+        profileBioDirty = false
+        pinnedTripsDirty = false
+        applyingJournalSnapshot = false
     }
 
     // ISO-3166 alpha-2 ("RU"), or one of `CountryChoice`'s sentinels

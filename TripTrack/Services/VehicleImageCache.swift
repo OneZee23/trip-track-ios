@@ -140,7 +140,13 @@ enum VehicleImageCache {
     }
 
     private static func download(_ url: URL) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        #if DEBUG && targetEnvironment(simulator)
+        let session = DebugForeignTripFixture.isRequested && url.host == "profile-fixture.invalid"
+            ? DebugForeignTripFixture.session : URLSession.shared
+        #else
+        let session = URLSession.shared
+        #endif
+        let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
@@ -148,6 +154,11 @@ enum VehicleImageCache {
     }
 
     // MARK: - Уборка
+
+    static func purgeDisk() {
+        memory.removeAllObjects()
+        try? FileManager.default.removeItem(at: diskDirectory)
+    }
 
     /// Снимок удалили — его копии всех размеров становятся мусором. Точечно
     /// вычистить нельзя (размеры заранее неизвестны), поэтому чистим память

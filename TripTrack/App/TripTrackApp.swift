@@ -78,6 +78,11 @@ struct TripTrackApp: App {
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
         }
         if DebugGarageSeed.isRequested { DebugGarageSeed.run() }
+        if DebugProfileCardSeed.isRequested {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.set(AppTab.profile.rawValue, forKey: AppTab.storageKey)
+            Task { await DebugProfileCardSeed.run() }
+        }
         if DebugForeignTripFixture.isRequested {
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)

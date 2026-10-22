@@ -82,6 +82,8 @@ enum LocalDataWipe {
         // точностью до двора, а `dismissedSuggestionTripId` — id поездки,
         // которой после вайпа не существует. Исключение из правила «префы не
         // трогаем» ровно на эти ключи и ровно потому, что это данные человека.
+        ProfilePhotoStore.shared.wipe()
+        SettingsManager.shared.wipeProfileJournal()
         SettingsManager.shared.wipeJourneyPrivateState()
         CosmeticRetentionStore.shared.wipe()
         // Дом, заданный РУКАМИ, и его приватная зона (0.8.2) — отдельная

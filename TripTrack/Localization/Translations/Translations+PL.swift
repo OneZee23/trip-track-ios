@@ -18,6 +18,7 @@ extension Translations {
         table.merge(pl5) { _, new in new }
         table.merge(pl6) { _, new in new }
         table.merge(plGarage) { _, new in new }
+        table.merge(plProfileJournal) { _, new in new }
         return table
     }()
 
@@ -1714,5 +1715,20 @@ extension Translations {
         "garageTransmissionCvt": "CVT",
         "garageTransmissionAmt": "AMT",
         "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let plProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} z {max}",
+        "profilePhotosSignIn": "Zaloguj się, aby inni widzieli zdjęcia",
+        "profilePhotosEmpty": "Dodaj zdjęcia — pojawią się na Twojej karcie",
+        "profilePhotosLimit": "Profil ma już dziewięć zdjęć",
+        "profilePhotoFirst": "Ustaw jako pierwsze",
+        "profileShowcase": "Witryna",
+        "profileShowcaseEmpty": "Przypnij do trzech podróży przez „…” na ekranie podróży — pojawią się jako pierwsze na Twojej karcie",
+        "profilePin": "Przypnij do profilu",
+        "profileUnpin": "Odepnij od profilu",
+        "profileShowcaseLimit": "W witrynie są już trzy podróże — odepnij jedną",
     ]
 }

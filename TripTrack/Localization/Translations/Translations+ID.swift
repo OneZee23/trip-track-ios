@@ -18,6 +18,7 @@ extension Translations {
         table.merge(id5) { _, new in new }
         table.merge(id6) { _, new in new }
         table.merge(idGarage) { _, new in new }
+        table.merge(idProfileJournal) { _, new in new }
         return table
     }()
 
@@ -1714,5 +1715,20 @@ extension Translations {
         "garageTransmissionCvt": "CVT",
         "garageTransmissionAmt": "AMT",
         "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let idProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} dari {max}",
+        "profilePhotosSignIn": "Masuk agar orang lain dapat melihat foto Anda",
+        "profilePhotosEmpty": "Tambahkan foto — akan terlihat di kartu Anda",
+        "profilePhotosLimit": "Profil Anda sudah memiliki sembilan foto",
+        "profilePhotoFirst": "Jadikan pertama",
+        "profileShowcase": "Etalase",
+        "profileShowcaseEmpty": "Sematkan hingga tiga perjalanan lewat “…” di layar perjalanan — akan tampil pertama di kartu Anda",
+        "profilePin": "Sematkan di profil",
+        "profileUnpin": "Lepas dari profil",
+        "profileShowcaseLimit": "Etalase sudah berisi tiga perjalanan — lepas satu",
     ]
 }

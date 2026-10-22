@@ -49,6 +49,10 @@ struct RefreshResponse: Codable {
 struct MeResponse: Codable {
     /// Видимость блоков публичного профиля (0.6.3). Опциональны: старый
     /// сервер этих ключей не шлёт, и их отсутствие означает «всё открыто».
+    var bioProvided: Bool = false
+    var bio: String? = nil
+    var photos: [ProfilePhotoDTO]? = nil
+    var pinnedTripIds: [UUID]? = nil
     let countersPublic: Bool?
     let statsPublic: Bool?
     let mapPublic: Bool?
@@ -78,3 +82,36 @@ struct MeResponse: Codable {
 
 struct EmptyRequest: Codable {}
 struct EmptyResponse: Codable {}
+
+extension MeResponse {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            bioProvided: (try? c.decodeNil(forKey: .bio)) == true
+                || (try? c.decode(String.self, forKey: .bio)) != nil,
+            bio: try? c.decodeIfPresent(String.self, forKey: .bio),
+            photos: try? c.decodeIfPresent([ProfilePhotoDTO].self, forKey: .photos),
+            pinnedTripIds: try? c.decodeIfPresent([UUID].self, forKey: .pinnedTripIds),
+            countersPublic: try c.decodeIfPresent(Bool.self, forKey: .countersPublic),
+            statsPublic: try c.decodeIfPresent(Bool.self, forKey: .statsPublic),
+            mapPublic: try c.decodeIfPresent(Bool.self, forKey: .mapPublic),
+            achievementsPublic: try c.decodeIfPresent(Bool.self, forKey: .achievementsPublic),
+            id: try c.decodeIfPresent(UUID.self, forKey: .id),
+            email: try c.decodeIfPresent(String.self, forKey: .email),
+            displayName: try c.decodeIfPresent(String.self, forKey: .displayName),
+            avatarEmoji: try c.decodeIfPresent(String.self, forKey: .avatarEmoji),
+            profileBackground: try c.decodeIfPresent(String.self, forKey: .profileBackground),
+            avatarFrame: try c.decodeIfPresent(String.self, forKey: .avatarFrame),
+            showPlusBadge: try c.decodeIfPresent(Bool.self, forKey: .showPlusBadge),
+            profileLevel: try c.decodeIfPresent(Int.self, forKey: .profileLevel),
+            profileXp: try c.decodeIfPresent(Int.self, forKey: .profileXp),
+            isPublic: try c.decode(Bool.self, forKey: .isPublic),
+            showOnPublicMap: try c.decodeIfPresent(Bool.self, forKey: .showOnPublicMap),
+            notifyReactions: try c.decodeIfPresent(Bool.self, forKey: .notifyReactions),
+            notifyFollows: try c.decodeIfPresent(Bool.self, forKey: .notifyFollows),
+            notifyComments: try c.decodeIfPresent(Bool.self, forKey: .notifyComments),
+            notifyWeeklyRecap: try c.decodeIfPresent(Bool.self, forKey: .notifyWeeklyRecap),
+            createdAt: try c.decodeIfPresent(String.self, forKey: .createdAt)
+        )
+    }
+}

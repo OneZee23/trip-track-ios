@@ -1,6 +1,7 @@
 #if DEBUG && targetEnvironment(simulator)
 import Foundation
 import CoreLocation
+import UIKit
 
 /// Offline regression fixture for Feed → someone else's trip. No local trip
 /// row, credentials or production traffic; the real navigation and detail
@@ -189,6 +190,12 @@ enum DebugForeignTripFixture {
             ],
             "recentBadges": isNew ? [] : ["marathon_42", "night_rider", "early_bird", "long_shift", "first_trip"],
             "recentTrips": trips,
+            "pinnedTrips": variant == "pro" ? Array(trips.prefix(2)) : [],
+            "photos": variant == "pro" ? (0..<5).map { i in
+                ["id": String(format: "D37A9200-0000-4000-8000-%012d", i),
+                 "thumbnailUrl": "https://profile-fixture.invalid/profile-card/\(i).jpg",
+                 "originalUrl": "https://profile-fixture.invalid/profile-card/\(i).jpg"]
+            } : [],
             "followerCount": isNew ? 1 : 48, "followingCount": isNew ? 0 : 23,
             "isFollowing": true,
             "bio": isNew ? NSNull() : "Езжу по выходным, люблю старые дороги",
@@ -228,6 +235,9 @@ enum DebugForeignTripFixture {
     }
 
     static func response(path: String) throws -> Data {
+        if path.contains("/profile-card/"),
+           let index = Int(URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent),
+           let image = DebugProfileCardSeed.image(index) { return image }
         let payload: [String: Any]
         if path.hasSuffix(APIEndpoint.socialFeed) {
             payload = ["trips": [trip(refreshed: false)]]
@@ -296,7 +306,7 @@ private final class ForeignTripURLProtocol: URLProtocol {
                 let data = try DebugForeignTripFixture.response(path: url.path)
                 let response = HTTPURLResponse(url: url, statusCode: 200,
                                                httpVersion: nil,
-                                               headerFields: ["Content-Type": "application/json"])!
+                                               headerFields: ["Content-Type": url.path.contains("/profile-card/") ? "image/jpeg" : "application/json"])!
                 self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
                 self.client?.urlProtocol(self, didLoad: data)
                 self.client?.urlProtocolDidFinishLoading(self)

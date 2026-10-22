@@ -872,7 +872,7 @@ final class APISyncTransport: SyncTransport {
     /// Returns `nil` when the data can't be decoded at all (corrupt file) so the
     /// caller can mark the photo failed — mirroring the old combined
     /// `guard let sourceImage = UIImage(data:)` that this refactor split apart.
-    nonisolated private static func encodePhotoVariants(
+    nonisolated static func encodePhotoVariants(
         originalData: Data, makeThumbnail: Bool, makeOriginal: Bool
     ) async -> (thumbnail: Data?, original: Data?)? {
         guard let sourceImage = UIImage(data: originalData) else { return nil }

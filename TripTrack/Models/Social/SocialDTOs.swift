@@ -491,6 +491,8 @@ struct SocialActiveVehicle: Codable, Hashable {
 }
 
 struct SocialProfile: Codable, Hashable {
+    var photos: [ProfilePhotoDTO]? = nil
+    var pinnedTrips: [SocialProfileRecentTrip]? = nil
     let id: UUID
     let displayName: String?
     let avatarEmoji: String?
@@ -635,6 +637,8 @@ extension SocialProfile {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
+            photos: try? c.decodeIfPresent([ProfilePhotoDTO].self, forKey: .photos),
+            pinnedTrips: try? c.decodeIfPresent([SocialProfileRecentTrip].self, forKey: .pinnedTrips),
             id: try c.decode(UUID.self, forKey: .id),
             displayName: try c.decodeIfPresent(String.self, forKey: .displayName),
             avatarEmoji: try c.decodeIfPresent(String.self, forKey: .avatarEmoji),
@@ -795,6 +799,8 @@ enum SuggestionMatchReason {
 /// from the JSON (see `encode(to:)`) — the server treats absent keys as
 /// "leave unchanged" but would treat `null` as "clear this field".
 struct ProfileUpdateRequest: Encodable {
+    var bio: String? = nil
+    var pinnedTripIds: [String]? = nil
     let displayName: String?
     let avatarEmoji: String?
     let profileBackground: String?
@@ -835,6 +841,8 @@ struct ProfileUpdateRequest: Encodable {
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(bio, forKey: .bio)
+        try c.encodeIfPresent(pinnedTripIds, forKey: .pinnedTripIds)
         try c.encodeIfPresent(displayName, forKey: .displayName)
         try c.encodeIfPresent(avatarEmoji, forKey: .avatarEmoji)
         try c.encodeIfPresent(profileBackground, forKey: .profileBackground)
@@ -860,6 +868,7 @@ struct ProfileUpdateRequest: Encodable {
     /// не уезжает на сервер. Запрос при этом успешен — все поля опциональны, —
     /// так что отказ не виден ни в сборке, ни в логах. См. `VisibilityWireTests`.
     private enum CodingKeys: String, CodingKey {
+        case bio, pinnedTripIds
         case displayName, avatarEmoji, profileBackground
         case profileLevel, profileXp, currentStreak, bestStreak
         case activeVehicleId, language, showOnPublicMap, isPublic

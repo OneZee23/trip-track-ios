@@ -18,6 +18,7 @@ extension Translations {
         table.merge(de5) { _, new in new }
         table.merge(de6) { _, new in new }
         table.merge(deGarage) { _, new in new }
+        table.merge(deProfileJournal) { _, new in new }
         return table
     }()
 
@@ -1714,5 +1715,20 @@ extension Translations {
         "garageTransmissionCvt": "CVT",
         "garageTransmissionAmt": "AMT",
         "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let deProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} von {max}",
+        "profilePhotosSignIn": "Melde dich an, damit andere deine Fotos sehen",
+        "profilePhotosEmpty": "Füge Fotos hinzu — sie erscheinen auf deiner Karte",
+        "profilePhotosLimit": "Dein Profil hat bereits neun Fotos",
+        "profilePhotoFirst": "Als Erstes anzeigen",
+        "profileShowcase": "Schaukasten",
+        "profileShowcaseEmpty": "Hefte über „…“ in einer Fahrt bis zu drei Fahrten an — sie erscheinen zuerst auf deiner Karte",
+        "profilePin": "Im Profil anheften",
+        "profileUnpin": "Vom Profil lösen",
+        "profileShowcaseLimit": "Bereits drei Fahrten im Schaukasten — löse eine",
     ]
 }

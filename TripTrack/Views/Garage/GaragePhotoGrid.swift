@@ -42,6 +42,7 @@ struct GaragePhotoThumbnail: View {
     var body: some View {
         switch page.source {
         case .local(let filename): AsyncThumbnailView(filename: filename)
+        case .profile(let filename): ProfilePhotoThumbnail(filename: filename)
         case .vehicle(let filename):
             VehiclePhotoImage(source: .local(filename: filename), maxSize: 250)
         case .remote(let url): RemoteThumbnailView(urlString: url)
