@@ -41,6 +41,39 @@ RAMPS = {
     "green":  ((0x2A, 0x6B, 0x2E), (0x4C, 0xAF, 0x50), (0x86, 0xD9, 0x8A)),
 }
 
+# A restrained matte ramp per colour: a narrower highlight and less saturation.
+MATTE_RAMPS = {
+    "white": ((100, 105, 114), (169, 173, 181), (197, 201, 209)),
+    "black": ((20, 21, 25), (30, 32, 38), (43, 45, 52)),
+    "silver": ((76, 81, 91), (119, 125, 138), (145, 151, 164)),
+    "gray": ((51, 56, 65), (80, 86, 98), (103, 109, 122)),
+    "red": ((103, 33, 31), (159, 53, 47), (181, 72, 62)),
+    "blue": ((28, 43, 68), (43, 64, 99), (58, 82, 120)),
+    "orange": ((104, 45, 25), (171, 75, 40), (194, 94, 56)),
+    "yellow": ((119, 95, 28), (173, 144, 49), (195, 170, 74)),
+    "green": ((37, 69, 41), (60, 111, 64), (83, 139, 85)),
+}
+
+
+def install_matte_assets():
+    from pathlib import Path
+    catalog = Path(__file__).resolve().parents[1] / "TripTrack/Resources/Assets.xcassets"
+    for source in sorted(catalog.glob("pixel_*_orange.imageset")):
+        body = source.stem.removesuffix("_orange")
+        master = Image.open(next(source.glob("*.png")))
+        for color, ramp in MATTE_RAMPS.items():
+            name = f"{body}_{color}_matte"
+            folder = catalog / f"{name}.imageset"
+            folder.mkdir(exist_ok=True)
+            image = recolor(master, ramp)
+            images = []
+            for scale in (1, 2, 3):
+                filename = f"{name}@{scale}x.png"
+                image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST).save(folder / filename, optimize=True)
+                images.append({"idiom": "universal", "scale": f"{scale}x", "filename": filename})
+            (folder / "Contents.json").write_text(json.dumps({"images": images, "info": {"author": "xcode", "version": 1}}, indent=2) + "\n")
+
+
 # Body hue window in degrees, plus the saturation floor that separates paint
 # from the near-neutral chrome, glass reflections and tyre highlights.
 HUE_LO, HUE_HI = 12.0, 58.0
@@ -136,13 +169,17 @@ def inspect(src: Image.Image):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("master")
+    ap.add_argument("master", nargs="?")
+    ap.add_argument("--install-matte", action="store_true")
     ap.add_argument("-o", "--outdir", default=".")
     ap.add_argument("-p", "--prefix", default="pixel_car")
     ap.add_argument("--only", nargs="*", help="subset of colour names")
     ap.add_argument("--inspect", action="store_true")
     a = ap.parse_args()
 
+    if a.install_matte:
+        install_matte_assets()
+        return
     src = Image.open(a.master)
     if a.inspect:
         inspect(src)

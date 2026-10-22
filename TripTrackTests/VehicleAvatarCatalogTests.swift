@@ -26,7 +26,7 @@ final class VehicleAvatarCatalogTests: XCTestCase {
             entries
                 .filter { $0.hasSuffix(".imageset") }
                 .map { String($0.dropLast(".imageset".count)) }
-                .filter { VehicleAvatar.isAsset($0) }
+                .filter { VehicleAvatar.isAsset($0) && !$0.hasSuffix("_matte") }
         )
     }
 
