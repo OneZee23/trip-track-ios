@@ -992,6 +992,13 @@ final class SettingsManager: ObservableObject {
         v.electricityPrice = entity.electricityPrice
         v.electricRangeKm = entity.electricRangeKm
         v.cardStyle = entity.cardStyle
+        v.drive2URL = entity.drive2URL
+        v.modTags = VehicleModTags.decodeJSON(entity.modTagsJSON)
+        v.paintFinish = entity.paintFinish
+        v.mods = VehicleMod.decodeJSON(entity.modsJSON)
+        v.catalogModelId = entity.catalogModelId
+        v.catalogGenerationId = entity.catalogGenerationId
+        v.catalogVariantId = entity.catalogVariantId
         v.about = entity.about ?? ""
         v.make = entity.make ?? ""
         v.model = entity.model ?? ""
@@ -1050,6 +1057,30 @@ final class SettingsManager: ObservableObject {
         entity.year = (year >= 1900 && year <= 2100) ? Int32(year) : 0
         entity.bodyType = bodyType
         entity.about = about
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
+    func updateVehicleGarage(id: UUID, drive2URL: String? = nil, modTags: [String]? = nil,
+                             paintFinish: VehicleFinish? = nil, mods: [VehicleMod]? = nil,
+                             catalogModelId: String? = nil, catalogGenerationId: String? = nil,
+                             catalogVariantId: String? = nil) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        if let drive2URL { entity.drive2URL = Drive2Link(drive2URL)?.url.absoluteString ?? "" }
+        if let modTags { entity.modTagsJSON = VehicleModTags.encodeJSON(modTags) }
+        if let paintFinish { entity.paintFinish = paintFinish.rawValue }
+        if let catalogModelId { entity.catalogModelId = catalogModelId }
+        if let catalogGenerationId { entity.catalogGenerationId = catalogGenerationId }
+        if let catalogVariantId { entity.catalogVariantId = catalogVariantId }
+        if let mods { entity.modsJSON = VehicleMod.encodeJSON(Array(mods.prefix(VehicleMod.limit))) }
         entity.lastModifiedAt = Date()
         entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
@@ -1158,7 +1189,7 @@ final class SettingsManager: ObservableObject {
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
         }
     }
 
@@ -1228,7 +1259,7 @@ final class SettingsManager: ObservableObject {
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
         }
     }
 
@@ -1241,7 +1272,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1255,7 +1286,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1278,7 +1309,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1324,7 +1355,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }

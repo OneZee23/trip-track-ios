@@ -17,6 +17,7 @@ extension Translations {
         table.merge(de4) { _, new in new }
         table.merge(de5) { _, new in new }
         table.merge(de6) { _, new in new }
+        table.merge(deGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "PRO-Abo",
         "cosmeticDefaultOption": "Standard",
         "settingsAvatarFrame": "Avatar-Rahmen",
-        "settingsVehicleCardStyle": "Kartenhintergrund",
+        "settingsVehicleCardStyle": "Podest",
         "showcaseVisibleAfterSignIn": "Gerade sehen nur Sie das. Andere sehen es, sobald Sie sich anmelden.",
         "showcaseVisibleAfterSync": "Gerade sehen nur Sie das. Andere sehen es nach Anmeldung und eingeschalteter Synchronisierung.",
         "vehicleCardStylePickerFootnote": "Der Hintergrund erscheint auf der Karte dieses Fahrzeugs — in Ihrer Garage und in Ihrem öffentlichen Profil.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Beenden",
         "showcaseBg": "Profilhintergrund",
         "showcaseFrame": "Avatar-Rahmen",
-        "showcaseCar": "Kartenhintergrund",
+        "showcaseCar": "Podest",
         "showcaseLine": "Routenlinie",
         "showcaseFree": "Kostenlos",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Erlauben Sie den Zugriff in den Einstellungen, damit der Atlas Ihnen folgt",
     ]
 
+}
+
+extension Translations {
+    private static let deGarage: [String: String] = [
+        "vehicleFinishGloss": "Glanz",
+        "vehicleFinishMatte": "Matt",
+        "vehicleFinishPearl": "Perlmutt",
+        "vehicleFinishChrome": "Chrom",
+        "garageFinish": "Lackierung",
+        "garageTags": "Tags auf der Karte",
+        "garageTagsHint": "Bis zu drei kurze Tags auf der Fahrzeugkarte.",
+        "garageDrive2Title": "Fahrtenbuch auf DRIVE2",
+        "garageDrive2Connect": "DRIVE2-Fahrtenbuch verknüpfen",
+        "garageDrive2Help": "In DRIVE2 dieses Auto öffnen → Teilen → Link kopieren und hier einfügen.",
+        "garageDrive2Field": "Fahrzeuglink",
+        "garageDrive2Valid": "✓ Fahrzeuglink: {make} · {model}",
+        "garageDrive2Hint": "Link zur Fahrzeugseite auf DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Alle, die dieses Auto sehen, sehen auch die DRIVE2-Schaltfläche.",
+        "garageDrive2LocalNote": "Der Link bleibt auf diesem Handy. Anmelden und Cloud-Sync aktivieren, um ihn zu teilen.",
+        "garageDrive2Unlink": "Verknüpfung lösen",
+        "garageMileage": "Kilometerstand",
+        "garageOnOdometer": "auf dem Tacho",
+        "garageTracked": "Mit TripTrack — {distance}",
+        "garageTripPhotos": "Fahrtfotos",
+        "garageMods": "Umbauten",
+        "garageAddMod": "Eintrag hinzufügen",
+        "garageModTitle": "Was wurde gemacht",
+        "garageModDate": "Datum",
+        "garageModDelete": "Eintrag löschen",
+        "garageModDeleteTitle": "Eintrag löschen?",
+        "garageModDeleteBody": "Fotos bleiben im Fahrzeugalbum.",
+        "garageModPhotos": "Fahrzeugfotos · bis zu 6",
+        "garageGearbox": "{type}{gears}",
+        "garagePlatform": "Podest",
+        "garagePower": "{value} PS",
+        "garageAcceleration": "0–100 km/h in {value} s",
+        "garageTransmissionManual": "MT",
+        "garageTransmissionAutomatic": "AT",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
 }

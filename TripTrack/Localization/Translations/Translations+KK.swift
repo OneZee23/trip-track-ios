@@ -17,6 +17,7 @@ extension Translations {
         table.merge(kk4) { _, new in new }
         table.merge(kk5) { _, new in new }
         table.merge(kk6) { _, new in new }
+        table.merge(kkGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "PRO жазылымы",
         "cosmeticDefaultOption": "Әдепкі",
         "settingsAvatarFrame": "Аватар жақтауы",
-        "settingsVehicleCardStyle": "Карточка фоны",
+        "settingsVehicleCardStyle": "Алаң",
         "showcaseVisibleAfterSignIn": "Әзірге мұны тек сіз көресіз. Басқалар аккаунтқа кіргеннен кейін көреді.",
         "showcaseVisibleAfterSync": "Әзірге мұны тек сіз көресіз. Басқалар кіріп, синхрондауды қосқаннан кейін көреді.",
         "vehicleCardStylePickerFootnote": "Фон осы көліктің карточкасында көрінеді — гаражда және ашық профильде.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Аяқтау",
         "showcaseBg": "Профиль фоны",
         "showcaseFrame": "Аватар жиегі",
-        "showcaseCar": "Карта фоны",
+        "showcaseCar": "Алаң",
         "showcaseLine": "Маршрут сызығы",
         "showcaseFree": "Тегін",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Атлас сізді қадағалауы үшін Параметрлерде рұқсат беріңіз",
     ]
 
+}
+
+extension Translations {
+    private static let kkGarage: [String: String] = [
+        "vehicleFinishGloss": "Жылтыр",
+        "vehicleFinishMatte": "Күңгірт",
+        "vehicleFinishPearl": "Інжу",
+        "vehicleFinishChrome": "Хром",
+        "garageFinish": "Қаптама",
+        "garageTags": "Карточка белгілері",
+        "garageTagsHint": "Көлік карточкасында үшке дейін қысқа белгі.",
+        "garageDrive2Title": "DRIVE2 журналы",
+        "garageDrive2Connect": "DRIVE2 журналын байланыстыру",
+        "garageDrive2Help": "DRIVE2-де осы көлікті ашыңыз → Бөлісу → Сілтемені көшіру, содан кейін осында қойыңыз.",
+        "garageDrive2Field": "Көлік сілтемесі",
+        "garageDrive2Valid": "✓ Көлік сілтемесі: {make} · {model}",
+        "garageDrive2Hint": "DRIVE2 көлік бетінің сілтемесі керек: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Осы көлікті көретіндердің бәрі DRIVE2 журналы батырмасын көреді.",
+        "garageDrive2LocalNote": "Сілтеме осы телефонда қалады. Басқаларға көрсету үшін кіріп, бұлтпен синхрондауды қосыңыз.",
+        "garageDrive2Unlink": "Байланысты үзу",
+        "garageMileage": "Жүріс",
+        "garageOnOdometer": "одометрде",
+        "garageTracked": "TripTrack-пен — {distance}",
+        "garageTripPhotos": "Сапар суреттері",
+        "garageMods": "Өзгерістер",
+        "garageAddMod": "Жазба қосу",
+        "garageModTitle": "Не істелді",
+        "garageModDate": "Күні",
+        "garageModDelete": "Жазбаны жою",
+        "garageModDeleteTitle": "Жазба жойылсын ба?",
+        "garageModDeleteBody": "Суреттер көлік альбомында қалады.",
+        "garageModPhotos": "Көлік суреттері · 6-ға дейін",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Алаң",
+        "garagePower": "{value} а.к.",
+        "garageAcceleration": "0–100 {value} с",
+        "garageTransmissionManual": "МҚПП",
+        "garageTransmissionAutomatic": "АҚПП",
+        "garageTransmissionCvt": "Вариатор",
+        "garageTransmissionAmt": "Робот",
+        "garageTransmissionDct": "Робот",
+    ]
 }

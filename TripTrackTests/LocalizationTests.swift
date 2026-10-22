@@ -383,6 +383,7 @@ final class LocalizationTests: XCTestCase {
     /// Пара «ключ + причина» по той же причине, что и allowlist сторожа: строка
     /// здесь — решение, а не строчка.
     private static let unitBelongsInTheText: [(key: String, reason: String)] = [
+        ("garageAcceleration", "Catalog acceleration is 0–100 km/h, not a conversion to 0–60 mph; owner decision 22 Oct 2026."),
         ("levelsRuleLong",
          "Правило игры: двойной опыт даётся за поездки от 200 КМ всем и при любой "
          + "настройке. Число в тексте обязано совпадать с числом в `GamificationManager` — "

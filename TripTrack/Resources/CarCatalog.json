@@ -1,0 +1,121 @@
+{
+  "schema": 2,
+  "compiledAt": "2026-10-22",
+  "placeholder": true,
+  "makes": [
+    {
+      "id": "volkswagen",
+      "name": "Volkswagen",
+      "models": [
+        {
+          "id": "volkswagen-polo",
+          "name": "Polo",
+          "aliases": [
+            "Поло",
+            "Поло седан",
+            "Polo Sedan",
+            "Polo седан",
+            "Фольксваген Поло",
+            "Фольксваген Поло седан",
+            "Фольцваген Поло",
+            "VW Polo",
+            "Polo лифтбек",
+            "Polo лифтбэк",
+            "Поло лифтбек",
+            "Polo GT",
+            "Поло GT"
+          ],
+          "generations": [
+            {
+              "name": "Polo седан, рестайлинг",
+              "yearStart": 2015,
+              "yearEnd": 2020,
+              "bodies": [
+                "sedan"
+              ],
+              "id": "volkswagen-polo-sedan-2015",
+              "variants": [
+                {
+                  "label": "1.6 MPI 110 л.с., АКПП 6",
+                  "fuel": "petrol",
+                  "displacementCc": 1598,
+                  "powerHp": 110,
+                  "torqueNm": 155,
+                  "transmission": "automatic",
+                  "gears": 6,
+                  "drivetrain": "fwd",
+                  "zeroToHundredS": 11.7,
+                  "topSpeedKmh": 184,
+                  "curbWeightKg": 1208,
+                  "yearStart": 2015,
+                  "sources": [
+                    "https://web.archive.org/web/20161220150856/http://www.volkswagen.ru/ru/models/polo/specifications.html",
+                    "https://web.archive.org/web/20160417121748/http://newpolo.volkswagen.ru/docs/new_polo_cat.pdf",
+                    "https://web.archive.org/web/20160204103443/http://www.volkswagen.ru/content/medialib/vwd4/ru/downloads/new_polo_kc-pdf/_jcr_content/renditions/rendition.download_attachment.file/new_polo_kc.pdf",
+                    "https://web.archive.org/web/20191022014834/https://www.volkswagen.ru/ru/models/polo/tech.html",
+                    "https://web.archive.org/web/20160304115941/http://news.volkswagen.ru/628519/"
+                  ],
+                  "notes": "EA211, from 16 Nov 2015; 6-speed automatic with Tiptronic (2016 catalog). Figures are the bracketed АКПП values of the spec tables.",
+                  "id": "volkswagen-polo-sedan-2015-16-110-at6"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "haval",
+      "name": "Haval",
+      "models": [
+        {
+          "id": "haval-jolion",
+          "name": "Jolion",
+          "aliases": [
+            "Джолион",
+            "Хавал Джолион",
+            "Хавейл Джолион",
+            "Хавэйл Джолион",
+            "Хавал Жолион",
+            "Новый Джолион",
+            "Haval Jolion",
+            "Jolion"
+          ],
+          "generations": [
+            {
+              "name": "Jolion",
+              "yearStart": 2021,
+              "yearEnd": 2024,
+              "bodies": [
+                "crossover"
+              ],
+              "id": "haval-jolion-2021",
+              "variants": [
+                {
+                  "label": "1.5T 143 л.с., робот DCT 7",
+                  "fuel": "petrol",
+                  "displacementCc": 1497,
+                  "powerHp": 143,
+                  "torqueNm": 210,
+                  "transmission": "dct",
+                  "gears": 7,
+                  "drivetrain": "fwd",
+                  "zeroToHundredS": 9.8,
+                  "topSpeedKmh": 185,
+                  "curbWeightKg": 1445,
+                  "sources": [
+                    "https://web.archive.org/web/20210618132120/https://haval.ru/models/new-haval-jolion/",
+                    "https://web.archive.org/web/20231023192116/https://cdn.haval-static.oneplatform.site/storage/prices/HAVAL_JOLION_price.pdf",
+                    "https://web.archive.org/web/20240425064548/https://haval.ru/models/new-haval-jolion/"
+                  ],
+                  "notes": "«7-ступенчатая, роботизированная, с двойным сцеплением мокрого типа».",
+                  "id": "haval-jolion-2021-15-143-dct7"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

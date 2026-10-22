@@ -17,6 +17,7 @@ extension Translations {
         table.merge(fil4) { _, new in new }
         table.merge(fil5) { _, new in new }
         table.merge(fil6) { _, new in new }
+        table.merge(filGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "Subscription na PRO",
         "cosmeticDefaultOption": "Default",
         "settingsAvatarFrame": "Frame ng avatar",
-        "settingsVehicleCardStyle": "Background ng card",
+        "settingsVehicleCardStyle": "Plataporma",
         "showcaseVisibleAfterSignIn": "Ikaw lang ang nakakakita nito sa ngayon. Makikita ito ng iba kapag nag-sign in ka.",
         "showcaseVisibleAfterSync": "Ikaw lang ang nakakakita nito sa ngayon. Makikita ito ng iba kapag nag-sign in ka at binuksan ang sync.",
         "vehicleCardStylePickerFootnote": "Lumalabas ang background sa card ng sasakyang ito — sa inyong garahe at sa inyong public profile.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Tapusin",
         "showcaseBg": "Background ng profile",
         "showcaseFrame": "Frame ng avatar",
-        "showcaseCar": "Background ng card",
+        "showcaseCar": "Plataporma",
         "showcaseLine": "Linya ng ruta",
         "showcaseFree": "Libre",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Payagan po ang access sa Settings para masundan kayo ng atlas",
     ]
 
+}
+
+extension Translations {
+    private static let filGarage: [String: String] = [
+        "vehicleFinishGloss": "Makintab",
+        "vehicleFinishMatte": "Matte",
+        "vehicleFinishPearl": "Perlas",
+        "vehicleFinishChrome": "Chrome",
+        "garageFinish": "Finish",
+        "garageTags": "Mga tag sa card",
+        "garageTagsHint": "Hanggang tatlong maikling tag sa card ng kotse.",
+        "garageDrive2Title": "Logbook sa DRIVE2",
+        "garageDrive2Connect": "I-link ang DRIVE2 logbook",
+        "garageDrive2Help": "Sa DRIVE2, buksan ang kotseng ito → Ibahagi → Kopyahin ang link, at i-paste rito.",
+        "garageDrive2Field": "Link ng kotse",
+        "garageDrive2Valid": "✓ Link ng kotse: {make} · {model}",
+        "garageDrive2Hint": "Gumamit ng link ng kotse sa DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Makikita ang DRIVE2 logbook button ng lahat ng nakakakita sa kotseng ito.",
+        "garageDrive2LocalNote": "Nasa teleponong ito lang ang link. Mag-sign in at i-on ang cloud sync para ibahagi ito.",
+        "garageDrive2Unlink": "I-unlink",
+        "garageMileage": "Mileage",
+        "garageOnOdometer": "sa odometer",
+        "garageTracked": "Sa TripTrack — {distance}",
+        "garageTripPhotos": "Mga larawan sa biyahe",
+        "garageMods": "Mga pagbabago",
+        "garageAddMod": "Magdagdag ng tala",
+        "garageModTitle": "Ginawang pagbabago",
+        "garageModDate": "Petsa",
+        "garageModDelete": "Burahin ang tala",
+        "garageModDeleteTitle": "Burahin ang tala?",
+        "garageModDeleteBody": "Mananatili ang mga larawan sa album ng kotse.",
+        "garageModPhotos": "Mga larawan ng kotse · hanggang 6",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Plataporma",
+        "garagePower": "{value} hp",
+        "garageAcceleration": "0–100 km/h {value} s",
+        "garageTransmissionManual": "Manual",
+        "garageTransmissionAutomatic": "Automatic",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
 }

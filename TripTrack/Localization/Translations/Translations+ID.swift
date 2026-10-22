@@ -17,6 +17,7 @@ extension Translations {
         table.merge(id4) { _, new in new }
         table.merge(id5) { _, new in new }
         table.merge(id6) { _, new in new }
+        table.merge(idGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "Langganan PRO",
         "cosmeticDefaultOption": "Bawaan",
         "settingsAvatarFrame": "Bingkai avatar",
-        "settingsVehicleCardStyle": "Latar kartu",
+        "settingsVehicleCardStyle": "Platform",
         "showcaseVisibleAfterSignIn": "Saat ini hanya Anda yang melihatnya. Orang lain akan melihatnya setelah Anda masuk.",
         "showcaseVisibleAfterSync": "Saat ini hanya Anda yang melihatnya. Orang lain akan melihatnya setelah Anda masuk dan menyalakan sinkronisasi.",
         "vehicleCardStylePickerFootnote": "Latar tampil di kartu kendaraan ini — di garasi dan di profil publik Anda.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Selesaikan",
         "showcaseBg": "Latar profil",
         "showcaseFrame": "Bingkai avatar",
-        "showcaseCar": "Latar kartu",
+        "showcaseCar": "Platform",
         "showcaseLine": "Garis rute",
         "showcaseFree": "Gratis",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Izinkan akses di Pengaturan agar atlas mengikuti Anda",
     ]
 
+}
+
+extension Translations {
+    private static let idGarage: [String: String] = [
+        "vehicleFinishGloss": "Mengilap",
+        "vehicleFinishMatte": "Matte",
+        "vehicleFinishPearl": "Mutiara",
+        "vehicleFinishChrome": "Krom",
+        "garageFinish": "Lapisan",
+        "garageTags": "Tag kartu",
+        "garageTagsHint": "Hingga tiga tag singkat di kartu mobil.",
+        "garageDrive2Title": "Jurnal di DRIVE2",
+        "garageDrive2Connect": "Tautkan jurnal DRIVE2",
+        "garageDrive2Help": "Di DRIVE2, buka mobil ini → Bagikan → Salin tautan, lalu tempel di sini.",
+        "garageDrive2Field": "Tautan mobil",
+        "garageDrive2Valid": "✓ Tautan mobil: {make} · {model}",
+        "garageDrive2Hint": "Gunakan tautan halaman mobil DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Semua yang dapat melihat mobil ini akan melihat tombol jurnal DRIVE2.",
+        "garageDrive2LocalNote": "Tautan tetap di ponsel ini. Masuk dan aktifkan sinkronisasi awan untuk membagikannya.",
+        "garageDrive2Unlink": "Putuskan tautan",
+        "garageMileage": "Jarak tempuh",
+        "garageOnOdometer": "di odometer",
+        "garageTracked": "Dengan TripTrack — {distance}",
+        "garageTripPhotos": "Foto perjalanan",
+        "garageMods": "Modifikasi",
+        "garageAddMod": "Tambah entri",
+        "garageModTitle": "Yang dikerjakan",
+        "garageModDate": "Tanggal",
+        "garageModDelete": "Hapus entri",
+        "garageModDeleteTitle": "Hapus entri?",
+        "garageModDeleteBody": "Foto tetap di album mobil.",
+        "garageModPhotos": "Foto mobil · hingga 6",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Platform",
+        "garagePower": "{value} hp",
+        "garageAcceleration": "0–100 km/h {value} dtk",
+        "garageTransmissionManual": "Manual",
+        "garageTransmissionAutomatic": "Otomatis",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
 }

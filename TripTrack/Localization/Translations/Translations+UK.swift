@@ -17,6 +17,7 @@ extension Translations {
         table.merge(uk4) { _, new in new }
         table.merge(uk5) { _, new in new }
         table.merge(uk6) { _, new in new }
+        table.merge(ukGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "Підписка PRO",
         "cosmeticDefaultOption": "Звичайний",
         "settingsAvatarFrame": "Рамка аватара",
-        "settingsVehicleCardStyle": "Тло картки",
+        "settingsVehicleCardStyle": "Майданчик",
         "showcaseVisibleAfterSignIn": "Поки це бачите лише ви. Інші побачать після входу в акаунт.",
         "showcaseVisibleAfterSync": "Поки це бачите лише ви. Інші побачать після входу й увімкнення синхронізації.",
         "vehicleCardStylePickerFootnote": "Тло видно на картці цієї машини — у гаражі та в публічному профілі.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Завершити",
         "showcaseBg": "Фон профілю",
         "showcaseFrame": "Рамка аватара",
-        "showcaseCar": "Фон картки",
+        "showcaseCar": "Майданчик",
         "showcaseLine": "Лінія маршруту",
         "showcaseFree": "Безплатні",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Дозвольте доступ у Налаштуваннях, щоб атлас стежив за вами",
     ]
 
+}
+
+extension Translations {
+    private static let ukGarage: [String: String] = [
+        "vehicleFinishGloss": "Глянець",
+        "vehicleFinishMatte": "Матовий",
+        "vehicleFinishPearl": "Перламутр",
+        "vehicleFinishChrome": "Хром",
+        "garageFinish": "Покриття",
+        "garageTags": "Позначки на картці",
+        "garageTagsHint": "До трьох коротких слів на картці машини.",
+        "garageDrive2Title": "Бортжурнал на DRIVE2",
+        "garageDrive2Connect": "Прив’язати бортжурнал DRIVE2",
+        "garageDrive2Help": "У DRIVE2 відкрийте цю машину → «Поділитися» → «Копіювати посилання» та вставте його сюди.",
+        "garageDrive2Field": "Посилання на машину",
+        "garageDrive2Valid": "✓ Посилання на машину: {make} · {model}",
+        "garageDrive2Hint": "Потрібне посилання на машину в DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Кнопку бортжурналу DRIVE2 побачать усі, кому видно цю машину.",
+        "garageDrive2LocalNote": "Посилання залишиться на цьому телефоні. Увійдіть і ввімкніть хмарну синхронізацію, щоб показати його іншим.",
+        "garageDrive2Unlink": "Відв’язати",
+        "garageMileage": "Пробіг",
+        "garageOnOdometer": "на одометрі",
+        "garageTracked": "З TripTrack — {distance}",
+        "garageTripPhotos": "Фото з поїздок",
+        "garageMods": "Доопрацювання",
+        "garageAddMod": "Додати запис",
+        "garageModTitle": "Що зроблено",
+        "garageModDate": "Дата",
+        "garageModDelete": "Видалити запис",
+        "garageModDeleteTitle": "Видалити запис?",
+        "garageModDeleteBody": "Фото залишаться в альбомі машини.",
+        "garageModPhotos": "Фото машини · до 6",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Майданчик",
+        "garagePower": "{value} к.с.",
+        "garageAcceleration": "0–100 за {value} с",
+        "garageTransmissionManual": "МКПП",
+        "garageTransmissionAutomatic": "АКПП",
+        "garageTransmissionCvt": "Варіатор",
+        "garageTransmissionAmt": "Робот",
+        "garageTransmissionDct": "Робот",
+    ]
 }

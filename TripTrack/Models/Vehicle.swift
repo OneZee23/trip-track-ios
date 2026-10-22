@@ -112,6 +112,14 @@ struct Vehicle: Identifiable, Codable {
     /// список знать незачем — ровно как `Vehicle.avatarStyle`.
     var cardStyle: String?
 
+    var drive2URL: String? = nil
+    var modTags: [String] = []
+    var paintFinish: String? = nil
+    var mods: [VehicleMod] = []
+    var catalogModelId: String? = nil
+    var catalogGenerationId: String? = nil
+    var catalogVariantId: String? = nil
+
     // MARK: - Паспорт машины (0.6.4)
 
     /// Одна строка о машине, написанная владельцем: «Первая своя. Брал, чтобы
@@ -266,6 +274,14 @@ struct Vehicle: Identifiable, Codable {
         // паспорта ниже: ни один сохранённый payload и ни один сервер до
         // 0.8.0 этого ключа не шлёт.
         cardStyle = try c.decodeIfPresent(String.self, forKey: .cardStyle)
+
+        drive2URL = (try? c.decodeIfPresent(String.self, forKey: .drive2URL)) ?? nil
+        modTags = (try? c.decodeIfPresent([String].self, forKey: .modTags)) ?? []
+        paintFinish = (try? c.decodeIfPresent(String.self, forKey: .paintFinish)) ?? nil
+        mods = (try? c.decodeIfPresent([VehicleMod].self, forKey: .mods)) ?? []
+        catalogModelId = (try? c.decodeIfPresent(String.self, forKey: .catalogModelId)) ?? nil
+        catalogGenerationId = (try? c.decodeIfPresent(String.self, forKey: .catalogGenerationId)) ?? nil
+        catalogVariantId = (try? c.decodeIfPresent(String.self, forKey: .catalogVariantId)) ?? nil
 
         // Поля паспорта (0.6.4). Все через `decodeIfPresent` с умолчанием: их
         // не шлёт ни один сохранённый payload и ни один сервер до 0.6.4, и

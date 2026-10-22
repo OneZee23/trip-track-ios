@@ -17,6 +17,7 @@ extension Translations {
         table.merge(es4) { _, new in new }
         table.merge(es5) { _, new in new }
         table.merge(es6) { _, new in new }
+        table.merge(esGarage) { _, new in new }
         return table
     }()
 
@@ -1380,7 +1381,7 @@ extension Translations {
         "plusBadgeLabel": "Suscripción PRO",
         "cosmeticDefaultOption": "Predeterminado",
         "settingsAvatarFrame": "Marco del avatar",
-        "settingsVehicleCardStyle": "Fondo de la tarjeta",
+        "settingsVehicleCardStyle": "Plataforma",
         "showcaseVisibleAfterSignIn": "Por ahora solo usted lo ve. Los demás lo verán cuando inicie sesión.",
         "showcaseVisibleAfterSync": "Por ahora solo usted lo ve. Los demás lo verán al iniciar sesión y activar la sincronización.",
         "vehicleCardStylePickerFootnote": "El fondo se ve en la tarjeta de este vehículo: en su garaje y en su perfil público.",
@@ -1511,7 +1512,7 @@ extension Translations {
         "carPlayFinish": "Finalizar",
         "showcaseBg": "Fondo del perfil",
         "showcaseFrame": "Marco del avatar",
-        "showcaseCar": "Fondo de la tarjeta",
+        "showcaseCar": "Plataforma",
         "showcaseLine": "Línea de ruta",
         "showcaseFree": "Gratis",
         "showcasePro": "PRO",
@@ -1672,4 +1673,46 @@ extension Translations {
         "atlasLocationDeniedBody": "Permita el acceso en Ajustes para que el atlas le siga",
     ]
 
+}
+
+extension Translations {
+    private static let esGarage: [String: String] = [
+        "vehicleFinishGloss": "Brillo",
+        "vehicleFinishMatte": "Mate",
+        "vehicleFinishPearl": "Perlado",
+        "vehicleFinishChrome": "Cromo",
+        "garageFinish": "Acabado",
+        "garageTags": "Etiquetas de la tarjeta",
+        "garageTagsHint": "Hasta tres etiquetas cortas en la tarjeta del coche.",
+        "garageDrive2Title": "Diario en DRIVE2",
+        "garageDrive2Connect": "Vincular un diario de DRIVE2",
+        "garageDrive2Help": "En DRIVE2, abre este coche → Compartir → Copiar enlace y pégalo aquí.",
+        "garageDrive2Field": "Enlace del coche",
+        "garageDrive2Valid": "✓ Enlace del coche: {make} · {model}",
+        "garageDrive2Hint": "Usa un enlace de un coche en DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Todos los que vean este coche verán el botón del diario de DRIVE2.",
+        "garageDrive2LocalNote": "El enlace queda en este teléfono. Inicia sesión y activa la sincronización para mostrarlo.",
+        "garageDrive2Unlink": "Desvincular",
+        "garageMileage": "Kilometraje",
+        "garageOnOdometer": "en el odómetro",
+        "garageTracked": "Con TripTrack — {distance}",
+        "garageTripPhotos": "Fotos de viajes",
+        "garageMods": "Modificaciones",
+        "garageAddMod": "Añadir entrada",
+        "garageModTitle": "Qué se ha hecho",
+        "garageModDate": "Fecha",
+        "garageModDelete": "Eliminar entrada",
+        "garageModDeleteTitle": "¿Eliminar entrada?",
+        "garageModDeleteBody": "Las fotos quedan en el álbum del coche.",
+        "garageModPhotos": "Fotos del coche · hasta 6",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Plataforma",
+        "garagePower": "{value} CV",
+        "garageAcceleration": "0–100 km/h en {value} s",
+        "garageTransmissionManual": "Manual",
+        "garageTransmissionAutomatic": "Automática",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
 }

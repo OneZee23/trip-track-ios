@@ -70,6 +70,14 @@ struct VehicleSyncPayload: Codable {
     /// нам незнакомо, и оба случая читаются как «не трогать локальное».
     let cardStyle: String?
 
+    var drive2Url: String? = nil
+    var modTags: [String]? = nil
+    var paintFinish: String? = nil
+    var mods: [VehicleMod]? = nil
+    var catalogModelId: String? = nil
+    var catalogGenerationId: String? = nil
+    var catalogVariantId: String? = nil
+
     // Электро и гибриды (0.8.3). Все четыре опциональные и с тем же смыслом,
     // что `dashboardUnits`: сервер без колонок молчит, и молчание означает «не
     // трогать локальное», а не «сбросить в ноль». Цена ошибки здесь та же, что
@@ -193,6 +201,7 @@ struct VehicleSyncPayload: Codable {
         case stickersJson, cityConsumption, highwayConsumption, fuelPrice
         case conflictVersion, lastModifiedAt, vehicleType, avatarStyle
         case plate, plateVisible, visibleToOthers, fuelCurrency, dashboardUnits
+        case drive2Url, modTags, paintFinish, mods, catalogModelId, catalogGenerationId, catalogVariantId
         case cardStyle
         case powertrain, electricConsumption, electricityPrice, electricRangeKm
         case about, make, model, year, bodyType
@@ -241,6 +250,13 @@ struct VehicleSyncPayload: Codable {
         // дают `nil`, а `nil` значит «не трогать локальное».
         dashboardUnits = DashboardUnits.parse(
             (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil)
+        drive2Url = (try? c.decodeIfPresent(String.self, forKey: .drive2Url)) ?? nil
+        modTags = (try? c.decodeIfPresent([String].self, forKey: .modTags)) ?? nil
+        paintFinish = (try? c.decodeIfPresent(String.self, forKey: .paintFinish)) ?? nil
+        mods = (try? c.decodeIfPresent([VehicleMod].self, forKey: .mods)) ?? nil
+        catalogModelId = (try? c.decodeIfPresent(String.self, forKey: .catalogModelId)) ?? nil
+        catalogGenerationId = (try? c.decodeIfPresent(String.self, forKey: .catalogGenerationId)) ?? nil
+        catalogVariantId = (try? c.decodeIfPresent(String.self, forKey: .catalogVariantId)) ?? nil
         cardStyle = try c.decodeIfPresent(String.self, forKey: .cardStyle)
         // Тип двигателя — строкой и через `parse`, как приборка выше: типом
         // `decodeIfPresent` БРОСАЕТ на незнакомом значении, то есть роняет всю
@@ -275,6 +291,13 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(visibleToOthers, forKey: .visibleToOthers)
         try c.encodeIfPresent(fuelCurrency, forKey: .fuelCurrency)
         try c.encodeIfPresent(dashboardUnits?.rawValue, forKey: .dashboardUnits)
+        try c.encodeIfPresent(drive2Url, forKey: .drive2Url)
+        try c.encodeIfPresent(modTags, forKey: .modTags)
+        try c.encodeIfPresent(paintFinish, forKey: .paintFinish)
+        try c.encodeIfPresent(mods, forKey: .mods)
+        try c.encodeIfPresent(catalogModelId, forKey: .catalogModelId)
+        try c.encodeIfPresent(catalogGenerationId, forKey: .catalogGenerationId)
+        try c.encodeIfPresent(catalogVariantId, forKey: .catalogVariantId)
         try c.encodeIfPresent(cardStyle, forKey: .cardStyle)
         try c.encodeIfPresent(powertrain?.rawValue, forKey: .powertrain)
         try c.encodeIfPresent(electricConsumption, forKey: .electricConsumption)
@@ -289,5 +312,18 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(photosVisible, forKey: .photosVisible)
         try c.encodeIfPresent(isArchived, forKey: .isArchived)
         try c.encode(soldAt, forKey: .soldAt)
+    }
+}
+
+extension VehicleSyncPayload {
+    /// NULL in a pre-v24 store is unknown; an explicitly stored empty value clears.
+    mutating func applyGarageFields(from entity: VehicleEntity) {
+        drive2Url = entity.drive2URL
+        modTags = entity.modTagsJSON.map { VehicleModTags.decodeJSON($0) }
+        paintFinish = entity.paintFinish
+        mods = entity.modsJSON.map { VehicleMod.decodeJSON($0) }
+        catalogModelId = entity.catalogModelId
+        catalogGenerationId = entity.catalogGenerationId
+        catalogVariantId = entity.catalogVariantId
     }
 }
