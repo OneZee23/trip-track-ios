@@ -194,6 +194,8 @@ struct ProfileView: View {
     @State private var historyLibrary = ProfileHistoryLibrary(trips: [])
     @State private var showcaseTrips: [Trip] = []
     @State private var hasShowcaseCandidates = false
+    /// Pins whose trips are not on this phone at all (see `reconcilePinnedTrips`).
+    @State private var showcaseElsewhere: [UUID] = []
     private var allTrips: [Trip] { historyLibrary.trips }
     /// Черновики — отдельно от `allTrips`: в мир они не вошли, и ни
     /// статистика, ни путешествия, ни календарь их не видят (спека §3.2).
@@ -916,15 +918,37 @@ struct ProfileView: View {
         let byId = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         showcaseTrips = settings.pinnedTripIds.compactMap { byId[$0] }
         hasShowcaseCandidates = !eligible.isEmpty
+        let here = Set(allTrips.map(\.id))
+        showcaseElsewhere = settings.pinnedTripIds.filter { !here.contains($0) }
     }
 
     private var journalCards: some View {
         VStack(alignment: .leading, spacing: 12) {
             ProfilePhotosCard(isOwn: true)
-            if !showcaseTrips.isEmpty || hasShowcaseCandidates {
+            if !showcaseTrips.isEmpty || hasShowcaseCandidates || !showcaseElsewhere.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(AppStrings.profileShowcase(lang.language)).font(AppType.section)
-                    if showcaseTrips.isEmpty {
+                    if !showcaseElsewhere.isEmpty {
+                        HStack(spacing: 8) {
+                            Text(AppStrings.profileShowcaseElsewhere(lang.language, count: showcaseElsewhere.count))
+                                .font(.interScaled(13, relativeTo: .footnote))
+                                .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                Haptics.tap()
+                                for id in showcaseElsewhere { settings.unpinTrip(id) }
+                                prepareShowcase()
+                            } label: {
+                                Text(AppStrings.profileUnpin(lang.language))
+                                    .font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
+                                    .foregroundStyle(AppTheme.accent)
+                                    .frame(minHeight: 44)
+                            }
+                            .buttonStyle(PressableCardStyle())
+                            .accessibilityIdentifier("profile_showcase_unpin_elsewhere")
+                        }
+                    }
+                    if showcaseTrips.isEmpty && showcaseElsewhere.isEmpty {
                         Text(AppStrings.profileShowcaseEmpty(lang.language))
                             .font(.interScaled(14, relativeTo: .subheadline))
                             .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)

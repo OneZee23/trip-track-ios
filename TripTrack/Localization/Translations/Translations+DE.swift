@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Als Erstes anzeigen",
         "profileShowcase": "Schaukasten",
         "profileShowcaseEmpty": "Hefte über „…“ in einer Fahrt bis zu drei Fahrten an — sie erscheinen zuerst auf deiner Karte",
+        "profileShowcaseElsewhere": "Noch {n} — auf einem anderen Gerät angeheftet",
         "profilePin": "Im Profil anheften",
         "profileUnpin": "Vom Profil lösen",
         "profileShowcaseLimit": "Bereits drei Fahrten im Schaukasten — löse eine",

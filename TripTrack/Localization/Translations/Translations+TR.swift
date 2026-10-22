@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "İlk sıraya al",
         "profileShowcase": "Vitrin",
         "profileShowcaseEmpty": "Yolculuk ekranındaki “…” ile en fazla üç yolculuk sabitleyin — kartınızda ilk onlar görünsün",
+        "profileShowcaseElsewhere": "{n} tane daha — başka bir cihazda sabitlendi",
         "profilePin": "Profile sabitle",
         "profileUnpin": "Profilden kaldır",
         "profileShowcaseLimit": "Vitrinde zaten üç yolculuk var — birini kaldırın",

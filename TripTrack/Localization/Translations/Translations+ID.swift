@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Jadikan pertama",
         "profileShowcase": "Etalase",
         "profileShowcaseEmpty": "Sematkan hingga tiga perjalanan lewat “…” di layar perjalanan — akan tampil pertama di kartu Anda",
+        "profileShowcaseElsewhere": "{n} lagi — disematkan di perangkat lain",
         "profilePin": "Sematkan di profil",
         "profileUnpin": "Lepas dari profil",
         "profileShowcaseLimit": "Etalase sudah berisi tiga perjalanan — lepas satu",

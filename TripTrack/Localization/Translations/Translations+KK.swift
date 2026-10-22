@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Бірінші ету",
         "profileShowcase": "Көрме",
         "profileShowcaseEmpty": "Сапар экранындағы «…» арқылы үш сапарға дейін бекітіңіз — олар картаңызда бірінші көрінеді",
+        "profileShowcaseElsewhere": "Тағы {n} — басқа құрылғыда бекітілген",
         "profilePin": "Профильге бекіту",
         "profileUnpin": "Профильден босату",
         "profileShowcaseLimit": "Көрмеде үш сапар бар — біреуін босатыңыз",

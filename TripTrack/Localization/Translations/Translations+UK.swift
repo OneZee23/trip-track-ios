@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Зробити першим",
         "profileShowcase": "Вітрина",
         "profileShowcaseEmpty": "Закріпіть до трьох поїздок через «…» на екрані поїздки — їх першими побачать на вашій картці",
+        "profileShowcaseElsewhere": "Ще {n} — закріплено на іншому пристрої",
         "profilePin": "Закріпити в профілі",
         "profileUnpin": "Відкріпити з профілю",
         "profileShowcaseLimit": "У вітрині вже три поїздки — відкріпіть одну",

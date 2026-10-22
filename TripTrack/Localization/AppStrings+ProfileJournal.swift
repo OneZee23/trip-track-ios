@@ -24,6 +24,14 @@ extension AppStrings {
     static func profileShowcaseEmpty(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileShowcaseEmpty", ru: "Закрепите до трёх поездок через «…» на экране поездки — их первыми увидят на вашей карточке", en: "Pin up to three trips using “…” on a trip — people will see them first on your card")
     }
+    /// Pins whose trips this phone does not have (pinned on another phone,
+    /// no cloud library here). Without this line they took showcase slots
+    /// with nothing on screen to unpin.
+    static func profileShowcaseElsewhere(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "profileShowcaseElsewhere", ru: "Ещё {n} — закреплено на другом устройстве",
+           en: "{n} more — pinned on another device")
+            .replacingOccurrences(of: "{n}", with: String(count))
+    }
     static func profilePin(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profilePin", ru: "Закрепить в профиле", en: "Pin to profile")
     }

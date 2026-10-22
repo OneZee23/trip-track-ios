@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Colocar primeiro",
         "profileShowcase": "Vitrine",
         "profileShowcaseEmpty": "Fixe até três viagens pelo «…» na tela da viagem — elas aparecerão primeiro no seu cartão",
+        "profileShowcaseElsewhere": "Mais {n} — fixadas em outro dispositivo",
         "profilePin": "Fixar no perfil",
         "profileUnpin": "Desafixar do perfil",
         "profileShowcaseLimit": "A vitrine já tem três viagens — desafixe uma",

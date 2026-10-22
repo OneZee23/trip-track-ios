@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Ustaw jako pierwsze",
         "profileShowcase": "Witryna",
         "profileShowcaseEmpty": "Przypnij do trzech podróży przez „…” na ekranie podróży — pojawią się jako pierwsze na Twojej karcie",
+        "profileShowcaseElsewhere": "Jeszcze {n} — przypięte na innym urządzeniu",
         "profilePin": "Przypnij do profilu",
         "profileUnpin": "Odepnij od profilu",
         "profileShowcaseLimit": "W witrynie są już trzy podróże — odepnij jedną",

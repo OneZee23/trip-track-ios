@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Poner primero",
         "profileShowcase": "Escaparate",
         "profileShowcaseEmpty": "Fija hasta tres viajes desde «…» en un viaje: aparecerán primero en tu tarjeta",
+        "profileShowcaseElsewhere": "{n} más — fijados en otro dispositivo",
         "profilePin": "Fijar en el perfil",
         "profileUnpin": "Desfijar del perfil",
         "profileShowcaseLimit": "Ya hay tres viajes en el escaparate: desfija uno",

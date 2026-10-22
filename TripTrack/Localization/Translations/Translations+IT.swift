@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Metti per prima",
         "profileShowcase": "Vetrina",
         "profileShowcaseEmpty": "Fissa fino a tre viaggi tramite «…» in un viaggio: appariranno per primi sulla tua scheda",
+        "profileShowcaseElsewhere": "Altri {n} — fissati su un altro dispositivo",
         "profilePin": "Fissa sul profilo",
         "profileUnpin": "Rimuovi dal profilo",
         "profileShowcaseLimit": "La vetrina ha già tre viaggi: rimuovine uno",

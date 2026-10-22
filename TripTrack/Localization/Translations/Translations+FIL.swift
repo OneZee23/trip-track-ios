@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Gawing una",
         "profileShowcase": "Tampok",
         "profileShowcaseEmpty": "Mag-pin ng hanggang tatlong biyahe gamit ang “…” sa isang biyahe — unang makikita sa iyong card",
+        "profileShowcaseElsewhere": "{n} pa — naka-pin sa ibang device",
         "profilePin": "I-pin sa profile",
         "profileUnpin": "Alisin sa profile",
         "profileShowcaseLimit": "May tatlong biyahe na sa tampok — alisin ang isa",

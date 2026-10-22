@@ -1732,6 +1732,7 @@ extension Translations {
         "profilePhotoFirst": "Mettre en premier",
         "profileShowcase": "Vitrine",
         "profileShowcaseEmpty": "Épinglez jusqu’à trois trajets via « … » sur un trajet — ils apparaîtront en premier sur votre carte",
+        "profileShowcaseElsewhere": "{n} de plus — épinglés sur un autre appareil",
         "profilePin": "Épingler au profil",
         "profileUnpin": "Détacher du profil",
         "profileShowcaseLimit": "La vitrine contient déjà trois trajets — détachez-en un",
