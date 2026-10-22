@@ -4215,3 +4215,68 @@ could resurrect an outdated premium even though the restoration guard passed.
 - `TripDetailFirstPaintTests` checks visible metric ink on the first render;
   `TripDetailOpeningTests` covers forced-light opening, route/controls and
   reopen. XCUI waits for idle, so inspect simctl video for push middle frames.
+
+## Гараж (0.9.1)
+
+Flow 1: машина живёт между личностью и числами `ProfileHeroCard`. Свой и
+чужой профиль используют один компонент; у своего гаража несколько доступных
+для записи машин листаются на месте. Пустой гараж открывает существующую форму.
+`VehicleStage` показывает главную фотографию, иначе пиксельную машину на
+площадке. Уровня машины в хедере человека нет; он остаётся в паспорте машины.
+
+- Core Data **v24**, семь nullable-строк у `VehicleEntity`: DRIVE2, JSON тегов
+  и доработок, покрытие и три ID каталога. Старые версии не редактировать;
+  после новой версии модели дважды выполнить `xcodegen generate`.
+- `updateVehicleGarage` — запись с `pendingUpload`, новым `lastModifiedAt` и
+  существующим `SyncEnqueuer`. JSON доработок заменяется целиком, до 100 записей;
+  фото — ID существующих `VehiclePhotoEntity`, до шести на запись. Удаление
+  записи не удаляет фотографии из альбома машины.
+- Отсутствующий ключ и `null` на wire — «не сказано». Пустая строка/массив —
+  явная очистка. При upload смотреть nullable-колонки через
+  `VehicleSyncPayload.applyGarageFields`, а не подставлять `[]` из удобного
+  снимка `Vehicle`: иначе старое устройство стирает ещё не загруженные поля.
+- Pull не меняет новые поля, пока есть локальная правка, и **не снимает её
+  флаг и время**. Иначе второй pull уже отменяет то, что первый сохранил.
+  Ответ upload помечает строку synced только если её `lastModifiedAt` всё ещё
+  совпадает с отправленным: правка во время запроса должна уехать следом.
+- `Drive2Link` и сервер разрешают только http(s) со списком хостов DRIVE2 и
+  `/r/make/model/digits/`; query/fragment отбрасываются. Переход через
+  `openURL`, чтобы universal link мог открыть приложение DRIVE2. Лист честно
+  сообщает о локальности ссылки без аккаунта/Cloud Sync. Привязка бесплатна.
+- Существующие `VehicleCardStyle` стали площадками: ID не меняются, `none` —
+  асфальт. `VehicleFinish.effective` и `VehicleModTags.effective` сохраняют
+  выбор после PRO и меняют только показ. Чужой хедер берёт
+  `SocialProfile.showsPaidCosmetics`; публичный паспорт получает уже
+  отфильтрованные сервером поля. В витрине России платного выбора нет.
+- Глянец бесплатный, matte — PRO. `availableFinishes` скрывает pearl/chrome,
+  пока нет художественных ассетов; данные и enum уже принимают их.
+  `Tools/build_vehicle_platforms.py` и `Tools/recolor_vehicle.py --install-matte`
+  требуют Pillow/NumPy. Matte есть только в приложении, Live Activity остаётся
+  на глянце. Prune основного установщика сохраняет отдельные matte-варианты.
+- `CarCatalog` читает schema v2 лениво вне главного актора. В bundle пока
+  только Polo и Jolion из проверенного pilot; подбор машины — следующий flow.
+  Незнакомые ID ничего не угадывают: капсула отсутствует. Разгон — именно
+  каталожный 0–100, десятичный разделитель — точка во всех языках.
+  `UnitsDisciplineTests` разрешает метрические имена полей в `CarCatalog`:
+  `topSpeedKmh` — схема хранения; подписи скорости всё равно через `Measure`.
+- Одометр и годовые столбики — единица приборки своей машины; публичный
+  паспорт — единица зрителя. `VehicleYearDistance` берёт существующий
+  `scoringKm` подтверждённых поездок этой машины без пересадок. Чтение поездок
+  выполняется на очереди background context (`fetchVehicleGarageTrips`),
+  разбор карты — по неизменяемым снимкам вне главного актора.
+- Фото поездок открывают сетку и существующий `PhotoFullScreenView`.
+  Публичные `tripPhotos` (до 600) защищены на сервере и осью фото машины, и
+  приватностью поездки; закрытые фото доработок не несут ни URL, ни счётчика.
+- DEBUG `-seed-garage-demo` использует маршруты и фото `DebugMapSeed`, создаёт
+  Polo с одометром 96 400, каталогом, DRIVE2 и тремя записями. Главного фото
+  машины в демо нет, чтобы проверять площадку. `-debug-foreign-profile pro`
+  вместе с `-debug-foreign-trip` даёт Jolion. Только симулятор, никакого Release.
+- В строках выбора с `Spacer` нужен `.contentShape(Rectangle())`: одних
+  `frame(minHeight: 44)` и `ButtonStyle` мало, прозрачная середина иначе
+  не нажимается. Регрессия покрытия проверяется `GarageProfileShotTests`.
+  В UI-тесте прокручивать именно ScrollView формы: жест по окну может
+  открыть соседний выбор марки, если целевая строка ещё вне экрана.
+
+Перед приложением нужен сервер с nullable-колонками миграции
+`1798300000000-AddVehicleGarage`, санитаризацией upsert и публичным DTO.
+Рабочие ветки `work/0.9.1-garage` и backend `work/garage` не публиковались.
