@@ -224,6 +224,14 @@ enum DebugForeignTripFixture {
             return try JSONSerialization.data(withJSONObject: ["status": "ok", "payload": garageVehicle()])
         } else if path.contains("/garage"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["vehicles": profileVariant == "new" ? [] : [garageVehicle()]]
+        } else if path.hasSuffix("/badges"), path.contains(authorId.lowercased()) || path.contains(authorId) {
+            // The whole collection (0.9.1): twice the five `recentBadges`, one
+            // of them an earned secret, so the card's count and the screen's
+            // grid both read past the preview.
+            payload = ["badges": profileVariant == "new" ? [] : [
+                "marathon_42", "night_rider", "early_bird", "long_shift", "first_trip",
+                "road_regular", "century", "iron_butt", "explorer_5", "streak_3"
+            ]]
         } else if path.hasSuffix("/trips"), path.contains(authorId.lowercased()) || path.contains(authorId) {
             payload = ["trips": publicTrips(), "nextCursor": NSNull()]
         } else if path.contains("/journeys"), path.contains(authorId.lowercased()) || path.contains(authorId) {

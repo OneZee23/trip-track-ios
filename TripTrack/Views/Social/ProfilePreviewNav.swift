@@ -67,6 +67,11 @@ enum ProfilePreviewDest: Hashable {
     /// аккаунта. Имя владельца едет с ним по той же причине, что у гаража:
     /// экран открывается без отдельного запроса за владельцем.
     case publicJourneys(UUID, String?)
+    /// Все достижения чужого профиля (0.9.1) — тот же экран «Достижения»,
+    /// что на «Я». Значки едут с собой: профиль уже спросил их у
+    /// `/users/:id/badges`, и экран рисует ровно тот список, по которому
+    /// карточка напечатала «N из M». Имя — подпись в шапке, как у статистики.
+    case publicAchievements(UUID, String?, [String])
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".

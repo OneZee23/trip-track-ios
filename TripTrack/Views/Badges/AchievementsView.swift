@@ -9,9 +9,31 @@ import SwiftUI
 ///
 /// Owns no navigation. Tapping a tile calls `onTapBadge` and the pusher opens
 /// the detail — so this screen can also be dropped into a preview stack.
+///
+/// Draws somebody else's collection too (0.9.1, `PublicAchievementsView`):
+/// the same screen, fed the ids the server sends instead of a trip walk.
 struct AchievementsView: View {
-    let trips: [Trip]
-    var onTapBadge: ((Badge) -> Void)? = nil
+    private let source: Source
+    private let onTapBadge: ((Badge) -> Void)?
+
+    /// Whose collection the screen draws.
+    enum Source {
+        /// The viewer's own: what is unlocked is derived from their trips.
+        case trips([Trip])
+        /// Somebody else's: the ids `/users/:id/badges` sent, and the owner's
+        /// name for the subtitle — as on somebody else's Stats.
+        case unlocked([String], ownerName: String?)
+    }
+
+    init(trips: [Trip], onTapBadge: ((Badge) -> Void)? = nil) {
+        self.source = .trips(trips)
+        self.onTapBadge = onTapBadge
+    }
+
+    init(unlockedIds: [String], ownerName: String?, onTapBadge: ((Badge) -> Void)? = nil) {
+        self.source = .unlocked(unlockedIds, ownerName: ownerName)
+        self.onTapBadge = onTapBadge
+    }
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -62,13 +84,15 @@ struct AchievementsView: View {
             // and a 28pt title, but every pushed screen this release runs
             // `CustomNavBar` (40pt `NavCircleIcon`, 18pt title), and a screen
             // that sizes its own would read as a different app mid-push.
-            CustomNavBar(title: AppStrings.achievementsTitle(lang.language), largeTitle: true)
+            CustomNavBar(title: AppStrings.achievementsTitle(lang.language),
+                         largeTitle: true, subtitle: ownerName)
                 .accessibilityIdentifier("achievements_back")
         }
         // Unlocking walks every trip and every badge predicate — once per trip
         // set, never per redraw. `trips.count` is the whole identity: badges
         // are milestone-shaped, so editing an existing trip cannot flip one.
-        .task(id: trips.count) { await load() }
+        // Somebody else's list is fixed for the life of the screen.
+        .task(id: loadKey) { await load() }
         .accessibilityIdentifier("achievements_screen")
     }
 
@@ -91,11 +115,16 @@ struct AchievementsView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
-                    Text(AppStrings.achievementsCollectHint(lang.language))
-                        .font(.inter(13, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // «Соберите коллекцию» is an invitation to the viewer, and
+                    // under a stranger's collection it would be addressed to
+                    // the wrong driver.
+                    if isOwn {
+                        Text(AppStrings.achievementsCollectHint(lang.language))
+                            .font(.inter(13, weight: .medium))
+                            .foregroundStyle(c.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -227,7 +256,11 @@ struct AchievementsView: View {
                 .font(.inter(13, weight: .bold))
                 .foregroundStyle(c.text)
 
-            Text(AppStrings.achievementsEmptyHint(lang.language))
+            // Second person for your own, third for somebody else's — the
+            // same split as the achievements card on a public profile.
+            Text(isOwn
+                 ? AppStrings.achievementsEmptyHint(lang.language)
+                 : AppStrings.achievementsEmptyOtherHint(lang.language))
                 .font(.inter(11, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -238,15 +271,40 @@ struct AchievementsView: View {
 
     // MARK: - Data
 
+    private var isOwn: Bool {
+        if case .trips = source { return true }
+        return false
+    }
+
+    private var ownerName: String? {
+        if case .unlocked(_, let name) = source { return name }
+        return nil
+    }
+
+    /// What a reload depends on: the trip set for your own collection, the
+    /// id list for somebody else's.
+    private var loadKey: Int {
+        switch source {
+        case .trips(let trips): return trips.count
+        case .unlocked(let ids, _): return ids.count
+        }
+    }
+
     private func load() async {
-        // `computeStats` reads the streak row off the CoreData view context,
-        // so the trip walk stays on the main actor; only the pure pass over
-        // the badge catalogue goes off it. Same split as
-        // `ProfileAchievementsSection`.
-        let stats = BadgeManager.computeStats(from: trips)
-        let built = await Task.detached(priority: .userInitiated) {
-            AchievementsCatalogue.build(stats: stats)
-        }.value
+        let built: AchievementsCatalogue
+        switch source {
+        case .trips(let trips):
+            // `computeStats` reads the streak row off the CoreData view
+            // context, so the trip walk stays on the main actor; only the pure
+            // pass over the badge catalogue goes off it. Same split as
+            // `ProfileAchievementsSection`.
+            let stats = BadgeManager.computeStats(from: trips)
+            built = await Task.detached(priority: .userInitiated) {
+                AchievementsCatalogue.build(stats: stats)
+            }.value
+        case .unlocked(let ids, _):
+            built = AchievementsCatalogue.build(unlockedIds: ids)
+        }
         guard !Task.isCancelled else { return }
         catalogue = built
         hasLoaded = true
@@ -256,7 +314,7 @@ struct AchievementsView: View {
 // MARK: - Chips
 
 /// One hero chip: a tier and how many of it the user holds.
-private struct RarityCount: Identifiable {
+struct RarityCount: Identifiable {
     let rarity: BadgeRarity
     let count: Int
 
@@ -265,7 +323,7 @@ private struct RarityCount: Identifiable {
 
 /// A chunked row of chips. A wrapper type rather than `[[RarityCount]]` so
 /// `ForEach` has a stable identity to hold onto instead of an array index.
-private struct RarityChipRow: Identifiable {
+struct RarityChipRow: Identifiable {
     let id: Int
     let items: [RarityCount]
 }
@@ -273,7 +331,7 @@ private struct RarityChipRow: Identifiable {
 // MARK: - Catalogue
 
 /// Everything the screen draws, resolved once per trip set.
-private struct AchievementsCatalogue {
+struct AchievementsCatalogue {
     var unlockedIds: Set<String> = []
     var unlockedCount = 0
     var totalCount = 0
@@ -317,7 +375,18 @@ private struct AchievementsCatalogue {
     /// different denominator would make the profile pill say «12 из 32» and
     /// this screen, one tap away, say «12 из 53» about the same collection.
     static func build(stats: BadgeStats) -> AchievementsCatalogue {
-        let unlocked = BadgeManager.unlockedBadges(for: stats)
+        build(unlocked: BadgeManager.unlockedBadges(for: stats))
+    }
+
+    /// Somebody else's collection arrives as ids (0.9.1). Catalogue order is
+    /// kept, so the grid and the counts are built exactly as for your own;
+    /// an id this build doesn't know drops out instead of drawing blank.
+    static func build(unlockedIds: [String]) -> AchievementsCatalogue {
+        let ids = Set(unlockedIds)
+        return build(unlocked: Badge.all.filter { ids.contains($0.id) })
+    }
+
+    private static func build(unlocked: [Badge]) -> AchievementsCatalogue {
         let ids = Set(unlocked.map(\.id))
 
         var out = AchievementsCatalogue()

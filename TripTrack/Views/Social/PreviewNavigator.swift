@@ -108,6 +108,8 @@ struct PreviewNavigator: View {
             PublicJourneyView(journeyId: id, pushPath: $path)
         case .publicJourneys(let id, let name):
             PublicJourneysView(accountId: id, ownerName: name, pushPath: $path)
+        case .publicAchievements(_, let name, let badgeIds):
+            PublicAchievementsView(badgeIds: badgeIds, ownerName: name)
         case .trip, .socialTrip:
             // Trip destinations only belong to Feed's NavigationStack. If they
             // somehow ended up here (in the profile-preview sheet) just render

@@ -64,6 +64,12 @@ struct SocialFeedResponse: Codable {
     let nextCursor: String?
 }
 
+/// `GET /users/:id/badges` (0.9.1) — every badge id of the profile, newest
+/// earn first; `SocialProfile.recentBadges` is only the card's preview.
+struct SocialBadgesResponse: Codable {
+    let badges: [String]
+}
+
 struct ReactionTally: Codable, Hashable {
     let emoji: String
     let count: Int

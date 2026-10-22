@@ -176,6 +176,12 @@ enum APIEndpoint {
         return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
     }
 
+    /// Все достижения профиля (0.9.1): `recentBadges` профиля — превью из
+    /// последних поездок, а здесь — значки всех поездок.
+    static func userBadges(_ id: String) -> String {
+        "/users/\(id)/badges"
+    }
+
     /// Курсор ленты для поездки — точь-в-точь `encodeFeedCursor` сервера:
     /// `toISOString()` (UTC, миллисекунды) и id в нижнем регистре. Сервер
     /// сравнивает кортеж `(start_date, id)` в базе, где uuid строчный, — и

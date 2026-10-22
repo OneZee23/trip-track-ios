@@ -94,6 +94,9 @@ struct DiscoverView: View {
                 case .publicJourneys(let id, let name):
                     PublicJourneysView(accountId: id, ownerName: name, pushPath: $authorPath)
                         .hideAppTabBar()
+                case .publicAchievements(_, let name, let badgeIds):
+                    PublicAchievementsView(badgeIds: badgeIds, ownerName: name)
+                        .hideAppTabBar()
                 case .trip, .socialTrip:
                     // Discover never pushes trip destinations; render empty
                     // if the path somehow gets one, to stay type-exhaustive.

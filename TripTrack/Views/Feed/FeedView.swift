@@ -294,6 +294,9 @@ struct FeedView: View {
                 case .publicJourneys(let id, let name):
                     PublicJourneysView(accountId: id, ownerName: name, pushPath: $authorPath)
                         .hideAppTabBar()
+                case .publicAchievements(_, let name, let badgeIds):
+                    PublicAchievementsView(badgeIds: badgeIds, ownerName: name)
+                        .hideAppTabBar()
                 }
             }
             // Custom header above owns the top chrome — hide the system bar.

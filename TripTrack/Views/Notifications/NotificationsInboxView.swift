@@ -109,6 +109,8 @@ struct NotificationsInboxView: View {
                         PublicJourneyView(journeyId: id, pushPath: $path)
                     case .publicJourneys(let id, let name):
                         PublicJourneysView(accountId: id, ownerName: name, pushPath: $path)
+                    case .publicAchievements(_, let name, let badgeIds):
+                        PublicAchievementsView(badgeIds: badgeIds, ownerName: name)
                     case .trip, .socialTrip:
                         // Inbox doesn't push trip destinations directly —
                         // tap-on-reaction routes through the trip detail

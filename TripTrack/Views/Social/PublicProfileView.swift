@@ -87,6 +87,11 @@ struct PublicProfileView: View {
     @State private var tripCards: [SocialFeedTrip] = []
     /// Страницы после десяти превью (0.9.1) — см. `ProfileTripsPager`.
     @State private var tripsPager = ProfileTripsPager()
+    /// Все достижения профиля (0.9.1, `/users/:id/badges`): `recentBadges` —
+    /// превью из последних поездок. `nil` — список ещё не пришёл или сервер
+    /// его не знает, и тогда карточка остаётся превью без ссылки на экран.
+    @State private var allBadges: AchievementsCatalogue?
+    @State private var allBadgeIds: [String]?
     /// Путешествия аккаунта (S7, 0.6.8) — одна страница лимитом 50
     /// (`loadJourneysPreview`), не только три: хаб-карточка показывает
     /// первые три, а `recomputeProfileRows` схлопывает «Историю» по ВСЕМ.
@@ -191,6 +196,17 @@ struct PublicProfileView: View {
         guard let pushPath else { return }
         pushPath.wrappedValue.cappedAppend(.publicJourneys(accountId, resolvedDisplayName))
     }
+
+    /// Все достижения чужого человека (0.9.1) — тем списком, по которому
+    /// карточка напечатала «N из M».
+    private func openAchievements() {
+        guard let pushPath, let ids = allBadgeIds else { return }
+        pushPath.wrappedValue.cappedAppend(.publicAchievements(accountId, resolvedDisplayName, ids))
+    }
+
+    /// Ссылка на экран — только когда пришёл весь список: превью из двадцати
+    /// значков под «N из M» обещало бы коллекцию, которой у экрана нет.
+    private var canOpenAchievements: Bool { pushPath != nil && allBadgeIds != nil }
 
     /// Одно чужое путешествие — с карточки-превью хаба и со строки в
     /// схлопнутой «Истории».
@@ -1476,12 +1492,37 @@ struct PublicProfileView: View {
             let overflow = rest.count - strip.count
 
             VStack(spacing: 12) {
-                // Canon prints «12 из 45 ›» opposite the label. It stays off
-                // until `/social/profile` sends an unlocked/total pair: the
-                // only counts the client holds are its own, and the id list
-                // here is a server-truncated "recent", not the collection.
-                ProfileSectionLabel(text: AppStrings.achievementsSection(lang.language))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Canon prints «12 из 45 ›» opposite the label — only once
+                // `/users/:id/badges` has sent the whole collection (0.9.1):
+                // `recentBadges` is a server-truncated preview, and a count
+                // over it would be a count of the wrong thing.
+                HStack(spacing: 8) {
+                    ProfileSectionLabel(text: AppStrings.achievementsSection(lang.language))
+
+                    Spacer(minLength: 8)
+
+                    if canOpenAchievements, let allBadges {
+                        Button {
+                            Haptics.tap()
+                            openAchievements()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(AppStrings.achievementsProgress(
+                                    lang.language,
+                                    unlocked: allBadges.unlockedCount,
+                                    total: allBadges.totalCount))
+                                .font(.inter(13, weight: .semibold))
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(c.textSecondary)
+                            .tapTarget()
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("public_achievements_all")
+                    }
+                }
 
                 featuredBadgeRow(featured, c)
 
@@ -1502,12 +1543,25 @@ struct PublicProfileView: View {
                         }
 
                         if overflow > 0 {
-                            Text("+\(overflow)")
+                            let more = Text("+\(overflow)")
                                 .font(.inter(12, weight: .semibold))
                                 .foregroundStyle(c.textSecondary)
                                 .frame(width: 34, height: 30)
                                 .background(c.cardAlt, in: Capsule())
+                            // A button only once there is a list to open: a
+                            // capsule that answers nothing must not look
+                            // pressable (or disabled) either.
+                            if canOpenAchievements {
+                                Button {
+                                    Haptics.tap()
+                                    openAchievements()
+                                } label: { more }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("public_achievements_more")
                                 .frame(maxWidth: .infinity)
+                            } else {
+                                more.frame(maxWidth: .infinity)
+                            }
                         }
                     }
                 }
@@ -1515,7 +1569,14 @@ struct PublicProfileView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .surfaceCard(cornerRadius: 16)
-            .accessibilityIdentifier("profile_achievements")
+            // The card's name sits on a marker, not on the card: on a
+            // container SwiftUI hands it to every child, and the «N из M»
+            // button would lose its own (the `stats_screen` rule).
+            .overlay(alignment: .topLeading) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("profile_achievements")
+            }
         } else {
             // A driver with nothing unlocked yet used to get NO card at all,
             // so their profile silently lost a section every other profile
@@ -1566,7 +1627,7 @@ struct PublicProfileView: View {
     /// showing are the ones that fit. Ids the client doesn't know (a badge
     /// added server-side after this build) drop out rather than draw blank.
     private var orderedBadges: [Badge] {
-        let badges = (profile?.recentBadges ?? []).compactMap { id in
+        let badges = (allBadgeIds ?? profile?.recentBadges ?? []).compactMap { id in
             Badge.all.first(where: { $0.id == id })
         }
         return badges.enumerated()
@@ -2151,6 +2212,9 @@ struct PublicProfileView: View {
             if !legacy.isEmpty {
                 Task { @MainActor in await hydrateLegacyTrips(legacy) }
             }
+            if p.visibility?.achievements ?? true {
+                Task { @MainActor in await loadAllBadges() }
+            }
             countsLog.debug("loadProfile committed id=\(idPrefix, privacy: .public) state.followingCount=\(p.followingCount, privacy: .public)")
         } catch {
             // Cancellation means `refresh()` replaced us with a newer task —
@@ -2161,6 +2225,20 @@ struct PublicProfileView: View {
             loadError = msg
             loadFailure = error as? APIError
             profileLog.error("profile load failed: \(msg)")
+        }
+    }
+
+    /// Все достижения профиля (0.9.1). Ошибка — в том числе сервер старше
+    /// 0.9.1 — оставляет карточку превью, как было: ни заглушки, ни ссылки.
+    private func loadAllBadges() async {
+        do {
+            let res: SocialBadgesResponse = try await APIClient.shared.get(
+                APIEndpoint.userBadges(accountId.uuidString),
+                requiresAuth: AuthService.shared.isSignedIn)
+            allBadges = AchievementsCatalogue.build(unlockedIds: res.badges)
+            allBadgeIds = res.badges
+        } catch {
+            profileLog.error("profile badges failed: \(error.localizedDescription)")
         }
     }
 
