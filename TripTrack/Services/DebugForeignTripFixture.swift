@@ -69,7 +69,8 @@ enum DebugForeignTripFixture {
     private static func publicTrips() -> [[String: Any]] {
         let iso = ISO8601DateFormatter()
         func trip(_ index: Int, from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
-                  points: Int, wiggle: Double, km: Double, region: String) -> [String: Any] {
+                  points: Int, wiggle: Double, km: Double, region: String,
+                  title: String? = nil) -> [String: Any] {
             let coordinates = (0..<points).map { i in
                 let p = Double(i) / Double(points - 1)
                 return CLLocationCoordinate2D(
@@ -84,6 +85,8 @@ enum DebugForeignTripFixture {
                 "distance": km * 1000,
                 "duration": Int(km * 40),
                 "region": region,
+                // Названия (0.9.1): строки поездок региона на чужой карте.
+                "title": title ?? "Поездка \(index + 1)",
                 "previewPolyline": Trip.encodePolyline(coordinates).base64EncodedString(),
             ]
         }
@@ -117,10 +120,12 @@ enum DebugForeignTripFixture {
         return [
             trip(0, from: CLLocationCoordinate2D(latitude: 43.4, longitude: 1.0),
                  to: CLLocationCoordinate2D(latitude: 50.65, longitude: 3.1),
-                 points: 2400, wiggle: 0.03, km: 896.3, region: "Occitanie"),
+                 points: 2400, wiggle: 0.03, km: 896.3, region: "Occitanie",
+                 title: "Toulouse → Lille"),
             trip(1, from: CLLocationCoordinate2D(latitude: 50.6, longitude: 3.0),
                  to: CLLocationCoordinate2D(latitude: 45.8, longitude: 1.3),
-                 points: 2400, wiggle: 0.03, km: 945.7, region: "Hauts-de-France"),
+                 points: 2400, wiggle: 0.03, km: 945.7, region: "Hauts-de-France",
+                 title: "Lille → Limoges"),
         ]
     }
 

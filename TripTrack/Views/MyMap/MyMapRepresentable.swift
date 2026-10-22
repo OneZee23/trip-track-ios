@@ -472,6 +472,15 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     /// доезжает всё, что SwiftUI на «Атласе» не довозит: камера, период,
     /// туман и вид карты.
     var model: MyMapViewModel?
+    /// Куда смотреть, пока поездок ещё нет (чужая карта, 0.9.1): рамка
+    /// последних поездок, пришедших с профилем. Без неё карта всю загрузку
+    /// стояла на случайном куске мира, а потом прыгала к маршрутам.
+    var initialBounds: GeoBounds? = nil
+    /// Первый кадр — по маршрутам ЦЕЛИКОМ, а не по их серединам (чужая
+    /// карта, 0.9.1). Середины держат свою карту там, где ездят чаще; у
+    /// чужой карты из двух поездок через всю Францию они давали центр
+    /// страны, и маршруты уходили за край экрана.
+    var framesWholeRoutes = false
 
     var onZoomLevelChange: (MapZoomLevel) -> Void
     var onSelectTrip: (UUID) -> Void
@@ -608,6 +617,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         coordinator.syncSelectedRoute(map, route: selectedRoute, language: language)
         coordinator.syncSelection(map, selection: selection)
         coordinator.syncPlaces(map, pins: placePins, selectedId: selectedPlaceId, language: language)
+        coordinator.framesWholeRoutes = framesWholeRoutes
+        coordinator.applyPresetCameraIfNeeded(map, bounds: initialBounds)
         coordinator.applyInitialCameraIfNeeded(map, exploration: exploration)
 
         if let command = cameraCommand {
@@ -692,6 +703,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var fingers: FingerWatch?
         private var level: MapZoomLevel = .far
         private var didSetInitialCamera = false
+        /// Камера уже стоит на рамке, данной снаружи (`initialBounds`). Тогда
+        /// первый кадр по всем маршрутам — ПЕРЕЛЁТ, а не скачок: человек уже
+        /// смотрит на карту, и мгновенная подмена места выглядит как сбой.
+        private var didPresetCamera = false
+        var framesWholeRoutes = false
         /// Язык и выбранная подсказка приходят из `@State` экрана, а не из
         /// вью-модели: пересборка по подписке берёт последние известные.
         var lastLanguage: LanguageManager.Language = .en
@@ -1330,9 +1346,36 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// zero frame (setRegion on an unlaid-out MKMapView lands at a broken
         /// zoom). SwiftUI gives no post-layout callback for representables,
         /// so retry shortly.
+        /// Рамка, данная снаружи, — ОДИН раз и только пока данных нет.
+        func applyPresetCameraIfNeeded(_ map: MKMapView, bounds: GeoBounds?) {
+            guard let bounds, !didPresetCamera, !didSetInitialCamera else { return }
+            guard map.frame.width > 0 else {
+                if !cameraRetryScheduled {
+                    cameraRetryScheduled = true
+                    Task { @MainActor [weak self, weak map] in
+                        try? await Task.sleep(nanoseconds: 80_000_000)
+                        guard let self, let map else { return }
+                        self.cameraRetryScheduled = false
+                        self.applyPresetCameraIfNeeded(map, bounds: bounds)
+                    }
+                }
+                return
+            }
+            didPresetCamera = true
+            map.setVisibleMapRect(
+                bounds.mapRect,
+                edgePadding: MapCameraCommand.Padding.overview.insets(
+                    safeArea: map.safeAreaInsets, size: map.bounds.size),
+                animated: false
+            )
+        }
+
         func applyInitialCameraIfNeeded(_ map: MKMapView, exploration: MapExploration) {
             guard !didSetInitialCamera, !exploration.isEmpty else { return }
-            guard let bounds = GeoBounds(covering: exploration.trips.map(\.coordinate)) else { return }
+            let covered = framesWholeRoutes
+                ? GeoBounds(coveringRoutes: exploration.trips.map(\.route))
+                : GeoBounds(covering: exploration.trips.map(\.coordinate))
+            guard let bounds = covered else { return }
 
             guard map.frame.width > 0 else {
                 if !cameraRetryScheduled {
@@ -1352,7 +1395,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 bounds.mapRect,
                 edgePadding: MapCameraCommand.Padding.overview.insets(
                     safeArea: map.safeAreaInsets, size: map.bounds.size),
-                animated: false
+                animated: didPresetCamera
             )
         }
 

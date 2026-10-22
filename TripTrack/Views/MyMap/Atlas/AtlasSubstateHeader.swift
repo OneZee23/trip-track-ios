@@ -11,7 +11,9 @@ import SwiftUI
 ///
 /// Выходов ДВА, и они ведут в разные места: «назад» возвращает туда, откуда
 /// пришли (список или сводка), × закрывает подсостояние до сводки. Кнопка,
-/// повторяющая соседнюю, была бы лишней — эти две не повторяются.
+/// повторяющая соседнюю, была бы лишней — эти две не повторяются. Где
+/// возвращаться, кроме сводки, некуда (чужая карта, 0.9.1), «назад» нет:
+/// `onBack == nil`, и остаётся одна ×, а «назад» на экране — к профилю.
 struct AtlasSubstateHeader: View {
     let title: String
     /// Вторая строка под заголовком: «Россия · с апреля 2026» у региона,
@@ -19,12 +21,14 @@ struct AtlasSubstateHeader: View {
     var subtitle: String?
     var backLabel: String
     var closeLabel: String
-    let onBack: () -> Void
+    var onBack: (() -> Void)?
     let onClose: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            circle("chevron.left", label: backLabel, id: "atlas_substate_back", action: onBack)
+            if let onBack {
+                circle("chevron.left", label: backLabel, id: "atlas_substate_back", action: onBack)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(AppType.headerTitle)

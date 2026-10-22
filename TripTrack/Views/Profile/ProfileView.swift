@@ -61,7 +61,7 @@ struct ProfileView: View {
         /// с другим источником поездок; имя владельца едет с ними, чтобы
         /// шапка отличала одну «Статистику» от другой.
         case publicStats(UUID, String?)
-        case publicMap(UUID, String?)
+        case publicMap(UUID, String?, GeoBounds?)
         /// Чужой гараж и чужая машина (0.6.4) — как статистика и карта, с
         /// именем владельца для шапки.
         case publicGarage(UUID, String?)
@@ -527,8 +527,8 @@ struct ProfileView: View {
                         ownerName: name
                     )
                     .hideAppTabBar()
-                case .publicMap(let id, let name):
-                    PublicMapView(accountId: id, ownerName: name)
+                case .publicMap(let id, let name, let start):
+                    PublicMapView(accountId: id, ownerName: name, initialBounds: start)
                         .hideAppTabBar()
                 case .publicGarage(let id, let name):
                     garageDest(id: id, name: name)
@@ -831,7 +831,7 @@ struct ProfileView: View {
         case .publicProfile(let id, let author): return .profile(id, author)
         case .followList(let id, let mode): return .followList(id, mode)
         case .publicStats(let id, let name): return .publicStats(id, name)
-        case .publicMap(let id, let name): return .publicMap(id, name)
+        case .publicMap(let id, let name, let start): return .publicMap(id, name, start)
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)
@@ -856,7 +856,7 @@ struct ProfileView: View {
         case .trip(let id, _): return .trip(id)
         case .socialTrip(let trip, _): return .companionTrip(trip)
         case .publicStats(let id, let name): return .publicStats(id, name)
-        case .publicMap(let id, let name): return .publicMap(id, name)
+        case .publicMap(let id, let name, let start): return .publicMap(id, name, start)
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)

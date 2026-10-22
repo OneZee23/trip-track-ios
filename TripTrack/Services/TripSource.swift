@@ -177,6 +177,9 @@ struct PublicTripDTO: Codable, Hashable {
     let region: String?
     /// base64 бинарной полилинии — тот же формат, что в ленте и профиле.
     let previewPolyline: String?
+    /// Название (0.9.1) — строки поездок региона и маршрута на чужой карте.
+    /// `nil` у сервера старше 0.9.1 и у поездки без названия.
+    var title: String? = nil
 
     /// Разворачивает DTO в тот же `Trip`, что приходит из CoreData.
     ///
@@ -202,6 +205,7 @@ struct PublicTripDTO: Codable, Hashable {
             averageSpeed: seconds > 0 ? distance / seconds : 0,
             trackPoints: [],
             photos: [],
+            title: title,
             region: region,
             // Эндпоинт отдаёт только публичные поездки. Приватный флаг здесь
             // означал бы, что серверный фильтр протёк.

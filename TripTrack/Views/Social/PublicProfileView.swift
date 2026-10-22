@@ -181,7 +181,12 @@ struct PublicProfileView: View {
 
     private func openMap() {
         guard let pushPath else { return }
-        pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName))
+        // Камера открывается там, где человек ездил последним: эти поездки
+        // уже пришли с профилем, и пока грузится вся карта, ей есть куда
+        // смотреть, кроме случайного куска мира (0.9.1).
+        let start = PublicMapView.startBounds(
+            previews: tripCards.prefix(PublicMapView.startTripLimit).map(\.previewCoordinates))
+        pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName, start))
     }
 
     /// Гараж чужого человека (0.6.4).

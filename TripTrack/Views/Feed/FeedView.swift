@@ -258,11 +258,11 @@ struct FeedView: View {
                 case .publicVehicle(let id, let vid, let name):
                     PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
                         .hideAppTabBar()
-                case .publicMap(let id, let name):
+                case .publicMap(let id, let name, let start):
                     // Карта полноэкранная, и её нижний лист живёт там же, где
                     // таб-бар: без этого бар красится поверх сводки и остаётся
                     // тапабельным.
-                    PublicMapView(accountId: id, ownerName: name)
+                    PublicMapView(accountId: id, ownerName: name, initialBounds: start)
                         .hideAppTabBar()
                 case .trip(let id, let focus):
                     TripDetailView(

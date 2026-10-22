@@ -99,8 +99,8 @@ struct NotificationsInboxView: View {
                             source: RemoteTripSource(accountId: id),
                             ownerName: name
                         )
-                    case .publicMap(let id, let name):
-                        PublicMapView(accountId: id, ownerName: name)
+                    case .publicMap(let id, let name, let start):
+                        PublicMapView(accountId: id, ownerName: name, initialBounds: start)
                     case .publicGarage(let id, let name):
                         PublicGarageView(accountId: id, ownerName: name)
                     case .publicVehicle(let id, let vid, let name):

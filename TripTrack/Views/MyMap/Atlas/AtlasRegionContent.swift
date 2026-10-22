@@ -15,6 +15,11 @@ struct AtlasRegionContent: View {
     @ObservedObject var vm: MyMapViewModel
     let region: MapRegionStat
     var onOpenTrip: (UUID) -> Void
+    /// Поле под последней строкой. По умолчанию — под таб-баром «Атласа»;
+    /// чужой карте таб-бар не мешает, ей хватает безопасной зоны (0.9.1).
+    var bottomInset: CGFloat = CustomTabBar.clearance
+    /// Чужая поездка, которую сейчас спрашивают у сервера (0.9.1).
+    var openingTripId: UUID? = nil
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.distanceUnit) private var unit
@@ -31,7 +36,7 @@ struct AtlasRegionContent: View {
             }
             .padding(.horizontal, AtlasTheme.sideInset)
             .padding(.top, 12)
-            .padding(.bottom, CustomTabBar.clearance)
+            .padding(.bottom, bottomInset)
         }
         .accessibilityIdentifier("atlas_region_page")
     }
@@ -174,41 +179,8 @@ struct AtlasRegionContent: View {
     }
 
     private func tripRow(_ trip: MapTripPin) -> some View {
-        Button {
-            Haptics.tap()
+        AtlasTripRow(trip: trip, isOpening: openingTripId == trip.id) {
             onOpenTrip(trip.id)
-        } label: {
-            HStack(spacing: 12) {
-                MapTripThumb(trip: trip, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(TripAutoTitle.localized(trip.title, startDate: trip.startDate,
-                                                 language: lang.language)
-                         ?? AppStrings.tripTitle(lang.language))
-                        .font(AppType.itemTitle)
-                        .foregroundStyle(AtlasTheme.ink)
-                        .lineLimit(1)
-                    Text(tripSubtitle(trip))
-                        .font(AppType.meta)
-                        .foregroundStyle(AtlasTheme.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AtlasTheme.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 56)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(PressableCardStyle())
-        .accessibilityIdentifier("atlas_region_trip")
-    }
-
-    private func tripSubtitle(_ trip: MapTripPin) -> String {
-        let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
-        let km = Measure.distance(metres: trip.distance, unit: unit,
-                                  lang: lang.language, style: .tenths)
-        return when + " · " + km
     }
 }

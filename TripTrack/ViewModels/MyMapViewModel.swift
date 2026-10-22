@@ -908,6 +908,24 @@ extension GeoBounds: Equatable {
         self = box
     }
 
+    /// Рамка вокруг ВСЕХ точек всех маршрутов — без склейки их в один
+    /// массив: у тяжёлой библиотеки это сотни тысяч точек.
+    init?(coveringRoutes routes: [[CLLocationCoordinate2D]]) {
+        var box = GeoBounds(minLat: 90, maxLat: -90, minLon: 180, maxLon: -180)
+        var seen = false
+        for route in routes {
+            for c in route {
+                seen = true
+                box.minLat = min(box.minLat, c.latitude)
+                box.maxLat = max(box.maxLat, c.latitude)
+                box.minLon = min(box.minLon, c.longitude)
+                box.maxLon = max(box.maxLon, c.longitude)
+            }
+        }
+        guard seen else { return nil }
+        self = box
+    }
+
     var center: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
     }
@@ -943,5 +961,16 @@ extension GeoBounds: Equatable {
     public static func == (lhs: GeoBounds, rhs: GeoBounds) -> Bool {
         lhs.minLat == rhs.minLat && lhs.maxLat == rhs.maxLat
             && lhs.minLon == rhs.minLon && lhs.maxLon == rhs.maxLon
+    }
+}
+
+/// Рамка едет в пути навигации (`ProfilePreviewDest.publicMap`, 0.9.1), а
+/// путь требует `Hashable`. Те же четыре числа, что сравнивает `==`.
+extension GeoBounds: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(minLat)
+        hasher.combine(maxLat)
+        hasher.combine(minLon)
+        hasher.combine(maxLon)
     }
 }

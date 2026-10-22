@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 /// Карта публичных поездок другого человека (0.6.3).
@@ -11,6 +12,13 @@ import SwiftUI
 /// Своя карта живёт в `MyMapViewModel.shared` — синглтоне, который переживает
 /// переключение табов. Здесь намеренно СВОЙ экземпляр: чужой аккаунт, заехавший
 /// в общий, стёр бы состояние карты владельца.
+///
+/// С 0.9.1 карта отвечает на нажатия, как «Атлас» (владелец 22 окт 2026):
+/// регион открывается в той же шторке — числа и его поездки, — а маршрут
+/// выделяется и показывает свои поездки строками. Прежний запрет («у
+/// смотрящего нет прав») был неправдой: поездки здесь только публичные, и
+/// профиль с лентой открывают их и так. Поездка спрашивается у сервера и
+/// открывается поверх, как рекорд в чужой статистике.
 struct PublicMapView: View {
     let accountId: UUID
     let ownerName: String?
@@ -18,20 +26,45 @@ struct PublicMapView: View {
     /// человека, как было в 0.6.3. Фильтр честный: сервер сам проверяет, что
     /// машина открыта и её карта не выключена.
     let vehicleId: UUID?
+    /// Куда смотреть, пока всё грузится (0.9.1): рамка последних поездок,
+    /// пришедших с профилем. `nil` — камеру поставят сами маршруты.
+    let initialBounds: GeoBounds?
 
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
     @StateObject private var vm: MyMapViewModel
     @State private var summaryHeight: CGFloat = 0
+    @State private var zoomLevel: MapZoomLevel = .far
+    /// Поездка, которую сейчас спрашивают у сервера: индикатор в её строке и
+    /// защита от второго нажатия.
+    @State private var openingTripId: UUID?
+    @State private var openedTrip: SocialFeedTrip?
+    @State private var toastItem: ToastItem?
 
-    init(accountId: UUID, ownerName: String?, vehicleId: UUID? = nil) {
+    init(accountId: UUID, ownerName: String?, vehicleId: UUID? = nil,
+         initialBounds: GeoBounds? = nil) {
         self.accountId = accountId
         self.ownerName = ownerName
         self.vehicleId = vehicleId
+        self.initialBounds = initialBounds
         _vm = StateObject(wrappedValue: MyMapViewModel(
             source: RemoteTripSource(accountId: accountId, vehicleId: vehicleId)))
     }
+
+    /// Сколько последних поездок профиля задают рамку камеры.
+    static let startTripLimit = 10
+
+    /// Рамка камеры на время загрузки — по превью последних поездок профиля.
+    /// Пустые превью не в счёт; ни одной точки — `nil`, и камеру поставят
+    /// сами маршруты, когда приедут.
+    nonisolated static func startBounds(previews: [[CLLocationCoordinate2D]]) -> GeoBounds? {
+        GeoBounds(covering: previews.flatMap { $0 })
+    }
+
+    /// Та же пружина, что у подсостояний «Атласа».
+    private static let sheetSpring = Animation.spring(response: 0.45, dampingFraction: 0.86)
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -47,12 +80,18 @@ struct PublicMapView: View {
                 selection: vm.selection,
                 language: l,
                 bottomOverlayHeight: summaryHeight,
-                onZoomLevelChange: { _ in },
-                onSelectTrip: { _ in },
-                onSelectRoad: { _ in },
-                // Чужие объекты не открываются: у смотрящего нет прав ни на
-                // деталку поездки, ни на разбор региона.
-                onTapMap: { _ in },
+                initialBounds: initialBounds,
+                framesWholeRoutes: true,
+                onZoomLevelChange: { zoomLevel = $0 },
+                onSelectTrip: { id in animateSelection { vm.select(.trip(id)) } },
+                onSelectRoad: { ids in animateSelection { vm.selectRoad(ids) } },
+                // Регион открывается по пальцу, а камера едет к нему только с
+                // отдаления — то же правило, что у «Атласа»: на улице промах
+                // мимо дороги не повод уносить человека на весь край.
+                onTapMap: { coordinate in
+                    guard !vm.isLoading else { return }
+                    animateSelection { vm.selectRegion(at: coordinate, zoom: zoomLevel == .far) }
+                },
                 cameraCommand: $vm.cameraCommand
             )
             .ignoresSafeArea()
@@ -60,19 +99,58 @@ struct PublicMapView: View {
             VStack(spacing: 0) {
                 header(c, l)
                 Spacer(minLength: 0)
-                summary(l)
-                    // Высота сводки тут переменная (загрузка, отказ, пусто,
-                    // числа), поэтому она измеряется, а не вписана числом:
+                sheet(l)
+                    // Высота шторки тут переменная (загрузка, отказ, пусто,
+                    // числа, регион, поездки), поэтому её ВЕРХ измеряется:
                     // логотип Apple и «Legal» обязаны остаться видны над ней.
+                    // Содержимое со скроллом при этом стоит на высоте ЧИСЛОМ —
+                    // замер скролла уходит вниз (урок листов «Атласа»).
                     .measuredBottomOverlay($summaryHeight)
+                    // Имя — на всей шторке, вместе с её полями: тесты меряют
+                    // её рамку до самого низа (`PublicMapSummaryTests`).
                     .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("public_map_summary")
+                    .accessibilityIdentifier(sheetIdentifier)
             }
-
-            if vm.isLoading { CarLoadingView() }
+            // Машинки поверх карты при загрузке больше нет (0.9.1): посреди
+            // карты значок машины читался меткой места, а не «грузится».
+            // Загрузку говорит скелетон в шторке, как у «Атласа».
         }
         .navigationBarHidden(true)
         .task { await vm.loadRemote() }
+        .fullScreenCover(item: $openedTrip) { trip in
+            NavigationStack {
+                TripDetailView(
+                    tripId: trip.id,
+                    viewModel: TripsViewModel(tripManager: mapVM.tripManager),
+                    social: trip
+                )
+            }
+        }
+        .toast(item: $toastItem)
+    }
+
+    private func animateSelection(_ change: () -> Void) {
+        withAnimation(Self.sheetSpring) { change() }
+    }
+
+    /// Чужую поездку сначала спрашивают у сервера — карточка ленты несёт
+    /// автора и реакции, а у карты есть только превью. Тот же путь, что у
+    /// рекорда в чужой статистике.
+    private func openTrip(_ id: UUID) {
+        guard openingTripId == nil else { return }
+        openingTripId = id
+        Task { @MainActor in
+            defer { openingTripId = nil }
+            do {
+                let res: SocialTripResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialTrip,
+                    body: SocialTripRequest(tripId: id, includeTrack: false),
+                    requiresAuth: AuthService.shared.isSignedIn)
+                openedTrip = res.item
+            } catch {
+                toastItem = ToastItem(type: .error, message: AppStrings.tripLoadFailed(lang.language))
+            }
+        }
     }
 
     // MARK: - Шапка
@@ -98,6 +176,135 @@ struct PublicMapView: View {
 
     // MARK: - Нижний лист
 
+    /// Одна шторка на всё: сводка, регион, поездки маршрута. Две шторки на
+    /// одном экране «Атлас» уже пробовал — и это была «полная жесть
+    /// несоответствия» (27 сен).
+    private func sheet(_ l: LanguageManager.Language) -> some View {
+        Group {
+            if let region = vm.selectedRegion {
+                regionPanel(region, l)
+            } else if let trips = selectedTrips {
+                tripsPanel(trips, l)
+            } else {
+                summary(l)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        // Down to the physical bottom: the map is full-bleed, so a sheet that
+        // stops at the safe area leaves a strip of map under the home
+        // indicator. Only the BACKGROUND runs into the safe area — the content
+        // keeps its inset, and the sheet's top (measured for Apple's logo)
+        // does not move.
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: AtlasTheme.sheetRadius, bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0, topTrailingRadius: AtlasTheme.sheetRadius,
+                style: .continuous)
+            .fill(AtlasTheme.background)
+            .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private var sheetIdentifier: String {
+        if vm.selectedRegion != nil { return "public_map_region" }
+        if selectedTrips != nil { return "public_map_trips" }
+        return "public_map_summary"
+    }
+
+    /// Поездки под пальцем: одна — у булавки или дороги одной поездки,
+    /// несколько — у дороги, по которой ездили не раз.
+    private var selectedTrips: [MapTripPin]? {
+        if let trip = vm.selectedTrip { return [trip] }
+        return vm.selectedRoad
+    }
+
+    private func closeSelection() {
+        animateSelection { vm.select(nil) }
+    }
+
+    /// Регион в той же шторке, что и сводка (0.9.1): числа, города и
+    /// поездки — то же содержимое, что у «Атласа». «Назад» здесь нет: на
+    /// экране он уже есть и ведёт к профилю, а возвращаться, кроме сводки,
+    /// некуда — это делает ×.
+    private func regionPanel(_ region: MapRegionStat, _ l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            AtlasSubstateHeader(
+                title: region.localizedName(l),
+                subtitle: AtlasRegionContent.subtitle(for: region, lang: l),
+                backLabel: AppStrings.back(l),
+                closeLabel: AppStrings.close(l),
+                onBack: nil,
+                onClose: { closeSelection() }
+            )
+            .padding(.top, 12)
+            AtlasRegionContent(
+                vm: vm,
+                region: region,
+                onOpenTrip: { openTrip($0) },
+                bottomInset: 12,
+                openingTripId: openingTripId
+            )
+            // Другой регион — другой список: «Все» и прокрутка с прошлого не
+            // переезжают.
+            .id(region.id)
+        }
+        .frame(height: Self.regionPanelHeight)
+    }
+
+    /// Высота шторки региона — ЧИСЛОМ: внутри скролл, и замер ушёл бы вниз.
+    /// Та же, на которую камера «Атласа» оставляет место под регион
+    /// (`MapCameraCommand.Padding.region`), но не больше половины экрана —
+    /// иначе на маленьком телефоне карты над шторкой не осталось бы.
+    private static var regionPanelHeight: CGFloat {
+        let screen = WindowLayoutMetrics.shared.size?.height ?? 844
+        return min(440, screen * 0.55)
+    }
+
+    /// Поездки маршрута: строки, как у региона, без чисел над ними — на
+    /// маршрут человек уже смотрит.
+    private func tripsPanel(_ trips: [MapTripPin], _ l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            AtlasSubstateHeader(
+                title: AppStrings.atlasTripsHere(l),
+                subtitle: "\(trips.count) " + AppStrings.nounTrips(l, trips.count),
+                backLabel: AppStrings.back(l),
+                closeLabel: AppStrings.close(l),
+                onBack: nil,
+                onClose: { closeSelection() }
+            )
+            .padding(.top, 12)
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(trips.enumerated()), id: \.element.id) { index, trip in
+                        if index > 0 {
+                            Rectangle().fill(AtlasTheme.separator)
+                                .frame(height: 1).padding(.leading, 64)
+                        }
+                        AtlasTripRow(trip: trip, isOpening: openingTripId == trip.id) {
+                            openTrip(trip.id)
+                        }
+                    }
+                }
+                .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+                .padding(.horizontal, AtlasTheme.sideInset)
+                .padding(.vertical, 12)
+            }
+            .scrollDisabled(trips.count <= Self.visibleTripRows)
+        }
+        .frame(height: Self.tripsPanelHeight(count: trips.count))
+    }
+
+    /// Сколько строк видно без прокрутки; при большем числе видна ещё
+    /// половина следующей — знак, что список листается.
+    private static let visibleTripRows = 4
+
+    /// Высота шторки поездок — ЧИСЛОМ, от числа строк: шапка 44 и её поле 12,
+    /// поля списка 12 + 12, строки по `AtlasTripRow.height`.
+    static func tripsPanelHeight(count: Int) -> CGFloat {
+        let rows = count > visibleTripRows ? CGFloat(visibleTripRows) + 0.5 : CGFloat(max(count, 1))
+        return 12 + 44 + 12 + rows * AtlasTripRow.height + 12
+    }
+
     /// The same sheet and tiles as one's own «Атлас» (12 Oct 2026). It used to
     /// be a white card of its own: three centred columns split by hairlines,
     /// a grey plate inside the white, and a grab handle on a sheet that does
@@ -116,10 +323,22 @@ struct PublicMapView: View {
             if vm.isLoading {
                 // Иначе сводка утверждает «0 маршрутов · 0 км · 0 регионов» про
                 // другого человека всё время загрузки — то есть врёт точными
-                // числами. Статистика этот случай уже закрывает.
-                // Ничего, кроме ручки листа: `CarLoadingView` уже висит
-                // оверлеем поверх карты и говорит о загрузке за нас.
-                Color.clear.frame(height: 24)
+                // числами. Скелетон «Атласа» (состояние 22) отвечает «сколько
+                // сейчас появится и какой формы», а строка под ним верна уже
+                // сейчас — и шторка не прыгает, когда приедут числа.
+                // В той же белой карточке, что тройка чисел: полоски прямо на
+                // бумаге шторки почти не видны, а карточка, появляющаяся из
+                // ниоткуда вместе с числами, — лишний скачок.
+                SkeletonPlaceholder(shape: .atlasStats, count: 1, period: 1.2)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AtlasTheme.card, in: RoundedRectangle(cornerRadius: AtlasTheme.cardRadius))
+                    .accessibilityIdentifier("public_map_skeleton")
+                Text(AppStrings.publicMapOnlyPublic(l))
+                    .font(AppType.meta)
+                    .foregroundStyle(AtlasTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else if vm.remoteFailed && vm.exploration.trips.isEmpty {
                 // Отказ загрузки — НЕ «человек ничего не опубликовал». Второе
                 //утверждение о другом человеке, которого мы не проверяли.
@@ -170,20 +389,6 @@ struct PublicMapView: View {
         .padding(.horizontal, AtlasTheme.sideInset)
         .padding(.top, 4)
         .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        // Down to the physical bottom: the map is full-bleed, so a sheet that
-        // stops at the safe area leaves a strip of map under the home
-        // indicator. Only the BACKGROUND runs into the safe area — the content
-        // keeps its inset, and the sheet's top (measured for Apple's logo)
-        // does not move.
-        .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: AtlasTheme.sheetRadius, bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0, topTrailingRadius: AtlasTheme.sheetRadius,
-                style: .continuous)
-            .fill(AtlasTheme.background)
-            .ignoresSafeArea(edges: .bottom)
-        )
     }
 
     private func ownerTitle(_ l: LanguageManager.Language) -> String {
