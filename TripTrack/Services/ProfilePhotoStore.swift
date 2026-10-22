@@ -121,15 +121,24 @@ final class ProfilePhotoStore: ObservableObject {
             // A photo this phone finished uploading but the server no longer
             // lists was deleted on another phone: the server's answer wins.
             let remoteIds = Set(remote.map(\.id))
-            for photo in photos where photo.thumbnailUploaded && photo.originalUploaded && !remoteIds.contains(photo.id) {
+            // Also a photo with no file here: it only ever came from the
+            // server, so the server not listing it is the whole answer.
+            func gone(_ photo: Photo) -> Bool {
+                !remoteIds.contains(photo.id)
+                    && (photo.filename == nil || (photo.thumbnailUploaded && photo.originalUploaded))
+            }
+            for photo in photos where gone(photo) {
                 if let url = fileURL(photo) { try? FileManager.default.removeItem(at: url) }
             }
-            photos.removeAll { $0.thumbnailUploaded && $0.originalUploaded && !remoteIds.contains($0.id) }
+            photos.removeAll(where: gone)
         }
         for item in remote where !metadata.removed.contains(item.id) {
             if let index = photos.firstIndex(where: { $0.id == item.id }) {
                 photos[index].thumbnailURL = item.thumbnailUrl
                 photos[index].originalURL = item.originalUrl
+                // The server only ever gains variants; never unset a flag here.
+                if item.thumbnailUrl != nil { photos[index].thumbnailUploaded = true }
+                if item.originalUrl != nil { photos[index].originalUploaded = true }
             } else if photos.count < Self.limit {
                 photos.append(Photo(id: item.id, order: photos.count,
                                     takenAt: item.takenAt.flatMap(ISODate.parse), filename: nil,

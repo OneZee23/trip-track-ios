@@ -172,7 +172,11 @@ struct VehicleModEditor: View {
             picking = []
         }
         for item in items where selected.count < VehicleMod.photoLimit {
+            // The picker can take seconds; a sign-out with a wipe in between
+            // deletes this car, and a photo added after that would be an
+            // orphan of the previous account.
             guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+                settings.vehicle(for: vehicle.id) != nil,
                 let photo = VehiclePhotoStore.add(image, to: vehicle.id)
             else { continue }
             selected.append(photo.id)

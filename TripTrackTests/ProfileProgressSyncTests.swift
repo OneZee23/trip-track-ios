@@ -161,6 +161,20 @@ final class ProfileProgressSyncTests: XCTestCase {
         XCTAssertEqual(Self.profileBodies.last?["profileXp"] as? Int, 26_000)
     }
 
+    /// Pins restored from another phone are absent here; they must not hold
+    /// back an edit of the showcase made on this phone (they did: the whole
+    /// list waited for trips this phone would never have).
+    func testRemoteOnlyPinsDoNotBlockAShowcaseEdit() async throws {
+        serve()
+        let a = UUID(), b = UUID()
+        settings.applyRemoteJournal(bio: nil, pinnedTripIds: [a, b])
+        XCTAssertTrue(settings.togglePinnedTrip(a))
+        await AuthService.shared.syncProfileToServer(refreshFeedAfter: false, client: client, settings: settings)
+        let sent = Self.profileBodies.compactMap { $0["pinnedTripIds"] as? [String] }
+        XCTAssertEqual(sent.last, [b.uuidString.lowercased()])
+        XCTAssertFalse(settings.pinnedTripsDirty)
+    }
+
     func testFreshPhoneReadsExistingAccountBeforeFullProfilePush() async throws {
         serve(level: 21, xp: 25_730)
         await AuthService.shared.syncProfileToServer(refreshFeedAfter: false, client: client, settings: settings)

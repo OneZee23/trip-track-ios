@@ -100,6 +100,22 @@ final class ProfilePhotoStoreTests: XCTestCase {
         XCTAssertEqual(store.photos.count, 1, "The local, not yet uploaded photo stays")
     }
 
+    func testRestoreConfirmsLateVariantsAndDropsRemoteOnlyPhotos() {
+        let id = UUID()
+        store.restore([ProfilePhotoDTO(id: id, thumbnailUrl: "https://example.invalid/t.jpg")],
+                      revision: store.uploadRevision)
+        XCTAssertEqual(store.photos.first?.originalUploaded, false)
+        store.restore([ProfilePhotoDTO(id: id, thumbnailUrl: "https://example.invalid/t.jpg",
+                                     originalUrl: "https://example.invalid/o.jpg")],
+                      revision: store.uploadRevision)
+        XCTAssertEqual(store.photos.first?.originalUploaded, true, "a variant the server reports is confirmed")
+        let partial = UUID()
+        store.restore([ProfilePhotoDTO(id: partial, thumbnailUrl: "https://example.invalid/p.jpg")],
+                      revision: store.uploadRevision)
+        store.restore([], revision: store.uploadRevision)
+        XCTAssertTrue(store.photos.isEmpty, "photos that only ever came from the server leave with it")
+    }
+
     func testImportFromAPreviousSessionIsRefused() async throws {
         let session = store.session
         store.wipe()

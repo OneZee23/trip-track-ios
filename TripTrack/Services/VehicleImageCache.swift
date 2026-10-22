@@ -136,6 +136,7 @@ enum VehicleImageCache {
         if let fromDisk = await Task.detached(priority: .userInitiated, operation: {
             readDisk(key)
         }).value {
+            guard started == generation else { return nil }
             remember(fromDisk, key)
             return fromDisk
         }
