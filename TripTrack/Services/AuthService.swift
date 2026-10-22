@@ -989,6 +989,7 @@ final class AuthService: ObservableObject {
         // сервер сохранил новое значение.
         let journalRevision = SettingsManager.shared.profileJournalRevision
         let journalWasDirty = SettingsManager.shared.profileBioDirty || SettingsManager.shared.pinnedTripsDirty
+        let photoRevision = ProfilePhotoStore.shared.uploadRevision
         let blockGens = visibilityGeneration
         do {
             let res: MeResponse = try await APIClient.shared.post(
@@ -1000,7 +1001,7 @@ final class AuthService: ObservableObject {
             if !journalWasDirty, journalRevision == SettingsManager.shared.profileJournalRevision {
                 SettingsManager.shared.applyRemoteJournal(bio: res.bio, pinnedTripIds: res.pinnedTripIds, bioProvided: res.bioProvided)
             }
-            ProfilePhotoStore.shared.restore(res.photos)
+            ProfilePhotoStore.shared.restore(res.photos, revision: photoRevision)
             progressReadAccountId = accountId
             if gen == publicProfileGeneration {
                 isPublicProfile = res.isPublic

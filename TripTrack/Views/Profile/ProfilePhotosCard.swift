@@ -134,10 +134,13 @@ struct ProfilePhotosCard: View {
     private func save(_ items: [PhotosPickerItem]) async {
         saving = true
         defer { saving = false; picking = [] }
+        let session = store.session
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
-                try await store.add(data)
+                try await store.add(data, session: session)
+            } catch is CancellationError {
+                break
             } catch ProfilePhotoStore.StoreError.limitReached {
                 toastItem = ToastItem(type: .info, message: AppStrings.profilePhotosLimit(lang.language))
                 break

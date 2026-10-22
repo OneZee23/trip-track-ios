@@ -38,6 +38,13 @@ final class ProfilePhotoStore: ObservableObject {
     private var metadata = Metadata()
     private var generation = UUID()
     private var mutationRevision = 0
+    /// Moves whenever a photo is added or one of its variants is confirmed
+    /// uploaded. A server snapshot requested before such a change may lack
+    /// that photo, and must not be read as «deleted on another phone».
+    private(set) var uploadRevision = 0
+    /// The account session the store belongs to; a sign-out or wipe replaces
+    /// it. Imports capture it before their first await.
+    var session: UUID { generation }
     private var syncing = false
     private let syncEnabled: Bool
     private let log = Logger(subsystem: "com.triptrack", category: "profile.photos")
@@ -57,7 +64,10 @@ final class ProfilePhotoStore: ObservableObject {
     }
 
     @discardableResult
-    func add(_ data: Data, takenAt: Date? = nil) async throws -> UUID {
+    func add(_ data: Data, takenAt: Date? = nil, session: UUID? = nil) async throws -> UUID {
+        // An import that began under another account (sign-out while the
+        // picker was still loading) must not land in this one.
+        if let session, session != generation { throw CancellationError() }
         guard photos.count < Self.limit else { throw StoreError.limitReached }
         let epoch = generation
         guard let prepared = await APISyncTransport.encodePhotoVariants(
@@ -73,6 +83,7 @@ final class ProfilePhotoStore: ObservableObject {
         photos.append(Photo(id: id, order: photos.count, takenAt: takenAt, filename: filename))
         metadata.orderDirty = true
         mutationRevision &+= 1
+        uploadRevision &+= 1
         save()
         Task { await sync() }
         return id
@@ -100,15 +111,21 @@ final class ProfilePhotoStore: ObservableObject {
         Task { await sync() }
     }
 
-    func restore(_ remote: [ProfilePhotoDTO]?) {
+    /// `revision` — `uploadRevision` read when the snapshot was REQUESTED.
+    /// Only a snapshot taken after the last local upload may remove photos or
+    /// reorder them; an older one can only add what this phone lacks.
+    func restore(_ remote: [ProfilePhotoDTO]?, revision: Int? = nil) {
         guard let remote else { return }
-        // A photo this phone finished uploading but the server no longer
-        // lists was deleted on another phone: the server's answer wins.
-        let remoteIds = Set(remote.map(\.id))
-        for photo in photos where photo.thumbnailUploaded && photo.originalUploaded && !remoteIds.contains(photo.id) {
-            if let url = fileURL(photo) { try? FileManager.default.removeItem(at: url) }
+        let fresh = revision == uploadRevision
+        if fresh {
+            // A photo this phone finished uploading but the server no longer
+            // lists was deleted on another phone: the server's answer wins.
+            let remoteIds = Set(remote.map(\.id))
+            for photo in photos where photo.thumbnailUploaded && photo.originalUploaded && !remoteIds.contains(photo.id) {
+                if let url = fileURL(photo) { try? FileManager.default.removeItem(at: url) }
+            }
+            photos.removeAll { $0.thumbnailUploaded && $0.originalUploaded && !remoteIds.contains($0.id) }
         }
-        photos.removeAll { $0.thumbnailUploaded && $0.originalUploaded && !remoteIds.contains($0.id) }
         for item in remote where !metadata.removed.contains(item.id) {
             if let index = photos.firstIndex(where: { $0.id == item.id }) {
                 photos[index].thumbnailURL = item.thumbnailUrl
@@ -121,7 +138,7 @@ final class ProfilePhotoStore: ObservableObject {
                                     thumbnailURL: item.thumbnailUrl, originalURL: item.originalUrl))
             }
         }
-        if !metadata.orderDirty {
+        if fresh, !metadata.orderDirty {
             let positions = Dictionary(remote.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
             photos.sort { (positions[$0.id] ?? Int.max) < (positions[$1.id] ?? Int.max) }
         }
@@ -158,9 +175,10 @@ final class ProfilePhotoStore: ObservableObject {
                 metadata.deletions.removeAll { $0 == id }
                 save()
             }
+            let listRevision = uploadRevision
             let list: PhotoList = try await APIClient.shared.post(APIEndpoint.profilePhotoList, body: EmptyRequest())
             guard isCurrent() else { return }
-            restore(list.photos)
+            restore(list.photos, revision: listRevision)
             for photo in photos where !photo.thumbnailUploaded || !photo.originalUploaded {
                 guard let url = fileURL(photo) else { continue }
                 let data = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
@@ -174,6 +192,7 @@ final class ProfilePhotoStore: ObservableObject {
                         photoId: photo.id, type: type, data: bytes, takenAt: photo.takenAt)
                     guard isCurrent() else { return }
                     guard let index = photos.firstIndex(where: { $0.id == photo.id }) else { continue }
+                    uploadRevision &+= 1
                     if type == .thumbnail {
                         photos[index].thumbnailUploaded = true
                         photos[index].thumbnailKey = response.url

@@ -206,9 +206,18 @@ final class SettingsManager: ObservableObject {
         return true
     }
 
+    /// Drops pins this phone KNOWS became unfit (now private, a draft, not
+    /// finished). A pin whose trip is simply absent stays: a phone without the
+    /// cloud library, or before its first pull, does not have the trips that
+    /// `/auth/me` pinned on another phone, and clearing them here would wipe
+    /// the person's «Витрина» everywhere. The server drops deleted and private
+    /// trips from the public answer by itself.
     func reconcilePinnedTrips(_ trips: [Trip]) {
-        let eligible = Set(trips.filter { !$0.isPrivate && !$0.isDraft && $0.endDate != nil }.map(\.id))
-        let valid = pinnedTripIds.filter { eligible.contains($0) }
+        let known = Dictionary(trips.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let valid = pinnedTripIds.filter { id in
+            guard let trip = known[id] else { return true }
+            return !trip.isPrivate && !trip.isDraft && trip.endDate != nil
+        }
         guard valid != pinnedTripIds else { return }
         pinnedTripIds = valid
         pinnedTripsDirty = true

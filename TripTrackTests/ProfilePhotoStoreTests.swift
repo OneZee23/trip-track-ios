@@ -85,6 +85,32 @@ final class ProfilePhotoStoreTests: XCTestCase {
         XCTAssertEqual(restored.photos, store.photos)
     }
 
+    func testOnlyAFreshSnapshotRemovesPhotosDeletedElsewhere() async throws {
+        let id = UUID()
+        store.restore([ProfilePhotoDTO(id: id, thumbnailUrl: "https://example.invalid/t.jpg",
+                                     originalUrl: "https://example.invalid/o.jpg")])
+        let requested = store.uploadRevision
+        try await store.add(jpeg())
+        // Requested before the local add: it cannot know about it, so it may
+        // add but never remove.
+        store.restore([], revision: requested)
+        XCTAssertTrue(store.photos.contains { $0.id == id })
+        store.restore([], revision: store.uploadRevision)
+        XCTAssertFalse(store.photos.contains { $0.id == id }, "A fresh snapshot without it means deleted elsewhere")
+        XCTAssertEqual(store.photos.count, 1, "The local, not yet uploaded photo stays")
+    }
+
+    func testImportFromAPreviousSessionIsRefused() async throws {
+        let session = store.session
+        store.wipe()
+        do {
+            try await store.add(jpeg(), session: session)
+            XCTFail("An import started before sign-out must not land in the next account")
+        } catch is CancellationError {
+        }
+        XCTAssertTrue(store.photos.isEmpty)
+    }
+
     func testWipeRemovesFolderMetadataAndMemory() async throws {
         try await store.add(jpeg())
         store.wipe()

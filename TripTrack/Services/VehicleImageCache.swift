@@ -81,7 +81,18 @@ enum VehicleImageCache {
         return image
     }
 
-    private static func writeDisk(_ image: UIImage, _ key: String) {
+    /// Bumped by `purgeDisk`. Work that started before a purge (a download, a
+    /// thumbnail being cut off the main thread) checks it before writing, or
+    /// it would put the previous account's pictures back after sign-out.
+    private static let generationLock = NSLock()
+    private static var purgeGeneration = 0
+    static var generation: Int {
+        generationLock.lock(); defer { generationLock.unlock() }
+        return purgeGeneration
+    }
+
+    private static func writeDisk(_ image: UIImage, _ key: String, generation: Int) {
+        guard generation == Self.generation else { return }
         try? FileManager.default.createDirectory(
             at: diskDirectory, withIntermediateDirectories: true)
         guard let data = image.jpegData(compressionQuality: 0.85) else { return }
@@ -95,6 +106,7 @@ enum VehicleImageCache {
     /// сколько нужно.
     static func sized(fileURL: URL, key: String, maxSize: CGFloat) async -> UIImage? {
         if let hit = cached(key) { return hit }
+        let started = generation
         let scale = await MainActor.run { UIScreen.main.scale }
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
             if let fromDisk = readDisk(key) { return fromDisk }
@@ -107,10 +119,10 @@ enum VehicleImageCache {
             guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
             else { return nil }
             let made = UIImage(cgImage: cg)
-            writeDisk(made, key)
+            writeDisk(made, key, generation: started)
             return made
         }.value
-        if let image { remember(image, key) }
+        if let image, started == generation { remember(image, key) }
         return image
     }
 
@@ -120,6 +132,7 @@ enum VehicleImageCache {
     static func remote(_ url: URL, maxSize: CGFloat) async -> UIImage? {
         let key = remoteKey(url, maxSize)
         if let hit = cached(key) { return hit }
+        let started = generation
         if let fromDisk = await Task.detached(priority: .userInitiated, operation: {
             readDisk(key)
         }).value {
@@ -131,7 +144,7 @@ enum VehicleImageCache {
         let originalKey = "r:\(url.path)@original"
         let originalFile = diskURL(originalKey)
         if !FileManager.default.fileExists(atPath: originalFile.path) {
-            guard let data = try? await download(url) else { return nil }
+            guard let data = try? await download(url), started == generation else { return nil }
             try? FileManager.default.createDirectory(
                 at: diskDirectory, withIntermediateDirectories: true)
             try? data.write(to: originalFile)
@@ -156,6 +169,9 @@ enum VehicleImageCache {
     // MARK: - Уборка
 
     static func purgeDisk() {
+        generationLock.lock()
+        purgeGeneration &+= 1
+        generationLock.unlock()
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: diskDirectory)
     }

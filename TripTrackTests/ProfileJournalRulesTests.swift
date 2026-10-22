@@ -45,18 +45,28 @@ final class ProfileJournalRulesTests: XCTestCase {
         XCTAssertEqual(settings.pinnedTripIds.count, 3, "Dirty list wins over remote")
     }
 
-    func testMissingPrivateAndUnfinishedTripsAreDroppedInOrder() {
+    func testPrivateAndUnfinishedTripsAreDroppedButMissingOnesStay() {
         let trips = (0..<3).map { _ in Trip(endDate: Date(), isPrivate: false) }
         for trip in trips { settings.togglePinnedTrip(trip.id) }
         var privateTrip = trips[1]
         privateTrip.isPrivate = true
+        // trips[2] is not in this phone's library at all (no cloud library,
+        // or the pull has not arrived): absence is not proof of anything.
         settings.reconcilePinnedTrips([trips[0], privateTrip])
-        XCTAssertEqual(settings.pinnedTripIds, [trips[0].id])
+        XCTAssertEqual(settings.pinnedTripIds, [trips[0].id, trips[2].id])
         var unfinished = trips[0]
         unfinished.endDate = nil
         settings.reconcilePinnedTrips([unfinished])
-        XCTAssertTrue(settings.pinnedTripIds.isEmpty)
+        XCTAssertEqual(settings.pinnedTripIds, [trips[2].id])
         XCTAssertTrue(settings.pinnedTripsDirty)
+    }
+
+    func testAnEmptyLibraryKeepsPinsFromAnotherPhone() {
+        let remote = [UUID(), UUID()]
+        settings.applyRemoteJournal(bio: nil, pinnedTripIds: remote)
+        settings.reconcilePinnedTrips([])
+        XCTAssertEqual(settings.pinnedTripIds, remote)
+        XCTAssertFalse(settings.pinnedTripsDirty)
     }
 
     func testCleanRemotePinnedOrderAndWipe() {
