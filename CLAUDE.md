@@ -67,6 +67,19 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   `-debug-foreign-trip` доступен только в DEBUG-симуляторе. Подробности и
   границы восстановления: `docs/releases/0.8.1/production-regressions.md`.
 
+### Чужие достижения (0.9.1)
+
+- Список чужих значков — `GET /users/:id/badges`: объединение
+  `trip.badges_json` всех поездок человека. Значок пишется в поездку только
+  при её завершении (`TripWorldEntry`), поэтому открытый иначе в список не
+  попадёт — это граница выбранного владельцем варианта, а не баг.
+  `recentBadges` профиля — превью (50 поездок, 20 значков), считать по нему
+  «N из M» нельзя.
+- Ссылка на экран в карточке профиля есть ТОЛЬКО после ответа этого пути;
+  экран — тот же `AchievementsView` (`.unlocked`), со знаменателем
+  `AchievementsCatalogue`. Значок там открывается `BadgeDetailOverlay`, а не
+  `MeDest.achievement`: чужой профиль живёт в пяти стеках.
+
 **MVVM + Service Layer**, native SwiftUI/UIKit. Sentry is the external
 crash-reporting dependency; see `project.yml` for the pinned package.
 
