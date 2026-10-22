@@ -93,3 +93,14 @@ final class CarCatalogSearchTests: XCTestCase {
         XCTAssertEqual(VehicleCatalog.defaultBody(forCatalogBody: "sedan", type: "bicycle"), "bicycle")
     }
 }
+
+final class CatalogBodyNameTests: XCTestCase {
+    /// A liftback or wagon has no exact silhouette name; showing «Седан»
+    /// under «Polo лифтбэк» would contradict the generation's own name.
+    func testOnlyExactlyNamedBodiesAreShown() {
+        XCTAssertEqual(VehicleCatalogModelSteps.namedBodies(["liftback"]), [])
+        XCTAssertEqual(VehicleCatalogModelSteps.namedBodies(["sedan", "wagon"]), ["car"])
+        XCTAssertEqual(VehicleCatalogModelSteps.namedBodies(["crossover", "crossover"]), ["crossover"])
+        XCTAssertEqual(VehicleCatalogModelSteps.namedBodies(nil), [])
+    }
+}

@@ -13,6 +13,18 @@ struct VehicleCatalogModelSteps: View {
         return [start, lastYear].compactMap { $0.map(String.init) }.joined(separator: "–")
     }
 
+    /// Catalog bodies that our silhouette names describe EXACTLY. A liftback
+    /// or a wagon has no name of its own there — `defaultBody` draws them as a
+    /// saloon and a hatchback — and a subtitle «Седан» under «Polo лифтбэк»
+    /// would contradict the line above it. Generation names already carry the
+    /// body, so the unnamed ones are simply left out.
+    static func namedBodies(_ bodies: [String]?) -> [String] {
+        let exact: [String: String] = ["sedan": "car", "hatchback": "hatchback", "crossover": "crossover",
+                                       "pickup": "pickup", "van": "van", "convertible": "convertible"]
+        var seen = Set<String>()
+        return (bodies ?? []).compactMap { exact[$0] }.filter { seen.insert($0).inserted }
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Page(title: AppStrings.catalogGeneration(lang.language)) {
@@ -23,11 +35,12 @@ struct VehicleCatalogModelSteps: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(generation.name + " · " + Self.yearSpan(start: generation.yearStart, end: generation.yearEnd))
                             .font(.inter(15, weight: .semibold)).foregroundStyle(c.text)
-                        Text((generation.bodies ?? []).map {
-                            AppStrings.avatarStyleName(lang.language,
-                                style: VehicleCatalog.defaultBody(forCatalogBody: $0, type: type))
-                        }.joined(separator: " · "))
-                            .font(.inter(12)).foregroundStyle(c.textSecondary)
+                        let bodies = Self.namedBodies(generation.bodies)
+                        if !bodies.isEmpty {
+                            Text(bodies.map { AppStrings.avatarStyleName(lang.language, style: $0) }
+                                .joined(separator: " · "))
+                                .font(.inter(12)).foregroundStyle(c.textSecondary)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
