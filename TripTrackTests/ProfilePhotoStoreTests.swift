@@ -128,6 +128,18 @@ final class ProfilePhotoStoreTests: XCTestCase {
         XCTAssertEqual(store.photos.map(\.id), [second, first])
     }
 
+    func testASnapshotRequestedWhileTheOrderWasInFlightCannotUndoIt() async throws {
+        let first = try await store.add(jpeg())
+        let second = try await store.add(jpeg())
+        store.makeFirst(second)
+        let requested = store.uploadRevision   // /auth/me starts before the order lands
+        store.acknowledgeOrderForTesting()
+        store.restore([ProfilePhotoDTO(id: first, thumbnailUrl: "https://example.invalid/1.jpg"),
+                       ProfilePhotoDTO(id: second, thumbnailUrl: "https://example.invalid/2.jpg")],
+                      revision: requested)
+        XCTAssertEqual(store.photos.map(\.id), [second, first])
+    }
+
     func testImportFromAPreviousSessionIsRefused() async throws {
         let session = store.session
         store.wipe()

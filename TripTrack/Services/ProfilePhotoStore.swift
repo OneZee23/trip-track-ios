@@ -222,7 +222,13 @@ final class ProfilePhotoStore: ObservableObject {
                     APIEndpoint.profilePhotoOrder,
                     body: OrderRequest(photoIds: ids.map { $0.uuidString.lowercased() }))
                 guard isCurrent() else { return }
-                if ids == photos.map(\.id) { metadata.orderDirty = false; save() }
+                if ids == photos.map(\.id) {
+                    metadata.orderDirty = false
+                    // A snapshot requested while this order was still on its
+                    // way still carries the old one: it must not apply now.
+                    uploadRevision &+= 1
+                    save()
+                }
             }
         } catch {
             guard isCurrent() else { return }
@@ -236,7 +242,7 @@ final class ProfilePhotoStore: ObservableObject {
     #if DEBUG
     /// What a successful `/profile/photos/order` does to local state, for the
     /// stale-snapshot test (the store under test has sync disabled).
-    func acknowledgeOrderForTesting() { metadata.orderDirty = false; save() }
+    func acknowledgeOrderForTesting() { metadata.orderDirty = false; uploadRevision &+= 1; save() }
     #endif
 
     func wipe() {

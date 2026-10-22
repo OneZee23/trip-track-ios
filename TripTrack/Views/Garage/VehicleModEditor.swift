@@ -30,7 +30,14 @@ struct VehicleModEditor: View {
         let available = Set(photos.map(\.id))
         _selected = State(initialValue: Array(entry.photoIds.filter(available.contains).prefix(VehicleMod.photoLimit)))
         _photos = State(initialValue: photos)
+        // Photos this phone has not restored yet (a new phone, a restore that
+        // failed) are not shown, but they are still the entry's: saving the
+        // title alone must not unlink them on every device.
+        notHere = entry.photoIds.filter { !available.contains($0) }
     }
+
+    /// The entry's photos missing from this phone's album, kept as they are.
+    private let notHere: [UUID]
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -152,7 +159,7 @@ struct VehicleModEditor: View {
         updated.title = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
         updated.date = VehicleMod.day(date)
         updated.odometerKm = parsed
-        updated.photoIds = selected
+        updated.photoIds = Array((selected + notHere.filter { !selected.contains($0) }).prefix(VehicleMod.photoLimit))
         var mods = settings.vehicle(for: vehicle.id)?.mods ?? vehicle.mods
         if let index = mods.firstIndex(where: { $0.id == updated.id }) {
             mods[index] = updated
