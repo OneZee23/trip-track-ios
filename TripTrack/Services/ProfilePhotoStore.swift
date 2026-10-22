@@ -219,8 +219,10 @@ final class ProfilePhotoStore: ObservableObject {
             // The server ignores ids it has not seen yet and still answers
             // «ok»: an order sent while a photo is still uploading would be
             // acknowledged without it and never resent. Send it once every
-            // photo here is on the server; until then it stays dirty.
-            if metadata.orderDirty, photos.allSatisfy({ $0.thumbnailUploaded && $0.originalUploaded }) {
+            // photo THIS phone uploads is on the server (one that only came
+            // from the server is there by definition); until then it stays dirty.
+            if metadata.orderDirty,
+               photos.allSatisfy({ $0.filename == nil || ($0.thumbnailUploaded && $0.originalUploaded) }) {
                 let ids = photos.map(\.id)
                 let _: EmptyResponse = try await APIClient.shared.post(
                     APIEndpoint.profilePhotoOrder,
