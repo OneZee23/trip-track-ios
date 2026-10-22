@@ -21,6 +21,9 @@ struct VehicleDetailView: View {
     @Environment(\.openURL) private var openURL
 
     @State private var showEditForm = false
+    @State private var showDrive2 = false
+    @State private var editingMod: VehicleMod?
+    @ObservedObject private var plus = PlusAccess.shared
     @State private var showPhotos = false
     @State private var showTrips = false
     @State private var showMap = false
@@ -56,6 +59,9 @@ struct VehicleDetailView: View {
         /// высотой незачем.
         var routes: [[CLLocationCoordinate2D]] = []
         var cityCount = 0
+        var regions: [MapRegionStat] = []
+        var years: [VehicleYearDistance] = []
+        var photos: [PhotoFullScreenView.Page] = []
         /// «Выше всего поднималась» — рекорд из `Trip.elevation`. В
         /// `MeAggregates` его нет, поэтому считается здесь же, по тем же
         /// поездкам, чтобы не заводить второй проход по массиву.
@@ -99,6 +105,9 @@ struct VehicleDetailView: View {
                 run { showEditForm = true }
             },
         ]
+        items.append(.init(title: AppStrings.garageDrive2Title(l), systemImage: "arrow.up.right") {
+            run { showDrive2 = true }
+        })
         // Не просто «не активная», а «может стать активной»: у проданной или
         // архивной этот пункт молча уводил в никуда — выбор записывался, а
         // потом отфильтровывался обратно, и человек оставался вообще без
@@ -137,9 +146,15 @@ struct VehicleDetailView: View {
                         heroCard(vehicle, c: c, l: l)
                         // Паспорт (0.6.4): круги теперь внутри шапки, здесь —
                         // строка владельца и рекорды. Всё из поездок ЭТОЙ машины.
-                        aboutCard(vehicle, c: c, l: l)
-                        odometerCard(vehicle, c: c, l: l)
+                        Drive2LogbookRow(link: vehicle.drive2URL, onConnect: { showDrive2 = true })
+                        GarageMileageCard(odometerKm: vehicle.displayOdometerKm, trackedKm: vehicle.odometerKm,
+                                          years: passport?.years ?? [], unit: dashUnit(vehicle), onEdit: { showEditForm = true })
                         whereWasCard(c: c, l: l)
+                        GarageTripPhotos(pages: passport?.photos ?? [])
+                        VehicleModsSection(mods: vehicle.mods, unit: dashUnit(vehicle), onEdit: { editingMod = $0 }, onAdd: {
+                            editingMod = VehicleMod(title: "", date: VehicleMod.day(Date()), odometerKm: vehicle.displayOdometerKm)
+                        })
+                        aboutCard(vehicle, c: c, l: l)
                         vehicleTrips(c: c, l: l)
                         vehicleRecords(c: c, l: l)
                         // A bicycle pairs with no stereo, so auto-record has
@@ -206,6 +221,9 @@ struct VehicleDetailView: View {
             .onChange(of: showPhotos) { _, open in
                 if !open { mainPhoto = VehiclePhotoStore.mainPhoto(of: vehicleId) }
             }
+            .onChange(of: editingMod) { _, entry in
+                if entry == nil { mainPhoto = VehiclePhotoStore.mainPhoto(of: vehicleId) }
+            }
             // The stereo connects and drops while this screen is open — the
             // card claims «подключена», so it has to keep earning it.
             .onReceive(NotificationCenter.default.publisher(
@@ -220,6 +238,10 @@ struct VehicleDetailView: View {
             // and the Garage stack that hosts this view hosts it too.
             .navigationDestination(isPresented: $showLevelInfo) {
                 VehicleLevelInfoView(level: vehicle.level, levelKm: vehicle.levelSourceKm)
+            }
+            .sheet(isPresented: $showDrive2) { Drive2LinkSheet(vehicle: vehicle) }
+            .sheet(item: $editingMod) { entry in
+                VehicleModEditor(vehicle: vehicle, entry: entry, appUnit: distanceUnit)
             }
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))
@@ -269,6 +291,7 @@ struct VehicleDetailView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(AppStrings.moreActions(l))
+            .accessibilityIdentifier("garage_vehicle_actions")
             .popover(isPresented: $showVehicleActions, arrowEdge: .top) {
                 ActionPopoverList(items: vehicleActionItems(l))
             }
@@ -299,25 +322,10 @@ struct VehicleDetailView: View {
                 Haptics.tap()
                 showPhotos = true
             } label: {
-                // Канон рисует героем ФОТОГРАФИЮ. Пока её нет — спрайт, но
-                // тап ведёт в одно и то же место: «у машины должно быть лицо»
-                // — единственное, что мы взяли у drive2 без поворота.
-                if let photo = mainPhoto {
-                    // Уменьшенная копия, а не оригинал с камеры: герой ровно
-                    // 180 точек высотой, и декодировать ради него десять
-                    // мегапикселей на каждой отрисовке экрана незачем.
-                    VehiclePhotoImage(photo: photo, maxSize: 400)
-                        .frame(height: 180)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                } else {
-                    VehicleSpritePlate(
-                        assetName: vehicle.avatarImageName,
-                        fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                        plateSize: heroPlateWidth,
-                        cornerRadius: 20
-                    )
-                }
+                VehicleStage(assetName: vehicle.avatarImageName, fallbackEmoji: vehicle.avatarEmoji,
+                             style: VehicleCardStyle.from(vehicle.cardStyle).effective(isPlus: plus.isPlus),
+                             finish: VehicleFinish.effective(vehicle.paintFinish, isPlus: plus.isPlus),
+                             photo: mainPhoto, width: heroPlateWidth)
             }
             .buttonStyle(.plain)
             // Спрайт и фотография для VoiceOver скрыты как декорация, значит
@@ -337,14 +345,11 @@ struct VehicleDetailView: View {
             // («Полторашка»), а «Volkswagen Polo · 2019 · седан» подпись.
             // Строки нет вовсе, пока паспорт не заполнен: пустая подпись под
             // именем читается как поломка, а не как приглашение.
-            if let sub = modelLine(vehicle, l) {
-                Text(sub)
-                    .font(.inter(13))
-                    .foregroundStyle(c.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 4)
-                    .padding(.horizontal, 8)
-            }
+            VehicleCatalogCaption(make: vehicle.make, model: vehicle.model, year: vehicle.year,
+                                  bodyType: vehicle.bodyType, modelID: vehicle.catalogModelId,
+                                  generationID: vehicle.catalogGenerationId, variantID: vehicle.catalogVariantId,
+                                  showsCapsule: true).padding(.top, 4)
+            VehicleTagsRow(tags: vehicle.modTags, showsPaidCosmetics: plus.isPlus).padding(.top, 8)
 
             // Состояние машины прямо под моделью: проданная не должна выглядеть
             // как обычная, иначе человек попробует записать на неё поездку.
@@ -372,6 +377,7 @@ struct VehicleDetailView: View {
                 LvlPill(level: vehicle.level, rankTitle: "")
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("vehicle_level_row")
             .padding(.top, 12)
 
             // Круги живут ВНУТРИ шапки, как в каноне, а не отдельной карточкой:
@@ -419,7 +425,7 @@ struct VehicleDetailView: View {
     }
 
     private var heroPlateWidth: CGFloat {
-        min(max(UIScreen.main.bounds.width * 0.62, 210), 280)
+        min(UIScreen.main.bounds.width * 0.77, 340)
     }
 
     // MARK: - Level Row
@@ -700,6 +706,7 @@ struct VehicleDetailView: View {
                     .frame(height: 130)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .allowsHitTesting(false)
+                GarageRegionChips(regions: p.regions)
             }
             .padding(14)
             .surfaceCard(cornerRadius: 16)
@@ -909,12 +916,8 @@ struct VehicleDetailView: View {
     /// сотнях поездок — это секунды заморозки, если делать его в `body`.
     private func loadPassport() async {
         let id = vehicleId
+        let mine = await CoreDataTripRepository().fetchVehicleGarageTrips(id: id)
         let built = await Task.detached(priority: .userInitiated) { () -> Passport in
-            // Репозиторий напрямую: `TripManager` заводится с `LocationManager`
-            // и синглтона не имеет, а здесь нужно только прочитать поездки.
-            let repo: TripRepository = CoreDataTripRepository()
-            let mine = repo.fetchTripsForMap()
-                .filter { $0.vehicleId == id && !$0.isTransfer }
             guard !mine.isEmpty else { return Passport() }
             let agg = MeAggregates.compute(trips: mine, now: Date(), calendar: .current)
             let cal = Calendar.current
@@ -936,6 +939,9 @@ struct VehicleDetailView: View {
                             recent: Array(mine.prefix(3)),
                             routes: Array(routes),
                             cityCount: exploration.regions.reduce(0) { $0 + $1.visitedCityCount },
+                            regions: exploration.regions,
+                            years: VehicleYearDistance.aggregate(mine, vehicleID: id),
+                            photos: mine.flatMap { $0.photos }.map { .init(id: $0.id, source: .local(filename: $0.filename), timestamp: $0.timestamp) },
                             highest: mine.max(by: { $0.elevation < $1.elevation }).map {
                                 ($0.title ?? $0.region ?? "—", $0.elevation)
                             })

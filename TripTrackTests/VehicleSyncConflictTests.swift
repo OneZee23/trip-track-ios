@@ -211,6 +211,33 @@ final class VehicleSyncConflictTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.recordedRequests.count, 1, "за гаражом ходить незачем")
     }
 
+    func testGarageEditDuringUploadKeepsItsPendingStatusAndTimestamp() async throws {
+        let id = localVehicle(name: "Car")
+        let started = expectation(description: "Vehicle request started")
+        let release = DispatchSemaphore(value: 0)
+        let body = ok(#"{"id":"\#(id.uuidString)","conflictVersion":4}"#)
+        MockURLProtocol.requestHandler = { request in
+            started.fulfill()
+            guard release.wait(timeout: .now() + 10) == .success else {
+                throw URLError(.timedOut)
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body)
+        }
+        let uploadTask = Task { try await self.upload(id) }
+        await fulfillment(of: [started], timeout: 5)
+        SettingsManager.shared.updateVehicleGarage(id: id, modTags: ["CarPlay"], paintFinish: .matte)
+        let editedAt = entity(id)?.lastModifiedAt
+        XCTAssertGreaterThan(try XCTUnwrap(editedAt), t0)
+        XCTAssertEqual(entity(id)?.syncStatus, SyncStatus.pendingUpload.rawValue)
+        release.signal()
+        try await uploadTask.value
+        XCTAssertEqual(entity(id)?.syncStatus, SyncStatus.pendingUpload.rawValue)
+        XCTAssertEqual(entity(id)?.lastModifiedAt, editedAt)
+        XCTAssertEqual(entity(id)?.conflictVersion, 4)
+        XCTAssertEqual(entity(id)?.paintFinish, "matte")
+        XCTAssertEqual(VehicleModTags.decodeJSON(entity(id)?.modTagsJSON), ["CarPlay"])
+    }
+
     /// Ошибку, которая не конфликт, глотать нельзя: операция должна упасть и
     /// повториться.
     func testOtherServerErrorStillThrows() async {

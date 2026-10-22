@@ -6,7 +6,12 @@ struct Drive2Link: Equatable {
     let model: String
 
     init?(_ input: String) {
-        guard let parts = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            input.range(
+                of: #"^https?://[^/?#:]+(?:[/?#]|$)"#,
+                options: [.regularExpression, .caseInsensitive]) != nil,
+            let parts = URLComponents(string: input),
             let scheme = parts.scheme?.lowercased(), ["http", "https"].contains(scheme),
             let host = parts.host?.lowercased(),
             ["drive2.ru", "www.drive2.ru", "m.drive2.ru", "drive2.com", "www.drive2.com"].contains(host),

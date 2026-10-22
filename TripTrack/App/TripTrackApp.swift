@@ -77,6 +77,7 @@ struct TripTrackApp: App {
         if ProcessInfo.processInfo.arguments.contains("-ui-test-onboarding") {
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
         }
+        if DebugGarageSeed.isRequested { DebugGarageSeed.run() }
         if DebugForeignTripFixture.isRequested {
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)

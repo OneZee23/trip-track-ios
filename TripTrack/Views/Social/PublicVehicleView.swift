@@ -28,6 +28,7 @@ struct PublicVehicleView: View {
     @State private var agg: MeAggregates?
     @State private var regionCount = 0
     @State private var cityCount = 0
+    @State private var regions: [MapRegionStat] = []
     @State private var routes: [[CLLocationCoordinate2D]] = []
     @State private var failed = false
     /// Машины для нас больше нет — спрятали, удалили или заблокировали.
@@ -68,16 +69,22 @@ struct PublicVehicleView: View {
                 VStack(spacing: 12) {
                     if let v = vehicle {
                         header(v, c: c, l: l)
-                        if let about = v.about, !about.isEmpty {
-                            aboutCard(about, c: c, l: l)
-                        }
-                        photosCard(v, c: c, l: l)
+                        Drive2LogbookRow(link: v.drive2Url)
+                        GarageMileageCard(odometerKm: v.odometerKm, trackedKm: agg?.totalKm ?? 0,
+                                          years: VehicleYearDistance.aggregate(trips, vehicleID: vehicleId), unit: distanceUnit)
                         // Карта — только если владелец её не выключил. Нет
                         // флага (старый сервер) трактуем как «не показывать»:
                         // молчание не разрешение.
                         if v.mapVisible == true, !routes.isEmpty {
                             mapCard(c: c, l: l)
                         }
+                        GarageTripPhotos(pages: (v.tripPhotos ?? []).map { .init(id: $0.id, source: .remote(url: $0.url ?? $0.thumbUrl), timestamp: $0.timestamp) })
+                        VehicleModsSection(mods: (v.mods ?? []).map(\.entry), unit: distanceUnit,
+                                           photoPages: modPhotoPages(v))
+                        if let about = v.about, !about.isEmpty {
+                            aboutCard(about, c: c, l: l)
+                        }
+                        photosCard(v, c: c, l: l)
                         if let agg, agg.tripCount > 0 {
                             records(agg, c: c, l: l)
                             Text(AppStrings.publicRecordsNote(l))
@@ -212,44 +219,28 @@ struct PublicVehicleView: View {
     private func header(_ v: PublicVehicle, c: AppTheme.Colors,
                         l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            // Героем идёт ФОТОГРАФИЯ, если владелец её открыл. Раньше здесь
-            // всегда стоял силуэт, а снимки лежали карточкой ниже: экран
-            // показывал эмодзи-машинку и тут же, под ней, настоящую машину.
-            // Свой паспорт так себя не ведёт, и чужой не должен.
-            if let main = mainShot(v) {
-                remoteImage(main.best, height: 210, corner: 20)
-                    .padding(.top, 4)
-                    .onTapGesture {
-                        Haptics.tap()
-                        // Индекс ИЩЕМ, а не берём нулевой: сервер сейчас
-                        // отдаёт главную первой, но просмотрщик не должен
-                        // зависеть от порядка в чужом ответе.
-                        viewerStart = ViewerStart(
-                            index: (v.photos ?? []).firstIndex(of: main) ?? 0)
-                    }
-            } else {
-                VehicleSpritePlate(
-                    assetName: VehicleAvatar.assetName(
-                        style: v.avatarStyle, avatar: v.avatarEmoji),
-                    fallbackEmoji: v.avatarEmoji,
-                    plateSize: 210,
-                    cornerRadius: 20
-                )
-                .padding(.top, 4)
-            }
+            Button {
+                if let main = mainShot(v) {
+                    viewerStart = ViewerStart(index: (v.photos ?? []).firstIndex(of: main) ?? 0)
+                }
+            } label: {
+                VehicleStage(assetName: VehicleAvatar.assetName(style: v.avatarStyle, avatar: v.avatarEmoji),
+                             fallbackEmoji: v.avatarEmoji, style: VehicleCardStyle.from(v.cardStyle),
+                             finish: VehicleFinish.effective(v.paintFinish, isPlus: true), remotePhoto: mainShot(v)?.best,
+                             width: min(UIScreen.main.bounds.width * 0.77, 340))
+            }.buttonStyle(PressableCardStyle()).disabled(mainShot(v) == nil)
+                .accessibilityLabel(AppStrings.vehiclePhotos(l))
 
             Text(v.name)
                 .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
                 .padding(.top, 12)
 
-            if let sub = v.modelLine(l) {
-                Text(sub)
-                    .font(.inter(13))
-                    .foregroundStyle(c.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 4)
-            }
+            VehicleCatalogCaption(make: v.make ?? "", model: v.model ?? "", year: v.year ?? 0,
+                                  bodyType: v.bodyType ?? "", modelID: v.catalogModelId,
+                                  generationID: v.catalogGenerationId, variantID: v.catalogVariantId,
+                                  showsCapsule: true).padding(.top, 4)
+            VehicleTagsRow(tags: v.modTags ?? [], showsPaidCosmetics: true).padding(.top, 8)
             if v.isSold {
                 Text(AppStrings.publicVehicleSold(l))
                     .font(.inter(11, weight: .semibold))
@@ -319,6 +310,12 @@ struct PublicVehicleView: View {
     /// плашки «фотографии скрыты» здесь нет намеренно: она отличала бы
     /// человека, который прячет, от человека, которому нечего показать.
     /// Главный снимок — тот, что владелец закрепил; иначе первый.
+    private func modPhotoPages(_ v: PublicVehicle) -> [UUID: [PhotoFullScreenView.Page]] {
+        Dictionary(uniqueKeysWithValues: (v.mods ?? []).map { mod in
+            (mod.id, (mod.photos ?? []).map { .init(id: $0.id, source: .remote(url: $0.url ?? $0.thumbUrl), timestamp: mod.entry.calendarDate ?? Date()) })
+        })
+    }
+
     private func mainShot(_ v: PublicVehicle) -> PublicVehiclePhoto? {
         let shots = v.photos ?? []
         return shots.first(where: { $0.isMain }) ?? shots.first
@@ -412,6 +409,7 @@ struct PublicVehicleView: View {
                 .frame(height: 130)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .allowsHitTesting(false)
+            GarageRegionChips(regions: regions)
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
@@ -522,6 +520,7 @@ struct PublicVehicleView: View {
         }
         if let bio {
             trips = bio.trips
+            regions = bio.regionStats
             agg = bio.agg
             regionCount = bio.regions
             cityCount = bio.cities
@@ -557,6 +556,7 @@ struct PublicVehicleView: View {
     private struct Biography {
         var trips: [Trip]
         var agg: MeAggregates
+        var regionStats: [MapRegionStat] = []
         var regions: Int
         var cities: Int
         var routes: [[CLLocationCoordinate2D]]
@@ -566,7 +566,9 @@ struct PublicVehicleView: View {
         let source = RemoteTripSource(accountId: accountId, vehicleId: vehicleId)
         let res = await source.load()
         guard !res.failed else { return nil }
-        let mine = res.trips
+        let mine = res.trips.map { trip in
+            var copy = trip; copy.vehicleId = vehicleId; return copy
+        }
         guard !mine.isEmpty else {
             return Biography(trips: [], agg: MeAggregates(), regions: 0, cities: 0, routes: [])
         }
@@ -579,6 +581,7 @@ struct PublicVehicleView: View {
         return Biography(
             trips: mine,
             agg: MeAggregates.compute(trips: mine, now: Date(), calendar: .current),
+            regionStats: exploration.regions,
             regions: exploration.regions.count,
             cities: exploration.regions.reduce(0) { $0 + $1.visitedCityCount },
             routes: mine.map { $0.previewCoordinates }.filter { $0.count >= 2 })

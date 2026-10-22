@@ -8,7 +8,7 @@ import XCTest
 /// в карточку ленты id машины — там же, где имя, только у открытой другим.
 ///
 /// Офлайн: `-debug-foreign-trip` — чужая поездка в ленте, её машина
-/// «Škoda Octavia» с id, и страница этой машины.
+/// «Jolion» с id, и страница этой машины.
 final class ForeignVehicleChipTests: XCTestCase {
     func testForeignCarChipOpensTheCarPage() throws {
         continueAfterFailure = false
@@ -29,7 +29,7 @@ final class ForeignVehicleChipTests: XCTestCase {
         chip.tap()
 
         // The car page: its name, and the year and model only it shows.
-        XCTAssertTrue(app.staticTexts["Škoda Octavia"].firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Jolion"].firstMatch.waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["detail_foreign_vehicle"].firstMatch.isHittable,
                        "still on the trip screen")
         sleep(1)

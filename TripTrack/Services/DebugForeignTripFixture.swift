@@ -149,7 +149,7 @@ enum DebugForeignTripFixture {
             "badgeIds": [], "commentCount": 0,
             // The car the trip was driven in — the same one the garage holds,
             // with its id, so the chip opens its page (0.9.0).
-            "vehicle": ["id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+            "vehicle": ["id": "D37A3000-0000-4000-8000-000000000081", "name": "Jolion",
                         "avatarEmoji": "🚙", "avatarStyle": NSNull()]
         ]
     }
@@ -184,7 +184,7 @@ enum DebugForeignTripFixture {
                 "regionsCount": isNew ? 0 : 9, "publicTripCount": isNew ? 0 : 37
             ],
             "activeVehicle": isNew ? NSNull() : [
-                "id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
+                "id": "D37A3000-0000-4000-8000-000000000081", "name": "Jolion",
                 "level": 7, "odometerKm": 12_840, "avatarEmoji": "🚙", "avatarStyle": NSNull()
             ],
             "recentBadges": isNew ? [] : ["marathon_42", "night_rider", "early_bird", "long_shift", "first_trip"],
@@ -199,12 +199,22 @@ enum DebugForeignTripFixture {
 
     private static func garageVehicle() -> [String: Any] {
         [
-            "id": "D37A3000-0000-4000-8000-000000000081", "name": "Škoda Octavia",
-            "avatarEmoji": "🚙", "avatarStyle": NSNull(), "vehicleType": NSNull(),
-            "make": "Škoda", "model": "Octavia", "year": 2019, "bodyType": NSNull(),
-            "level": 7, "odometerKm": 12_840, "about": NSNull(),
+            "id": "D37A3000-0000-4000-8000-000000000081", "name": "Jolion",
+            "avatarEmoji": "pixel_car_red", "avatarStyle": "crossover", "vehicleType": "car",
+            "make": "Haval", "model": "Jolion", "year": 2022, "bodyType": "crossover",
+            "level": 7, "odometerKm": 12840, "about": NSNull(),
             "isArchived": false, "soldAt": NSNull(), "plate": NSNull(),
-            "mapVisible": true, "photosVisible": true, "createdAt": NSNull()
+            "mapVisible": true, "photosVisible": true, "createdAt": "2025-03-01T12:00:00Z",
+            "drive2Url": "https://www.drive2.ru/r/haval/jolion/123456789/",
+            "cardStyle": profileVariant == "pro" ? "card_gold" : "",
+            "paintFinish": profileVariant == "pro" ? "matte" : "gloss",
+            "modTags": profileVariant == "pro" ? ["CarPlay"] : [],
+            "catalogModelId": "haval-jolion", "catalogGenerationId": "haval-jolion-2021",
+            "catalogVariantId": "haval-jolion-2021-15-143-dct7",
+            "mods": [
+                ["id": "D37A9100-0000-4000-8000-000000000001", "title": "CarPlay", "date": "2026-03-12", "odometerKm": 12000, "photos": []],
+                ["id": "D37A9100-0000-4000-8000-000000000002", "title": "Зимние шины", "date": "2025-11-03", "odometerKm": 9000, "photos": []]
+            ]
         ]
     }
 

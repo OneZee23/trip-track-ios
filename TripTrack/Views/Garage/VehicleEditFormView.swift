@@ -103,6 +103,8 @@ struct VehicleEditFormView: View {
     /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
     @State private var cardStyle: VehicleCardStyle
     @State private var cardStyleWasPicked = false
+    @State private var garageFinish = "gloss"
+    @State private var garageTags: [String] = []
     /// Открытая витрина оформления. Фон карточки машины живёт не в
     /// `SettingsManager`, а в самой машине, поэтому запись идёт замыканием.
     @State private var showcase: ProShowcaseKind?
@@ -130,6 +132,8 @@ struct VehicleEditFormView: View {
         if case .edit(let id) = mode,
            let vehicle = SettingsManager.shared.vehicles.first(where: { $0.id == id }) {
             editedVehicle = vehicle
+            _garageFinish = State(initialValue: vehicle.paintFinish ?? "gloss")
+            _garageTags = State(initialValue: vehicle.modTags)
             // Поля паспорта заполняются В ЕДИНИЦЕ ПРИБОРКИ, а не человека:
             // всё, что тут вводят, списывают с панели этой машины.
             let shownDistance = vehicle.dashboardUnit(app: appDistance)
@@ -765,6 +769,7 @@ struct VehicleEditFormView: View {
             // без платного строки нет вовсе (`PlusGate` → `.hidden`).
             if cardStyleAccess != .hidden {
                 cardStyleRow(c: c, l: l)
+                VehicleGarageCustomization(finish: $garageFinish, tags: $garageTags)
             }
         }
         .padding(14)
@@ -1610,10 +1615,16 @@ struct VehicleEditFormView: View {
                 settings.selectCosmetic(.vehicleCard, id: cardStyle.rawValue,
                                         vehicleID: newId, isPlus: plus.isPlus)
             }
+            settings.updateVehicleGarage(id: newId, modTags: garageTags, paintFinish: VehicleFinish.parse(garageFinish))
             settings.selectVehicle(id: newId)
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
+            if garageFinish != (original.paintFinish ?? "gloss") || VehicleModTags.sanitized(garageTags) != original.modTags {
+                settings.updateVehicleGarage(id: id,
+                    modTags: VehicleModTags.sanitized(garageTags) != original.modTags ? garageTags : nil,
+                    paintFinish: garageFinish != (original.paintFinish ?? "gloss") ? VehicleFinish.parse(garageFinish) : nil)
+            }
             // Приборка — первой: следом идут пробег и расход, и они уже
             // разобраны в ЕЁ единице. Порядок здесь не косметика — пул,
             // приехавший между двумя записями, увидел бы числа, разобранные

@@ -27,6 +27,8 @@ struct ProfileView: View {
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @State private var headerVehicleID: UUID?
+    @State private var showHeaderAddVehicle = false
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
     /// Наблюдается, а не читается разово: путешествие создаётся с экрана
@@ -463,6 +465,12 @@ struct ProfileView: View {
             .toast(item: $toastItem)
             .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(item: $headerVehicleID) { id in
+                VehicleDetailView(vehicleId: id)
+            }
+            .sheet(isPresented: $showHeaderAddVehicle) {
+                VehicleEditFormView(mode: .add).environmentObject(lang)
+            }
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
                 case .garage:
@@ -916,6 +924,8 @@ struct ProfileView: View {
             km: mapVM.cachedTotalKm,
             regions: agg?.regionsAllTime ?? 0,
             showsStats: mapVM.cachedTripCount > 0,
+            onTapVehicle: { headerVehicleID = $0 },
+            onAddVehicle: { showHeaderAddVehicle = true },
             // Guests included, and on purpose: the avatar on the hub is local
             // state anyone can edit, and gating the tap would take the emoji
             // picker away from signed-out users, who had it before.

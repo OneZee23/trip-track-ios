@@ -20,6 +20,21 @@ struct ProfileHeroCard: View {
     let km: Double
     let regions: Int
     var showsStats: Bool = true
+    var isForeign = false
+    var isOwnProfilePreview = false
+    var publicProfile: SocialProfile? = nil
+    var publicVehicle: PublicVehicle? = nil
+    var followTitle: String? = nil
+    var followBusy = false
+    var followEnabled = true
+    var onFollow: () -> Void = {}
+    var bio: String? = nil
+    var country: String? = nil
+    var privacyStats = false
+    var detailsEnabled = true
+    var onCopyName: (() -> Void)? = nil
+    var onTapVehicle: (UUID) -> Void = { _ in }
+    var onAddVehicle: () -> Void = {}
     let onTapProfile: () -> Void
     let onTapLevel: () -> Void
     let onTapStats: () -> Void
@@ -35,7 +50,7 @@ struct ProfileHeroCard: View {
     /// The background as others see it; `nil` for the light default. An
     /// expired PRO falls back here too (`effective`), never to a dark card.
     private var chosenCover: ProfileBackground? {
-        let effective = background.effective(isPlus: plus.isPlus)
+        let effective = background.effective(isPlus: paidCosmetics)
         return effective == .none ? nil : effective
     }
     private var hasCover: Bool { chosenCover != nil }
@@ -44,9 +59,30 @@ struct ProfileHeroCard: View {
     private var secondaryInk: Color { hasCover ? .white.opacity(0.85) : colors.textSecondary }
     private var rule: Color { hasCover ? .white.opacity(0.22) : AppTheme.accent.opacity(0.18) }
 
+    private var paidCosmetics: Bool { isForeign ? publicProfile?.showsPaidCosmetics ?? false : plus.isPlus }
+    private var frame: AvatarFrame {
+        .effective(id: isForeign ? publicProfile?.avatarFrame : settings.avatarFrame, isPlus: paidCosmetics)
+    }
+    private var showsBadge: Bool {
+        if isForeign {
+            return isOwnProfilePreview
+                ? PlusBadgeVisibility.shows(isPlus: paidCosmetics, isOwn: true, showsOwnBadge: settings.showPlusBadge)
+                : publicProfile?.isPlus == true
+        }
+        return PlusBadgeVisibility.shows(isPlus: plus.isPlus, isOwn: true, showsOwnBadge: settings.showPlusBadge)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             identityRow
+            if let bio, !bio.isEmpty {
+                Text(bio).font(.interScaled(14, relativeTo: .subheadline))
+                    .foregroundStyle(ink).lineLimit(3)
+                    .accessibilityIdentifier("profile_bio")
+            }
+            ProfileGarageHeader(isForeign: isForeign, publicVehicle: publicVehicle,
+                                showsPaidCosmetics: paidCosmetics, ink: ink, secondaryInk: secondaryInk,
+                                onTap: onTapVehicle, onAdd: onAddVehicle)
             if showsStats {
                 Rectangle().fill(rule).frame(height: 1)
                 statsRow
@@ -89,12 +125,13 @@ struct ProfileHeroCard: View {
                         .frame(width: 60, height: 60)
                         .background(hasCover ? .white.opacity(0.16) : colors.cardAlt, in: Circle())
                         .avatarFrame(
-                            AvatarFrame.effective(id: settings.avatarFrame, isPlus: plus.isPlus),
+                            frame,
                             lineWidth: 3)
                 }
                 .buttonStyle(PressableCardStyle())
                 .accessibilityLabel(AppStrings.myProfileTitle(lang.language))
                 .accessibilityIdentifier("profile_avatar")
+                .disabled(isForeign)
 
                 if !typeSize.isAccessibilitySize {
                     identityText
@@ -102,19 +139,21 @@ struct ProfileHeroCard: View {
                 } else {
                     Spacer(minLength: 0)
                 }
-                Button {
-                    Haptics.tap()
-                    onTapSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(secondaryInk)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
+                if !isForeign {
+                    Button {
+                        Haptics.tap()
+                        onTapSettings()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(secondaryInk)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityLabel(AppStrings.settingsTitle(lang.language))
+                    .accessibilityIdentifier("profile_gear")
                 }
-                .buttonStyle(PressableCardStyle())
-                .accessibilityLabel(AppStrings.settingsTitle(lang.language))
-                .accessibilityIdentifier("profile_gear")
             }
             if typeSize.isAccessibilitySize { identityText }
         }
@@ -124,23 +163,25 @@ struct ProfileHeroCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Button {
                 Haptics.tap()
-                onTapProfile()
+                if isForeign { onCopyName?() } else { onTapProfile() }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(name)
+                        .accessibilityIdentifier(isForeign ? "profile_display_name" : "profile_name_text")
                         .font(.interScaled(21, weight: .bold, relativeTo: .title3))
                         .tracking(-0.3)
                         .foregroundStyle(isNamePlaceholder ? secondaryInk : ink)
                         .fixedSize(horizontal: false, vertical: true)
-                    if PlusBadgeVisibility.shows(isPlus: plus.isPlus, isOwn: true,
-                                                showsOwnBadge: settings.showPlusBadge) {
+                    if showsBadge {
                         ProBadge(height: 16)
                     }
                 }
                 .frame(minHeight: 32, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableCardStyle())
+            .onLongPressGesture { onCopyName?() }
+            .accessibilityIdentifier(isForeign ? "profile_copy_name" : "profile_name")
 
             Button {
                 Haptics.tap()
@@ -153,16 +194,42 @@ struct ProfileHeroCard: View {
                     Text(rankTitle)
                         .font(.interScaled(12, weight: .medium, relativeTo: .caption))
                         .foregroundStyle(secondaryInk)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(secondaryInk)
+                    if detailsEnabled {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(secondaryInk)
+                    }
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 44, alignment: .leading)
+                .frame(minHeight: 26, alignment: .leading)
+                .padding(.vertical, 9)
                 .contentShape(Rectangle())
+                .padding(.vertical, -9)
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("profile_lvl_pill")
+            .accessibilityIdentifier(isForeign ? "public_lvl_pill" : "profile_lvl_pill")
+            .disabled(!detailsEnabled)
+            if let country {
+                Text(country).font(.inter(12)).foregroundStyle(secondaryInk)
+                    .accessibilityIdentifier("profile_country")
+            }
+            if let followTitle {
+                Button(action: onFollow) {
+                    HStack(spacing: 6) {
+                        if followBusy { ProgressView().tint(.white).scaleEffect(0.7) }
+                        Text(followTitle).font(.inter(13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 7).padding(.horizontal, 14)
+                    .background(AppTheme.accent, in: Capsule())
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    .padding(.vertical, -7)
+                }
+                .buttonStyle(PressableCardStyle())
+                .disabled(followBusy || !followEnabled)
+                .accessibilityIdentifier("profile_follow")
+            }
         }
     }
 
@@ -175,15 +242,16 @@ struct ProfileHeroCard: View {
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
                 : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
             layout {
-                column(value: "\(trips)", label: AppStrings.trips(lang.language))
-                column(value: Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
+                column(value: privacyStats ? "••••" : "\(trips)", label: AppStrings.trips(lang.language))
+                column(value: privacyStats ? "••••" : Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
                        label: AppStrings.statsKmTotal(lang.language, unit: distanceUnit))
-                column(value: "\(regions)", label: AppStrings.statsRegions(lang.language))
+                column(value: privacyStats ? "••••" : "\(regions)", label: AppStrings.statsRegions(lang.language))
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier("profile_stats_strip")
+        .disabled(!detailsEnabled || (isForeign && privacyStats))
     }
 
     private func column(value: String, label: String) -> some View {

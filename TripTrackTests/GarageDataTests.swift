@@ -19,6 +19,8 @@ final class GarageDataTests: XCTestCase {
             "drive2.ru/r/vw/polo/123", "https://drive2.ru.evil.example/r/vw/polo/123/", "https://drive2.ru/users/test/",
             "https://drive2.ru/l/123/", "https://drive2.ru/r/vw/polo/abc/", "https://drive2.ru/r/vw/polo/123abc/",
             "https://user@drive2.ru/r/vw/polo/123/", "https://drive2.ru:443/r/vw/polo/123/",
+            "https:drive2.ru/r/vw/polo/123/", "https://drive2.ru:/r/vw/polo/123/",
+            "http://drive2.ru:80/r/vw/polo/123/",
             "ftp://drive2.ru/r/vw/polo/123/", "https://drive2.ru/r/vw/%70olo/123/",
         ] {
             XCTAssertNil(Drive2Link(input), input)
