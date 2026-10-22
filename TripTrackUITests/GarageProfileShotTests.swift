@@ -39,7 +39,7 @@ final class GarageProfileShotTests: XCTestCase {
         app.buttons["garage_mod_save"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Garage regression"].firstMatch.waitForExistence(timeout: 5))
         app.terminate()
-        launchOwn()
+        launchOwn(reset: false)
         app.buttons["garage_header_vehicle"].firstMatch.tap()
         reveal("garage_mods")
         XCTAssertTrue(app.staticTexts["Garage regression"].firstMatch.waitForExistence(timeout: 5))
@@ -148,7 +148,7 @@ final class GarageProfileShotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["GarageTag"].firstMatch.waitForExistence(timeout: 5))
         capture("12-customized-car")
         app.terminate()
-        launchOwn()
+        launchOwn(reset: false)
         app.buttons["garage_header_vehicle"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["GarageTag"].firstMatch.waitForExistence(timeout: 10))
     }
@@ -159,9 +159,10 @@ final class GarageProfileShotTests: XCTestCase {
             "(ru)", "-AppleLocale", "ru_RU",
         ]
     }
-    private func launchOwn() {
+    private func launchOwn(reset: Bool = true) {
         app = XCUIApplication()
         app.launchArguments += common + ["-seed-garage-demo", "-debug-plus"]
+            + (reset ? ["-seed-garage-reset"] : [])
         app.launch()
         let tab = app.buttons["tab_profile"].firstMatch
         XCTAssertTrue(tab.waitForExistence(timeout: 30))

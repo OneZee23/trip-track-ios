@@ -11,7 +11,7 @@ final class VehicleCatalogPickerShotTests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments += [
             "-hasCompletedOnboarding", "<true/>", "-appLanguage", "ru", "-appThemeMode", "light",
-            "-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU", "-seed-garage-demo", "-debug-plus",
+            "-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU", "-seed-garage-demo", "-seed-garage-reset", "-debug-plus",
         ]
         app.launch()
         tap("tab_profile", timeout: 30)

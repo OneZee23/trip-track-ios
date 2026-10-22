@@ -7,6 +7,11 @@
         static let launchArgument = "-seed-garage-demo"
         static let vehicleID = UUID(uuidString: "D37A9000-0000-4000-8000-000000000091")!
         static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains(launchArgument) }
+        /// Puts the car back the way the seed made it. Shot tests change it
+        /// (tags, DRIVE2 unlinked, finish), and without this a second run of
+        /// the same class on a used simulator started from that changed car.
+        /// Relaunches inside one test leave it out: they check persistence.
+        static let resetArgument = "-seed-garage-reset"
 
         @MainActor static func run() {
             let persistence = PersistenceController.shared
@@ -14,6 +19,11 @@
             let context = persistence.container.viewContext
             let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@", vehicleID as CVarArg)
+            if ProcessInfo.processInfo.arguments.contains(resetArgument),
+               let stale = try? context.fetch(request).first {
+                context.delete(stale)
+                persistence.save()
+            }
             if (try? context.fetch(request).first) == nil {
                 let car = VehicleEntity(context: context)
                 car.id = vehicleID
