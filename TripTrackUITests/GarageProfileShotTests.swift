@@ -20,6 +20,14 @@ final class GarageProfileShotTests: XCTestCase {
         app.buttons["garage_trip_photos"].firstMatch.tap()
         let photo = app.buttons["garage_photo_0"].firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 5))
+        // Seeded photos are 4:3; a fill image framed only by height spilled
+        // into the next cell (owner on device, 23 Oct 2026).
+        let next = app.buttons["garage_photo_1"].firstMatch
+        if next.exists {
+            XCTAssertLessThanOrEqual(photo.frame.maxX, next.frame.minX + 0.5)
+            XCTAssertEqual(photo.frame.width, next.frame.width, accuracy: 0.5)
+        }
+        capture("04b-trip-photos-grid")
         photo.tap()
         let closePhoto = app.buttons["photo_viewer_close"].firstMatch
         XCTAssertTrue(closePhoto.waitForExistence(timeout: 5))

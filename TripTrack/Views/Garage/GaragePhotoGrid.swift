@@ -20,7 +20,13 @@ struct GaragePhotoGrid: View {
                         Button {
                             selected = Selection(id: index)
                         } label: {
-                            GaragePhotoThumbnail(page: page).frame(height: 112).clipped()
+                            // The cell sets the size and the photo fills it. A
+                            // fill image framed only by height keeps its own
+                            // width and spills over its neighbours.
+                            Color.clear.frame(maxWidth: .infinity).frame(height: 112)
+                                .overlay { GaragePhotoThumbnail(page: page) }
+                                .clipShape(RoundedRectangle(cornerRadius: 9))
+                                .contentShape(Rectangle())
                         }.buttonStyle(PressableCardStyle()).accessibilityLabel(AppStrings.photos(lang.language))
                             .accessibilityIdentifier("garage_photo_\(index)")
                     }
@@ -74,8 +80,9 @@ struct GarageTripPhotos: View {
                     }
                     HStack(spacing: 7) {
                         ForEach(pages.prefix(4)) { page in
-                            GaragePhotoThumbnail(page: page).frame(maxWidth: .infinity).frame(height: 64)
-                                .clipped().clipShape(RoundedRectangle(cornerRadius: 9))
+                            Color.clear.frame(maxWidth: .infinity).frame(height: 64)
+                                .overlay { GaragePhotoThumbnail(page: page) }
+                                .clipShape(RoundedRectangle(cornerRadius: 9))
                         }
                     }
                 }.padding(16).surfaceCard(cornerRadius: 20)
