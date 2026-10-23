@@ -16,10 +16,13 @@ struct Drive2LogbookRow: View {
                 if let parsed { openURL(parsed.url) } else { onConnect?() }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "arrow.up.right").font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(parsed == nil ? c.textSecondary : AppTheme.accent)
+                    // Their favicon, bundled once and shown only here, next to
+                    // the link it names (owner, 23 Oct 2026; rules in
+                    // docs/releases/0.9.1/drive2.md). Nothing is fetched.
+                    Image("drive2_icon").resizable().interpolation(.high)
                         .frame(width: 36, height: 36)
-                        .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .opacity(parsed == nil ? 0.55 : 1)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(
                             parsed == nil
@@ -28,10 +31,6 @@ struct Drive2LogbookRow: View {
                         )
                         .font(.inter(15, weight: parsed == nil ? .medium : .bold))
                         .foregroundStyle(parsed == nil ? c.textSecondary : c.text)
-                        if let parsed {
-                            Text(parsed.url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
-                                .font(.inter(12)).foregroundStyle(c.textSecondary).lineLimit(1).truncationMode(.tail)
-                        }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(
                         c.textTertiary)
