@@ -110,6 +110,10 @@ struct PublicProfileView: View {
     /// перерисовывается на каждый `toggleReaction`, а перебор путешествий —
     /// не работа для этого такта.
     @State private var profileRows: [HistoryRow] = []
+    @State private var coverHasScrolled = false
+    @State private var preparedJournal = PreparedProfileHistory.empty
+    @State private var journalPreparation: Task<Void, Never>?
+    private var hasCoverPhotos: Bool { !(profile?.photos ?? []).isEmpty }
     /// Исходная карточка по id — `.trip` строка держит `Trip` (для
     /// `HistoryFolding`), а рисовать нужно ПРЕЖНЮЮ `SocialFeedCardView` по
     /// полной `SocialFeedTrip`.
@@ -408,65 +412,13 @@ struct PublicProfileView: View {
                     if profile != nil {
                         VStack(spacing: 16) {
                             heroSection(c)
-                                .padding(.top, 6)
+                                .background { ProfileCoverScrollProbe(space: "publicProfileCover") { coverHasScrolled = $0 } }
+                                .padding(.top, hasCoverPhotos ? 0 : 6)
 
-                            // Видимость (0.6.3) действует и на своём экране.
-                            // Этот экран для владельца — ПРЕВЬЮ «как видят
-                            // другие» (см. previewBanner), и оговорка
-                            // «|| isOwnProfile» превратила бы его в ложь:
-                            // владелец видел бы блоки, которых у других нет.
-                            // Свои полные данные у него в табе «Я».
-                            // Карточка рисуется всегда: внутри неё тумблер
-                            // гасит только дорожные числа, а счётчики подписок
-                            // остаются входом в списки.
-                            if let photos = profile?.photos, !photos.isEmpty {
-                                ProfilePhotosCard(remotePhotos: photos).padding(.horizontal, 16)
-                            }
-                            showcaseSection(c)
+                            pinnedJournal
                                 .padding(.horizontal, 16)
-                            statsGrid(c, lng: lng)
-                                .padding(.horizontal, 16)
-
-                            // Скрытый блок исчезает целиком — ни плашки
-                            // «скрыто», ни серой заглушки: прецедент правила
-                            // про госномер.
-                            if visibility.stats, canOpenHub {
-                                statsEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-                            // Карта — только когда на ней есть что показать.
-                            // Без публичных поездок карточка была серым
-                            // прямоугольником со значком, открывала пустую
-                            // карту, а ниже то же самое уже говорит «Пока нет
-                            // публичных поездок». Правило путешествий ниже:
-                            // пустая карточка-хаб — ложное обещание.
-                            if visibility.map, canOpenHub, hasPublicRoutes {
-                                mapEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-                            // Гараж (0.6.4). Строка показывается ВСЕГДА, когда
-                            // экран вообще открыт: сервер сам решит, что внутри,
-                            // а прятать вход по локальной догадке значит либо
-                            // соврать, либо выдать, что человек что-то прячет.
-                            if canOpenHub {
-                                garageEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-
-                            // Путешествия (S7, 0.6.8). В отличие от гаража,
-                            // строка НЕ рисуется пустой: «нет путешествий»
-                            // не выдаёт ничего скрытого, а пустая карточка-
-                            // хаб — то же ложное обещание содержимого, от
-                            // которого предостерегает превью гаража выше.
-                            if canOpenHub {
-                                journeysEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-
-                            if visibility.achievements {
-                                achievementsSection(c)
-                                    .padding(.horizontal, 16)
-                            }
+                            if canOpenHub { profileSectionsRow(c).padding(.horizontal, 16) }
+                            if canOpenHub { journeysEntryCard(c, lng: lng).padding(.horizontal, 16) }
 
                             // «Находки» (0.7.0, спека §4) — та же видимость,
                             // что у достижений: обе карточки говорят о том,
@@ -517,10 +469,12 @@ struct PublicProfileView: View {
         // 120 + высота индикатора. В ленте этого не видно, потому что до её
         // конца никто не доскроллил; профиль кончается всегда, и пустая
         // полоса под последней карточкой была последним, что человек видит.
-        .ignoresSafeArea(edges: .bottom)
+        .coordinateSpace(name: "publicProfileCover")
+        .ignoresSafeArea(edges: hasCoverPhotos ? [.top, .bottom] : .bottom)
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
+            if !hasCoverPhotos {
             CustomNavBar(title: navTitle) {
                 // Single «…» entry point (Figma 117:2367) — sharing on top,
                 // moderation below. The block hand used to sit as its own
@@ -548,7 +502,19 @@ struct PublicProfileView: View {
                     ActionPopoverList(items: profileActionItems())
                 }
             }
+            }
         }
+        .overlay(alignment: .top) {
+            if hasCoverPhotos && coverHasScrolled {
+                VStack(spacing: 0) {
+                    c.bg.frame(height: WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59)
+                    CustomNavBar(title: navTitle) { profileMoreButton }
+                }
+                .background(c.bg)
+                .offset(y: -(WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59))
+            }
+        }
+
         .task {
             guard !didInitialLoad else { return }
             didInitialLoad = true
@@ -577,6 +543,8 @@ struct PublicProfileView: View {
         // считаются здесь, а не в `body`: тело перерисовывается на каждый
         // `toggleReaction`, а `HistoryFolding.fold` перебирает путешествия.
         .onChange(of: tripCards) { _, _ in recomputeProfileRows() }
+        .onChange(of: lang.language) { _, _ in recomputeProfileRows() }
+        .onChange(of: pinnedTripCards) { _, _ in recomputeProfileRows() }
         .onChange(of: publicJourneys) { _, _ in recomputeProfileRows() }
         .refreshable { await refresh() }
         // Commented on a trip from the detail screen pushed off THIS page —
@@ -855,6 +823,8 @@ struct PublicProfileView: View {
                 guard auth.isSignedIn else { signInPrompt = .follow; return }
                 Task { await toggleFollow() }
             },
+            onFollowers: { openFollowList(.followers) },
+            onFollowing: { openFollowList(.following) },
             bio: resolvedBio,
             country: countryGlyph.map(countryPillText),
             privacyStats: isPrivacyMode,
@@ -870,7 +840,17 @@ struct PublicProfileView: View {
             },
             onTapProfile: {}, onTapLevel: { openLevels(level) },
             onTapStats: { if canOpenHub { openStats() } }, onTapSettings: {})
-            .padding(.horizontal, 16)
+            .overlay(alignment: .top) {
+                if hasCoverPhotos && !coverHasScrolled {
+                    HStack {
+                        NavBackButton().environment(\.colorScheme, .light)
+                        Spacer()
+                        profileMoreButton
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, (WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59) + 4)
+                }
+            }
             .task(id: accountId) { await loadGaragePreview() }
     }
 
@@ -1659,15 +1639,54 @@ struct PublicProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var showcaseIds: Set<UUID> { Set((profile?.pinnedTrips ?? []).map(\.id)) }
+    private var profileMoreButton: some View {
+        Button { Haptics.tap(); showProfileActions = true } label: {
+            Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color(white: 0.12)).frame(width: 40, height: 40).background(.white, in: Circle())
+        }
+        .buttonStyle(PressableCardStyle()).accessibilityLabel(AppStrings.moreActions(lang.language))
+        .accessibilityIdentifier("profile_more")
+        .popover(isPresented: $showProfileActions, arrowEdge: .top) { ActionPopoverList(items: profileActionItems()) }
+    }
 
-    @ViewBuilder
-    private func showcaseSection(_ c: AppTheme.Colors) -> some View {
-        if !pinnedTripCards.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(AppStrings.profileShowcase(lang.language)).font(AppType.section).foregroundStyle(c.text)
-                ForEach(pinnedTripCards) { trip in tripCard(trip) }
+    private var pinnedJournal: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(preparedJournal.pinned) { trip in
+                ProfileTripCardView(trip: trip, level: profile?.profileLevel ?? 1, isPinned: true, mapHeight: 118) {
+                    if let original = tripCardsById[trip.id] { openTrip(original) }
+                }
             }
+        }
+    }
+
+    private func profileSectionsRow(_ c: AppTheme.Colors) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { profileSectionButtons }
+            VStack(alignment: .leading, spacing: 4) { profileSectionButtons }
+        }
+        .font(.interScaled(13, weight: .medium, relativeTo: .footnote)).foregroundStyle(c.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 6).surfaceCard()
+    }
+
+    @ViewBuilder private var profileSectionButtons: some View {
+        if visibility.stats, canOpenHub {
+            Button(action: openStats) { Text(AppStrings.stats(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_stats_entry")
+        }
+        if visibility.map, canOpenHub, hasPublicRoutes {
+            if visibility.stats { Text("·").accessibilityHidden(true) }
+            Button(action: openMap) { Text(AppStrings.tabMap(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_map_entry")
+        }
+        if visibility.achievements, canOpenAchievements {
+            if visibility.stats || (visibility.map && hasPublicRoutes) { Text("·").accessibilityHidden(true) }
+            Button(action: openAchievements) { Text(AppStrings.achievementsSection(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("public_achievements_all")
+        }
+        if canOpenHub, garagePreviewVehicles.count > 1 {
+            if visibility.stats || (visibility.map && hasPublicRoutes) || (visibility.achievements && canOpenAchievements) { Text("·").accessibilityHidden(true) }
+            Button(action: openGarage) { Text(AppStrings.garage(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_garage_entry")
         }
     }
 
@@ -1675,7 +1694,7 @@ struct PublicProfileView: View {
 
     @ViewBuilder
     private func recentTrips(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
-        if !tripCards.isEmpty {
+        if !tripCards.isEmpty || !pinnedTripCards.isEmpty {
             let publicCount = profile?.stats.publicTripCount ?? tripCards.count
             let totalCount = profile?.stats.tripCount ?? tripCards.count
             VStack(alignment: .leading, spacing: 10) {
@@ -1698,24 +1717,21 @@ struct PublicProfileView: View {
                         }
                     }
                 } else {
-                    // Схлопывание (S7, 0.6.8) — только здесь, как в «Моих»
-                    // (`HistoryFolding`). Сетка выше НЕ схлопывается: решётка
-                    // на две колонки не растягивается под карточку во всю
-                    // ширину, и это уже правило `HistoryFolding.runs` для
-                    // «Моих», сюда не перенесённое сознательно — своей сетки
-                    // путешествий на профиле нет.
                     LazyVStack(spacing: 12) {
-                        ForEach(Array(profileRows.enumerated()), id: \.element.id) { idx, row in
-                            historyRowView(row, c: c)
-                                // Строки схлопнуты в путешествия, поэтому порог
-                                // считается по СТРОКАМ: последняя строка видна —
-                                // пора за следующей страницей поездок.
-                                .onAppear {
-                                    loadMoreTripsIfNeeded(appearedIndex: idx, of: profileRows.count)
-                                }
+                        ForEach(preparedJournal.chapters) { month in
+                            ProfileHistoryMonthHeader(month: month)
+                            ForEach(month.rows) { row in
+                                historyRowView(row, c: c)
+                            }
+                        }
+                        // A lazy footer also reloads when appended trips fold
+                        // into an already visible journey of the same height.
+                        Color.clear.frame(height: 1).task(id: tripCards.count) {
+                            loadMoreTripsIfNeeded(appearedIndex: max(0, profileRows.count - 1), of: profileRows.count)
                         }
                     }
                 }
+
                 if tripsPager.isLoading {
                     CarLoadingView()
                         .frame(maxWidth: .infinity)
@@ -1795,6 +1811,10 @@ struct PublicProfileView: View {
             if let original = tripCardsById[t.id] {
                 tripCard(original)
             }
+        case .routine(let group):
+            ProfileRoutineTripsView(group: group) { trip in
+                if let original = tripCardsById[trip.id] { openTrip(original) }
+            }
         case .journey(let j, let legs):
             JourneyCardView(journey: j, legs: legs, onTap: { openJourney(j.id) })
         }
@@ -1802,28 +1822,36 @@ struct PublicProfileView: View {
 
     /// Считается вне `body` — см. `@State private var profileRows`.
     private func recomputeProfileRows() {
-        visibleTripCards = tripCards.filter { !showcaseIds.contains($0.id) }
-        let trips = visibleTripCards.map(Trip.init(social:))
-        let journeys = publicJourneys.map { Journey(publicJourney: $0, ownerId: accountId) }
-        // `range` не передаём — на этом экране нет отрезка календаря, каким
-        // «Мои» отличает «плечи отрезал фильтр» от «плеч не осталось», и без
-        // него `HistoryFolding.fold` держит пустое путешествие строкой ВСЕГДА
-        // (`intersects` возвращает true при `range == nil`). Здесь это не
-        // тот случай: `tripCards` — короткое превью «Последних поездок», а не
-        // вся история, и путешествие без единого совпавшего плеча в нём —
-        // не «плеч не осталось», а «плечи вне превью». Пустая карточка (карта-
-        // заглушка, нули) тут не даёт войти и удалить путешествие, как на
-        // «Моих» — это чужой профиль, — так что фильтруем её здесь, а не
-        // правим общую `HistoryFolding`. Список поездок при этом не худеет:
-        // этих карточек в нём и так не было.
-        profileRows = HistoryFolding.fold(trips: trips, journeys: journeys).filter { row in
-            if case .journey(_, let legs) = row { return !legs.isEmpty }
-            return true
+        journalPreparation?.cancel()
+        let cards = tripCards
+        let pins = pinnedTripCards
+        let publicJourneySnapshot = publicJourneys
+        let owner = accountId
+        let language = lang.language
+        journalPreparation = Task {
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                let allCards = pins + cards.filter { card in !pins.contains(where: { $0.id == card.id }) }
+                let library = ProfileHistoryLibrary(trips: allCards.map(Trip.init(social:)))
+                let journeys = publicJourneySnapshot.map { Journey(publicJourney: $0, ownerId: owner) }
+                // Public DTO has no checkpoint field. Absence is unknown,
+                // so these trips never qualify for routine folding.
+                let history = PreparedProfileHistory(
+                    library: library, journeys: journeys, query: "", from: nil, to: nil,
+                    language: language, pinnedTripIds: pins.map(\.id),
+                    foldsRoutine: false, keepsEmptyJourneys: false, foldsJourneysInGrid: false)
+                let originals = Dictionary(allCards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                let gridCards = history.gridRuns.flatMap { $0 }.compactMap { row -> SocialFeedTrip? in
+                    guard case .trip(let trip) = row else { return nil }
+                    return originals[trip.id]
+                }
+                return (history: history, originals: originals, gridCards: gridCards)
+            }.value
+            guard !Task.isCancelled else { return }
+            preparedJournal = snapshot.history
+            profileRows = snapshot.history.rows
+            visibleTripCards = snapshot.gridCards
+            tripCardsById = snapshot.originals
         }
-        // `uniquingKeysWith`, а не `uniqueKeysWithValues`: дубликат id в ответе
-        // сервера — его баг, но платить за него падением процесса нельзя.
-        // Побеждает первая карточка — порядок ленты профиля.
-        tripCardsById = Dictionary(tripCards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     private func isOwnTrip(_ trip: SocialFeedTrip) -> Bool {

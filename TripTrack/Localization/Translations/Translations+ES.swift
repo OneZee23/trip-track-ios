@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Motor y cambio"
         table["catalogUnknownEngine"] = "No sé qué motor tiene"
         table["catalogHasYear"] = "Disponible en {year}"
+        table["profileAddCover"] = "Añadir portada"
+        table["profileAddPhoto"] = "Añadir foto"
+        table["profileMakeCover"] = "Usar como portada"
+        table["profileJournalSignIn"] = "Inicia sesión para que otros vean tu diario"
+        table["profilePinned"] = "Fijado"
+        table["profileRoutineOne"] = "{n} viaje repetido"
+        table["profileRoutineFew"] = "{n} viajes repetidos"
+        table["profileRoutineMany"] = "{n} viajes repetidos"
+        table["profileMoreTrips"] = "{n} más"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "{n} más — fijados en otro dispositivo",
         "profilePin": "Fijar en el perfil",
         "profileUnpin": "Desfijar del perfil",
-        "profileShowcaseLimit": "Ya hay tres viajes en el escaparate: desfija uno",
+        "profileShowcaseLimit": "Ya hay tres viajes fijados — desfija uno",
     ]
 }

@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Қозғалтқыш пен беріліс қорабы"
         table["catalogUnknownEngine"] = "Қозғалтқышты білмеймін"
         table["catalogHasYear"] = "{year} бар"
+        table["profileAddCover"] = "Мұқаба қосу"
+        table["profileAddPhoto"] = "Фото қосу"
+        table["profileMakeCover"] = "Мұқаба ету"
+        table["profileJournalSignIn"] = "Журналды басқалар көруі үшін кіріңіз"
+        table["profilePinned"] = "Бекітілген"
+        table["profileRoutineOne"] = "{n} қайталанатын сапар"
+        table["profileRoutineFew"] = "{n} қайталанатын сапар"
+        table["profileRoutineMany"] = "{n} қайталанатын сапар"
+        table["profileMoreTrips"] = "Тағы {n}"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "Тағы {n} — басқа құрылғыда бекітілген",
         "profilePin": "Профильге бекіту",
         "profileUnpin": "Профильден босату",
-        "profileShowcaseLimit": "Көрмеде үш сапар бар — біреуін босатыңыз",
+        "profileShowcaseLimit": "Үш сапар бекітілген — біреуін бекітуден алыңыз",
     ]
 }

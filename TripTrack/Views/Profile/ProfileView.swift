@@ -192,8 +192,6 @@ struct ProfileView: View {
     /// Every completed trip, newest first. `agg.recentTrips` stops at 10,
     /// which made a date filter over История meaningless.
     @State private var historyLibrary = ProfileHistoryLibrary(trips: [])
-    @State private var showcaseTrips: [Trip] = []
-    @State private var hasShowcaseCandidates = false
     /// Pins whose trips are not on this phone at all (see `reconcilePinnedTrips`).
     @State private var showcaseElsewhere: [UUID] = []
     private var allTrips: [Trip] { historyLibrary.trips }
@@ -204,6 +202,10 @@ struct ProfileView: View {
     /// move together. Unrelated body updates only read this prepared value.
     @State private var preparedHistory = PreparedProfileHistory.empty
     @State private var historyQuery = ""
+    @State private var historyPreparation: Task<Void, Never>?
+    @State private var journalSignIn = false
+    @State private var coverHasScrolled = false
+    @ObservedObject private var coverPhotos = ProfilePhotoStore.shared
     @FocusState private var historySearchFocused: Bool
     @State private var showsProfileSections = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -343,7 +345,9 @@ struct ProfileView: View {
         NavigationStack(path: $mePath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    hero()
+                    hero().background {
+                        ProfileCoverScrollProbe(space: "ownProfileCover") { coverHasScrolled = $0 }
+                    }
 
                     // Объявления с сервера для «Я» (0.9.0); пусто — ничего.
                     RemoteNoticeStack(placement: .me, outerPadding: EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
@@ -362,7 +366,7 @@ struct ProfileView: View {
                         // where a new user names the thing they drive, and
                         // it is the one section here that has something to
                         // do before the first kilometre.
-                        journalCards
+                        pinsElsewhereRow
                         firstTripWelcomeCard(c)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 12)
@@ -373,7 +377,7 @@ struct ProfileView: View {
                         clubsSection()
                     } else {
                         if !auth.isSignedIn {
-                            guestSignInCard(c)
+                            journalSignInRow(c)
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
                         } else if showsVisibilityNotice {
@@ -382,7 +386,6 @@ struct ProfileView: View {
                                 .padding(.bottom, 12)
                         }
 
-                        journalCards
                         profileSections(c)
 
                         // Над «Историей», а не под ней: подсказка про только
@@ -449,8 +452,17 @@ struct ProfileView: View {
                 // Клиренс — как у гаража и паспорта, от границы безопасной зоны.
                 .padding(.bottom, hostedInTab ? CustomTabBar.clearanceAboveSafeArea : 40)
             }
+            .coordinateSpace(name: "ownProfileCover")
             .scrollIndicators(.hidden)
+            .ignoresSafeArea(.container, edges: coverPhotos.photos.isEmpty ? [] : .top)
             .background(c.bg)
+            .overlay(alignment: .top) {
+                if !coverPhotos.photos.isEmpty && coverHasScrolled {
+                    c.bg.frame(height: WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59)
+                        .offset(y: -(WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59))
+                        .accessibilityHidden(true).allowsHitTesting(false)
+                }
+            }
             // The page colour under the status bar. This tab has no header of
             // its own — the hero card is the top — so the scroll ran straight
             // under the clock: «Гараж · Достижения · Клубы», the calendar and
@@ -463,10 +475,11 @@ struct ProfileView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 Color.clear
                     .frame(height: 0)
-                    .background(c.bg.ignoresSafeArea(edges: .top))
+                    .background { if coverPhotos.photos.isEmpty { c.bg.ignoresSafeArea(edges: .top) } }
                     .accessibilityHidden(true)
             }
             .toast(item: $toastItem)
+            .sheet(isPresented: $journalSignIn) { SignInPromptSheet(action: .generic).environmentObject(auth) }
             .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $headerVehicleID) { id in
@@ -609,6 +622,7 @@ struct ProfileView: View {
         // in `loadAggregates`, the range moves here.
         .onChange(of: dateFrom) { _, _ in refreshVisibleTrips() }
         .onChange(of: dateTo) { _, _ in refreshVisibleTrips() }
+        .onChange(of: settings.pinnedTripIds) { _, _ in refreshVisibleTrips() }
         .onChange(of: historyQuery) { _, _ in refreshVisibleTrips() }
         .onChange(of: lang.language) { _, _ in refreshVisibleTrips() }
         .task {
@@ -913,57 +927,24 @@ struct ProfileView: View {
     /// SwiftUI treat it as ONE element and swallow the buttons inside it, which
     /// takes the avatar, the pill and the gear away from VoiceOver and from the
     /// UI tests alike. The ids live on those buttons.
-    private func prepareShowcase() {
-        let eligible = allTrips.filter { !$0.isPrivate && !$0.isDraft && $0.endDate != nil }
-        let byId = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        showcaseTrips = settings.pinnedTripIds.compactMap { byId[$0] }
-        hasShowcaseCandidates = !eligible.isEmpty
-        let here = Set(allTrips.map(\.id))
-        showcaseElsewhere = settings.pinnedTripIds.filter { !here.contains($0) }
-    }
-
-    private var journalCards: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ProfilePhotosCard(isOwn: true)
-            if !showcaseTrips.isEmpty || hasShowcaseCandidates || !showcaseElsewhere.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(AppStrings.profileShowcase(lang.language)).font(AppType.section)
-                    if !showcaseElsewhere.isEmpty {
-                        HStack(spacing: 8) {
-                            Text(AppStrings.profileShowcaseElsewhere(lang.language, count: showcaseElsewhere.count))
-                                .font(.interScaled(13, relativeTo: .footnote))
-                                .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Button {
-                                Haptics.tap()
-                                for id in showcaseElsewhere { settings.unpinTrip(id) }
-                                prepareShowcase()
-                            } label: {
-                                Text(AppStrings.profileUnpin(lang.language))
-                                    .font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
-                                    .foregroundStyle(AppTheme.accent)
-                                    .frame(minHeight: 44)
-                            }
-                            .buttonStyle(PressableCardStyle())
-                            .accessibilityIdentifier("profile_showcase_unpin_elsewhere")
-                        }
-                    }
-                    if showcaseTrips.isEmpty && showcaseElsewhere.isEmpty {
-                        Text(AppStrings.profileShowcaseEmpty(lang.language))
-                            .font(.interScaled(14, relativeTo: .subheadline))
-                            .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
-                    }
-                    ForEach(showcaseTrips) { trip in
-                        ProfileTripCardView(trip: trip, level: settings.profileLevel) {
-                            Haptics.tap()
-                            push(.trip(trip.id))
-                        }
-                    }
-                }.padding(16).surfaceCard()
-            }
+    @ViewBuilder private var pinsElsewhereRow: some View {
+        if !showcaseElsewhere.isEmpty {
+            HStack(spacing: 8) {
+                Text(AppStrings.profileShowcaseElsewhere(lang.language, count: showcaseElsewhere.count))
+                    .font(.interScaled(13, relativeTo: .footnote))
+                    .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    Haptics.tap()
+                    for id in showcaseElsewhere { settings.unpinTrip(id) }
+                } label: {
+                    Text(AppStrings.profileUnpin(lang.language))
+                        .font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
+                        .foregroundStyle(AppTheme.accent).frame(minHeight: 44)
+                }.buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("profile_showcase_unpin_elsewhere")
+            }.padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .padding(.horizontal, 16).padding(.bottom, 12)
-        .onChange(of: settings.pinnedTripIds) { _, _ in prepareShowcase() }
     }
 
     private func hero() -> some View {
@@ -992,8 +973,6 @@ struct ProfileView: View {
             onTapStats: { push(.stats) },
             onTapSettings: { showSettings = true }
         )
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
         .padding(.bottom, 12)
     }
 
@@ -1452,12 +1431,18 @@ struct ProfileView: View {
         // would otherwise butt straight into «Со мной».
         .padding(.bottom, 16)
 
+        pinsElsewhereRow
         if !trips.isEmpty {
             switch historyMode {
             case .grid:
+                pinnedHistory
                 gridHistory(preparedHistory.gridRuns)
             case .list:
-                listHistory(preparedHistory.rows)
+                pinnedHistory
+                ForEach(preparedHistory.chapters) { month in
+                    ProfileHistoryMonthHeader(month: month).padding(.horizontal, 16).padding(.bottom, 8)
+                    listHistory(month.rows)
+                }
             }
         } else {
             historyEmptyState(c)
@@ -1540,7 +1525,7 @@ struct ProfileView: View {
                         // Долгий тап открывает лист объединения — значит
                         // удержание видно под пальцем (CLAUDE.md, «Нажатие
                         // обязано отвечать»).
-                        pressResponse: .hold,
+                        pressResponse: .hold, mapHeight: 118,
                         onTap: { openTrip(trip) }
                     )
                     .overlay { justAddedRing(trip.id) }
@@ -1554,6 +1539,8 @@ struct ProfileView: View {
                     .accessibilityAction(named: Text(AppStrings.journeyCombine(lang.language))) {
                         openJourneyComposer(anchor: trip)
                     }
+                case .routine(let group):
+                    ProfileRoutineTripsView(group: group, onOpen: openTrip)
                 case .journey(let journey, let legs):
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
@@ -1734,11 +1721,48 @@ struct ProfileView: View {
     /// Recompute only when the library, journeys, query, language or dates
     /// change. No count/date cache key: same-count edits must replace cards too.
     private func refreshVisibleTrips() {
-        preparedHistory = PreparedProfileHistory(
-            library: historyLibrary, journeys: journeys.journeys,
-            query: historyQuery, from: dateFrom, to: dateTo,
-            language: lang.language
-        )
+        historyPreparation?.cancel()
+        let library = historyLibrary
+        let journeySnapshot = journeys.journeys
+        let pins = settings.pinnedTripIds
+        let query = historyQuery
+        let from = dateFrom
+        let to = dateTo
+        let language = lang.language
+        historyPreparation = Task {
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                PreparedProfileHistory(library: library, journeys: journeySnapshot,
+                                       query: query, from: from, to: to, language: language, pinnedTripIds: pins)
+            }.value
+            guard !Task.isCancelled else { return }
+            preparedHistory = snapshot
+            let local = Set(library.trips.map(\.id))
+            showcaseElsewhere = pins.filter { !local.contains($0) }
+        }
+    }
+
+    private var pinnedHistory: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(preparedHistory.pinned) { trip in
+                ProfileTripCardView(trip: trip, level: preparedHistory.historicalLevels?[trip.id] ?? settings.profileLevel,
+                                    isPinned: true, mapHeight: 118, onTap: { openTrip(trip) })
+            }
+        }.padding(.horizontal, 14).padding(.bottom, preparedHistory.pinned.isEmpty ? 0 : 12)
+    }
+
+    private func journalSignInRow(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 12) {
+            Text(auth.needsReauth ? AppStrings.sessionExpiredTitle(lang.language) : AppStrings.profileJournalSignIn(lang.language))
+                .font(.interScaled(14, weight: .medium, relativeTo: .subheadline))
+                .foregroundStyle(c.text).frame(maxWidth: .infinity, alignment: .leading)
+            Button { Haptics.tap(); journalSignIn = true } label: {
+                Text(AppStrings.signInShort(lang.language)).font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
+                    .foregroundStyle(c.card).padding(.horizontal, 13).padding(.vertical, 9)
+                    .background(c.text, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.vertical, 5).contentShape(Rectangle()).padding(.vertical, -5)
+            }.buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_journal_signin_button")
+        }.padding(.horizontal, 14).padding(.vertical, 12).surfaceCard()
+        .accessibilityIdentifier("profile_guest_signin")
     }
 
     // MARK: - Объединение в путешествие (0.6.6)
@@ -2249,7 +2273,6 @@ struct ProfileView: View {
         agg = crunched.aggregates
         historyLibrary = crunched.history.library
         settings.reconcilePinnedTrips(historyLibrary.trips)
-        prepareShowcase()
         kmByDay = crunched.history.kmByDay
         maxKmDay = crunched.history.maxKmDay
         // Every path that reloads the library lands here — a deleted trip has

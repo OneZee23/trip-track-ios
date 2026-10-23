@@ -39,6 +39,38 @@ extension AppStrings {
         tr(lang, "profileUnpin", ru: "Открепить из профиля", en: "Unpin from profile")
     }
     static func profileShowcaseLimit(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "profileShowcaseLimit", ru: "В витрине уже три поездки — открепите одну", en: "Your showcase already has three trips — unpin one")
+        tr(lang, "profileShowcaseLimit", ru: "Уже закреплены три поездки — открепите одну", en: "Three trips are already pinned — unpin one")
+    }
+}
+
+extension AppStrings {
+    static func profileAddCover(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileAddCover", ru: "Добавить обложку", en: "Add cover")
+    }
+    static func profileAddPhoto(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileAddPhoto", ru: "Добавить фото", en: "Add photo")
+    }
+    static func profileMakeCover(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileMakeCover", ru: "Сделать обложкой", en: "Make cover")
+    }
+    static func profileJournalSignIn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileJournalSignIn", ru: "Войдите, чтобы журнал увидели другие", en: "Sign in so others can see your journal")
+    }
+    static func profilePinned(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profilePinned", ru: "Закреплено", en: "Pinned")
+    }
+    static func profileRoutineCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        plural(lang, count,
+               one: tr(lang, "profileRoutineOne", ru: "{n} повторяющаяся поездка", en: "{n} repeated trip"),
+               few: tr(lang, "profileRoutineFew", ru: "{n} повторяющиеся поездки", en: "{n} repeated trips"),
+               many: tr(lang, "profileRoutineMany", ru: "{n} повторяющихся поездок", en: "{n} repeated trips"))
+            .replacingOccurrences(of: "{n}", with: String(count))
+    }
+    static func profileMoreTrips(_ lang: LanguageManager.Language, count: Int) -> String {
+        tr(lang, "profileMoreTrips", ru: "Ещё {n}", en: "{n} more")
+            .replacingOccurrences(of: "{n}", with: String(count))
+    }
+    static func profileChapterSummary(_ lang: LanguageManager.Language, distance: String, trips: Int, regions: Int) -> String {
+        [distance, "\(trips) \(nounTrips(lang, trips))", "\(regions) \(nounRegions(lang, regions))"].joined(separator: " · ")
     }
 }

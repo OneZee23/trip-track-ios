@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Moteur et boîte"
         table["catalogUnknownEngine"] = "Je ne connais pas le moteur"
         table["catalogHasYear"] = "Disponible en {year}"
+        table["profileAddCover"] = "Ajouter une couverture"
+        table["profileAddPhoto"] = "Ajouter une photo"
+        table["profileMakeCover"] = "Définir comme couverture"
+        table["profileJournalSignIn"] = "Connectez-vous pour partager votre journal"
+        table["profilePinned"] = "Épinglé"
+        table["profileRoutineOne"] = "{n} trajet répété"
+        table["profileRoutineFew"] = "{n} trajets répétés"
+        table["profileRoutineMany"] = "{n} trajets répétés"
+        table["profileMoreTrips"] = "Encore {n}"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "{n} de plus — épinglés sur un autre appareil",
         "profilePin": "Épingler au profil",
         "profileUnpin": "Détacher du profil",
-        "profileShowcaseLimit": "La vitrine contient déjà trois trajets — détachez-en un",
+        "profileShowcaseLimit": "Trois trajets sont déjà épinglés — détachez-en un",
     ]
 }

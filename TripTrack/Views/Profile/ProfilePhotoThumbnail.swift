@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfilePhotoThumbnail: View {
     let filename: String
+    var maxSize: CGFloat = 140
     @State private var image: UIImage?
 
     var body: some View {
@@ -12,7 +13,7 @@ struct ProfilePhotoThumbnail: View {
         .task(id: filename) {
             image = await VehicleImageCache.sized(
                 fileURL: ProfilePhotoStore.directory.appendingPathComponent(filename),
-                key: VehicleImageCache.localKey(filename, 140), maxSize: 140)
+                key: VehicleImageCache.localKey(filename, maxSize), maxSize: maxSize)
         }
         .accessibilityHidden(true)
     }

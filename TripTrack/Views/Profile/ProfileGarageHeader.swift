@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileGarageHeader: View {
     var isForeign = false
+    var onCoverEdge = false
     var publicVehicle: PublicVehicle? = nil
     var showsPaidCosmetics = false
     let ink: Color
@@ -20,12 +21,12 @@ struct ProfileGarageHeader: View {
         guard let active = settings.activeRecordableVehicleId else { return all }
         return all.sorted { ($0.id == active ? 0 : 1) < ($1.id == active ? 0 : 1) }
     }
-    private var width: CGFloat { min(UIScreen.main.bounds.width * 0.67, 300) }
+    private var width: CGFloat { onCoverEdge ? 250 : min(UIScreen.main.bounds.width * 0.67, 300) }
 
     var body: some View {
         if isForeign {
             if let v = publicVehicle { foreign(v) }
-        } else if vehicles.isEmpty {
+        } else if vehicles.isEmpty && !onCoverEdge {
             Button(action: onAdd) {
                 VStack(spacing: 8) {
                     Image(systemName: "plus").font(.system(size: 24))
@@ -41,13 +42,13 @@ struct ProfileGarageHeader: View {
             .accessibilityIdentifier("garage_header_add")
         } else if vehicles.count == 1, let v = vehicles.first {
             own(v)
-        } else {
+        } else if !vehicles.isEmpty {
             VStack(spacing: 0) {
                 TabView(selection: $page) {
                     ForEach(Array(vehicles.enumerated()), id: \.element.id) { index, v in own(v).tag(index) }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: width * 0.78 + 62)
+                .frame(height: onCoverEdge ? 188 : width * 0.78 + 62)
                 HStack(spacing: 10) {
                     ForEach(vehicles.indices, id: \.self) { index in
                         Circle().fill(index == page ? AppTheme.accent : secondaryInk.opacity(0.3))
@@ -68,11 +69,15 @@ struct ProfileGarageHeader: View {
                     assetName: v.avatarImageName, fallbackEmoji: v.avatarEmoji,
                     style: .effective(id: v.cardStyle, isPlus: plus.isPlus),
                     finish: .effective(v.paintFinish, isPlus: plus.isPlus), photo: mainPhotos[v.id], width: width)
-                name(v.name.isEmpty ? AppStrings.defaultVehicleName(lang.language) : v.name)
-                VehicleCatalogCaption(
-                    make: v.make, model: v.model, year: v.year, bodyType: v.bodyType,
-                    modelID: v.catalogModelId, generationID: v.catalogGenerationId,
-                    variantID: v.catalogVariantId, foreground: secondaryInk)
+                    .frame(height: onCoverEdge ? 155 : nil, alignment: .bottom)
+                let layout = onCoverEdge ? AnyLayout(HStackLayout(spacing: 5)) : AnyLayout(VStackLayout(spacing: 8))
+                layout {
+                    name(v.name.isEmpty ? AppStrings.defaultVehicleName(lang.language) : v.name)
+                    VehicleCatalogCaption(
+                        make: v.make, model: v.model, year: v.year, bodyType: v.bodyType,
+                        modelID: v.catalogModelId, generationID: v.catalogGenerationId,
+                        variantID: v.catalogVariantId, foreground: secondaryInk)
+                }
             }.frame(maxWidth: .infinity).contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
@@ -92,11 +97,15 @@ struct ProfileGarageHeader: View {
                     style: .effective(id: v.cardStyle, isPlus: showsPaidCosmetics),
                     finish: .effective(v.paintFinish, isPlus: showsPaidCosmetics),
                     remotePhoto: v.mainPhoto.flatMap { $0.isEmpty ? nil : URL(string: $0) }, width: width)
-                name(v.name)
-                VehicleCatalogCaption(
-                    make: v.make ?? "", model: v.model ?? "", year: v.year ?? 0, bodyType: v.bodyType ?? "",
-                    modelID: v.catalogModelId, generationID: v.catalogGenerationId,
-                    variantID: v.catalogVariantId, foreground: secondaryInk)
+                    .frame(height: onCoverEdge ? 155 : nil, alignment: .bottom)
+                let layout = onCoverEdge ? AnyLayout(HStackLayout(spacing: 5)) : AnyLayout(VStackLayout(spacing: 8))
+                layout {
+                    name(v.name)
+                    VehicleCatalogCaption(
+                        make: v.make ?? "", model: v.model ?? "", year: v.year ?? 0, bodyType: v.bodyType ?? "",
+                        modelID: v.catalogModelId, generationID: v.catalogGenerationId,
+                        variantID: v.catalogVariantId, foreground: secondaryInk)
+                }
             }.frame(maxWidth: .infinity).contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
@@ -105,7 +114,7 @@ struct ProfileGarageHeader: View {
 
     private func name(_ value: String) -> some View {
         HStack(spacing: 5) {
-            Text(value).font(.inter(16, weight: .bold)).foregroundStyle(ink)
+            Text(value).font(.inter(onCoverEdge ? 15 : 16, weight: .semibold)).foregroundStyle(ink)
             Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(secondaryInk)
         }
     }

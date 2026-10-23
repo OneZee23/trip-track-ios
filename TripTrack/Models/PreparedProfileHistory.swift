@@ -21,30 +21,34 @@ struct PreparedProfileHistory {
     let rows: [HistoryRow]
     let gridRuns: [[HistoryRow]]
     let historicalLevels: [UUID: Int]?
+    let pinned: [Trip]
+    let chapters: [ProfileHistoryMonth]
 
     init(
         library: ProfileHistoryLibrary, journeys: [Journey], query: String,
         from: Date?, to: Date?, language: LanguageManager.Language,
-        calendar: Calendar = .current
+        calendar: Calendar = .current, pinnedTripIds: [UUID] = [],
+        foldsRoutine: Bool = true, keepsEmptyJourneys: Bool = true, foldsJourneysInGrid: Bool = true
     ) {
         let visibleTrips = TripHistoryFilter.apply(
             library.trips, query: query, from: from, to: to,
             language: language, calendar: calendar
         )
-        let rows: [HistoryRow]
-        // Search exposes matching legs directly; a collapsed journey would
-        // conceal the title the person searched for.
-        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            rows = HistoryFolding.fold(
-                trips: visibleTrips, journeys: journeys,
-                range: HistoryFolding.dayRange(from: from, to: to, calendar: calendar)
-            )
-        } else {
-            rows = visibleTrips.map(HistoryRow.trip)
-        }
+        let journal = HistoryFolding.journal(
+            trips: visibleTrips, journeys: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? journeys : [],
+            pinnedTripIds: pinnedTripIds,
+            range: HistoryFolding.dayRange(from: from, to: to, calendar: calendar), calendar: calendar,
+            foldsRoutine: foldsRoutine && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            keepsEmptyJourneys: keepsEmptyJourneys)
+        self.pinned = journal.pinned
+        self.chapters = ProfileHistoryMonth.build(rows: journal.rows, trips: visibleTrips, calendar: calendar, language: language)
         self.visibleTrips = visibleTrips
-        self.rows = rows
-        self.gridRuns = HistoryFolding.runs(rows)
+        self.rows = journal.rows
+        let grid = HistoryFolding.journal(
+            trips: visibleTrips, journeys: foldsJourneysInGrid && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? journeys : [],
+            pinnedTripIds: pinnedTripIds, range: HistoryFolding.dayRange(from: from, to: to, calendar: calendar),
+            calendar: calendar, foldsRoutine: false, keepsEmptyJourneys: keepsEmptyJourneys)
+        self.gridRuns = HistoryFolding.runs(grid.rows)
         // Filters hide trips; they do not remove the XP earned before them.
         self.historicalLevels = library.historicalLevels
     }

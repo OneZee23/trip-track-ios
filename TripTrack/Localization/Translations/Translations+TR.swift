@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Motor ve şanzıman"
         table["catalogUnknownEngine"] = "Motoru bilmiyorum"
         table["catalogHasYear"] = "{year} mevcut"
+        table["profileAddCover"] = "Kapak ekle"
+        table["profileAddPhoto"] = "Fotoğraf ekle"
+        table["profileMakeCover"] = "Kapak yap"
+        table["profileJournalSignIn"] = "Günlüğünü başkalarının görmesi için giriş yap"
+        table["profilePinned"] = "Sabitlendi"
+        table["profileRoutineOne"] = "{n} tekrarlanan yolculuk"
+        table["profileRoutineFew"] = "{n} tekrarlanan yolculuk"
+        table["profileRoutineMany"] = "{n} tekrarlanan yolculuk"
+        table["profileMoreTrips"] = "{n} tane daha"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "{n} tane daha — başka bir cihazda sabitlendi",
         "profilePin": "Profile sabitle",
         "profileUnpin": "Profilden kaldır",
-        "profileShowcaseLimit": "Vitrinde zaten üç yolculuk var — birini kaldırın",
+        "profileShowcaseLimit": "Üç yolculuk zaten sabitlendi — birini kaldır",
     ]
 }

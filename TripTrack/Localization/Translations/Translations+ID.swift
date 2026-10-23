@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Mesin dan transmisi"
         table["catalogUnknownEngine"] = "Saya tidak tahu mesinnya"
         table["catalogHasYear"] = "Tersedia tahun {year}"
+        table["profileAddCover"] = "Tambah sampul"
+        table["profileAddPhoto"] = "Tambah foto"
+        table["profileMakeCover"] = "Jadikan sampul"
+        table["profileJournalSignIn"] = "Masuk agar orang lain dapat melihat jurnalmu"
+        table["profilePinned"] = "Disematkan"
+        table["profileRoutineOne"] = "{n} perjalanan berulang"
+        table["profileRoutineFew"] = "{n} perjalanan berulang"
+        table["profileRoutineMany"] = "{n} perjalanan berulang"
+        table["profileMoreTrips"] = "{n} lagi"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "{n} lagi — disematkan di perangkat lain",
         "profilePin": "Sematkan di profil",
         "profileUnpin": "Lepas dari profil",
-        "profileShowcaseLimit": "Etalase sudah berisi tiga perjalanan — lepas satu",
+        "profileShowcaseLimit": "Sudah ada tiga perjalanan yang disematkan — lepas salah satunya",
     ]
 }

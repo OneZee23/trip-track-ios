@@ -39,6 +39,7 @@ struct PhotoFullScreenView: View {
     /// `nil` у поездок — у них главной фотографии нет.
     var onSetMain: ((UUID) -> Void)? = nil
     var setMainTitle: String? = nil
+    var onAdd: (() -> Void)? = nil
     /// Уже главная: кнопка тогда показывает состояние, а не предлагает
     /// сделать то, что и так сделано.
     var isMain: ((UUID) -> Bool)? = nil
@@ -93,6 +94,7 @@ struct PhotoFullScreenView: View {
         onDelete: ((UUID) -> Void)? = nil,
         onSetMain: ((UUID) -> Void)? = nil,
         setMainTitle: String? = nil,
+        onAdd: (() -> Void)? = nil,
         onReport: ((UUID) -> Void)? = nil,
         isMain: ((UUID) -> Bool)? = nil,
         onMarkPlace: ((UUID) -> Void)? = nil,
@@ -106,6 +108,7 @@ struct PhotoFullScreenView: View {
         self.onDelete = onDelete
         self.onSetMain = onSetMain
         self.setMainTitle = setMainTitle
+        self.onAdd = onAdd
         self.onReport = onReport
         self.isMain = isMain
         self.onMarkPlace = onMarkPlace
@@ -354,6 +357,9 @@ struct PhotoFullScreenView: View {
     private var topRow: some View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
+            if let onAdd {
+                circleButton("plus", label: AppStrings.profileAddPhoto(language), id: "photo_viewer_add", action: onAdd)
+            }
             if let onSetMain {
                 let already = isMain?(livePages[currentIndex].id) ?? false
                 circleButton(already ? "star.fill" : "star",

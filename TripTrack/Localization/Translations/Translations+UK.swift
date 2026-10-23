@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Двигун і коробка"
         table["catalogUnknownEngine"] = "Не знаю двигун"
         table["catalogHasYear"] = "є {year}"
+        table["profileAddCover"] = "Додати обкладинку"
+        table["profileAddPhoto"] = "Додати фото"
+        table["profileMakeCover"] = "Зробити обкладинкою"
+        table["profileJournalSignIn"] = "Увійдіть, щоб інші побачили ваш журнал"
+        table["profilePinned"] = "Закріплено"
+        table["profileRoutineOne"] = "{n} повторювана поїздка"
+        table["profileRoutineFew"] = "{n} повторювані поїздки"
+        table["profileRoutineMany"] = "{n} повторюваних поїздок"
+        table["profileMoreTrips"] = "Ще {n}"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "Ще {n} — закріплено на іншому пристрої",
         "profilePin": "Закріпити в профілі",
         "profileUnpin": "Відкріпити з профілю",
-        "profileShowcaseLimit": "У вітрині вже три поїздки — відкріпіть одну",
+        "profileShowcaseLimit": "Уже закріплено три поїздки — відкріпіть одну",
     ]
 }

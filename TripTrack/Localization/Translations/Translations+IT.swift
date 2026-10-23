@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Motore e cambio"
         table["catalogUnknownEngine"] = "Non conosco il motore"
         table["catalogHasYear"] = "Disponibile nel {year}"
+        table["profileAddCover"] = "Aggiungi copertina"
+        table["profileAddPhoto"] = "Aggiungi foto"
+        table["profileMakeCover"] = "Imposta come copertina"
+        table["profileJournalSignIn"] = "Accedi per mostrare il diario agli altri"
+        table["profilePinned"] = "In evidenza"
+        table["profileRoutineOne"] = "{n} viaggio ripetuto"
+        table["profileRoutineFew"] = "{n} viaggi ripetuti"
+        table["profileRoutineMany"] = "{n} viaggi ripetuti"
+        table["profileMoreTrips"] = "Altri {n}"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "Altri {n} — fissati su un altro dispositivo",
         "profilePin": "Fissa sul profilo",
         "profileUnpin": "Rimuovi dal profilo",
-        "profileShowcaseLimit": "La vetrina ha già tre viaggi: rimuovine uno",
+        "profileShowcaseLimit": "Ci sono già tre viaggi in evidenza — rimuovine uno",
     ]
 }

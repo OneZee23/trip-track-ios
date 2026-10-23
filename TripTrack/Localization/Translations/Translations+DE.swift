@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Motor und Getriebe"
         table["catalogUnknownEngine"] = "Motor unbekannt"
         table["catalogHasYear"] = "{year} verfügbar"
+        table["profileAddCover"] = "Titelbild hinzufügen"
+        table["profileAddPhoto"] = "Foto hinzufügen"
+        table["profileMakeCover"] = "Als Titelbild festlegen"
+        table["profileJournalSignIn"] = "Melde dich an, damit andere dein Journal sehen"
+        table["profilePinned"] = "Angeheftet"
+        table["profileRoutineOne"] = "{n} wiederholte Fahrt"
+        table["profileRoutineFew"] = "{n} wiederholte Fahrten"
+        table["profileRoutineMany"] = "{n} wiederholte Fahrten"
+        table["profileMoreTrips"] = "{n} weitere"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "Noch {n} — auf einem anderen Gerät angeheftet",
         "profilePin": "Im Profil anheften",
         "profileUnpin": "Vom Profil lösen",
-        "profileShowcaseLimit": "Bereits drei Fahrten im Schaukasten — löse eine",
+        "profileShowcaseLimit": "Drei Fahrten sind bereits angeheftet — löse eine davon",
     ]
 }

@@ -28,6 +28,8 @@ struct ProfileHeroCard: View {
     var followBusy = false
     var followEnabled = true
     var onFollow: () -> Void = {}
+    var onFollowers: () -> Void = {}
+    var onFollowing: () -> Void = {}
     var bio: String? = nil
     var country: String? = nil
     var privacyStats = false
@@ -46,6 +48,9 @@ struct ProfileHeroCard: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var plus = PlusAccess.shared
+    @ObservedObject private var photos = ProfilePhotoStore.shared
+
+    private var hasPhotos: Bool { isForeign ? !(publicProfile?.photos ?? []).isEmpty : !photos.photos.isEmpty }
 
     /// The background as others see it; `nil` for the light default. An
     /// expired PRO falls back here too (`effective`), never to a dark card.
@@ -73,6 +78,64 @@ struct ProfileHeroCard: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            if hasPhotos {
+                ProfileCoverPager(remotePhotos: publicProfile?.photos, isOwn: !isForeign,
+                                  onSettings: isForeign ? nil : onTapSettings)
+                coverPanel
+            } else {
+                originalCard.padding(.horizontal, 16).padding(.top, 4)
+                if !isForeign { ProfileCoverPager(isOwn: true) }
+            }
+        }
+    }
+
+    private var hasVehicle: Bool { isForeign ? publicVehicle != nil : !settings.recordableVehicles.isEmpty }
+
+    private var coverPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if hasVehicle {
+                ProfileGarageHeader(isForeign: isForeign, onCoverEdge: true, publicVehicle: publicVehicle,
+                                    showsPaidCosmetics: paidCosmetics, ink: ink, secondaryInk: secondaryInk,
+                                    onTap: onTapVehicle, onAdd: onAddVehicle)
+                    .padding(.top, -82)
+            }
+            identityRow
+            if isForeign { followersLine }
+            if let bio, !bio.isEmpty {
+                Text(bio).font(.interScaled(15, relativeTo: .subheadline)).foregroundStyle(ink)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("profile_bio")
+            }
+            if showsStats { statsRow.padding(.top, 4) }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 12)
+        .padding(.top, (isForeign ? publicVehicle != nil : !settings.recordableVehicles.isEmpty) ? 0 : 18)
+        .background {
+            if let chosenCover { chosenCover.view().overlay(.black.opacity(0.64)) }
+            else { colors.bg }
+        }
+    }
+
+    private var followersLine: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) { followerButtons }
+            VStack(alignment: .leading, spacing: 4) { followerButtons }
+        }.font(.interScaled(13, relativeTo: .footnote)).foregroundStyle(secondaryInk)
+    }
+
+    @ViewBuilder private var followerButtons: some View {
+        let followers = publicProfile?.followerCount ?? 0
+        let following = publicProfile?.followingCount ?? 0
+        Button(action: onFollowers) {
+            Text("\(followers) " + AppStrings.followersCaption(lang.language, n: followers)).frame(minHeight: 28)
+        }.buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_followers")
+        Text("·").accessibilityHidden(true)
+        Button(action: onFollowing) {
+            Text("\(following) " + AppStrings.followingCaption(lang.language, n: following)).frame(minHeight: 28)
+        }.buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_following")
+    }
+
+    private var originalCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             identityRow
             if let bio, !bio.isEmpty {
@@ -83,6 +146,7 @@ struct ProfileHeroCard: View {
             ProfileGarageHeader(isForeign: isForeign, publicVehicle: publicVehicle,
                                 showsPaidCosmetics: paidCosmetics, ink: ink, secondaryInk: secondaryInk,
                                 onTap: onTapVehicle, onAdd: onAddVehicle)
+            if isForeign { followersLine }
             if showsStats {
                 Rectangle().fill(rule).frame(height: 1)
                 statsRow
@@ -121,8 +185,8 @@ struct ProfileHeroCard: View {
                     onTapProfile()
                 } label: {
                     Text(avatarEmoji)
-                        .font(.inter(32))
-                        .frame(width: 60, height: 60)
+                        .font(.inter(hasPhotos ? 26 : 32))
+                        .frame(width: hasPhotos ? 46 : 60, height: hasPhotos ? 46 : 60)
                         .background(hasCover ? .white.opacity(0.16) : colors.cardAlt, in: Circle())
                         .avatarFrame(
                             frame,
@@ -139,7 +203,8 @@ struct ProfileHeroCard: View {
                 } else {
                     Spacer(minLength: 0)
                 }
-                if !isForeign {
+                if let followTitle, !typeSize.isAccessibilitySize { followButton(followTitle) }
+                if !isForeign && !hasPhotos {
                     Button {
                         Haptics.tap()
                         onTapSettings()
@@ -155,7 +220,10 @@ struct ProfileHeroCard: View {
                     .accessibilityIdentifier("profile_gear")
                 }
             }
-            if typeSize.isAccessibilitySize { identityText }
+            if typeSize.isAccessibilitySize {
+                identityText
+                if let followTitle { followButton(followTitle) }
+            }
         }
     }
 
@@ -176,7 +244,7 @@ struct ProfileHeroCard: View {
                         ProBadge(height: 16)
                     }
                 }
-                .frame(minHeight: 32, alignment: .leading)
+                .frame(minHeight: hasPhotos ? 26 : 32, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableCardStyle())
@@ -201,10 +269,10 @@ struct ProfileHeroCard: View {
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 26, alignment: .leading)
-                .padding(.vertical, 9)
+                .frame(minHeight: hasPhotos ? 18 : 26, alignment: .leading)
+                .padding(.vertical, hasPhotos ? 13 : 9)
                 .contentShape(Rectangle())
-                .padding(.vertical, -9)
+                .padding(.vertical, hasPhotos ? -13 : -9)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(isForeign ? "public_lvl_pill" : "profile_lvl_pill")
@@ -213,24 +281,21 @@ struct ProfileHeroCard: View {
                 Text(country).font(.inter(12)).foregroundStyle(secondaryInk)
                     .accessibilityIdentifier("profile_country")
             }
-            if let followTitle {
-                Button(action: onFollow) {
-                    HStack(spacing: 6) {
-                        if followBusy { ProgressView().tint(.white).scaleEffect(0.7) }
-                        Text(followTitle).font(.inter(13, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 7).padding(.horizontal, 14)
-                    .background(AppTheme.accent, in: Capsule())
-                    .padding(.vertical, 7)
-                    .contentShape(Rectangle())
-                    .padding(.vertical, -7)
-                }
-                .buttonStyle(PressableCardStyle())
-                .disabled(followBusy || !followEnabled)
-                .accessibilityIdentifier("profile_follow")
-            }
         }
+    }
+
+    private func followButton(_ title: String) -> some View {
+        Button(action: onFollow) {
+            HStack(spacing: 6) {
+                if followBusy { ProgressView().tint(.white).scaleEffect(0.7) }
+                Text(title).font(.interScaled(13, weight: .semibold, relativeTo: .footnote))
+            }
+            .foregroundStyle(.white).padding(.vertical, 8).padding(.horizontal, 12)
+            .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 6).contentShape(Rectangle()).padding(.vertical, -6)
+        }
+        .buttonStyle(PressableCardStyle()).disabled(followBusy || !followEnabled)
+        .accessibilityIdentifier("profile_follow")
     }
 
     private var statsRow: some View {
@@ -257,7 +322,7 @@ struct ProfileHeroCard: View {
     private func column(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.interScaled(22, weight: .bold, relativeTo: .title3).monospacedDigit())
+                .font(.interScaled(hasPhotos ? 19 : 22, weight: hasPhotos ? .heavy : .bold, relativeTo: .title3).monospacedDigit())
                 .foregroundStyle(ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

@@ -24,6 +24,15 @@ extension Translations {
         table["catalogVariant"] = "Makina at transmisyon"
         table["catalogUnknownEngine"] = "Hindi ko alam ang makina"
         table["catalogHasYear"] = "May {year}"
+        table["profileAddCover"] = "Magdagdag ng pabalat"
+        table["profileAddPhoto"] = "Magdagdag ng larawan"
+        table["profileMakeCover"] = "Gawing pabalat"
+        table["profileJournalSignIn"] = "Mag-sign in para makita ng iba ang iyong talaarawan"
+        table["profilePinned"] = "Naka-pin"
+        table["profileRoutineOne"] = "{n} paulit-ulit na biyahe"
+        table["profileRoutineFew"] = "{n} paulit-ulit na biyahe"
+        table["profileRoutineMany"] = "{n} paulit-ulit na biyahe"
+        table["profileMoreTrips"] = "{n} pa"
         return table
     }()
 
@@ -1735,6 +1744,6 @@ extension Translations {
         "profileShowcaseElsewhere": "{n} pa — naka-pin sa ibang device",
         "profilePin": "I-pin sa profile",
         "profileUnpin": "Alisin sa profile",
-        "profileShowcaseLimit": "May tatlong biyahe na sa tampok — alisin ang isa",
+        "profileShowcaseLimit": "Tatlong biyahe na ang naka-pin — alisin ang isa",
     ]
 }
