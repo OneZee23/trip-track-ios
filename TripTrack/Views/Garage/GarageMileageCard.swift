@@ -33,7 +33,9 @@ struct GarageMileageCard: View {
                         .textCase(.uppercase).foregroundStyle(c.textTertiary)
                 }.contentShape(Rectangle())
             }.buttonStyle(PressableCardStyle()).disabled(onEdit == nil)
-            if !years.isEmpty { chart(c) }
+            // One year compares nothing, and its bar only repeats the line
+            // below (owner on device, 23 Oct: «что за линия жирная, огромная?»).
+            if years.count >= 2 { chart(c) }
             Text(AppStrings.garageTracked(l, distance: Measure.distance(km: trackedKm, unit: unit, lang: l)))
                 .font(.inter(12)).foregroundStyle(c.textSecondary)
         }
@@ -50,11 +52,9 @@ struct GarageMileageCard: View {
                         Text(Measure.distance(km: year.km, unit: unit, lang: lang.language))
                             .font(.inter(11, weight: .semibold)).foregroundStyle(c.text).lineLimit(1)
                         UnevenRoundedRectangle(topLeadingRadius: 6, topTrailingRadius: 6)
-                            .fill(AppTheme.accent).frame(height: max(2, 70 * year.km / maxKm))
+                            .fill(AppTheme.accent).frame(width: 32, height: max(2, 70 * year.km / maxKm))
                         Text(String(year.year)).font(.inter(11)).foregroundStyle(c.textSecondary)
-                    }.frame(
-                        width: years.count <= 2
-                            ? (UIScreen.main.bounds.width - 78) / CGFloat(max(1, years.count)) - 7 : 90)
+                    }.frame(width: 64)
                 }
             }.frame(height: 110)
         }
