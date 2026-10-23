@@ -94,6 +94,30 @@ final class GarageProfileShotTests: XCTestCase {
         XCTAssertTrue(app.buttons["garage_drive2_row"].firstMatch.waitForExistence(timeout: 5))
     }
 
+    /// Вне СНГ пустого приглашения DRIVE2 на странице машины нет, а
+    /// привязанная ссылка и пункт в «…» остаются (владелец, 23 окт 2026).
+    func testDrive2InviteStaysOffThePageOutsideCIS() {
+        launchOwn(language: "en", locale: "en_US")
+        let header = app.buttons["garage_header_vehicle"].firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 30))
+        header.tap()
+        XCTAssertTrue(app.buttons["vehicle_level_row"].firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["garage_drive2_row"].firstMatch.exists, "A linked logbook is shown to everyone")
+        let more = app.buttons["garage_vehicle_actions"].firstMatch
+        more.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Logbook on DRIVE2")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["garage_drive2_save"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Unlink"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["vehicle_level_row"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["garage_drive2_row"].firstMatch.exists, "No empty DRIVE2 invite outside CIS")
+        capture("13-car-no-drive2-invite-en")
+        more.tap()
+        XCTAssertTrue(
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Logbook on DRIVE2")).firstMatch
+                .waitForExistence(timeout: 5),
+            "Linking stays reachable from …")
+    }
+
     func testForeignHeaderAndReadOnlyCar() {
         app = XCUIApplication()
         app.launchArguments += common + ["-debug-foreign-trip", "-debug-foreign-profile", "pro"]
@@ -161,15 +185,16 @@ final class GarageProfileShotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["GarageTag"].firstMatch.waitForExistence(timeout: 10))
     }
 
-    private var common: [String] {
+    private var common: [String] { common() }
+    private func common(language: String = "ru", locale: String = "ru_RU") -> [String] {
         [
-            "-hasCompletedOnboarding", "<true/>", "-appLanguage", "ru", "-appThemeMode", "light", "-AppleLanguages",
-            "(ru)", "-AppleLocale", "ru_RU",
+            "-hasCompletedOnboarding", "<true/>", "-appLanguage", language, "-appThemeMode", "light", "-AppleLanguages",
+            "(\(language))", "-AppleLocale", locale,
         ]
     }
-    private func launchOwn(reset: Bool = true) {
+    private func launchOwn(reset: Bool = true, language: String = "ru", locale: String = "ru_RU") {
         app = XCUIApplication()
-        app.launchArguments += common + ["-seed-garage-demo", "-debug-plus"]
+        app.launchArguments += common(language: language, locale: locale) + ["-seed-garage-demo", "-debug-plus"]
             + (reset ? ["-seed-garage-reset"] : [])
         app.launch()
         let tab = app.buttons["tab_profile"].firstMatch

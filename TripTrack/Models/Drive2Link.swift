@@ -30,3 +30,28 @@ struct Drive2Link: Equatable {
         url = normalized
     }
 }
+
+/// Кому приглашение «Привязать бортжурнал DRIVE2» стоит прямо на странице
+/// машины.
+///
+/// DRIVE2 — сервис русскоязычный, и за пределами СНГ его почти не знают.
+/// Пустая строка второй под шапкой показывала немцу или бразильцу незнакомое
+/// имя на самом видном месте (владелец, 23 окт 2026: «не сильно выпячивать,
+/// у меня иностранная аудитория тоже есть»). Остальным привязка доступна из
+/// «…» на странице машины, а УЖЕ привязанная ссылка видна всем: это то, что
+/// человек сам положил в свой гараж.
+///
+/// Решают язык приложения ИЛИ регион телефона: русский в Германии и немецкий
+/// интерфейс в Казахстане — оба вероятные читатели DRIVE2.
+enum Drive2Audience {
+    static let languages: Set<LanguageManager.Language> = [.ru, .uk, .kk]
+    static let regions: Set<String> = ["RU", "BY", "KZ"]
+
+    static func invitesOnPage(language: LanguageManager.Language, region: String?) -> Bool {
+        languages.contains(language) || region.map { regions.contains($0.uppercased()) } == true
+    }
+
+    static func invitesOnPage(language: LanguageManager.Language) -> Bool {
+        invitesOnPage(language: language, region: Locale.current.region?.identifier)
+    }
+}

@@ -146,7 +146,9 @@ struct VehicleDetailView: View {
                         heroCard(vehicle, c: c, l: l)
                         // Паспорт (0.6.4): круги теперь внутри шапки, здесь —
                         // строка владельца и рекорды. Всё из поездок ЭТОЙ машины.
-                        Drive2LogbookRow(link: vehicle.drive2URL, onConnect: { showDrive2 = true })
+                        Drive2LogbookRow(
+                            link: vehicle.drive2URL,
+                            onConnect: Drive2Audience.invitesOnPage(language: l) ? { showDrive2 = true } : nil)
                         GarageMileageCard(odometerKm: vehicle.displayOdometerKm, trackedKm: vehicle.odometerKm,
                                           years: passport?.years ?? [], unit: dashUnit(vehicle), onEdit: { showEditForm = true })
                         whereWasCard(c: c, l: l)
