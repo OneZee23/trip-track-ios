@@ -6418,8 +6418,8 @@ enum AppStrings {
     /// them is not silently claiming other people can see them.
     static func previewBannerBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "previewBannerBody",
-           ru: "Юзернейм, флаг и «о себе» пока хранятся только на телефоне — другие их не увидят.",
-           en: "Your handle, flag and bio live on this device only — nobody else can see them yet.")
+           ru: "Юзернейм и флаг пока хранятся только на телефоне — другие их не увидят.",
+           en: "Your handle and flag live on this device only — nobody else can see them yet.")
     }
     /// Stands where the follow button would be on someone else's profile.
     static func previewThisIsYou(_ lang: LanguageManager.Language) -> String {

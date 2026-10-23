@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Чемпион жол",
         "statsRecordFarthest": "Ең алыс нүкте",
         "previewBannerSubtitle": "Алдын ала қарау · жазылу мен реакциялар қолжетімсіз",
-        "previewBannerBody": "Пайдаланушы аты, жалауша және «өзім туралы» әзірге тек осы телефонда — басқалар оларды көрмейді.",
+        "previewBannerBody": "Пайдаланушы аты мен жалауша әзірге тек осы телефонда — басқалар оларды көрмейді.",
         "previewThisIsYou": "Бұл сіз",
         "vehicleTypeCar": "Автокөлік",
         "vehicleTypeMoto": "Мотоцикл",

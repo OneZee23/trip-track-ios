@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Route championne",
         "statsRecordFarthest": "Point le plus lointain",
         "previewBannerSubtitle": "Aperçu · s'abonner et réagir sont indisponibles",
-        "previewBannerBody": "Votre identifiant, votre drapeau et votre bio ne vivent pour l'instant que sur cet appareil — personne d'autre ne les voit.",
+        "previewBannerBody": "Votre identifiant et votre drapeau ne vivent pour l'instant que sur cet appareil — personne d'autre ne les voit.",
         "previewThisIsYou": "C'est vous",
         "vehicleTypeCar": "Voiture",
         "vehicleTypeMoto": "Moto",

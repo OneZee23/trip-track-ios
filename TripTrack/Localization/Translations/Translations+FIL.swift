@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Kampeong kalsada",
         "statsRecordFarthest": "Pinakamalayong punto",
         "previewBannerSubtitle": "Preview · hindi available ang pagsunod at reaksyon",
-        "previewBannerBody": "Ang inyong username, bandila at «tungkol sa akin» ay nasa telepono lang muna — hindi pa ito nakikita ng iba.",
+        "previewBannerBody": "Ang inyong username at bandila ay nasa telepono lang muna — hindi pa ito nakikita ng iba.",
         "previewThisIsYou": "Kayo ito",
         "vehicleTypeCar": "Kotse",
         "vehicleTypeMoto": "Motor",

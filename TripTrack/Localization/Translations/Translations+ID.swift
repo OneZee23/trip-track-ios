@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Jalan juara",
         "statsRecordFarthest": "Titik terjauh",
         "previewBannerSubtitle": "Pratinjau · mengikuti dan bereaksi belum tersedia",
-        "previewBannerBody": "Nama pengguna, bendera, dan «tentang saya» untuk sekarang hanya ada di ponsel ini — orang lain belum melihatnya.",
+        "previewBannerBody": "Nama pengguna dan bendera untuk sekarang hanya ada di ponsel ini — orang lain belum melihatnya.",
         "previewThisIsYou": "Ini Anda",
         "vehicleTypeCar": "Mobil",
         "vehicleTypeMoto": "Motor",

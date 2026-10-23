@@ -373,10 +373,9 @@ struct PublicProfileView: View {
         guard isOwnProfile else { return false }
         let localHandle = !settings.profileUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let localCountry = !settings.profileCountry.isEmpty
-        let serverBio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let localBio = serverBio.isEmpty
-            && !settings.profileBio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return localHandle || localCountry || localBio
+        // «О себе» syncs since 0.9.1 (`ProfileUpdateRequest.bio`); handle and
+        // flag still have no server field.
+        return localHandle || localCountry
     }
 
     var body: some View {

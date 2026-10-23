@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Meistgefahrene Straße",
         "statsRecordFarthest": "Entferntester Punkt",
         "previewBannerSubtitle": "Vorschau · Folgen und Reaktionen sind nicht verfügbar",
-        "previewBannerBody": "Benutzername, Flagge und «Über mich» liegen bisher nur auf diesem Gerät — andere sehen sie noch nicht.",
+        "previewBannerBody": "Benutzername und Flagge liegen bisher nur auf diesem Gerät — andere sehen sie noch nicht.",
         "previewThisIsYou": "Das sind Sie",
         "vehicleTypeCar": "Auto",
         "vehicleTypeMoto": "Motorrad",

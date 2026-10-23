@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Şampiyon yol",
         "statsRecordFarthest": "En uzak nokta",
         "previewBannerSubtitle": "Önizleme · takip ve tepkiler kullanılamaz",
-        "previewBannerBody": "Kullanıcı adınız, bayrağınız ve «hakkımda» şimdilik yalnızca bu telefonda — başkaları göremez.",
+        "previewBannerBody": "Kullanıcı adınız ve bayrağınız şimdilik yalnızca bu telefonda — başkaları göremez.",
         "previewThisIsYou": "Bu sizsiniz",
         "vehicleTypeCar": "Araba",
         "vehicleTypeMoto": "Motosiklet",

@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Carretera campeona",
         "statsRecordFarthest": "Punto más lejano",
         "previewBannerSubtitle": "Vista previa · seguir y reaccionar no está disponible",
-        "previewBannerBody": "Su nombre de usuario, la bandera y el «sobre mí» están de momento solo en este teléfono: nadie más los ve.",
+        "previewBannerBody": "Su nombre de usuario y la bandera están de momento solo en este teléfono: nadie más los ve.",
         "previewThisIsYou": "Este es usted",
         "vehicleTypeCar": "Coche",
         "vehicleTypeMoto": "Moto",

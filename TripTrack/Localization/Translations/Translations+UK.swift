@@ -871,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Дорога-чемпіон",
         "statsRecordFarthest": "Найдальша точка",
         "previewBannerSubtitle": "Превʼю · підписки та реакції недоступні",
-        "previewBannerBody": "Юзернейм, прапор і «про себе» поки зберігаються лише на телефоні — інші їх не побачать.",
+        "previewBannerBody": "Юзернейм і прапор поки зберігаються лише на телефоні — інші їх не побачать.",
         "previewThisIsYou": "Це ви",
         "vehicleTypeCar": "Авто",
         "vehicleTypeMoto": "Мото",
