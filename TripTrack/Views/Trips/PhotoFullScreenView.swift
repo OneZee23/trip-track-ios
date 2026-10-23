@@ -122,6 +122,15 @@ struct PhotoFullScreenView: View {
 
     private var isZoomed: Bool { zoomScale > 1.01 }
 
+    /// Страница на экране, если она есть. Список бывает пустым: экран машины
+    /// писал страницы и индекс двумя состояниями подряд, а `fullScreenCover`
+    /// собирал просмотрщик ещё по пустому списку — `livePages[0]` ронял
+    /// приложение (Sentry APPLE-IOS-3, 0.9.0 (88), `topRow`). Все чтения
+    /// текущей страницы идут отсюда, а пустой просмотрщик закрывается сам.
+    private var currentPage: Page? {
+        livePages.indices.contains(currentIndex) ? livePages[currentIndex] : nil
+    }
+
     /// Zooming hides the chrome on its own — while you are inside the
     /// picture, nothing else belongs on screen.
     private var chromeVisible: Bool { !chromeHidden && !isZoomed }
@@ -154,6 +163,9 @@ struct PhotoFullScreenView: View {
                 .animation(.easeOut(duration: 0.18), value: chromeHidden)
         }
         .statusBarHidden(chromeHidden)
+        .task {
+            if livePages.isEmpty { onDismiss() }
+        }
         // House dialog, never the system's (CLAUDE.md «Dialogs»). The viewer
         // takes its language as a value rather than off the environment, so
         // both titles are resolved from `language` instead of the modifier's
@@ -360,34 +372,34 @@ struct PhotoFullScreenView: View {
             if let onAdd {
                 circleButton("plus", label: AppStrings.profileAddPhoto(language), id: "photo_viewer_add", action: onAdd)
             }
-            if let onSetMain {
-                let already = isMain?(livePages[currentIndex].id) ?? false
+            if let onSetMain, let page = currentPage {
+                let already = isMain?(page.id) ?? false
                 circleButton(already ? "star.fill" : "star",
                              label: setMainTitle ?? AppStrings.vehiclePhotoMakeMain(language),
                              id: "photo_viewer_main",
                              tint: already ? AppTheme.accent : .white) {
                     guard !already else { return }
                     Haptics.tap()
-                    onSetMain(livePages[currentIndex].id)
+                    onSetMain(page.id)
                 }
             }
-            if let onMarkPlace, canMarkPlace?(livePages[currentIndex].id) ?? false {
+            if let onMarkPlace, let page = currentPage, canMarkPlace?(page.id) ?? false {
                 circleButton("mappin.and.ellipse", label: AppStrings.checkpointMarkPlace(language),
                              id: "photo_viewer_mark_place") {
                     Haptics.success()
-                    onMarkPlace(livePages[currentIndex].id)
+                    onMarkPlace(page.id)
                 }
             }
-            if onDelete != nil {
+            if onDelete != nil, currentPage != nil {
                 circleButton("trash", label: AppStrings.delete(language), id: "photo_viewer_delete") {
                     confirmingDelete = true
                 }
             }
-            if let onReport {
+            if let onReport, let page = currentPage {
                 circleButton("flag", label: AppStrings.reportProfileAction(language),
                              id: "photo_viewer_report") {
                     Haptics.tap()
-                    onReport(livePages[currentIndex].id)
+                    onReport(page.id)
                 }
             }
             // No share button: a photo is shared as part of the trip, from
@@ -455,9 +467,8 @@ struct PhotoFullScreenView: View {
 
     /// «14 апр, 10:40 · Тверская обл.» — photo timestamp + trip region.
     private var captionLine: String? {
-        guard pages.indices.contains(currentIndex) else { return nil }
+        guard let page = currentPage else { return nil }
         let f = Self.captionFormatters[language]
-        let page = livePages[currentIndex]
         let unknownDate = page.timestamp == Date(timeIntervalSince1970: 0)
         var line = unknownDate ? "" : (f?.string(from: page.timestamp) ?? "")
         if let region, !region.isEmpty {
