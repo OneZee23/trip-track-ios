@@ -22,7 +22,6 @@ struct VehicleDetailView: View {
 
     @State private var showEditForm = false
     @State private var showDrive2 = false
-    @State private var editingMod: VehicleMod?
     @ObservedObject private var plus = PlusAccess.shared
     @State private var showPhotos = false
     @State private var showTrips = false
@@ -153,9 +152,6 @@ struct VehicleDetailView: View {
                                           years: passport?.years ?? [], unit: dashUnit(vehicle), onEdit: { showEditForm = true })
                         whereWasCard(c: c, l: l)
                         GarageTripPhotos(pages: passport?.photos ?? [])
-                        VehicleModsSection(mods: vehicle.mods, unit: dashUnit(vehicle), onEdit: { editingMod = $0 }, onAdd: {
-                            editingMod = VehicleMod(title: "", date: VehicleMod.day(Date()), odometerKm: vehicle.displayOdometerKm)
-                        })
                         aboutCard(vehicle, c: c, l: l)
                         vehicleTrips(c: c, l: l)
                         vehicleRecords(c: c, l: l)
@@ -223,9 +219,6 @@ struct VehicleDetailView: View {
             .onChange(of: showPhotos) { _, open in
                 if !open { mainPhoto = VehiclePhotoStore.mainPhoto(of: vehicleId) }
             }
-            .onChange(of: editingMod) { _, entry in
-                if entry == nil { mainPhoto = VehiclePhotoStore.mainPhoto(of: vehicleId) }
-            }
             // The stereo connects and drops while this screen is open — the
             // card claims «подключена», so it has to keep earning it.
             .onReceive(NotificationCenter.default.publisher(
@@ -242,9 +235,6 @@ struct VehicleDetailView: View {
                 VehicleLevelInfoView(level: vehicle.level, levelKm: vehicle.levelSourceKm)
             }
             .sheet(isPresented: $showDrive2) { Drive2LinkSheet(vehicle: vehicle) }
-            .sheet(item: $editingMod) { entry in
-                VehicleModEditor(vehicle: vehicle, entry: entry, appUnit: distanceUnit)
-            }
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))
                     .environmentObject(lang)

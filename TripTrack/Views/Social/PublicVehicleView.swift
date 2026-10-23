@@ -79,8 +79,6 @@ struct PublicVehicleView: View {
                             mapCard(c: c, l: l)
                         }
                         GarageTripPhotos(pages: (v.tripPhotos ?? []).map { .init(id: $0.id, source: .remote(url: $0.url ?? $0.thumbUrl), timestamp: $0.timestamp) })
-                        VehicleModsSection(mods: (v.mods ?? []).map(\.entry), unit: distanceUnit,
-                                           photoPages: modPhotoPages(v))
                         if let about = v.about, !about.isEmpty {
                             aboutCard(about, c: c, l: l)
                         }
@@ -310,12 +308,6 @@ struct PublicVehicleView: View {
     /// плашки «фотографии скрыты» здесь нет намеренно: она отличала бы
     /// человека, который прячет, от человека, которому нечего показать.
     /// Главный снимок — тот, что владелец закрепил; иначе первый.
-    private func modPhotoPages(_ v: PublicVehicle) -> [UUID: [PhotoFullScreenView.Page]] {
-        Dictionary(uniqueKeysWithValues: (v.mods ?? []).map { mod in
-            (mod.id, (mod.photos ?? []).map { .init(id: $0.id, source: .remote(url: $0.url ?? $0.thumbUrl), timestamp: mod.entry.calendarDate ?? Date()) })
-        })
-    }
-
     private func mainShot(_ v: PublicVehicle) -> PublicVehiclePhoto? {
         let shots = v.photos ?? []
         return shots.first(where: { $0.isMain }) ?? shots.first

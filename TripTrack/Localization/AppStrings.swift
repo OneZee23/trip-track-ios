@@ -8833,30 +8833,6 @@ extension AppStrings {
     static func garageTripPhotos(_ l: LanguageManager.Language) -> String {
         tr(l, "garageTripPhotos", ru: "Фото из поездок", en: "Trip photos")
     }
-    static func garageMods(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageMods", ru: "Доработки", en: "Modifications")
-    }
-    static func garageAddMod(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageAddMod", ru: "Добавить запись", en: "Add entry")
-    }
-    static func garageModTitle(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModTitle", ru: "Что сделано", en: "What was done")
-    }
-    static func garageModDate(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModDate", ru: "Дата", en: "Date")
-    }
-    static func garageModDelete(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModDelete", ru: "Удалить запись", en: "Delete entry")
-    }
-    static func garageModDeleteTitle(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModDeleteTitle", ru: "Удалить запись?", en: "Delete entry?")
-    }
-    static func garageModDeleteBody(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModDeleteBody", ru: "Фотографии останутся в альбоме машины.", en: "Photos stay in the car’s album.")
-    }
-    static func garageModPhotos(_ l: LanguageManager.Language) -> String {
-        tr(l, "garageModPhotos", ru: "Фото машины · до 6", en: "Car photos · up to 6")
-    }
     static func garagePlatform(_ l: LanguageManager.Language) -> String {
         tr(l, "garagePlatform", ru: "Площадка", en: "Platform")
     }

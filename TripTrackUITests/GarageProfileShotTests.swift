@@ -6,7 +6,7 @@ final class GarageProfileShotTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
     override func tearDownWithError() throws { app?.terminate() }
 
-    func testOwnGarageScreensAndModPersistence() {
+    func testOwnGarageScreens() {
         launchOwn()
         let header = app.buttons["garage_header_vehicle"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 30))
@@ -33,34 +33,9 @@ final class GarageProfileShotTests: XCTestCase {
         XCTAssertTrue(closePhoto.waitForExistence(timeout: 5))
         closePhoto.tap()
         app.buttons["Назад"].firstMatch.tap()
-        reveal("garage_mods")
-        capture("05-mods")
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Шумоизоляция дверей")).firstMatch.tap()
-        XCTAssertTrue(app.textFields["garage_mod_title"].firstMatch.waitForExistence(timeout: 5))
-        capture("07-mod-editor")
-        app.buttons["garage_mod_save"].firstMatch.tap()
-        app.buttons["garage_add_mod"].firstMatch.tap()
-        let title = app.textFields["garage_mod_title"].firstMatch
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        title.tap()
-        title.typeText("Garage regression\n")
-        app.buttons["garage_mod_save"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Garage regression"].firstMatch.waitForExistence(timeout: 5))
-        app.terminate()
-        launchOwn(reset: false)
-        app.buttons["garage_header_vehicle"].firstMatch.tap()
-        reveal("garage_mods")
-        XCTAssertTrue(app.staticTexts["Garage regression"].firstMatch.waitForExistence(timeout: 5))
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Garage regression")).firstMatch.tap()
-        app.buttons["garage_mod_delete"].firstMatch.tap()
-        let confirm = app.buttons["garage_mod_delete_confirm"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["app_dialog"].firstMatch.exists,
-            "Deletion uses AppConfirmDialog")
-        confirm.tap()
-        XCTAssertTrue(app.buttons["garage_add_mod"].firstMatch.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Garage regression"].firstMatch.exists)
+        // «Доработки» сняты владельцем 23 окт 2026: «это не то, что я хотел».
+        XCTAssertFalse(app.descendants(matching: .any)["garage_mods"].exists)
+        XCTAssertFalse(app.buttons["garage_add_mod"].exists)
     }
 
     func testDrive2SheetValidationAndLocalDisclosure() {
@@ -137,9 +112,7 @@ final class GarageProfileShotTests: XCTestCase {
             app.staticTexts["Haval Jolion"].firstMatch.waitForExistence(timeout: 10)
                 || app.staticTexts["Haval Jolion кроссовер · 2022"].firstMatch.waitForExistence(timeout: 10))
         capture("08-foreign-car")
-        reveal("garage_mods")
-        XCTAssertFalse(app.buttons["garage_add_mod"].exists)
-        capture("09-foreign-mods")
+        XCTAssertFalse(app.descendants(matching: .any)["garage_mods"].exists)
     }
 
     func testVehicleCustomizationSavesFinishTagsAndPlatform() {
