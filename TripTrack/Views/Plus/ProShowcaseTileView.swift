@@ -94,9 +94,8 @@ struct ProShowcaseTileView: View {
                 .avatarFrame(AvatarFrame.from(tile.id), lineWidth: 3)
         case .vehicleCard:
             let style = VehicleCardStyle.from(tile.id)
-            if style == .none { empty(c) } else {
-                VehicleCardStyleWash(style: style, cornerRadius: 12)
-            }
+            Image("platform_" + (style == .none ? "asphalt" : String(style.rawValue.dropFirst(5))))
+                .resizable().interpolation(.none).scaledToFit().padding(6)
         case .routeLine:
             let style = RouteLineStyle.from(tile.id)
             if let colour = style.color {
@@ -195,22 +194,14 @@ private struct ProShowcaseVehiclePreview: View {
         // примерял фон на чужую карточку.
         let vehicle = vehicleID.flatMap { id in settings.vehicles.first { $0.id == id } }
             ?? settings.vehicles.first
-        return ZStack {
-            if style == .none { c.cardAlt } else {
-                VehicleCardStyleWash(style: style, cornerRadius: 0)
-            }
-            VStack(spacing: 6) {
-                Image(systemName: "car.side.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(style == .none ? c.textSecondary : .white.opacity(0.92))
-                Text(vehicle?.name ?? AppStrings.proDemoCarEmptyTitle(lang.language))
-                    .font(.inter(15, weight: .semibold))
-                    .foregroundStyle(style == .none ? c.text : .white)
-                    .lineLimit(1)
-            }
+        return VStack(spacing: 6) {
+            VehicleStage(assetName: vehicle?.avatarImageName ?? VehicleAvatar.assetName(style: nil, avatar: "pixel_car_blue"),
+                         fallbackEmoji: vehicle?.avatarEmoji ?? "🚗", style: style,
+                         finish: VehicleFinish.effective(vehicle?.paintFinish, isPlus: PlusAccess.shared.isPlus), width: 210)
+            Text(vehicle?.name ?? AppStrings.proDemoCarEmptyTitle(lang.language))
+                .font(.inter(15, weight: .semibold)).foregroundStyle(c.text).lineLimit(1)
         }
-        .frame(height: 120)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity).padding(12)
+        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 16))
     }
 }

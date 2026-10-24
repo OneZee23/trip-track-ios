@@ -692,6 +692,8 @@ final class AuthService: ObservableObject {
         // The next Apple ID on this phone has pushed nothing yet. Leaving the
         // previous account's «confirmed» behind would swallow its first push
         // and leave it nameless — the very failure this latch exists to catch.
+        ProfilePhotoStore.shared.wipe()
+        SettingsManager.shared.wipeProfileJournal()
         ProfileSyncLatch.reset()
         progressReadAccountId = nil
         lastSyncedProfileProgress = nil
@@ -784,6 +786,12 @@ final class AuthService: ObservableObject {
     // MARK: - Profile sync to server
 
     private var progressReadAccountId: UUID?
+    /// «О себе» and «Витрина» go out one request at a time. Two in flight can
+    /// land in the wrong order: the newer value first, then the older one over
+    /// it — and the newer one's acknowledgement has already cleared its dirty
+    /// flag, so nothing would ever resend it. Other callers of
+    /// `syncProfileToServer` are not held back: only these two fields wait.
+    private var journalPushInFlight = false
     private var lastSyncedProfileProgress: (accountId: UUID, progress: ProfileProgress)?
 
     /// A first launch on another phone can have an empty library while the
@@ -877,6 +885,37 @@ final class AuthService: ObservableObject {
         // «без рамки» на сервере это отсутствие значения, а не строка "".
         req.avatarFrame = knowsCosmetics || settings.avatarFrame != nil ? (settings.avatarFrame ?? "") : nil
         req.showPlusBadge = settings.showPlusBadge
+        let carriesJournal = !journalPushInFlight
+        if carriesJournal {
+            req.bio = settings.profileBioDirty ? settings.profileBio : nil
+            if settings.pinnedTripsDirty {
+                let repository = CoreDataTripRepository()
+                // A pin this phone does not have came from another phone
+                // through `/auth/me`, so the server already knows that trip;
+                // only trips present here must have reached the server first
+                // (the server silently drops ids it has never seen).
+                let ready = settings.pinnedTripIds.allSatisfy { id in
+                    guard let trip = repository.fetchEntity(id: id) else { return true }
+                    return trip.serverCreatedAt != nil && trip.syncStatus == SyncStatus.synced.rawValue
+                        && !trip.isPrivate && trip.endDate != nil
+                }
+                if ready { req.pinnedTripIds = settings.pinnedTripIds.map { $0.uuidString.lowercased() } }
+            }
+        }
+        let sentJournal = req.bio != nil || req.pinnedTripIds != nil
+        var journalAcknowledged = false
+        if sentJournal { journalPushInFlight = true }
+        defer {
+            if sentJournal {
+                journalPushInFlight = false
+                // Only after a success: a failed push stays dirty and the next
+                // sync pass retries it — resending here would spin offline.
+                if journalAcknowledged, isSignedIn, TokenStore.shared.accountId == accountId,
+                   settings.profileBioDirty || settings.pinnedTripsDirty {
+                    Task { await syncProfileToServer(refreshFeedAfter: false, client: client, settings: settings) }
+                }
+            }
+        }
         do {
             let _: EmptyResponse = try await client.post(
                 APIEndpoint.profileUpdate, body: req)
@@ -885,6 +924,11 @@ final class AuthService: ObservableObject {
             // latch; writing "confirmed" afterwards would suppress the NEXT
             // account's first push and leave IT nameless.
             if isSignedIn, TokenStore.shared.accountId == accountId {
+                journalAcknowledged = sentJournal
+                if let bio = req.bio, settings.profileBio == bio { settings.profileBioDirty = false }
+                if let ids = req.pinnedTripIds, settings.pinnedTripIds.map({ $0.uuidString.lowercased() }) == ids {
+                    settings.pinnedTripsDirty = false
+                }
                 ProfileSyncLatch.markConfirmed()
                 if let accountId, let progress {
                     lastSyncedProfileProgress = (accountId, progress)
@@ -971,6 +1015,9 @@ final class AuthService: ObservableObject {
         // что от устаревшего ответа блоки надо защищать отдельно: иначе
         // тумблер, переключённый во время этого запроса, отскочит назад, хотя
         // сервер сохранил новое значение.
+        let journalRevision = SettingsManager.shared.profileJournalRevision
+        let journalWasDirty = SettingsManager.shared.profileBioDirty || SettingsManager.shared.pinnedTripsDirty
+        let photoRevision = ProfilePhotoStore.shared.uploadRevision
         let blockGens = visibilityGeneration
         do {
             let res: MeResponse = try await APIClient.shared.post(
@@ -979,6 +1026,10 @@ final class AuthService: ObservableObject {
                   res.id == nil || res.id == accountId else { return }
             SettingsManager.shared.applyRemoteProfileProgress(
                 level: res.profileLevel, xp: res.profileXp)
+            if !journalWasDirty, journalRevision == SettingsManager.shared.profileJournalRevision {
+                SettingsManager.shared.applyRemoteJournal(bio: res.bio, pinnedTripIds: res.pinnedTripIds, bioProvided: res.bioProvided)
+            }
+            ProfilePhotoStore.shared.restore(res.photos, revision: photoRevision)
             progressReadAccountId = accountId
             if gen == publicProfileGeneration {
                 isPublicProfile = res.isPublic

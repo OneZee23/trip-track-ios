@@ -81,6 +81,9 @@ def prune(keep, catalogs=CATALOGS):
     for catalog in catalogs:
         for d in glob.glob(os.path.join(catalog, "pixel_*.imageset")):
             n = os.path.basename(d)[: -len(".imageset")]
+            # Matte variants are generated separately for the app only.
+            if n.endswith("_matte") and n[:-6] in keep and "TripTrackLiveActivity" not in catalog:
+                continue
             if n not in keep:
                 shutil.rmtree(d)
                 removed.append(n)

@@ -558,6 +558,20 @@ struct TripDetailView: View {
                 }
             },
         ]
+        if !trip.isPrivate && !trip.isDraft && trip.endDate != nil {
+            let pinned = SettingsManager.shared.pinnedTripIds.contains(trip.id)
+            items.append(.init(
+                title: pinned ? AppStrings.profileUnpin(lang.language) : AppStrings.profilePin(lang.language),
+                systemImage: pinned ? "pin.slash" : "pin",
+                accessibilityId: "detail_action_profile_pin"
+            ) {
+                showTripActions = false
+                Haptics.selection()
+                if !SettingsManager.shared.togglePinnedTrip(trip.id) {
+                    toastItem = ToastItem(type: .info, message: AppStrings.profileShowcaseLimit(lang.language))
+                }
+            })
+        }
         // Ровно один пункт из двух: поездку либо ещё не с чем объединять, либо
         // она уже лежит в путешествии — и тогда единственное, что с ним можно
         // сделать отсюда, это открыть. Объединять её второй раз некуда.

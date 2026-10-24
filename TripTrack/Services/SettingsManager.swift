@@ -166,7 +166,82 @@ final class SettingsManager: ObservableObject {
 
     // «О себе» — free text, ≤140 chars (capped by the editor). "" = not set.
     @Published var profileBio: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBio") ?? "" {
-        didSet { UserDefaults.standard.set(profileBio, forKey: "com.triptrack.settings.profileBio") }
+        didSet {
+            UserDefaults.standard.set(profileBio, forKey: "com.triptrack.settings.profileBio")
+            if !applyingJournalSnapshot && oldValue != profileBio { profileBioDirty = true; profileJournalRevision &+= 1 }
+        }
+    }
+
+    private(set) var profileJournalRevision = 0
+    private var applyingJournalSnapshot = false
+    var profileBioDirty: Bool = (UserDefaults.standard.object(forKey: "profileBioDirty") as? Bool)
+        ?? !(UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBio") ?? "").isEmpty {
+        didSet { UserDefaults.standard.set(profileBioDirty, forKey: "profileBioDirty") }
+    }
+    var pinnedTripsDirty: Bool = UserDefaults.standard.bool(forKey: "pinnedTripsDirty") {
+        didSet { UserDefaults.standard.set(pinnedTripsDirty, forKey: "pinnedTripsDirty") }
+    }
+    @Published private(set) var pinnedTripIds: [UUID] =
+        (UserDefaults.standard.stringArray(forKey: "profilePinnedTrips") ?? []).compactMap(UUID.init(uuidString:)) {
+        didSet { UserDefaults.standard.set(pinnedTripIds.map(\.uuidString), forKey: "profilePinnedTrips") }
+    }
+
+    func applyRemoteJournal(bio: String?, pinnedTripIds: [UUID]?, bioProvided: Bool = false) {
+        applyingJournalSnapshot = true
+        defer { applyingJournalSnapshot = false }
+        if !profileBioDirty, bioProvided || bio != nil { profileBio = bio ?? "" }
+        if !pinnedTripsDirty, let pinnedTripIds { self.pinnedTripIds = Array(pinnedTripIds.prefix(3)) }
+    }
+
+    /// Drops one pin, if it is there (the trip was deleted on this phone).
+    func unpinTrip(_ id: UUID) {
+        guard pinnedTripIds.contains(id) else { return }
+        pinnedTripIds.removeAll { $0 == id }
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+    }
+
+    @discardableResult
+    func togglePinnedTrip(_ id: UUID) -> Bool {
+        if pinnedTripIds.contains(id) { pinnedTripIds.removeAll { $0 == id } }
+        else {
+            guard pinnedTripIds.count < 3 else { return false }
+            pinnedTripIds.append(id)
+        }
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+        return true
+    }
+
+    /// Drops pins this phone KNOWS became unfit (now private, a draft, not
+    /// finished). A pin whose trip is simply absent stays: a phone without the
+    /// cloud library, or before its first pull, does not have the trips that
+    /// `/auth/me` pinned on another phone, and clearing them here would wipe
+    /// the person's «Витрина» everywhere. The server drops deleted and private
+    /// trips from the public answer by itself.
+    func reconcilePinnedTrips(_ trips: [Trip]) {
+        let known = Dictionary(trips.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let valid = pinnedTripIds.filter { id in
+            guard let trip = known[id] else { return true }
+            return !trip.isPrivate && !trip.isDraft && trip.endDate != nil
+        }
+        guard valid != pinnedTripIds else { return }
+        pinnedTripIds = valid
+        pinnedTripsDirty = true
+        profileJournalRevision &+= 1
+        Task { await AuthService.shared.syncProfileToServer(refreshFeedAfter: false) }
+    }
+
+    func wipeProfileJournal() {
+        profileJournalRevision &+= 1
+        applyingJournalSnapshot = true
+        profileBio = ""
+        pinnedTripIds = []
+        profileBioDirty = false
+        pinnedTripsDirty = false
+        applyingJournalSnapshot = false
     }
 
     // ISO-3166 alpha-2 ("RU"), or one of `CountryChoice`'s sentinels
@@ -992,6 +1067,13 @@ final class SettingsManager: ObservableObject {
         v.electricityPrice = entity.electricityPrice
         v.electricRangeKm = entity.electricRangeKm
         v.cardStyle = entity.cardStyle
+        v.drive2URL = entity.drive2URL
+        v.modTags = VehicleModTags.decodeJSON(entity.modTagsJSON)
+        v.paintFinish = entity.paintFinish
+        v.mods = VehicleMod.decodeJSON(entity.modsJSON)
+        v.catalogModelId = entity.catalogModelId
+        v.catalogGenerationId = entity.catalogGenerationId
+        v.catalogVariantId = entity.catalogVariantId
         v.about = entity.about ?? ""
         v.make = entity.make ?? ""
         v.model = entity.model ?? ""
@@ -1050,6 +1132,30 @@ final class SettingsManager: ObservableObject {
         entity.year = (year >= 1900 && year <= 2100) ? Int32(year) : 0
         entity.bodyType = bodyType
         entity.about = about
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
+    func updateVehicleGarage(id: UUID, drive2URL: String? = nil, modTags: [String]? = nil,
+                             paintFinish: VehicleFinish? = nil, mods: [VehicleMod]? = nil,
+                             catalogModelId: String? = nil, catalogGenerationId: String? = nil,
+                             catalogVariantId: String? = nil) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        if let drive2URL { entity.drive2URL = Drive2Link(drive2URL)?.url.absoluteString ?? "" }
+        if let modTags { entity.modTagsJSON = VehicleModTags.encodeJSON(modTags) }
+        if let paintFinish { entity.paintFinish = paintFinish.rawValue }
+        if let catalogModelId { entity.catalogModelId = catalogModelId }
+        if let catalogGenerationId { entity.catalogGenerationId = catalogGenerationId }
+        if let catalogVariantId { entity.catalogVariantId = catalogVariantId }
+        if let mods { entity.modsJSON = VehicleMod.encodeJSON(Array(mods.prefix(VehicleMod.limit))) }
         entity.lastModifiedAt = Date()
         entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
@@ -1158,7 +1264,7 @@ final class SettingsManager: ObservableObject {
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
         }
     }
 
@@ -1228,7 +1334,7 @@ final class SettingsManager: ObservableObject {
         persistenceController.save()
         loadVehicles()
         Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
         }
     }
 
@@ -1241,7 +1347,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1255,7 +1361,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1278,7 +1384,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }
@@ -1324,7 +1430,7 @@ final class SettingsManager: ObservableObject {
             persistenceController.save()
             loadVehicles()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
             }
         }
     }

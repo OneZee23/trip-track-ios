@@ -17,6 +17,22 @@ extension Translations {
         table.merge(tr4) { _, new in new }
         table.merge(tr5) { _, new in new }
         table.merge(tr6) { _, new in new }
+        table.merge(trGarage) { _, new in new }
+        table.merge(trProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Diğer modeller — teknik özelliksiz"
+        table["catalogGeneration"] = "Nesil"
+        table["catalogVariant"] = "Motor ve şanzıman"
+        table["catalogUnknownEngine"] = "Motoru bilmiyorum"
+        table["catalogHasYear"] = "{year} mevcut"
+        table["profileAddCover"] = "Kapak ekle"
+        table["profileAddPhoto"] = "Fotoğraf ekle"
+        table["profileMakeCover"] = "Kapak yap"
+        table["profileJournalSignIn"] = "Günlüğünü başkalarının görmesi için giriş yap"
+        table["profilePinned"] = "Sabitlendi"
+        table["profileRoutineOne"] = "{n} tekrarlanan yolculuk"
+        table["profileRoutineFew"] = "{n} tekrarlanan yolculuk"
+        table["profileRoutineMany"] = "{n} tekrarlanan yolculuk"
+        table["profileMoreTrips"] = "{n} tane daha"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Şampiyon yol",
         "statsRecordFarthest": "En uzak nokta",
         "previewBannerSubtitle": "Önizleme · takip ve tepkiler kullanılamaz",
-        "previewBannerBody": "Kullanıcı adınız, bayrağınız ve «hakkımda» şimdilik yalnızca bu telefonda — başkaları göremez.",
+        "previewBannerBody": "Kullanıcı adınız ve bayrağınız şimdilik yalnızca bu telefonda — başkaları göremez.",
         "previewThisIsYou": "Bu sizsiniz",
         "vehicleTypeCar": "Araba",
         "vehicleTypeMoto": "Motosiklet",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "PRO aboneliği",
         "cosmeticDefaultOption": "Varsayılan",
         "settingsAvatarFrame": "Avatar çerçevesi",
-        "settingsVehicleCardStyle": "Kart arka planı",
+        "settingsVehicleCardStyle": "Platform",
         "showcaseVisibleAfterSignIn": "Şimdilik bunu yalnızca siz görüyorsunuz. Giriş yaptığınızda başkaları da görecek.",
         "showcaseVisibleAfterSync": "Şimdilik bunu yalnızca siz görüyorsunuz. Giriş yapıp eşitlemeyi açtığınızda başkaları da görecek.",
         "vehicleCardStylePickerFootnote": "Arka plan bu aracın kartında görünür — garajınızda ve herkese açık profilinizde.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Bitir",
         "showcaseBg": "Profil arka planı",
         "showcaseFrame": "Avatar çerçevesi",
-        "showcaseCar": "Kart arka planı",
+        "showcaseCar": "Platform",
         "showcaseLine": "Rota çizgisi",
         "showcaseFree": "Ücretsiz",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Atlasın sizi takip etmesi için Ayarlar'dan erişime izin verin",
     ]
 
+}
+
+extension Translations {
+    private static let trGarage: [String: String] = [
+        "vehicleFinishGloss": "Parlak",
+        "vehicleFinishMatte": "Mat",
+        "vehicleFinishPearl": "Sedef",
+        "vehicleFinishChrome": "Krom",
+        "garageFinish": "Kaplama",
+        "garageTags": "Kart etiketleri",
+        "garageTagsHint": "Araç kartında en fazla üç kısa etiket.",
+        "garageDrive2Title": "DRIVE2 günlüğü",
+        "garageDrive2Connect": "DRIVE2 günlüğü bağla",
+        "garageDrive2Help": "DRIVE2’de bu aracı açın → Paylaş → Bağlantıyı kopyala, ardından buraya yapıştırın.",
+        "garageDrive2Field": "Araç bağlantısı",
+        "garageDrive2Valid": "✓ Araç bağlantısı: {make} · {model}",
+        "garageDrive2Hint": "DRIVE2 araç sayfasının bağlantısını kullanın: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Bu aracı görebilen herkes DRIVE2 günlüğü düğmesini görür.",
+        "garageDrive2LocalNote": "Bağlantı bu telefonda kalır. Paylaşmak için giriş yapıp bulut eşitlemesini açın.",
+        "garageDrive2Unlink": "Bağlantıyı kaldır",
+        "garageMileage": "Kilometre",
+        "garageOnOdometer": "sayaçta",
+        "garageTracked": "TripTrack ile — {distance}",
+        "garageTripPhotos": "Yolculuk fotoğrafları",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Platform",
+        "garagePower": "{value} bg",
+        "garageAcceleration": "0–100 km/h {value} sn",
+        "garageTransmissionManual": "Manuel",
+        "garageTransmissionAutomatic": "Otomatik",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let trProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} / {max}",
+        "profilePhotosSignIn": "Fotoğraflarınızı başkalarının görmesi için giriş yapın",
+        "profilePhotosEmpty": "Fotoğraf ekleyin — kartınızda görünsün",
+        "profilePhotosLimit": "Profilinizde zaten dokuz fotoğraf var",
+        "profilePhotoFirst": "İlk sıraya al",
+        "profileShowcase": "Vitrin",
+        "profileShowcaseEmpty": "Yolculuk ekranındaki “…” ile en fazla üç yolculuk sabitleyin — kartınızda ilk onlar görünsün",
+        "profileShowcaseElsewhere": "{n} tane daha — başka bir cihazda sabitlendi",
+        "profilePin": "Profile sabitle",
+        "profileUnpin": "Profilden kaldır",
+        "profileShowcaseLimit": "Üç yolculuk zaten sabitlendi — birini kaldır",
+    ]
 }

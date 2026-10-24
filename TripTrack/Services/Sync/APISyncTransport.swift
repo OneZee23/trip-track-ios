@@ -400,7 +400,7 @@ final class APISyncTransport: SyncTransport {
         req.fetchLimit = 1
         guard let entity = try? ctx.fetch(req).first else { return }
 
-        let payload = VehicleSyncPayload(
+        var payload = VehicleSyncPayload(
             id: vehicle.id,
             name: vehicle.name,
             avatarEmoji: vehicle.avatarEmoji,
@@ -435,10 +435,14 @@ final class APISyncTransport: SyncTransport {
             isArchived: vehicle.isArchived,
             soldAt: vehicle.soldAt
         )
+        payload.applyGarageFields(from: entity)
         do {
             let res: VehicleUpsertResponse = try await client.post(APIEndpoint.vehicleUpsert, body: payload)
             entity.conflictVersion = Int32(res.conflictVersion)
-            entity.syncStatus = SyncStatus.synced.rawValue
+            // A new edit made while the request was in flight has its own queue operation.
+            if entity.lastModifiedAt == payload.lastModifiedAt {
+                entity.syncStatus = SyncStatus.synced.rawValue
+            }
             try? ctx.save()
         } catch let err as APIError {
             if case .conflictDetected = err {
@@ -868,7 +872,7 @@ final class APISyncTransport: SyncTransport {
     /// Returns `nil` when the data can't be decoded at all (corrupt file) so the
     /// caller can mark the photo failed — mirroring the old combined
     /// `guard let sourceImage = UIImage(data:)` that this refactor split apart.
-    nonisolated private static func encodePhotoVariants(
+    nonisolated static func encodePhotoVariants(
         originalData: Data, makeThumbnail: Bool, makeOriginal: Bool
     ) async -> (thumbnail: Data?, original: Data?)? {
         guard let sourceImage = UIImage(data: originalData) else { return nil }

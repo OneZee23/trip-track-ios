@@ -13,6 +13,7 @@ enum FullScreenPhotoSource: Hashable {
     /// не «положить рядом с фото поездок»: снимки машины обязаны пережить
     /// удаление любой её поездки, поэтому и лежат отдельно.
     case vehicle(filename: String)
+    case profile(filename: String)
 }
 
 struct PhotoFullScreenView: View {
@@ -37,6 +38,8 @@ struct PhotoFullScreenView: View {
     /// глядя на снимок целиком, а не на плитку сорока точек в сетке.
     /// `nil` у поездок — у них главной фотографии нет.
     var onSetMain: ((UUID) -> Void)? = nil
+    var setMainTitle: String? = nil
+    var onAdd: (() -> Void)? = nil
     /// Уже главная: кнопка тогда показывает состояние, а не предлагает
     /// сделать то, что и так сделано.
     var isMain: ((UUID) -> Bool)? = nil
@@ -90,6 +93,8 @@ struct PhotoFullScreenView: View {
         language: LanguageManager.Language = .en,
         onDelete: ((UUID) -> Void)? = nil,
         onSetMain: ((UUID) -> Void)? = nil,
+        setMainTitle: String? = nil,
+        onAdd: (() -> Void)? = nil,
         onReport: ((UUID) -> Void)? = nil,
         isMain: ((UUID) -> Bool)? = nil,
         onMarkPlace: ((UUID) -> Void)? = nil,
@@ -102,6 +107,8 @@ struct PhotoFullScreenView: View {
         self.language = language
         self.onDelete = onDelete
         self.onSetMain = onSetMain
+        self.setMainTitle = setMainTitle
+        self.onAdd = onAdd
         self.onReport = onReport
         self.isMain = isMain
         self.onMarkPlace = onMarkPlace
@@ -114,6 +121,15 @@ struct PhotoFullScreenView: View {
     }
 
     private var isZoomed: Bool { zoomScale > 1.01 }
+
+    /// Страница на экране, если она есть. Список бывает пустым: экран машины
+    /// писал страницы и индекс двумя состояниями подряд, а `fullScreenCover`
+    /// собирал просмотрщик ещё по пустому списку — `livePages[0]` ронял
+    /// приложение (Sentry APPLE-IOS-3, 0.9.0 (88), `topRow`). Все чтения
+    /// текущей страницы идут отсюда, а пустой просмотрщик закрывается сам.
+    private var currentPage: Page? {
+        livePages.indices.contains(currentIndex) ? livePages[currentIndex] : nil
+    }
 
     /// Zooming hides the chrome on its own — while you are inside the
     /// picture, nothing else belongs on screen.
@@ -147,6 +163,9 @@ struct PhotoFullScreenView: View {
                 .animation(.easeOut(duration: 0.18), value: chromeHidden)
         }
         .statusBarHidden(chromeHidden)
+        .task {
+            if livePages.isEmpty { onDismiss() }
+        }
         // House dialog, never the system's (CLAUDE.md «Dialogs»). The viewer
         // takes its language as a value rather than off the environment, so
         // both titles are resolved from `language` instead of the modifier's
@@ -350,34 +369,37 @@ struct PhotoFullScreenView: View {
     private var topRow: some View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
-            if let onSetMain {
-                let already = isMain?(livePages[currentIndex].id) ?? false
+            if let onAdd {
+                circleButton("plus", label: AppStrings.profileAddPhoto(language), id: "photo_viewer_add", action: onAdd)
+            }
+            if let onSetMain, let page = currentPage {
+                let already = isMain?(page.id) ?? false
                 circleButton(already ? "star.fill" : "star",
-                             label: AppStrings.vehiclePhotoMakeMain(language),
+                             label: setMainTitle ?? AppStrings.vehiclePhotoMakeMain(language),
                              id: "photo_viewer_main",
                              tint: already ? AppTheme.accent : .white) {
                     guard !already else { return }
                     Haptics.tap()
-                    onSetMain(livePages[currentIndex].id)
+                    onSetMain(page.id)
                 }
             }
-            if let onMarkPlace, canMarkPlace?(livePages[currentIndex].id) ?? false {
+            if let onMarkPlace, let page = currentPage, canMarkPlace?(page.id) ?? false {
                 circleButton("mappin.and.ellipse", label: AppStrings.checkpointMarkPlace(language),
                              id: "photo_viewer_mark_place") {
                     Haptics.success()
-                    onMarkPlace(livePages[currentIndex].id)
+                    onMarkPlace(page.id)
                 }
             }
-            if onDelete != nil {
+            if onDelete != nil, currentPage != nil {
                 circleButton("trash", label: AppStrings.delete(language), id: "photo_viewer_delete") {
                     confirmingDelete = true
                 }
             }
-            if let onReport {
+            if let onReport, let page = currentPage {
                 circleButton("flag", label: AppStrings.reportProfileAction(language),
                              id: "photo_viewer_report") {
                     Haptics.tap()
-                    onReport(livePages[currentIndex].id)
+                    onReport(page.id)
                 }
             }
             // No share button: a photo is shared as part of the trip, from
@@ -445,13 +467,14 @@ struct PhotoFullScreenView: View {
 
     /// «14 апр, 10:40 · Тверская обл.» — photo timestamp + trip region.
     private var captionLine: String? {
-        guard pages.indices.contains(currentIndex) else { return nil }
+        guard let page = currentPage else { return nil }
         let f = Self.captionFormatters[language]
-        var line = f?.string(from: livePages[currentIndex].timestamp) ?? ""
+        let unknownDate = page.timestamp == Date(timeIntervalSince1970: 0)
+        var line = unknownDate ? "" : (f?.string(from: page.timestamp) ?? "")
         if let region, !region.isEmpty {
             line += " · \(region)"
         }
-        return line
+        return line.isEmpty ? nil : line
     }
 }
 
@@ -488,7 +511,7 @@ private struct PhotoPage: View {
         self.onDismissDragEnded = onDismissDragEnded
         self.onSingleTap = onSingleTap
         switch source {
-        case .vehicle(let filename):
+        case .vehicle(let filename), .profile(let filename):
             _image = State(initialValue: VehicleImageCache.cached(
                 VehicleImageCache.localKey(filename, Self.fullScreenSize)))
         case .remote(let urlString):
@@ -595,6 +618,14 @@ private struct PhotoPage: View {
             } else if image == nil {
                 failed = true
             }
+        case .profile(let filename):
+            let loaded = await VehicleImageCache.sized(
+                fileURL: ProfilePhotoStore.directory.appendingPathComponent(filename),
+                key: VehicleImageCache.localKey(filename, Self.fullScreenSize),
+                maxSize: Self.fullScreenSize)
+            if Task.isCancelled { return }
+            image = loaded
+            failed = loaded == nil
         case .vehicle(let filename):
             // Через кэш и с уменьшением, а не `UIImage(contentsOfFile:)`.
             //

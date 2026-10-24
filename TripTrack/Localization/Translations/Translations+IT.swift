@@ -17,6 +17,22 @@ extension Translations {
         table.merge(it4) { _, new in new }
         table.merge(it5) { _, new in new }
         table.merge(it6) { _, new in new }
+        table.merge(itGarage) { _, new in new }
+        table.merge(itProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Altri modelli — senza specifiche"
+        table["catalogGeneration"] = "Generazione"
+        table["catalogVariant"] = "Motore e cambio"
+        table["catalogUnknownEngine"] = "Non conosco il motore"
+        table["catalogHasYear"] = "Disponibile nel {year}"
+        table["profileAddCover"] = "Aggiungi copertina"
+        table["profileAddPhoto"] = "Aggiungi foto"
+        table["profileMakeCover"] = "Imposta come copertina"
+        table["profileJournalSignIn"] = "Accedi per mostrare il diario agli altri"
+        table["profilePinned"] = "In evidenza"
+        table["profileRoutineOne"] = "{n} viaggio ripetuto"
+        table["profileRoutineFew"] = "{n} viaggi ripetuti"
+        table["profileRoutineMany"] = "{n} viaggi ripetuti"
+        table["profileMoreTrips"] = "Altri {n}"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Strada campione",
         "statsRecordFarthest": "Punto più lontano",
         "previewBannerSubtitle": "Anteprima · seguire e reagire non sono disponibili",
-        "previewBannerBody": "Nome utente, bandiera e «su di me» per ora stanno solo su questo telefono — gli altri non li vedono.",
+        "previewBannerBody": "Nome utente e bandiera per ora stanno solo su questo telefono — gli altri non li vedono.",
         "previewThisIsYou": "È il Suo profilo",
         "vehicleTypeCar": "Auto",
         "vehicleTypeMoto": "Moto",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "Abbonamento PRO",
         "cosmeticDefaultOption": "Predefinito",
         "settingsAvatarFrame": "Cornice dell’avatar",
-        "settingsVehicleCardStyle": "Sfondo della scheda",
+        "settingsVehicleCardStyle": "Piattaforma",
         "showcaseVisibleAfterSignIn": "Per ora lo vede solo Lei. Gli altri lo vedranno dopo l’accesso.",
         "showcaseVisibleAfterSync": "Per ora lo vede solo Lei. Gli altri lo vedranno dopo l’accesso e la sincronizzazione attiva.",
         "vehicleCardStylePickerFootnote": "Lo sfondo compare sulla scheda di questo veicolo: nel Suo garage e nel Suo profilo pubblico.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Termina",
         "showcaseBg": "Sfondo del profilo",
         "showcaseFrame": "Cornice dell’avatar",
-        "showcaseCar": "Sfondo della scheda",
+        "showcaseCar": "Piattaforma",
         "showcaseLine": "Linea del percorso",
         "showcaseFree": "Gratis",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Consenta l'accesso in Impostazioni così l'atlante La segue",
     ]
 
+}
+
+extension Translations {
+    private static let itGarage: [String: String] = [
+        "vehicleFinishGloss": "Lucido",
+        "vehicleFinishMatte": "Opaco",
+        "vehicleFinishPearl": "Perlato",
+        "vehicleFinishChrome": "Cromo",
+        "garageFinish": "Finitura",
+        "garageTags": "Tag sulla scheda",
+        "garageTagsHint": "Fino a tre tag brevi sulla scheda dell’auto.",
+        "garageDrive2Title": "Diario su DRIVE2",
+        "garageDrive2Connect": "Collega un diario DRIVE2",
+        "garageDrive2Help": "In DRIVE2 apri quest’auto → Condividi → Copia link, poi incollalo qui.",
+        "garageDrive2Field": "Link dell’auto",
+        "garageDrive2Valid": "✓ Link dell’auto: {make} · {model}",
+        "garageDrive2Hint": "Usa il link di un’auto su DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Chi vede quest’auto vedrà il pulsante del diario DRIVE2.",
+        "garageDrive2LocalNote": "Il link resta su questo telefono. Accedi e attiva la sincronizzazione per condividerlo.",
+        "garageDrive2Unlink": "Scollega",
+        "garageMileage": "Chilometraggio",
+        "garageOnOdometer": "sul contachilometri",
+        "garageTracked": "Con TripTrack — {distance}",
+        "garageTripPhotos": "Foto dei viaggi",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Piattaforma",
+        "garagePower": "{value} CV",
+        "garageAcceleration": "0–100 km/h in {value} s",
+        "garageTransmissionManual": "Manuale",
+        "garageTransmissionAutomatic": "Automatica",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let itProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} di {max}",
+        "profilePhotosSignIn": "Accedi per mostrare le foto agli altri",
+        "profilePhotosEmpty": "Aggiungi foto: saranno visibili sulla tua scheda",
+        "profilePhotosLimit": "Il profilo ha già nove foto",
+        "profilePhotoFirst": "Metti per prima",
+        "profileShowcase": "Vetrina",
+        "profileShowcaseEmpty": "Fissa fino a tre viaggi tramite «…» in un viaggio: appariranno per primi sulla tua scheda",
+        "profileShowcaseElsewhere": "Altri {n} — fissati su un altro dispositivo",
+        "profilePin": "Fissa sul profilo",
+        "profileUnpin": "Rimuovi dal profilo",
+        "profileShowcaseLimit": "Ci sono già tre viaggi in evidenza — rimuovine uno",
+    ]
 }

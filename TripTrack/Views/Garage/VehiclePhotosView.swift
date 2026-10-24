@@ -22,7 +22,7 @@ struct VehiclePhotosView: View {
     /// действий: список был временной заплаткой на то, что смотреть было негде,
     /// а «сделать главной» и «удалить» переехали в саму открытую фотографию —
     /// туда, где на неё смотрят целиком.
-    @State private var viewerIndex: Int?
+    @State private var viewer: ViewerStart?
     /// Страницы, замороженные на время показа, и id главной — отдельно.
     ///
     /// Пересобирать этот массив под открытым просмотрщиком нельзя: «сделать
@@ -34,7 +34,11 @@ struct VehiclePhotosView: View {
     /// Поэтому порядок фиксируется в момент открытия, а звезда рисуется по
     /// `viewerMainId`, который меняется сразу. Список пересортируется потом, на
     /// закрытии, когда это уже никого не сбивает.
-    @State private var viewerPages: [PhotoFullScreenView.Page] = []
+    ///
+    /// Страницы едут ВНУТРИ `viewer`, а не отдельным состоянием рядом с
+    /// индексом: две записи подряд `fullScreenCover` успевал прочитать
+    /// наполовину — индекс уже есть, страниц ещё нет, — и просмотрщик
+    /// открывался с пустым списком (Sentry APPLE-IOS-3, 0.9.0 (88)).
     @State private var viewerMainId: UUID?
     /// Разовый вопрос «показывать ли эти снимки другим», который задаётся ровно
     /// в тот момент, когда он впервые осмыслен: у машины появилась первая
@@ -83,14 +87,11 @@ struct VehiclePhotosView: View {
         // этом месте только сброс индекса. Здесь список перечитывается уже
         // ПОСЛЕ того, как просмотрщик ушёл.
         .fullScreenCover(
-            item: Binding(
-                get: { viewerIndex.map { ViewerStart(index: $0) } },
-                set: { if $0 == nil { viewerIndex = nil } }
-            ),
+            item: $viewer,
             onDismiss: { reload() }
         ) { start in
             PhotoFullScreenView(
-                pages: viewerPages,
+                pages: start.pages,
                 initialIndex: start.index,
                 language: lang.language,
                 onDelete: { id in
@@ -105,7 +106,7 @@ struct VehiclePhotosView: View {
                     viewerMainId = id
                 },
                 isMain: { $0 == viewerMainId },
-                onDismiss: { viewerIndex = nil }
+                onDismiss: { viewer = nil }
             )
         }
         .appConfirm(
@@ -133,7 +134,11 @@ struct VehiclePhotosView: View {
 
     /// Обёртка ради `fullScreenCover(item:)`: индекс сам по себе не
     /// `Identifiable`, а расширять `Int` на весь проект — плохая мена.
-    private struct ViewerStart: Identifiable { let index: Int; var id: Int { index } }
+    private struct ViewerStart: Identifiable {
+        let index: Int
+        let pages: [PhotoFullScreenView.Page]
+        var id: Int { index }
+    }
 
     // MARK: - Шапка
 
@@ -301,14 +306,14 @@ struct VehiclePhotosView: View {
             photosVisible: visible)
     }
 
-    /// Снимок порядка на момент открытия — см. `viewerPages`.
+    /// Снимок порядка на момент открытия — см. `viewer`.
     private func openViewer(at index: Int) {
-        viewerPages = photos.map {
+        let pages: [PhotoFullScreenView.Page] = photos.map {
             .init(id: $0.id, source: .vehicle(filename: $0.filename),
                   timestamp: $0.timestamp)
         }
         viewerMainId = photos.first(where: { $0.isMain })?.id
-        viewerIndex = index
+        viewer = ViewerStart(index: index, pages: pages)
     }
 
     private func reload() {

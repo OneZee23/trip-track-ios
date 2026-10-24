@@ -33,6 +33,16 @@ final class AchievementsSecretShotTests: XCTestCase {
         add(attachment)
     }
 
+    /// Swipes until the element's frame clears the custom tab bar (110 pt
+    /// tall above the bottom edge, `CustomTabBar.clearance`).
+    private func scrollAboveTabBar(_ element: XCUIElement) {
+        let limit = app.frame.maxY - 140
+        for _ in 0..<8 where element.frame.maxY > limit {
+            app.swipeUp(velocity: .slow)
+            usleep(400_000)
+        }
+    }
+
     /// «Я» → «Достижения» → фильтр «Секретные».
     private func openSecretShelf() {
         let profile = app.buttons.matching(identifier: "tab_profile").firstMatch
@@ -43,11 +53,18 @@ final class AchievementsSecretShotTests: XCTestCase {
         // Since 2 Oct 2026 the cards under «История» sit behind one
         // disclosure on a populated «Я» — the same step `ProfileTapTargetsTests`
         // takes first.
+        // Since 0.9.1 the profile card (photos, «Витрина») sits above it, so
+        // the toggle starts below the custom tab bar — and a tap at its point
+        // lands on the record disk instead. Bring it above the bar first.
         let toggle = app.buttons["profile_sections_toggle"].firstMatch
-        if toggle.waitForExistence(timeout: 5) { toggle.tap() }
+        if toggle.waitForExistence(timeout: 5) {
+            scrollAboveTabBar(toggle)
+            toggle.tap()
+        }
 
         let all = app.buttons.matching(identifier: "profile_achievements_all").firstMatch
         XCTAssertTrue(all.waitForExistence(timeout: 8), "строка «Достижения» в профиле")
+        scrollAboveTabBar(all)
         all.tap()
         XCTAssertTrue(app.otherElements["achievements_screen"].waitForExistence(timeout: 8),
                       "экран достижений открылся")

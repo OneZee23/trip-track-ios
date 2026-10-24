@@ -31,6 +31,11 @@ enum APIEndpoint {
 
     static let settingsUpsert = "/settings/upsert"
 
+    static let profilePhotoUpload = "/profile/photos/upload"
+    static let profilePhotoList = "/profile/photos/list"
+    static let profilePhotoDelete = "/profile/photos/delete"
+    static let profilePhotoOrder = "/profile/photos/order"
+
     static let photoUpload = "/photos/upload"
     static let photoURL    = "/photos/url"
     static let photoDelete = "/photos/delete"

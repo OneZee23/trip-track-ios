@@ -38,6 +38,7 @@ struct VehicleEditFormView: View {
     @State private var yearText: String
     @State private var bodyType: String
     @State private var about: String
+    @State private var catalogSelection: VehicleCatalogSelection?
     @State private var showCatalog = false
     @State private var showPrivacy = false
     @State private var confirmSell = false
@@ -103,6 +104,8 @@ struct VehicleEditFormView: View {
     /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
     @State private var cardStyle: VehicleCardStyle
     @State private var cardStyleWasPicked = false
+    @State private var garageFinish = "gloss"
+    @State private var garageTags: [String] = []
     /// Открытая витрина оформления. Фон карточки машины живёт не в
     /// `SettingsManager`, а в самой машине, поэтому запись идёт замыканием.
     @State private var showcase: ProShowcaseKind?
@@ -130,6 +133,8 @@ struct VehicleEditFormView: View {
         if case .edit(let id) = mode,
            let vehicle = SettingsManager.shared.vehicles.first(where: { $0.id == id }) {
             editedVehicle = vehicle
+            _garageFinish = State(initialValue: vehicle.paintFinish ?? "gloss")
+            _garageTags = State(initialValue: vehicle.modTags)
             // Поля паспорта заполняются В ЕДИНИЦЕ ПРИБОРКИ, а не человека:
             // всё, что тут вводят, списывают с панели этой машины.
             let shownDistance = vehicle.dashboardUnit(app: appDistance)
@@ -519,7 +524,8 @@ struct VehicleEditFormView: View {
                 .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("vehicle_catalog_open")
 
             HStack(spacing: 10) {
                 Text(AppStrings.vehicleYear(l))
@@ -530,7 +536,12 @@ struct VehicleEditFormView: View {
                 // for four digits, and the word was cut to «Не указ…» (in
                 // German «Nicht angegeben» even shorter). A number in the
                 // place of a number also says what goes here (0.8.9).
-                TextField(Self.yearExample, text: $yearText)
+                TextField(Self.yearExample, text: Binding(
+                    get: { yearText },
+                    set: { value in
+                        if value != yearText { clearCatalogSelection() }
+                        yearText = value
+                    }))
                     .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
                     .tint(AppTheme.accent)
@@ -584,14 +595,15 @@ struct VehicleEditFormView: View {
             VehicleCatalogPickerView(
                 type: selectedType.rawValue,
                 initialQuery: make
-            ) { pickedMake, pickedModel, pickedBody in
-                make = pickedMake
-                carModel = pickedModel
-                bodyType = pickedBody
-                // Силуэт идёт следом за кузовом: выбрал «Polo» — спрайт стал
-                // седаном сам. Каталог предлагает, тип решает.
-                selectedAvatarStyle = VehicleAvatar.resolveStyle(
-                    pickedBody, forType: selectedType.rawValue)
+            ) { selection in
+                make = selection.make
+                carModel = selection.model
+                bodyType = selection.body
+                if let year = selection.year { yearText = String(year) }
+                var storedSelection = selection
+                if selection.catalogModelId == nil { storedSelection.clearCatalogIDs() }
+                catalogSelection = storedSelection
+                selectedAvatarStyle = VehicleAvatar.resolveStyle(selection.body, forType: selectedType.rawValue)
             }
             .environmentObject(lang)
         }
@@ -627,6 +639,7 @@ struct VehicleEditFormView: View {
         let isSelected = selectedType == type
         return Button {
             Haptics.selection()
+            if selectedType != type { clearCatalogSelection() }
             selectedType = type
             // The silhouette follows the type it belongs to. Without this,
             // calling a vehicle a motorcycle leaves a saloon sitting in the
@@ -765,6 +778,7 @@ struct VehicleEditFormView: View {
             // без платного строки нет вовсе (`PlusGate` → `.hidden`).
             if cardStyleAccess != .hidden {
                 cardStyleRow(c: c, l: l)
+                VehicleGarageCustomization(finish: $garageFinish, tags: $garageTags)
             }
         }
         .padding(14)
@@ -1610,10 +1624,18 @@ struct VehicleEditFormView: View {
                 settings.selectCosmetic(.vehicleCard, id: cardStyle.rawValue,
                                         vehicleID: newId, isPlus: plus.isPlus)
             }
+            settings.updateVehicleGarage(id: newId, modTags: garageTags, paintFinish: VehicleFinish.parse(garageFinish))
+            saveCatalogSelection(id: newId)
             settings.selectVehicle(id: newId)
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
+            saveCatalogSelection(id: id)
+            if garageFinish != (original.paintFinish ?? "gloss") || VehicleModTags.sanitized(garageTags) != original.modTags {
+                settings.updateVehicleGarage(id: id,
+                    modTags: VehicleModTags.sanitized(garageTags) != original.modTags ? garageTags : nil,
+                    paintFinish: garageFinish != (original.paintFinish ?? "gloss") ? VehicleFinish.parse(garageFinish) : nil)
+            }
             // Приборка — первой: следом идут пробег и расход, и они уже
             // разобраны в ЕЁ единице. Порядок здесь не косметика — пул,
             // приехавший между двумя записями, увидел бы числа, разобранные
@@ -1707,6 +1729,20 @@ struct VehicleEditFormView: View {
 
         Haptics.success()
         dismiss()
+    }
+
+    private func clearCatalogSelection() {
+        var selection = catalogSelection ?? VehicleCatalogSelection(make: make, model: carModel, body: bodyType)
+        selection.clearCatalogIDs()
+        catalogSelection = selection
+    }
+
+    private func saveCatalogSelection(id: UUID) {
+        guard let selection = catalogSelection else { return }
+        settings.updateVehicleGarage(id: id,
+            catalogModelId: selection.catalogModelId,
+            catalogGenerationId: selection.catalogGenerationId,
+            catalogVariantId: selection.catalogVariantId ?? "")
     }
 
     private func parsed(_ text: String) -> Double? {

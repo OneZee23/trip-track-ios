@@ -406,6 +406,10 @@ final class TripManager: ObservableObject {
         }
         Task { @MainActor in
             PlaceManager.shared.forget(tripId: id)
+            // A deleted trip leaves «Витрина» here and now: absent trips are
+            // otherwise kept as pins from another phone, and three of them
+            // would block pinning anything else, with nothing left to unpin.
+            SettingsManager.shared.unpinTrip(id)
         }
         // Сырой лог фиксов уезжает вместе с поездкой (спека §3.2): «Удалить»
         // черновика — это, возможно, чей-то чужой путь, и координаты не

@@ -353,6 +353,21 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
+    /// Read immutable garage snapshots on their context's queue.
+    func fetchVehicleGarageTrips(id: UUID) async -> [Trip] {
+        let background = persistenceController.container.newBackgroundContext()
+        return await background.perform {
+            let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                self.completedTripPredicate, NSPredicate(format: "vehicleId == %@", id as CVarArg)
+            ])
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+            return ((try? background.fetch(request)) ?? []).compactMap {
+                self.tripFromEntity($0, includeTrackPoints: $0.previewPolyline == nil)
+            }.filter { !$0.isTransfer }
+        }
+    }
+
     func fetchTripsModifiedSince(_ date: Date) -> [Trip] {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(
@@ -1692,7 +1707,10 @@ final class CoreDataTripRepository: TripRepository {
         // pull that immediately follows uploading it: pick a scooter, sync,
         // watch it turn back into a saloon. No backend has the column yet, so
         // that was every pull for every signed-in person.
-        if let style = p.avatarStyle { entity.avatarStyle = style }
+        // And, like the passport, not over an unsent local edit (0.9.1): the
+        // exact car picker sets body and silhouette together, and a pull that
+        // returned the old silhouette under the new car would ship that mix.
+        if !hasLocalEdits, let style = p.avatarStyle { entity.avatarStyle = style }
         entity.odometerKm = p.odometerKm
         // Только когда ключ пришёл: сервер без колонки его не шлёт, и `?? nil`
         // стёр бы введённое человеком число. Без этой строки ручной пробег
@@ -1757,6 +1775,15 @@ final class CoreDataTripRepository: TripRepository {
         if !hasLocalEdits, let units = p.dashboardUnits { entity.dashboardUnits = units.rawValue }
         // Фон карточки (0.8.0, «Плюс») — тем же приёмом, что единица
         // приборки: ключ отсутствует или правка ещё не уехала — не трогаем.
+        if !hasLocalEdits {
+            if let url = p.drive2Url { entity.drive2URL = Drive2Link(url)?.url.absoluteString ?? "" }
+            if let tags = p.modTags { entity.modTagsJSON = VehicleModTags.encodeJSON(tags) }
+            if let raw = p.paintFinish, let finish = raw.isEmpty ? VehicleFinish.gloss : VehicleFinish.parse(raw) { entity.paintFinish = finish.rawValue }
+            if let mods = p.mods { entity.modsJSON = VehicleMod.encodeJSON(mods) }
+            if let id = p.catalogModelId { entity.catalogModelId = id }
+            if let id = p.catalogGenerationId { entity.catalogGenerationId = id }
+            if let id = p.catalogVariantId { entity.catalogVariantId = id }
+        }
         if !hasLocalEdits, let style = p.cardStyle { entity.cardStyle = style }
         // Электро и гибриды (0.8.3) — тем же приёмом и с той же ценой ошибки,
         // что у единицы приборки: вернувшийся тип двигателя или обнулённый
@@ -1770,11 +1797,18 @@ final class CoreDataTripRepository: TripRepository {
         if !hasLocalEdits, let range = p.electricRangeKm { entity.electricRangeKm = range }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
-        if let about = p.about { entity.about = about }
-        if let make = p.make { entity.make = make }
-        if let model = p.model { entity.model = model }
-        if let year = p.year { entity.year = Int32(year) }
-        if let body = p.bodyType { entity.bodyType = body }
+        //
+        // И под тем же гейтом правки (0.9.1): с выбором из каталога паспорт и
+        // три ID каталога — ОДНА правка. Пул, вернувший прежние марку и год
+        // поверх ещё не уехавших новых, оставил бы машину с чужой строкой
+        // характеристик: ID защищены гейтом, а паспорт — нет.
+        if !hasLocalEdits {
+            if let about = p.about { entity.about = about }
+            if let make = p.make { entity.make = make }
+            if let model = p.model { entity.model = model }
+            if let year = p.year { entity.year = Int32(year) }
+            if let body = p.bodyType { entity.bodyType = body }
+        }
         if !hasLocalEdits, let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
         if !hasLocalEdits, let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
         if let archived = p.isArchived { entity.isArchived = archived }
@@ -1785,8 +1819,10 @@ final class CoreDataTripRepository: TripRepository {
         // другого устройства не приезжала никогда.
         if p.soldAtKnown { entity.soldAt = p.soldAt }
         entity.conflictVersion = Int32(p.conflictVersion)
-        entity.lastModifiedAt = p.lastModifiedAt
-        entity.syncStatus = SyncStatus.synced.rawValue
+        if !hasLocalEdits {
+            entity.lastModifiedAt = p.lastModifiedAt
+            entity.syncStatus = SyncStatus.synced.rawValue
+        }
         // Save deferred — see flushPendingApplies().
     }
 

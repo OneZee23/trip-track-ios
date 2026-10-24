@@ -17,6 +17,22 @@ extension Translations {
         table.merge(id4) { _, new in new }
         table.merge(id5) { _, new in new }
         table.merge(id6) { _, new in new }
+        table.merge(idGarage) { _, new in new }
+        table.merge(idProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Model lain — tanpa spesifikasi"
+        table["catalogGeneration"] = "Generasi"
+        table["catalogVariant"] = "Mesin dan transmisi"
+        table["catalogUnknownEngine"] = "Saya tidak tahu mesinnya"
+        table["catalogHasYear"] = "Tersedia tahun {year}"
+        table["profileAddCover"] = "Tambah sampul"
+        table["profileAddPhoto"] = "Tambah foto"
+        table["profileMakeCover"] = "Jadikan sampul"
+        table["profileJournalSignIn"] = "Masuk agar orang lain dapat melihat jurnalmu"
+        table["profilePinned"] = "Disematkan"
+        table["profileRoutineOne"] = "{n} perjalanan berulang"
+        table["profileRoutineFew"] = "{n} perjalanan berulang"
+        table["profileRoutineMany"] = "{n} perjalanan berulang"
+        table["profileMoreTrips"] = "{n} lagi"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Jalan juara",
         "statsRecordFarthest": "Titik terjauh",
         "previewBannerSubtitle": "Pratinjau · mengikuti dan bereaksi belum tersedia",
-        "previewBannerBody": "Nama pengguna, bendera, dan «tentang saya» untuk sekarang hanya ada di ponsel ini — orang lain belum melihatnya.",
+        "previewBannerBody": "Nama pengguna dan bendera untuk sekarang hanya ada di ponsel ini — orang lain belum melihatnya.",
         "previewThisIsYou": "Ini Anda",
         "vehicleTypeCar": "Mobil",
         "vehicleTypeMoto": "Motor",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "Langganan PRO",
         "cosmeticDefaultOption": "Bawaan",
         "settingsAvatarFrame": "Bingkai avatar",
-        "settingsVehicleCardStyle": "Latar kartu",
+        "settingsVehicleCardStyle": "Platform",
         "showcaseVisibleAfterSignIn": "Saat ini hanya Anda yang melihatnya. Orang lain akan melihatnya setelah Anda masuk.",
         "showcaseVisibleAfterSync": "Saat ini hanya Anda yang melihatnya. Orang lain akan melihatnya setelah Anda masuk dan menyalakan sinkronisasi.",
         "vehicleCardStylePickerFootnote": "Latar tampil di kartu kendaraan ini — di garasi dan di profil publik Anda.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Selesaikan",
         "showcaseBg": "Latar profil",
         "showcaseFrame": "Bingkai avatar",
-        "showcaseCar": "Latar kartu",
+        "showcaseCar": "Platform",
         "showcaseLine": "Garis rute",
         "showcaseFree": "Gratis",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Izinkan akses di Pengaturan agar atlas mengikuti Anda",
     ]
 
+}
+
+extension Translations {
+    private static let idGarage: [String: String] = [
+        "vehicleFinishGloss": "Mengilap",
+        "vehicleFinishMatte": "Matte",
+        "vehicleFinishPearl": "Mutiara",
+        "vehicleFinishChrome": "Krom",
+        "garageFinish": "Lapisan",
+        "garageTags": "Tag kartu",
+        "garageTagsHint": "Hingga tiga tag singkat di kartu mobil.",
+        "garageDrive2Title": "Jurnal di DRIVE2",
+        "garageDrive2Connect": "Tautkan jurnal DRIVE2",
+        "garageDrive2Help": "Di DRIVE2, buka mobil ini → Bagikan → Salin tautan, lalu tempel di sini.",
+        "garageDrive2Field": "Tautan mobil",
+        "garageDrive2Valid": "✓ Tautan mobil: {make} · {model}",
+        "garageDrive2Hint": "Gunakan tautan halaman mobil DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Semua yang dapat melihat mobil ini akan melihat tombol jurnal DRIVE2.",
+        "garageDrive2LocalNote": "Tautan tetap di ponsel ini. Masuk dan aktifkan sinkronisasi awan untuk membagikannya.",
+        "garageDrive2Unlink": "Putuskan tautan",
+        "garageMileage": "Jarak tempuh",
+        "garageOnOdometer": "di odometer",
+        "garageTracked": "Dengan TripTrack — {distance}",
+        "garageTripPhotos": "Foto perjalanan",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Platform",
+        "garagePower": "{value} hp",
+        "garageAcceleration": "0–100 km/h {value} dtk",
+        "garageTransmissionManual": "Manual",
+        "garageTransmissionAutomatic": "Otomatis",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let idProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} dari {max}",
+        "profilePhotosSignIn": "Masuk agar orang lain dapat melihat foto Anda",
+        "profilePhotosEmpty": "Tambahkan foto — akan terlihat di kartu Anda",
+        "profilePhotosLimit": "Profil Anda sudah memiliki sembilan foto",
+        "profilePhotoFirst": "Jadikan pertama",
+        "profileShowcase": "Etalase",
+        "profileShowcaseEmpty": "Sematkan hingga tiga perjalanan lewat “…” di layar perjalanan — akan tampil pertama di kartu Anda",
+        "profileShowcaseElsewhere": "{n} lagi — disematkan di perangkat lain",
+        "profilePin": "Sematkan di profil",
+        "profileUnpin": "Lepas dari profil",
+        "profileShowcaseLimit": "Sudah ada tiga perjalanan yang disematkan — lepas salah satunya",
+    ]
 }

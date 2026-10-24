@@ -44,7 +44,23 @@ final class RemoteVehicleMergeTests: XCTestCase {
         e.odometerKm = 120
         e.vehicleLevel = 2
         e.lastModifiedAt = Date()
+        // Synced: these tests are about what the SERVER says to a phone with
+        // nothing unsent. An unsent local edit wins over a pull (0.9.1, the
+        // same gate as the passport) — see `testUnsentLocalSilhouetteWins`.
+        e.syncStatus = SyncStatus.synced.rawValue
         return e
+    }
+
+    /// The exact car picker sets body and silhouette in one edit; a pull that
+    /// lands before it is uploaded must not put the old silhouette back.
+    func testUnsentLocalSilhouetteWins() {
+        let id = UUID()
+        let local = makeLocal(id: id, style: "crossover")
+        local.syncStatus = SyncStatus.pendingUpload.rawValue
+
+        repo.applyRemoteVehicle(payload(id: id, avatarStyle: "car"))
+
+        XCTAssertEqual(fetch(id)?.avatarStyle, "crossover")
     }
 
     private func payload(id: UUID, avatarStyle: String?) -> VehicleSyncPayload {

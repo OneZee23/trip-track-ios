@@ -3872,6 +3872,27 @@ enum AppStrings {
            ru: "Ничего не нашлось — впишите своими словами",
            en: "Nothing found — type it in yourself")
     }
+    static func catalogOtherModels(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogOtherModels", ru: "Другие модели — без характеристик", en: "Other models — without specs")
+    }
+
+    static func catalogGeneration(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogGeneration", ru: "Поколение", en: "Generation")
+    }
+
+    static func catalogVariant(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogVariant", ru: "Двигатель и коробка", en: "Engine and gearbox")
+    }
+
+    static func catalogUnknownEngine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogUnknownEngine", ru: "Не знаю двигатель", en: "I don’t know the engine")
+    }
+
+    static func catalogHasYear(_ lang: LanguageManager.Language, year: Int) -> String {
+        tr(lang, "catalogHasYear", ru: "есть {year}", en: "{year} available")
+            .replacingOccurrences(of: "{year}", with: String(year))
+    }
+
     static func catalogUseTyped(_ lang: LanguageManager.Language) -> String {
         tr(lang, "catalogUseTyped", ru: "Оставить как есть", en: "Use what I typed")
     }
@@ -6397,8 +6418,8 @@ enum AppStrings {
     /// them is not silently claiming other people can see them.
     static func previewBannerBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "previewBannerBody",
-           ru: "Юзернейм, флаг и «о себе» пока хранятся только на телефоне — другие их не увидят.",
-           en: "Your handle, flag and bio live on this device only — nobody else can see them yet.")
+           ru: "Юзернейм и флаг пока хранятся только на телефоне — другие их не увидят.",
+           en: "Your handle and flag live on this device only — nobody else can see them yet.")
     }
     /// Stands where the follow button would be on someone else's profile.
     static func previewThisIsYou(_ lang: LanguageManager.Language) -> String {
@@ -8248,7 +8269,7 @@ enum AppStrings {
         tr(lang, "showcaseFrame", ru: "Рамка аватара", en: "Avatar frame")
     }
     static func showcaseCar(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "showcaseCar", ru: "Фон карточки", en: "Card background")
+        tr(lang, "showcaseCar", ru: "Площадка", en: "Platform")
     }
     static func showcaseLine(_ lang: LanguageManager.Language) -> String {
         tr(lang, "showcaseLine", ru: "Линия маршрута", en: "Route line")
@@ -8452,7 +8473,7 @@ enum AppStrings {
     }
     /// Строка «Фон карточки» в паспорте машины.
     static func settingsVehicleCardStyle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "settingsVehicleCardStyle", ru: "Фон карточки", en: "Card background")
+        tr(lang, "settingsVehicleCardStyle", ru: "Площадка", en: "Platform")
     }
 
     /// Подпись под пикером фона карточки: где именно он виден.
@@ -8747,5 +8768,97 @@ enum AppStrings {
         tr(lang, "homeRemoveBody",
            ru: "Приватная зона перестанет работать, и публичные поездки будут отправлены заново — целиком.",
            en: "The private zone stops working, and your public trips will be sent again — whole.")
+    }
+}
+
+// Garage flow 1 (0.9.1). Catalog acceleration is always 0–100 km/h.
+extension AppStrings {
+    static func vehicleFinishGloss(_ l: LanguageManager.Language) -> String {
+        tr(l, "vehicleFinishGloss", ru: "Глянец", en: "Gloss")
+    }
+    static func vehicleFinishMatte(_ l: LanguageManager.Language) -> String {
+        tr(l, "vehicleFinishMatte", ru: "Матовый", en: "Matte")
+    }
+    static func vehicleFinishPearl(_ l: LanguageManager.Language) -> String {
+        tr(l, "vehicleFinishPearl", ru: "Перламутр", en: "Pearl")
+    }
+    static func vehicleFinishChrome(_ l: LanguageManager.Language) -> String {
+        tr(l, "vehicleFinishChrome", ru: "Хром", en: "Chrome")
+    }
+    static func garageFinish(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageFinish", ru: "Покрытие", en: "Finish")
+    }
+    static func garageTags(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageTags", ru: "Доработки на карточке", en: "Card tags")
+    }
+    static func garageTagsHint(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageTagsHint", ru: "До трёх коротких слов — их видно на карточке машины.", en: "Up to three short tags, visible on the car card.")
+    }
+    static func garageDrive2Title(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Title", ru: "Бортжурнал на DRIVE2", en: "Logbook on DRIVE2")
+    }
+    static func garageDrive2Connect(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Connect", ru: "Привязать бортжурнал DRIVE2", en: "Link a DRIVE2 logbook")
+    }
+    static func garageDrive2Help(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Help", ru: "В DRIVE2 откройте эту машину → «Поделиться» → «Скопировать ссылку» и вставьте её сюда.", en: "In DRIVE2, open this car → Share → Copy link, then paste it here.")
+    }
+    static func garageDrive2Field(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Field", ru: "Ссылка на машину", en: "Car link")
+    }
+    static func garageDrive2Valid(_ l: LanguageManager.Language, make: String, model: String) -> String {
+        tr(l, "garageDrive2Valid", ru: "✓ Ссылка на машину: {make} · {model}", en: "✓ Car link: {make} · {model}").replacingOccurrences(of: "{make}", with: make).replacingOccurrences(of: "{model}", with: model)
+    }
+    static func garageDrive2Hint(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Hint", ru: "Нужна ссылка на страницу машины в DRIVE2: drive2.ru/r/…", en: "Use a DRIVE2 car-page link: drive2.ru/r/…")
+    }
+    static func garageDrive2PublicNote(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2PublicNote", ru: "Кнопку «Бортжурнал на DRIVE2» увидят все, кому видна эта машина.", en: "Everyone who can see this car will see the DRIVE2 logbook button.")
+    }
+    static func garageDrive2LocalNote(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2LocalNote", ru: "Ссылка останется на этом телефоне. Чтобы показать её другим, войдите в аккаунт и включите облачную синхронизацию.", en: "The link stays on this phone. Sign in and enable cloud sync to show it to others.")
+    }
+    static func garageDrive2Unlink(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageDrive2Unlink", ru: "Отвязать", en: "Unlink")
+    }
+    static func garageMileage(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageMileage", ru: "Пробег", en: "Mileage")
+    }
+    static func garageOnOdometer(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageOnOdometer", ru: "на одометре", en: "on the odometer")
+    }
+    static func garageTracked(_ l: LanguageManager.Language, distance: String) -> String {
+        tr(l, "garageTracked", ru: "С TripTrack — {distance}", en: "With TripTrack — {distance}").replacingOccurrences(of: "{distance}", with: distance)
+    }
+    static func garageTripPhotos(_ l: LanguageManager.Language) -> String {
+        tr(l, "garageTripPhotos", ru: "Фото из поездок", en: "Trip photos")
+    }
+    static func garagePlatform(_ l: LanguageManager.Language) -> String {
+        tr(l, "garagePlatform", ru: "Площадка", en: "Platform")
+    }
+    static func garagePower(_ l: LanguageManager.Language, value: String) -> String {
+        tr(l, "garagePower", ru: "{value} л.с.", en: "{value} hp").replacingOccurrences(of: "{value}", with: value)
+    }
+    static func garageAcceleration(_ l: LanguageManager.Language, value: String) -> String {
+        tr(l, "garageAcceleration", ru: "0–100 за {value} с", en: "0–100 km/h {value} s").replacingOccurrences(of: "{value}", with: value)
+    }
+    static func garageTransmission(_ l: LanguageManager.Language, kind: String) -> String {
+        switch kind {
+        case "manual": return tr(l, "garageTransmissionManual", ru: "МКПП", en: "MT")
+        case "automatic": return tr(l, "garageTransmissionAutomatic", ru: "АКПП", en: "AT")
+        case "cvt": return tr(l, "garageTransmissionCvt", ru: "Вариатор", en: "CVT")
+        case "amt": return tr(l, "garageTransmissionAmt", ru: "Робот", en: "AMT")
+        case "dct": return tr(l, "garageTransmissionDct", ru: "Робот", en: "DCT")
+        default: return ""
+        }
+    }
+}
+
+extension AppStrings {
+    static func garageGearbox(_ l: LanguageManager.Language, kind: String, gears: Int?) -> String {
+        guard let gears else { return garageTransmission(l, kind: kind) }
+        return tr(l, "garageGearbox", ru: "{type} {gears}", en: "{type}{gears}")
+            .replacingOccurrences(of: "{type}", with: garageTransmission(l, kind: kind))
+            .replacingOccurrences(of: "{gears}", with: String(gears))
     }
 }

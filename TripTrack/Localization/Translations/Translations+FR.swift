@@ -17,6 +17,22 @@ extension Translations {
         table.merge(fr4) { _, new in new }
         table.merge(fr5) { _, new in new }
         table.merge(fr6) { _, new in new }
+        table.merge(frGarage) { _, new in new }
+        table.merge(frProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Autres modèles — sans caractéristiques"
+        table["catalogGeneration"] = "Génération"
+        table["catalogVariant"] = "Moteur et boîte"
+        table["catalogUnknownEngine"] = "Je ne connais pas le moteur"
+        table["catalogHasYear"] = "Disponible en {year}"
+        table["profileAddCover"] = "Ajouter une couverture"
+        table["profileAddPhoto"] = "Ajouter une photo"
+        table["profileMakeCover"] = "Définir comme couverture"
+        table["profileJournalSignIn"] = "Connectez-vous pour partager votre journal"
+        table["profilePinned"] = "Épinglé"
+        table["profileRoutineOne"] = "{n} trajet répété"
+        table["profileRoutineFew"] = "{n} trajets répétés"
+        table["profileRoutineMany"] = "{n} trajets répétés"
+        table["profileMoreTrips"] = "Encore {n}"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Route championne",
         "statsRecordFarthest": "Point le plus lointain",
         "previewBannerSubtitle": "Aperçu · s'abonner et réagir sont indisponibles",
-        "previewBannerBody": "Votre identifiant, votre drapeau et votre bio ne vivent pour l'instant que sur cet appareil — personne d'autre ne les voit.",
+        "previewBannerBody": "Votre identifiant et votre drapeau ne vivent pour l'instant que sur cet appareil — personne d'autre ne les voit.",
         "previewThisIsYou": "C'est vous",
         "vehicleTypeCar": "Voiture",
         "vehicleTypeMoto": "Moto",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "Abonnement PRO",
         "cosmeticDefaultOption": "Par défaut",
         "settingsAvatarFrame": "Cadre de l’avatar",
-        "settingsVehicleCardStyle": "Fond de la carte",
+        "settingsVehicleCardStyle": "Plateforme",
         "showcaseVisibleAfterSignIn": "Pour l’instant, vous seul le voyez. Les autres le verront une fois connecté.",
         "showcaseVisibleAfterSync": "Pour l’instant, vous seul le voyez. Les autres le verront après connexion et activation de la synchronisation.",
         "vehicleCardStylePickerFootnote": "Le fond apparaît sur la carte de ce véhicule — dans votre garage et sur votre profil public.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Terminer",
         "showcaseBg": "Fond du profil",
         "showcaseFrame": "Cadre de l’avatar",
-        "showcaseCar": "Fond de la carte",
+        "showcaseCar": "Plateforme",
         "showcaseLine": "Tracé du trajet",
         "showcaseFree": "Gratuits",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Autorisez l'accès dans Réglages pour que l'atlas vous suive",
     ]
 
+}
+
+extension Translations {
+    private static let frGarage: [String: String] = [
+        "vehicleFinishGloss": "Brillant",
+        "vehicleFinishMatte": "Mat",
+        "vehicleFinishPearl": "Nacré",
+        "vehicleFinishChrome": "Chrome",
+        "garageFinish": "Finition",
+        "garageTags": "Étiquettes de la carte",
+        "garageTagsHint": "Jusqu’à trois étiquettes courtes sur la fiche du véhicule.",
+        "garageDrive2Title": "Carnet sur DRIVE2",
+        "garageDrive2Connect": "Lier un carnet DRIVE2",
+        "garageDrive2Help": "Dans DRIVE2, ouvrez cette voiture → Partager → Copier le lien, puis collez-le ici.",
+        "garageDrive2Field": "Lien du véhicule",
+        "garageDrive2Valid": "✓ Lien du véhicule : {make} · {model}",
+        "garageDrive2Hint": "Lien vers la voiture sur DRIVE2 : drive2.ru/r/…",
+        "garageDrive2PublicNote": "Tous ceux qui voient cette voiture verront le bouton du carnet DRIVE2.",
+        "garageDrive2LocalNote": "Le lien reste sur ce téléphone. Connectez-vous et activez la synchronisation pour le partager.",
+        "garageDrive2Unlink": "Dissocier",
+        "garageMileage": "Kilométrage",
+        "garageOnOdometer": "au compteur",
+        "garageTracked": "Avec TripTrack — {distance}",
+        "garageTripPhotos": "Photos de trajets",
+        "garageGearbox": "{type}{gears}",
+        "garagePlatform": "Plateforme",
+        "garagePower": "{value} ch",
+        "garageAcceleration": "0–100 km/h en {value} s",
+        "garageTransmissionManual": "BVM",
+        "garageTransmissionAutomatic": "BVA",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let frProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} sur {max}",
+        "profilePhotosSignIn": "Connectez-vous pour que les autres voient vos photos",
+        "profilePhotosEmpty": "Ajoutez des photos — elles apparaîtront sur votre carte",
+        "profilePhotosLimit": "Votre profil contient déjà neuf photos",
+        "profilePhotoFirst": "Mettre en premier",
+        "profileShowcase": "Vitrine",
+        "profileShowcaseEmpty": "Épinglez jusqu’à trois trajets via « … » sur un trajet — ils apparaîtront en premier sur votre carte",
+        "profileShowcaseElsewhere": "{n} de plus — épinglés sur un autre appareil",
+        "profilePin": "Épingler au profil",
+        "profileUnpin": "Détacher du profil",
+        "profileShowcaseLimit": "Trois trajets sont déjà épinglés — détachez-en un",
+    ]
 }

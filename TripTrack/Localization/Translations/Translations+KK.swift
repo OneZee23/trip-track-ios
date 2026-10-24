@@ -17,6 +17,22 @@ extension Translations {
         table.merge(kk4) { _, new in new }
         table.merge(kk5) { _, new in new }
         table.merge(kk6) { _, new in new }
+        table.merge(kkGarage) { _, new in new }
+        table.merge(kkProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Басқа модельдер — сипаттамасыз"
+        table["catalogGeneration"] = "Буын"
+        table["catalogVariant"] = "Қозғалтқыш пен беріліс қорабы"
+        table["catalogUnknownEngine"] = "Қозғалтқышты білмеймін"
+        table["catalogHasYear"] = "{year} бар"
+        table["profileAddCover"] = "Мұқаба қосу"
+        table["profileAddPhoto"] = "Фото қосу"
+        table["profileMakeCover"] = "Мұқаба ету"
+        table["profileJournalSignIn"] = "Журналды басқалар көруі үшін кіріңіз"
+        table["profilePinned"] = "Бекітілген"
+        table["profileRoutineOne"] = "{n} қайталанатын сапар"
+        table["profileRoutineFew"] = "{n} қайталанатын сапар"
+        table["profileRoutineMany"] = "{n} қайталанатын сапар"
+        table["profileMoreTrips"] = "Тағы {n}"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Чемпион жол",
         "statsRecordFarthest": "Ең алыс нүкте",
         "previewBannerSubtitle": "Алдын ала қарау · жазылу мен реакциялар қолжетімсіз",
-        "previewBannerBody": "Пайдаланушы аты, жалауша және «өзім туралы» әзірге тек осы телефонда — басқалар оларды көрмейді.",
+        "previewBannerBody": "Пайдаланушы аты мен жалауша әзірге тек осы телефонда — басқалар оларды көрмейді.",
         "previewThisIsYou": "Бұл сіз",
         "vehicleTypeCar": "Автокөлік",
         "vehicleTypeMoto": "Мотоцикл",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "PRO жазылымы",
         "cosmeticDefaultOption": "Әдепкі",
         "settingsAvatarFrame": "Аватар жақтауы",
-        "settingsVehicleCardStyle": "Карточка фоны",
+        "settingsVehicleCardStyle": "Алаң",
         "showcaseVisibleAfterSignIn": "Әзірге мұны тек сіз көресіз. Басқалар аккаунтқа кіргеннен кейін көреді.",
         "showcaseVisibleAfterSync": "Әзірге мұны тек сіз көресіз. Басқалар кіріп, синхрондауды қосқаннан кейін көреді.",
         "vehicleCardStylePickerFootnote": "Фон осы көліктің карточкасында көрінеді — гаражда және ашық профильде.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Аяқтау",
         "showcaseBg": "Профиль фоны",
         "showcaseFrame": "Аватар жиегі",
-        "showcaseCar": "Карта фоны",
+        "showcaseCar": "Алаң",
         "showcaseLine": "Маршрут сызығы",
         "showcaseFree": "Тегін",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Атлас сізді қадағалауы үшін Параметрлерде рұқсат беріңіз",
     ]
 
+}
+
+extension Translations {
+    private static let kkGarage: [String: String] = [
+        "vehicleFinishGloss": "Жылтыр",
+        "vehicleFinishMatte": "Күңгірт",
+        "vehicleFinishPearl": "Інжу",
+        "vehicleFinishChrome": "Хром",
+        "garageFinish": "Қаптама",
+        "garageTags": "Карточка белгілері",
+        "garageTagsHint": "Көлік карточкасында үшке дейін қысқа белгі.",
+        "garageDrive2Title": "DRIVE2 журналы",
+        "garageDrive2Connect": "DRIVE2 журналын байланыстыру",
+        "garageDrive2Help": "DRIVE2-де осы көлікті ашыңыз → Бөлісу → Сілтемені көшіру, содан кейін осында қойыңыз.",
+        "garageDrive2Field": "Көлік сілтемесі",
+        "garageDrive2Valid": "✓ Көлік сілтемесі: {make} · {model}",
+        "garageDrive2Hint": "DRIVE2 көлік бетінің сілтемесі керек: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Осы көлікті көретіндердің бәрі DRIVE2 журналы батырмасын көреді.",
+        "garageDrive2LocalNote": "Сілтеме осы телефонда қалады. Басқаларға көрсету үшін кіріп, бұлтпен синхрондауды қосыңыз.",
+        "garageDrive2Unlink": "Байланысты үзу",
+        "garageMileage": "Жүріс",
+        "garageOnOdometer": "одометрде",
+        "garageTracked": "TripTrack-пен — {distance}",
+        "garageTripPhotos": "Сапар суреттері",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Алаң",
+        "garagePower": "{value} а.к.",
+        "garageAcceleration": "0–100 {value} с",
+        "garageTransmissionManual": "МҚПП",
+        "garageTransmissionAutomatic": "АҚПП",
+        "garageTransmissionCvt": "Вариатор",
+        "garageTransmissionAmt": "Робот",
+        "garageTransmissionDct": "Робот",
+    ]
+}
+
+extension Translations {
+    private static let kkProfileJournal: [String: String] = [
+        "profilePhotoCount": "{max} ішінен {n}",
+        "profilePhotosSignIn": "Фотоларды басқалар көруі үшін кіріңіз",
+        "profilePhotosEmpty": "Фото қосыңыз — олар картаңызда көрінеді",
+        "profilePhotosLimit": "Профильде тоғыз фото бар",
+        "profilePhotoFirst": "Бірінші ету",
+        "profileShowcase": "Көрме",
+        "profileShowcaseEmpty": "Сапар экранындағы «…» арқылы үш сапарға дейін бекітіңіз — олар картаңызда бірінші көрінеді",
+        "profileShowcaseElsewhere": "Тағы {n} — басқа құрылғыда бекітілген",
+        "profilePin": "Профильге бекіту",
+        "profileUnpin": "Профильден босату",
+        "profileShowcaseLimit": "Үш сапар бекітілген — біреуін бекітуден алыңыз",
+    ]
 }

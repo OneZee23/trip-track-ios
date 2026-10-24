@@ -17,6 +17,22 @@ extension Translations {
         table.merge(fil4) { _, new in new }
         table.merge(fil5) { _, new in new }
         table.merge(fil6) { _, new in new }
+        table.merge(filGarage) { _, new in new }
+        table.merge(filProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Iba pang modelo — walang detalye"
+        table["catalogGeneration"] = "Henerasyon"
+        table["catalogVariant"] = "Makina at transmisyon"
+        table["catalogUnknownEngine"] = "Hindi ko alam ang makina"
+        table["catalogHasYear"] = "May {year}"
+        table["profileAddCover"] = "Magdagdag ng pabalat"
+        table["profileAddPhoto"] = "Magdagdag ng larawan"
+        table["profileMakeCover"] = "Gawing pabalat"
+        table["profileJournalSignIn"] = "Mag-sign in para makita ng iba ang iyong talaarawan"
+        table["profilePinned"] = "Naka-pin"
+        table["profileRoutineOne"] = "{n} paulit-ulit na biyahe"
+        table["profileRoutineFew"] = "{n} paulit-ulit na biyahe"
+        table["profileRoutineMany"] = "{n} paulit-ulit na biyahe"
+        table["profileMoreTrips"] = "{n} pa"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Kampeong kalsada",
         "statsRecordFarthest": "Pinakamalayong punto",
         "previewBannerSubtitle": "Preview · hindi available ang pagsunod at reaksyon",
-        "previewBannerBody": "Ang inyong username, bandila at «tungkol sa akin» ay nasa telepono lang muna — hindi pa ito nakikita ng iba.",
+        "previewBannerBody": "Ang inyong username at bandila ay nasa telepono lang muna — hindi pa ito nakikita ng iba.",
         "previewThisIsYou": "Kayo ito",
         "vehicleTypeCar": "Kotse",
         "vehicleTypeMoto": "Motor",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "Subscription na PRO",
         "cosmeticDefaultOption": "Default",
         "settingsAvatarFrame": "Frame ng avatar",
-        "settingsVehicleCardStyle": "Background ng card",
+        "settingsVehicleCardStyle": "Plataporma",
         "showcaseVisibleAfterSignIn": "Ikaw lang ang nakakakita nito sa ngayon. Makikita ito ng iba kapag nag-sign in ka.",
         "showcaseVisibleAfterSync": "Ikaw lang ang nakakakita nito sa ngayon. Makikita ito ng iba kapag nag-sign in ka at binuksan ang sync.",
         "vehicleCardStylePickerFootnote": "Lumalabas ang background sa card ng sasakyang ito — sa inyong garahe at sa inyong public profile.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Tapusin",
         "showcaseBg": "Background ng profile",
         "showcaseFrame": "Frame ng avatar",
-        "showcaseCar": "Background ng card",
+        "showcaseCar": "Plataporma",
         "showcaseLine": "Linya ng ruta",
         "showcaseFree": "Libre",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Payagan po ang access sa Settings para masundan kayo ng atlas",
     ]
 
+}
+
+extension Translations {
+    private static let filGarage: [String: String] = [
+        "vehicleFinishGloss": "Makintab",
+        "vehicleFinishMatte": "Matte",
+        "vehicleFinishPearl": "Perlas",
+        "vehicleFinishChrome": "Chrome",
+        "garageFinish": "Finish",
+        "garageTags": "Mga tag sa card",
+        "garageTagsHint": "Hanggang tatlong maikling tag sa card ng kotse.",
+        "garageDrive2Title": "Logbook sa DRIVE2",
+        "garageDrive2Connect": "I-link ang DRIVE2 logbook",
+        "garageDrive2Help": "Sa DRIVE2, buksan ang kotseng ito → Ibahagi → Kopyahin ang link, at i-paste rito.",
+        "garageDrive2Field": "Link ng kotse",
+        "garageDrive2Valid": "✓ Link ng kotse: {make} · {model}",
+        "garageDrive2Hint": "Gumamit ng link ng kotse sa DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Makikita ang DRIVE2 logbook button ng lahat ng nakakakita sa kotseng ito.",
+        "garageDrive2LocalNote": "Nasa teleponong ito lang ang link. Mag-sign in at i-on ang cloud sync para ibahagi ito.",
+        "garageDrive2Unlink": "I-unlink",
+        "garageMileage": "Mileage",
+        "garageOnOdometer": "sa odometer",
+        "garageTracked": "Sa TripTrack — {distance}",
+        "garageTripPhotos": "Mga larawan sa biyahe",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Plataporma",
+        "garagePower": "{value} hp",
+        "garageAcceleration": "0–100 km/h {value} s",
+        "garageTransmissionManual": "Manual",
+        "garageTransmissionAutomatic": "Automatic",
+        "garageTransmissionCvt": "CVT",
+        "garageTransmissionAmt": "AMT",
+        "garageTransmissionDct": "DCT",
+    ]
+}
+
+extension Translations {
+    private static let filProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} sa {max}",
+        "profilePhotosSignIn": "Mag-sign in para makita ng iba ang mga larawan",
+        "profilePhotosEmpty": "Magdagdag ng mga larawan — makikita sa iyong card",
+        "profilePhotosLimit": "May siyam na larawan na ang profile mo",
+        "profilePhotoFirst": "Gawing una",
+        "profileShowcase": "Tampok",
+        "profileShowcaseEmpty": "Mag-pin ng hanggang tatlong biyahe gamit ang “…” sa isang biyahe — unang makikita sa iyong card",
+        "profileShowcaseElsewhere": "{n} pa — naka-pin sa ibang device",
+        "profilePin": "I-pin sa profile",
+        "profileUnpin": "Alisin sa profile",
+        "profileShowcaseLimit": "Tatlong biyahe na ang naka-pin — alisin ang isa",
+    ]
 }

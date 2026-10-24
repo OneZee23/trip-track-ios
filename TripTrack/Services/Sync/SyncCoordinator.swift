@@ -52,7 +52,7 @@ final class SyncCoordinator {
         // — outbound is safe.
         if TripManager.isAnyRecording {
             await queue.processQueue()
-            await AuthService.shared.syncProgressToServer()
+            await syncAccountProfile()
             return
         }
         // Cloud Sync OFF mode (privacy-first): we still process the queue —
@@ -69,7 +69,7 @@ final class SyncCoordinator {
             enqueuePendingOriginals()
             await queue.processQueue()
             await queue.retryFailed()
-            await AuthService.shared.syncProgressToServer()
+            await syncAccountProfile()
             return
         }
         isPulling = true
@@ -92,7 +92,19 @@ final class SyncCoordinator {
         // permanent "0/1" until they manually tap Retry. retryFailed has
         // its own 2^maxRetry backoff sleep so we won't hot-spin.
         await queue.retryFailed()
+        await syncAccountProfile()
+    }
+
+    /// Account-level identity rides every sync pass, whatever Cloud Sync
+    /// says: progress, the profile card's «о себе» and «Витрина» when edited
+    /// locally, and profile photos still waiting for upload. They are public
+    /// identity like the avatar, not the trip library.
+    private func syncAccountProfile() async {
         await AuthService.shared.syncProgressToServer()
+        await ProfilePhotoStore.shared.sync()
+        if SettingsManager.shared.profileBioDirty || SettingsManager.shared.pinnedTripsDirty {
+            await AuthService.shared.syncProfileToServer(refreshFeedAfter: false)
+        }
     }
 
     private func runPull() async {

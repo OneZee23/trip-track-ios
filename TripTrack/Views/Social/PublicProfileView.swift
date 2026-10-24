@@ -40,7 +40,12 @@ struct PublicProfileView: View {
     @State private var profile: SocialProfile?
     /// Машины для превью гаража. Пусто — строка просто без превью: пока
     /// список не приехал, обещать содержимое нечем.
+    @State private var headerVehicleID: UUID?
     @State private var garagePreviewVehicles: [PublicVehicle] = []
+    /// Only the latest garage request may write the snapshot: an older one
+    /// finishing after a refresh would bring back a car photo the owner has
+    /// hidden in between.
+    @State private var garageLoadGeneration = 0
     @State private var isLoading = false
     @State private var isTogglingFollow = false
     @State private var loadError: String?
@@ -86,6 +91,8 @@ struct PublicProfileView: View {
     /// the stats and the achievements with it.
     @State private var tripCards: [SocialFeedTrip] = []
     /// Страницы после десяти превью (0.9.1) — см. `ProfileTripsPager`.
+    @State private var pinnedTripCards: [SocialFeedTrip] = []
+    @State private var visibleTripCards: [SocialFeedTrip] = []
     @State private var tripsPager = ProfileTripsPager()
     /// Все достижения профиля (0.9.1, `/users/:id/badges`): `recentBadges` —
     /// превью из последних поездок. `nil` — список ещё не пришёл или сервер
@@ -103,6 +110,10 @@ struct PublicProfileView: View {
     /// перерисовывается на каждый `toggleReaction`, а перебор путешествий —
     /// не работа для этого такта.
     @State private var profileRows: [HistoryRow] = []
+    @State private var coverHasScrolled = false
+    @State private var preparedJournal = PreparedProfileHistory.empty
+    @State private var journalPreparation: Task<Void, Never>?
+    private var hasCoverPhotos: Bool { !(profile?.photos ?? []).isEmpty }
     /// Исходная карточка по id — `.trip` строка держит `Trip` (для
     /// `HistoryFolding`), а рисовать нужно ПРЕЖНЮЮ `SocialFeedCardView` по
     /// полной `SocialFeedTrip`.
@@ -362,10 +373,9 @@ struct PublicProfileView: View {
         guard isOwnProfile else { return false }
         let localHandle = !settings.profileUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let localCountry = !settings.profileCountry.isEmpty
-        let serverBio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let localBio = serverBio.isEmpty
-            && !settings.profileBio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return localHandle || localCountry || localBio
+        // «О себе» syncs since 0.9.1 (`ProfileUpdateRequest.bio`); handle and
+        // flag still have no server field.
+        return localHandle || localCountry
     }
 
     var body: some View {
@@ -401,60 +411,13 @@ struct PublicProfileView: View {
                     if profile != nil {
                         VStack(spacing: 16) {
                             heroSection(c)
-                                .padding(.top, 6)
+                                .background { ProfileCoverScrollProbe(space: "publicProfileCover") { coverHasScrolled = $0 } }
+                                .padding(.top, hasCoverPhotos ? 0 : 6)
 
-                            // Видимость (0.6.3) действует и на своём экране.
-                            // Этот экран для владельца — ПРЕВЬЮ «как видят
-                            // другие» (см. previewBanner), и оговорка
-                            // «|| isOwnProfile» превратила бы его в ложь:
-                            // владелец видел бы блоки, которых у других нет.
-                            // Свои полные данные у него в табе «Я».
-                            // Карточка рисуется всегда: внутри неё тумблер
-                            // гасит только дорожные числа, а счётчики подписок
-                            // остаются входом в списки.
-                            statsGrid(c, lng: lng)
+                            pinnedJournal
                                 .padding(.horizontal, 16)
-
-                            // Скрытый блок исчезает целиком — ни плашки
-                            // «скрыто», ни серой заглушки: прецедент правила
-                            // про госномер.
-                            if visibility.stats, canOpenHub {
-                                statsEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-                            // Карта — только когда на ней есть что показать.
-                            // Без публичных поездок карточка была серым
-                            // прямоугольником со значком, открывала пустую
-                            // карту, а ниже то же самое уже говорит «Пока нет
-                            // публичных поездок». Правило путешествий ниже:
-                            // пустая карточка-хаб — ложное обещание.
-                            if visibility.map, canOpenHub, hasPublicRoutes {
-                                mapEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-                            // Гараж (0.6.4). Строка показывается ВСЕГДА, когда
-                            // экран вообще открыт: сервер сам решит, что внутри,
-                            // а прятать вход по локальной догадке значит либо
-                            // соврать, либо выдать, что человек что-то прячет.
-                            if canOpenHub {
-                                garageEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-
-                            // Путешествия (S7, 0.6.8). В отличие от гаража,
-                            // строка НЕ рисуется пустой: «нет путешествий»
-                            // не выдаёт ничего скрытого, а пустая карточка-
-                            // хаб — то же ложное обещание содержимого, от
-                            // которого предостерегает превью гаража выше.
-                            if canOpenHub {
-                                journeysEntryCard(c, lng: lng)
-                                    .padding(.horizontal, 16)
-                            }
-
-                            if visibility.achievements {
-                                achievementsSection(c)
-                                    .padding(.horizontal, 16)
-                            }
+                            if canOpenHub { profileSectionsRow(c).padding(.horizontal, 16) }
+                            if canOpenHub { journeysEntryCard(c, lng: lng).padding(.horizontal, 16) }
 
                             // «Находки» (0.7.0, спека §4) — та же видимость,
                             // что у достижений: обе карточки говорят о том,
@@ -505,10 +468,12 @@ struct PublicProfileView: View {
         // 120 + высота индикатора. В ленте этого не видно, потому что до её
         // конца никто не доскроллил; профиль кончается всегда, и пустая
         // полоса под последней карточкой была последним, что человек видит.
-        .ignoresSafeArea(edges: .bottom)
+        .coordinateSpace(name: "publicProfileCover")
+        .ignoresSafeArea(edges: hasCoverPhotos ? [.top, .bottom] : .bottom)
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
+            if !hasCoverPhotos {
             CustomNavBar(title: navTitle) {
                 // Single «…» entry point (Figma 117:2367) — sharing on top,
                 // moderation below. The block hand used to sit as its own
@@ -536,7 +501,19 @@ struct PublicProfileView: View {
                     ActionPopoverList(items: profileActionItems())
                 }
             }
+            }
         }
+        .overlay(alignment: .top) {
+            if hasCoverPhotos && coverHasScrolled {
+                VStack(spacing: 0) {
+                    c.bg.frame(height: WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59)
+                    CustomNavBar(title: navTitle) { profileMoreButton }
+                }
+                .background(c.bg)
+                .offset(y: -(WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59))
+            }
+        }
+
         .task {
             guard !didInitialLoad else { return }
             didInitialLoad = true
@@ -558,12 +535,15 @@ struct PublicProfileView: View {
             // instead of leaving it stuck on the previous account's data.
             profile = nil
             tripCards = []
+            pinnedTripCards = []
             Task { await refresh() }
         }
         // Схлопывание «Истории» (S7, 0.6.8) — строки и словарь id → карточка
         // считаются здесь, а не в `body`: тело перерисовывается на каждый
         // `toggleReaction`, а `HistoryFolding.fold` перебирает путешествия.
         .onChange(of: tripCards) { _, _ in recomputeProfileRows() }
+        .onChange(of: lang.language) { _, _ in recomputeProfileRows() }
+        .onChange(of: pinnedTripCards) { _, _ in recomputeProfileRows() }
         .onChange(of: publicJourneys) { _, _ in recomputeProfileRows() }
         .refreshable { await refresh() }
         // Commented on a trip from the detail screen pushed off THIS page —
@@ -573,11 +553,16 @@ struct PublicProfileView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tripCommentCountChanged)) { note in
             guard
                 let tripId = note.userInfo?["tripId"] as? UUID,
-                let delta = note.userInfo?["delta"] as? Int,
-                let idx = tripCards.firstIndex(where: { $0.id == tripId })
+                let delta = note.userInfo?["delta"] as? Int
             else { return }
-            let updated = max(0, tripCards[idx].commentCount + delta)
-            tripCards[idx] = tripCards[idx].with(commentCount: updated)
+            // Each list on its own: a trip pinned to «Витрина» is often older
+            // than anything in the recent list, and lives only there.
+            if let idx = tripCards.firstIndex(where: { $0.id == tripId }) {
+                tripCards[idx] = tripCards[idx].with(commentCount: max(0, tripCards[idx].commentCount + delta))
+            }
+            if let idx = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+                pinnedTripCards[idx] = pinnedTripCards[idx].with(commentCount: max(0, pinnedTripCards[idx].commentCount + delta))
+            }
         }
         .sheet(item: $signInPrompt, onDismiss: {
             guard resumeFollowAfterAuth else { return }
@@ -605,6 +590,10 @@ struct PublicProfileView: View {
         .sheet(item: $tripPendingReport) { trip in
             ReportSheet(target: .trip(trip.id))
                 .environmentObject(lang)
+        }
+        .navigationDestination(item: $headerVehicleID) { id in
+            PublicVehicleView(accountId: accountId, vehicleId: id, ownerName: resolvedDisplayName,
+                              preloaded: garagePreviewVehicles.first { $0.id == id })
         }
         .toast(item: $toastItem)
         .overlay {
@@ -811,162 +800,57 @@ struct PublicProfileView: View {
     /// card itself here too, with the cover card's dark veil and white ink.
     /// No background — the plain card, as on «Я».
     private func heroSection(_ c: AppTheme.Colors) -> some View {
-        let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
-        // «Сервер молчит» (`isPlus == nil`) читается как «подписки нет» — во
-        // всех местах этой функции одинаково, включая значок
-        // (`PlusBadgeVisibility.shows` требует ровно `true`). Спека §2:
-        // «Плюс» кончился — показывается бесплатное.
-        //
-        // Фон и рамку решает ПОДПИСКА (`showsPaidCosmetics`), а не значок:
-        // значок человек вправе спрятать, а оплаченный вид — нет.
-        let saidPlus = profile.map(\.showsPaidCosmetics)
-            ?? PlusBadgeVisibility.saysPlus(preloaded?.isPlus)
-        let background = ProfileBackground.effective(
-            id: profile?.profileBackground, isPlus: saidPlus)
-        let frame = AvatarFrame.effective(
-            id: profile?.avatarFrame ?? preloaded?.avatarFrame, isPlus: saidPlus)
-        let cover = background != .none
-        let ink: Color = cover ? .white : c.text
-        let secondaryInk: Color = cover ? .white.opacity(0.85) : c.textSecondary
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(emoji)
-                    .font(.system(size: 34))
-                    .frame(width: 64, height: 64)
-                    .background(cover ? .white.opacity(0.16) : c.cardAlt, in: Circle())
-                    .avatarFrame(frame, lineWidth: 3)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    // Long-press copies the name. It is the one string that
-                    // can be pasted into Поиск and actually find this person
-                    // again: the server matches display names, and the
-                    // @handle is still device-local.
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(resolvedDisplayName)
-                            .font(.interScaled(21, weight: .bold, relativeTo: .title3))
-                            .tracking(-0.3)
-                            .foregroundStyle(ink)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .contentShape(Rectangle())
-                            .onLongPressGesture {
-                                UIPasteboard.general.string = resolvedDisplayName
-                                Haptics.success()
-                                toastItem = ToastItem(
-                                    type: .success,
-                                    message: AppStrings.profileNameCopied(lang.language)
-                                )
-                            }
-                            // Идентификатор остаётся НА ИМЕНИ, а не на строке:
-                            // id на контейнере делает его одним элементом для
-                            // VoiceOver и для UI-тестов.
-                            .accessibilityIdentifier("profile_display_name")
-
-                        // Свой профиль в превью подчиняется тумблеру
-                        // приватности — иначе «как видят другие» показывало
-                        // бы не то, что видят.
-                        if PlusBadgeVisibility.shows(
-                            isPlus: saidPlus, isOwn: isOwnProfile,
-                            showsOwnBadge: settings.showPlusBadge) {
-                            ProBadge(height: 16)
-                        }
+        let level = profile?.profileLevel ?? preloaded?.profileLevel ?? 1
+        let active = garagePreviewVehicles.first { $0.id == profile?.activeVehicle?.id }
+        return ProfileHeroCard(
+            background: ProfileBackground.from(profile?.profileBackground),
+            avatarEmoji: profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗",
+            name: resolvedDisplayName, level: level,
+            rankTitle: DriverRank.from(level: level).title(lang.language),
+            trips: profile?.stats.tripCount ?? 0,
+            km: profile?.stats.totalKm ?? 0,
+            regions: profile?.stats.regionsCount ?? 0,
+            showsStats: visibility.counters,
+            isForeign: true, isOwnProfilePreview: isOwnProfile, publicProfile: profile, publicVehicle: active,
+            followTitle: isOwnProfile ? AppStrings.previewThisIsYou(lang.language)
+                : ((profile?.isFollowing ?? false) ? AppStrings.notificationsInboxFollowing(lang.language) + " ✓" : AppStrings.discoverFollow(lang.language)),
+            followBusy: isTogglingFollow,
+            followEnabled: !isOwnProfile,
+            onFollow: {
+                guard !isOwnProfile else { return }
+                Haptics.action()
+                guard auth.isSignedIn else { signInPrompt = .follow; return }
+                Task { await toggleFollow() }
+            },
+            onFollowers: { openFollowList(.followers) },
+            onFollowing: { openFollowList(.following) },
+            bio: resolvedBio,
+            country: countryGlyph.map(countryPillText),
+            privacyStats: isPrivacyMode,
+            detailsEnabled: canOpenHub,
+            onCopyName: {
+                UIPasteboard.general.string = resolvedDisplayName
+                Haptics.success()
+                toastItem = ToastItem(type: .success, message: AppStrings.profileNameCopied(lang.language))
+            },
+            onTapVehicle: { id in
+                if let pushPath { pushPath.wrappedValue.cappedAppend(.publicVehicle(accountId, id, resolvedDisplayName)) }
+                else { headerVehicleID = id }
+            },
+            onTapProfile: {}, onTapLevel: { openLevels(level) },
+            onTapStats: { if canOpenHub { openStats() } }, onTapSettings: {})
+            .overlay(alignment: .top) {
+                if hasCoverPhotos && !coverHasScrolled {
+                    HStack {
+                        NavBackButton().environment(\.colorScheme, .light)
+                        Spacer()
+                        profileMoreButton
                     }
-
-                    // Rank and flag on ONE line, the flag trailing: two chips
-                    // of the same kind — who this driver is.
-                    HStack(spacing: 8) {
-                        if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
-                            let rank = DriverRank.from(level: lvl).title(lang.language)
-                            let pill = Group {
-                                if cover {
-                                    // On the cover the gold capsule turns to mud;
-                                    // «Я» draws the level in white Handjet here.
-                                    HStack(spacing: 5) {
-                                        Text("LVL \(lvl)")
-                                            .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
-                                            .foregroundStyle(.white)
-                                        Text(rank)
-                                            .font(.interScaled(12, weight: .medium, relativeTo: .caption))
-                                            .foregroundStyle(secondaryInk)
-                                    }
-                                } else {
-                                    LvlPill(level: lvl, rankTitle: rank)
-                                }
-                            }
-                            // The level opens «Уровни», as on «Я» (0.9.1): the
-                            // same chevron says it leads somewhere. No path to
-                            // push on — no button, a dead one is worse.
-                            if pushPath != nil {
-                                Button {
-                                    Haptics.tap()
-                                    openLevels(lvl)
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        pill
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundStyle(secondaryInk)
-                                    }
-                                    .tapTarget()
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("public_lvl_pill")
-                            } else {
-                                pill
-                            }
-                        }
-
-                        // Country (canon 1717:135). Device-local like the
-                        // handle, so it renders in the owner's preview and
-                        // nowhere else — see `countryGlyph`.
-                        if let glyph = countryGlyph {
-                            Text(countryPillText(glyph))
-                                .font(.inter(13))
-                                .foregroundStyle(ink)
-                                .lineLimit(1)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(cover ? .white.opacity(0.16) : c.cardAlt, in: Capsule())
-                                .accessibilityIdentifier("profile_country")
-                        }
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, (WindowLayoutMetrics.shared.safeAreaInsets?.top ?? 59) + 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            if let bio = resolvedBio {
-                Text(bio)
-                    .font(.interScaled(14, relativeTo: .subheadline))
-                    .foregroundStyle(cover ? .white.opacity(0.92) : c.text)
-                    .lineSpacing(3)
-                    // The editor accepts 140 characters: three lines at most.
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("profile_bio")
-            }
-
-            heroAction(c, onCover: cover)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if cover {
-                // The cover card's own recipe (`ProfileHeroCard`): the
-                // artwork under a dark veil, so white type reads on every one
-                // of the eight backgrounds, the light ones included.
-                background.view()
-                    .overlay(.black.opacity(0.64))
-            } else {
-                c.card
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(cover ? .clear : c.border, lineWidth: 1)
-        }
-        .padding(.horizontal, 16)
+            .task(id: accountId) { await loadGaragePreview() }
     }
 
     /// Canon 1717:135 pairs the flag with the country's name, except for the
@@ -983,65 +867,6 @@ struct PublicProfileView: View {
     private var countryGlyph: String? {
         guard isOwnProfile else { return nil }
         return CountryChoice.glyph(for: settings.profileCountry.isEmpty ? nil : settings.profileCountry)
-    }
-
-    /// Where a stranger's profile offers «Подписаться», the owner's preview
-    /// stands a dead pill of the same shape. Same chrome, same footprint, so
-    /// switching between the two views doesn't move anything under the thumb.
-    @ViewBuilder
-    private func heroAction(_ c: AppTheme.Colors, onCover: Bool = false) -> some View {
-        if isOwnProfile {
-            Text(AppStrings.previewThisIsYou(lang.language))
-                .socialActionButton(.inert, colors: c, width: 130, onCover: onCover)
-                .accessibilityIdentifier("profile_this_is_you")
-                .accessibilityAddTraits(.isStaticText)
-        } else if !auth.isSignedIn || profile?.isFollowing != nil {
-            // Guests get the CTA too: the backend omits `isFollowing`
-            // for unauthenticated requesters (it decodes nil), so gating
-            // on non-nil alone hid the primary Figma CTA (117:931) — and
-            // its sign-in funnel — from every signed-out viewer. The
-            // button's own guard routes guests to the sign-in prompt.
-            followButton(c, lng: lang.language, onCover: onCover)
-        }
-    }
-
-    @ViewBuilder
-    private func followButton(_ c: AppTheme.Colors, lng: LanguageManager.Language,
-                              onCover: Bool = false) -> some View {
-        let isFollowing = profile?.isFollowing ?? false
-        Button {
-            Haptics.action()
-            guard auth.isSignedIn else {
-                signInPrompt = .follow
-                return
-            }
-            Task { await toggleFollow() }
-        } label: {
-            HStack(spacing: 6) {
-                if isTogglingFollow {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        // Matches the chrome it spins on: the done state is an
-                        // accent tint with accent ink, not a grey chip.
-                        .tint(isFollowing && !onCover ? AppTheme.accent : .white)
-                }
-                Text(isFollowing
-                     ? (AppStrings.notificationsInboxFollowing(lng))
-                     : (AppStrings.discoverFollow(lng)))
-                // Canon 1635:145 puts the tick AFTER the word and draws no
-                // glyph at all on the offer — a leading «+» made «Подписаться»
-                // read as «add», which is a different promise.
-                if isFollowing && !isTogglingFollow {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                }
-            }
-            // Pinned to canon's 130pt (117:969) so it keeps the footprint of
-            // the «Это вы» pill that stands in its place on your own preview.
-            .socialActionButton(isFollowing ? .done : .primary, colors: c, width: 130, onCover: onCover)
-        }
-        .buttonStyle(.plain)
-        .disabled(isTogglingFollow)
     }
 
     // MARK: - Stats
@@ -1095,16 +920,6 @@ struct PublicProfileView: View {
                 // Тумблер обещает спрятать «поездки, километры и регионы» — и
                 // прячет ровно их. Счётчики подписок остаются: они не дорожные
                 // числа, и это ЕДИНСТВЕННЫЙ вход в списки подписок.
-                if visibility.counters {
-                    HStack(spacing: 0) {
-                        statCell(value: tripsValue, label: AppStrings.trips(lang.language), c: c)
-                        columnRule(c)
-                        statCell(value: kmValue, label: kmLabel, c: c)
-                        columnRule(c)
-                        statCell(value: regionsValue, label: AppStrings.statsRegions(lang.language), c: c)
-                    }
-                    divider(c)
-                }
                 HStack(spacing: 0) {
                     followCounterCell(
                         count: followerShown,
@@ -1413,13 +1228,18 @@ struct PublicProfileView: View {
         }
     }
 
-    private func loadGaragePreview() async {
-        guard garagePreviewVehicles.isEmpty else { return }
+    private func loadGaragePreview(force: Bool = false) async {
+        guard force || garagePreviewVehicles.isEmpty else { return }
+        garageLoadGeneration &+= 1
+        let generation = garageLoadGeneration
         let res: PublicGarageResponse? = try? await APIClient.shared.get(
             APIEndpoint.userGarage(accountId.uuidString),
             requiresAuth: AuthService.shared.isSignedIn)
+        guard generation == garageLoadGeneration else { return }
         // Отказ сети — молчание, а не пустая заглушка: строка остаётся тем,
-        // чем была, и ведёт внутрь, где ошибку покажут словами.
+        // чем была, и ведёт внутрь, где ошибку покажут словами. При
+        // обновлении (`force`) отказ оставляет прежний снимок.
+        if force, res == nil { return }
         garagePreviewVehicles = res?.vehicles ?? []
     }
 
@@ -1818,11 +1638,62 @@ struct PublicProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var profileMoreButton: some View {
+        Button { Haptics.tap(); showProfileActions = true } label: {
+            Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color(white: 0.12)).frame(width: 40, height: 40).background(.white, in: Circle())
+        }
+        .buttonStyle(PressableCardStyle()).accessibilityLabel(AppStrings.moreActions(lang.language))
+        .accessibilityIdentifier("profile_more")
+        .popover(isPresented: $showProfileActions, arrowEdge: .top) { ActionPopoverList(items: profileActionItems()) }
+    }
+
+    private var pinnedJournal: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(preparedJournal.pinned) { trip in
+                ProfileTripCardView(trip: trip, level: profile?.profileLevel ?? 1, isPinned: true, mapHeight: 118) {
+                    if let original = tripCardsById[trip.id] { openTrip(original) }
+                }
+            }
+        }
+    }
+
+    private func profileSectionsRow(_ c: AppTheme.Colors) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { profileSectionButtons }
+            VStack(alignment: .leading, spacing: 4) { profileSectionButtons }
+        }
+        .font(.interScaled(13, weight: .medium, relativeTo: .footnote)).foregroundStyle(c.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 6).surfaceCard()
+    }
+
+    @ViewBuilder private var profileSectionButtons: some View {
+        if visibility.stats, canOpenHub {
+            Button(action: openStats) { Text(AppStrings.stats(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_stats_entry")
+        }
+        if visibility.map, canOpenHub, hasPublicRoutes {
+            if visibility.stats { Text("·").accessibilityHidden(true) }
+            Button(action: openMap) { Text(AppStrings.tabMap(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_map_entry")
+        }
+        if visibility.achievements, canOpenAchievements {
+            if visibility.stats || (visibility.map && hasPublicRoutes) { Text("·").accessibilityHidden(true) }
+            Button(action: openAchievements) { Text(AppStrings.achievementsSection(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("public_achievements_all")
+        }
+        if canOpenHub, garagePreviewVehicles.count > 1 {
+            if visibility.stats || (visibility.map && hasPublicRoutes) || (visibility.achievements && canOpenAchievements) { Text("·").accessibilityHidden(true) }
+            Button(action: openGarage) { Text(AppStrings.garage(lang.language)).frame(minHeight: 44) }
+                .buttonStyle(PressableCardStyle()).accessibilityIdentifier("profile_garage_entry")
+        }
+    }
+
     // MARK: - Recent trips
 
     @ViewBuilder
     private func recentTrips(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
-        if !tripCards.isEmpty {
+        if !tripCards.isEmpty || !pinnedTripCards.isEmpty {
             let publicCount = profile?.stats.publicTripCount ?? tripCards.count
             let totalCount = profile?.stats.tripCount ?? tripCards.count
             VStack(alignment: .leading, spacing: 10) {
@@ -1839,30 +1710,27 @@ struct PublicProfileView: View {
                         columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
                         spacing: 10
                     ) {
-                        ForEach(Array(tripCards.enumerated()), id: \.element.id) { idx, t in
+                        ForEach(Array(visibleTripCards.enumerated()), id: \.element.id) { idx, t in
                             openable(t) { tripGridCell(t, c: c, lng: lng) }
-                                .onAppear { loadMoreTripsIfNeeded(appearedIndex: idx, of: tripCards.count) }
+                                .onAppear { loadMoreTripsIfNeeded(appearedIndex: idx, of: visibleTripCards.count) }
                         }
                     }
                 } else {
-                    // Схлопывание (S7, 0.6.8) — только здесь, как в «Моих»
-                    // (`HistoryFolding`). Сетка выше НЕ схлопывается: решётка
-                    // на две колонки не растягивается под карточку во всю
-                    // ширину, и это уже правило `HistoryFolding.runs` для
-                    // «Моих», сюда не перенесённое сознательно — своей сетки
-                    // путешествий на профиле нет.
                     LazyVStack(spacing: 12) {
-                        ForEach(Array(profileRows.enumerated()), id: \.element.id) { idx, row in
-                            historyRowView(row, c: c)
-                                // Строки схлопнуты в путешествия, поэтому порог
-                                // считается по СТРОКАМ: последняя строка видна —
-                                // пора за следующей страницей поездок.
-                                .onAppear {
-                                    loadMoreTripsIfNeeded(appearedIndex: idx, of: profileRows.count)
-                                }
+                        ForEach(preparedJournal.chapters) { month in
+                            ProfileHistoryMonthHeader(month: month)
+                            ForEach(month.rows) { row in
+                                historyRowView(row, c: c)
+                            }
+                        }
+                        // A lazy footer also reloads when appended trips fold
+                        // into an already visible journey of the same height.
+                        Color.clear.frame(height: 1).task(id: tripCards.count) {
+                            loadMoreTripsIfNeeded(appearedIndex: max(0, profileRows.count - 1), of: profileRows.count)
                         }
                     }
                 }
+
                 if tripsPager.isLoading {
                     CarLoadingView()
                         .frame(maxWidth: .infinity)
@@ -1942,6 +1810,10 @@ struct PublicProfileView: View {
             if let original = tripCardsById[t.id] {
                 tripCard(original)
             }
+        case .routine(let group):
+            ProfileRoutineTripsView(group: group) { trip in
+                if let original = tripCardsById[trip.id] { openTrip(original) }
+            }
         case .journey(let j, let legs):
             JourneyCardView(journey: j, legs: legs, onTap: { openJourney(j.id) })
         }
@@ -1949,27 +1821,36 @@ struct PublicProfileView: View {
 
     /// Считается вне `body` — см. `@State private var profileRows`.
     private func recomputeProfileRows() {
-        let trips = tripCards.map(Trip.init(social:))
-        let journeys = publicJourneys.map { Journey(publicJourney: $0, ownerId: accountId) }
-        // `range` не передаём — на этом экране нет отрезка календаря, каким
-        // «Мои» отличает «плечи отрезал фильтр» от «плеч не осталось», и без
-        // него `HistoryFolding.fold` держит пустое путешествие строкой ВСЕГДА
-        // (`intersects` возвращает true при `range == nil`). Здесь это не
-        // тот случай: `tripCards` — короткое превью «Последних поездок», а не
-        // вся история, и путешествие без единого совпавшего плеча в нём —
-        // не «плеч не осталось», а «плечи вне превью». Пустая карточка (карта-
-        // заглушка, нули) тут не даёт войти и удалить путешествие, как на
-        // «Моих» — это чужой профиль, — так что фильтруем её здесь, а не
-        // правим общую `HistoryFolding`. Список поездок при этом не худеет:
-        // этих карточек в нём и так не было.
-        profileRows = HistoryFolding.fold(trips: trips, journeys: journeys).filter { row in
-            if case .journey(_, let legs) = row { return !legs.isEmpty }
-            return true
+        journalPreparation?.cancel()
+        let cards = tripCards
+        let pins = pinnedTripCards
+        let publicJourneySnapshot = publicJourneys
+        let owner = accountId
+        let language = lang.language
+        journalPreparation = Task {
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                let allCards = pins + cards.filter { card in !pins.contains(where: { $0.id == card.id }) }
+                let library = ProfileHistoryLibrary(trips: allCards.map(Trip.init(social:)))
+                let journeys = publicJourneySnapshot.map { Journey(publicJourney: $0, ownerId: owner) }
+                // Public DTO has no checkpoint field. Absence is unknown,
+                // so these trips never qualify for routine folding.
+                let history = PreparedProfileHistory(
+                    library: library, journeys: journeys, query: "", from: nil, to: nil,
+                    language: language, pinnedTripIds: pins.map(\.id),
+                    foldsRoutine: false, keepsEmptyJourneys: false, foldsJourneysInGrid: false)
+                let originals = Dictionary(allCards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                let gridCards = history.gridRuns.flatMap { $0 }.compactMap { row -> SocialFeedTrip? in
+                    guard case .trip(let trip) = row else { return nil }
+                    return originals[trip.id]
+                }
+                return (history: history, originals: originals, gridCards: gridCards)
+            }.value
+            guard !Task.isCancelled else { return }
+            preparedJournal = snapshot.history
+            profileRows = snapshot.history.rows
+            visibleTripCards = snapshot.gridCards
+            tripCardsById = snapshot.originals
         }
-        // `uniquingKeysWith`, а не `uniqueKeysWithValues`: дубликат id в ответе
-        // сервера — его баг, но платить за него падением процесса нельзя.
-        // Побеждает первая карточка — порядок ленты профиля.
-        tripCardsById = Dictionary(tripCards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     private func isOwnTrip(_ trip: SocialFeedTrip) -> Bool {
@@ -1980,9 +1861,14 @@ struct PublicProfileView: View {
     /// put the card back if the server refuses.
     @MainActor
     private func toggleReaction(_ tripId: UUID, emoji: String) async {
-        guard let idx = tripCards.firstIndex(where: { $0.id == tripId }) else { return }
-        let before = tripCards[idx]
-        tripCards[idx] = before.togglingReaction(emoji)
+        guard let before = tripCards.first(where: { $0.id == tripId })
+            ?? pinnedTripCards.first(where: { $0.id == tripId }) else { return }
+        if let index = tripCards.firstIndex(where: { $0.id == tripId }) {
+            tripCards[index] = before.togglingReaction(emoji)
+        }
+        if let index = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+            pinnedTripCards[index] = before.togglingReaction(emoji)
+        }
         do {
             try await SocialReactions.send(
                 tripId: tripId, previous: before.myReaction, emoji: emoji
@@ -1993,6 +1879,9 @@ struct PublicProfileView: View {
             // card over a DIFFERENT trip's slot.
             if let current = tripCards.firstIndex(where: { $0.id == tripId }) {
                 tripCards[current] = before
+            }
+            if let index = pinnedTripCards.firstIndex(where: { $0.id == tripId }) {
+                pinnedTripCards[index] = before
             }
             profileLog.error("profile react failed: \(error.localizedDescription)")
         }
@@ -2203,6 +2092,11 @@ struct PublicProfileView: View {
             }
             if Task.isCancelled { return }
             await loadProfile()
+            // The header car comes from the garage snapshot: a pull-to-refresh
+            // must replace it too, or a car photo the owner has since hidden
+            // stays on screen after a «successful» refresh.
+            if Task.isCancelled { return }
+            await loadGaragePreview(force: true)
         }
         loadTask = task
         await task.value
@@ -2240,8 +2134,10 @@ struct PublicProfileView: View {
                 avatarEmoji: p.avatarEmoji,
                 profileLevel: p.profileLevel
             )
+            pinnedTripCards = (p.pinnedTrips ?? []).map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
             tripCards = p.recentTrips.map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
             tripsPager.reset(preview: tripCards, publicCount: p.stats.publicTripCount)
+            recomputeProfileRows()
             // Trips that arrived without an author came from a server that
             // still sends the old six-field summary — fetch the real items.
             let legacy = p.recentTrips.filter { $0.author == nil }
@@ -2431,6 +2327,7 @@ private struct PublicProfileLocalDestination: ViewModifier {
 private extension SocialProfile {
     func with(isFollowing: Bool, followerCount: Int) -> SocialProfile {
         SocialProfile(
+            photos: photos, pinnedTrips: pinnedTrips,
             id: id, displayName: displayName, avatarEmoji: avatarEmoji,
             profileLevel: profileLevel, profileBackground: profileBackground,
             currentStreak: currentStreak, bestStreak: bestStreak,
@@ -2442,7 +2339,7 @@ private extension SocialProfile {
             // Косметику надо ПЕРЕНОСИТЬ, а не ронять на умолчание: подписка
             // с кнопки «Подписаться» пересобирает профиль, и забытое поле
             // сняло бы с чужого профиля рамку и значок на глазах.
-            isPlus: isPlus, avatarFrame: avatarFrame
+            isPlus: isPlus, avatarFrame: avatarFrame, hasPlus: hasPlus, profileXp: profileXp
         )
     }
 }

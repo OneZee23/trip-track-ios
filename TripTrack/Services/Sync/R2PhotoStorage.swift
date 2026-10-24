@@ -117,6 +117,17 @@ final class R2PhotoStorage: RemotePhotoStorage {
         )
     }
 
+    func uploadProfilePhotoPart(photoId: UUID, type: PhotoType, data: Data,
+                                takenAt: Date?) async throws -> PhotoUploadResponse {
+        var fields: [(name: String, value: String)] = [
+            ("photoId", photoId.uuidString.lowercased()), ("type", type.rawValue)
+        ]
+        if let takenAt { fields.append(("takenAt", ISODate.format(takenAt))) }
+        return try await client.uploadMultipart(
+            APIEndpoint.profilePhotoUpload, fields: fields,
+            file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: data))
+    }
+
     func fetchPresignedURL(photoId: UUID, type: PhotoType) async throws -> URL {
         let res: PhotoURLResponse = try await client.post(
             APIEndpoint.photoURL,

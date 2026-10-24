@@ -81,11 +81,37 @@ enum VehicleImageCache {
         return image
     }
 
-    private static func writeDisk(_ image: UIImage, _ key: String) {
-        try? FileManager.default.createDirectory(
-            at: diskDirectory, withIntermediateDirectories: true)
+    /// Bumped by `purgeDisk`. Work that started before a purge (a download, a
+    /// thumbnail being cut off the main thread) checks it before writing, or
+    /// it would put the previous account's pictures back after sign-out.
+    private static let generationLock = NSLock()
+    private static var purgeGeneration = 0
+    static var generation: Int {
+        generationLock.lock(); defer { generationLock.unlock() }
+        return purgeGeneration
+    }
+
+    /// Memory, like disk, is filled only if no purge happened since the work
+    /// began — checked and inserted under the purge's lock.
+    private static func rememberIfCurrent(_ image: UIImage, _ key: String, generation: Int) -> Bool {
+        generationLock.lock(); defer { generationLock.unlock() }
+        guard generation == purgeGeneration else { return false }
+        remember(image, key)
+        return true
+    }
+
+    private static func writeDisk(_ image: UIImage, _ key: String, generation: Int) {
         guard let data = image.jpegData(compressionQuality: 0.85) else { return }
-        try? data.write(to: diskURL(key))
+        writeIfCurrent(data, to: diskURL(key), generation: generation)
+    }
+
+    /// The check and the write under the purge's own lock: checked first and
+    /// written after a purge, the file would come back for the next account.
+    private static func writeIfCurrent(_ data: Data, to url: URL, generation: Int) {
+        generationLock.lock(); defer { generationLock.unlock() }
+        guard generation == purgeGeneration else { return }
+        try? FileManager.default.createDirectory(at: diskDirectory, withIntermediateDirectories: true)
+        try? data.write(to: url)
     }
 
     // MARK: - Уменьшенная копия из файла
@@ -95,6 +121,7 @@ enum VehicleImageCache {
     /// сколько нужно.
     static func sized(fileURL: URL, key: String, maxSize: CGFloat) async -> UIImage? {
         if let hit = cached(key) { return hit }
+        let started = generation
         let scale = await MainActor.run { UIScreen.main.scale }
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
             if let fromDisk = readDisk(key) { return fromDisk }
@@ -107,10 +134,10 @@ enum VehicleImageCache {
             guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
             else { return nil }
             let made = UIImage(cgImage: cg)
-            writeDisk(made, key)
+            writeDisk(made, key, generation: started)
             return made
         }.value
-        if let image { remember(image, key) }
+        guard let image, rememberIfCurrent(image, key, generation: started) else { return nil }
         return image
     }
 
@@ -120,10 +147,11 @@ enum VehicleImageCache {
     static func remote(_ url: URL, maxSize: CGFloat) async -> UIImage? {
         let key = remoteKey(url, maxSize)
         if let hit = cached(key) { return hit }
+        let started = generation
         if let fromDisk = await Task.detached(priority: .userInitiated, operation: {
             readDisk(key)
         }).value {
-            remember(fromDisk, key)
+            guard rememberIfCurrent(fromDisk, key, generation: started) else { return nil }
             return fromDisk
         }
         // Оригинал кладём отдельным файлом — он же нужен другим размерам того
@@ -131,16 +159,20 @@ enum VehicleImageCache {
         let originalKey = "r:\(url.path)@original"
         let originalFile = diskURL(originalKey)
         if !FileManager.default.fileExists(atPath: originalFile.path) {
-            guard let data = try? await download(url) else { return nil }
-            try? FileManager.default.createDirectory(
-                at: diskDirectory, withIntermediateDirectories: true)
-            try? data.write(to: originalFile)
+            guard let data = try? await download(url), started == generation else { return nil }
+            writeIfCurrent(data, to: originalFile, generation: started)
         }
         return await sized(fileURL: originalFile, key: key, maxSize: maxSize)
     }
 
     private static func download(_ url: URL) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        #if DEBUG && targetEnvironment(simulator)
+        let session = DebugForeignTripFixture.isRequested && url.host == "profile-fixture.invalid"
+            ? DebugForeignTripFixture.session : URLSession.shared
+        #else
+        let session = URLSession.shared
+        #endif
+        let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
@@ -148,6 +180,14 @@ enum VehicleImageCache {
     }
 
     // MARK: - Уборка
+
+    static func purgeDisk() {
+        generationLock.lock()
+        purgeGeneration &+= 1
+        memory.removeAllObjects()
+        try? FileManager.default.removeItem(at: diskDirectory)
+        generationLock.unlock()
+    }
 
     /// Снимок удалили — его копии всех размеров становятся мусором. Точечно
     /// вычистить нельзя (размеры заранее неизвестны), поэтому чистим память

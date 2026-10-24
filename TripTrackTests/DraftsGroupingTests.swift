@@ -13,7 +13,9 @@ final class DraftsGroupingTests: XCTestCase {
 
     /// Порядок групп — «Сегодня», «Вчера», «Ранее», и внутри свежие сверху.
     func testGroupsComeInOrderAndFreshestFirst() {
-        let now = Date()
+        // Noon, not `Date()`: between 00:00 and 01:00 «an hour ago» is
+        // already yesterday, and the test failed every night in that hour.
+        let now = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
         let earlier = now.addingTimeInterval(-6 * 86400)
         let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
         let older = now.addingTimeInterval(-3600)

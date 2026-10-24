@@ -291,6 +291,10 @@ final class UnitsDisciplineTests: XCTestCase {
 
         // --- Провод на другой процесс: метрический навсегда ---------------
 
+        ("TripTrack/Services/CarCatalog.swift",
+         "Reader schema v2: `topSpeedKmh` — метрическое поле каталога, а не подпись на экране. "
+         + "При показе скорости нужен `Measure`; 0–100 в капсуле — исходный замер каталога, не 0–60 mph."),
+
         ("TripTrackShared/TripActivityAttributes.swift",
          "Провод живой активности метрический НАВСЕГДА: `speedKmh`/`distanceKm` везут "
          + "километры, а что нарисовать — говорит отдельное поле `distanceUnit`. "

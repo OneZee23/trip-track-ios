@@ -17,6 +17,9 @@ struct ProfileTripCardView: View {
     /// Отклик под пальцем. `.hold` там, где на карточке ещё и долгий тап
     /// («Мои»): без тянущегося сжатия удержание неотличимо от промаха.
     var pressResponse: CardPressResponse = .tap
+    var isPinned = false
+    /// Journal cards use a shorter map; drafts retain their established size.
+    var mapHeight: CGFloat = 178
     /// Нажатие ЦЕЛИКОМ, вместе с щелчком.
     ///
     /// Щелчок раньше бился здесь, а вызывающий решал уже после него, открывать
@@ -148,7 +151,11 @@ struct ProfileTripCardView: View {
             // local trip, so the slot would open an empty sheet. It carries the
             // privacy state instead — the one fact the ProfileTripRow this card
             // replaces showed and that would otherwise be lost from История.
-            if trip.isPrivate {
+            if isPinned {
+                Text("● " + AppStrings.profilePinned(lang.language))
+                    .font(.inter(11, weight: .semibold)).foregroundStyle(AppTheme.accent)
+                    .fixedSize().accessibilityIdentifier("profile_trip_pinned")
+            } else if trip.isPrivate {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 13))
                     .foregroundStyle(c.textTertiary)
@@ -166,14 +173,14 @@ struct ProfileTripCardView: View {
     private func mapSection(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
         if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 178)
-                .frame(height: 178)
+            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: mapHeight)
+                .frame(height: mapHeight)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         } else {
             // The `count > 1` guard has to stay: with fewer points
             // MapSnapshotPreview bails BEFORE it can mark itself failed, so it
-            // would shimmer forever. Dropping the whole 178pt band instead is
+            // would shimmer forever. Dropping the whole map band instead is
             // worse — the card collapses into a stub between full-height
             // neighbours — so the empty case gets that view's own failed
             // chrome, glyph centred since there's no faded route to defer to.
@@ -183,7 +190,7 @@ struct ProfileTripCardView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
             }
-            .frame(height: 178)
+            .frame(height: mapHeight)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }

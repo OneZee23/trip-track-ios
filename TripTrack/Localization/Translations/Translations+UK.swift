@@ -17,6 +17,22 @@ extension Translations {
         table.merge(uk4) { _, new in new }
         table.merge(uk5) { _, new in new }
         table.merge(uk6) { _, new in new }
+        table.merge(ukGarage) { _, new in new }
+        table.merge(ukProfileJournal) { _, new in new }
+        table["catalogOtherModels"] = "Інші моделі — без характеристик"
+        table["catalogGeneration"] = "Покоління"
+        table["catalogVariant"] = "Двигун і коробка"
+        table["catalogUnknownEngine"] = "Не знаю двигун"
+        table["catalogHasYear"] = "є {year}"
+        table["profileAddCover"] = "Додати обкладинку"
+        table["profileAddPhoto"] = "Додати фото"
+        table["profileMakeCover"] = "Зробити обкладинкою"
+        table["profileJournalSignIn"] = "Увійдіть, щоб інші побачили ваш журнал"
+        table["profilePinned"] = "Закріплено"
+        table["profileRoutineOne"] = "{n} повторювана поїздка"
+        table["profileRoutineFew"] = "{n} повторювані поїздки"
+        table["profileRoutineMany"] = "{n} повторюваних поїздок"
+        table["profileMoreTrips"] = "Ще {n}"
         return table
     }()
 
@@ -855,7 +871,7 @@ extension Translations {
         "statsRecordChampionRoad": "Дорога-чемпіон",
         "statsRecordFarthest": "Найдальша точка",
         "previewBannerSubtitle": "Превʼю · підписки та реакції недоступні",
-        "previewBannerBody": "Юзернейм, прапор і «про себе» поки зберігаються лише на телефоні — інші їх не побачать.",
+        "previewBannerBody": "Юзернейм і прапор поки зберігаються лише на телефоні — інші їх не побачать.",
         "previewThisIsYou": "Це ви",
         "vehicleTypeCar": "Авто",
         "vehicleTypeMoto": "Мото",
@@ -1380,7 +1396,7 @@ extension Translations {
         "plusBadgeLabel": "Підписка PRO",
         "cosmeticDefaultOption": "Звичайний",
         "settingsAvatarFrame": "Рамка аватара",
-        "settingsVehicleCardStyle": "Тло картки",
+        "settingsVehicleCardStyle": "Майданчик",
         "showcaseVisibleAfterSignIn": "Поки це бачите лише ви. Інші побачать після входу в акаунт.",
         "showcaseVisibleAfterSync": "Поки це бачите лише ви. Інші побачать після входу й увімкнення синхронізації.",
         "vehicleCardStylePickerFootnote": "Тло видно на картці цієї машини — у гаражі та в публічному профілі.",
@@ -1511,7 +1527,7 @@ extension Translations {
         "carPlayFinish": "Завершити",
         "showcaseBg": "Фон профілю",
         "showcaseFrame": "Рамка аватара",
-        "showcaseCar": "Фон картки",
+        "showcaseCar": "Майданчик",
         "showcaseLine": "Лінія маршруту",
         "showcaseFree": "Безплатні",
         "showcasePro": "PRO",
@@ -1672,4 +1688,54 @@ extension Translations {
         "atlasLocationDeniedBody": "Дозвольте доступ у Налаштуваннях, щоб атлас стежив за вами",
     ]
 
+}
+
+extension Translations {
+    private static let ukGarage: [String: String] = [
+        "vehicleFinishGloss": "Глянець",
+        "vehicleFinishMatte": "Матовий",
+        "vehicleFinishPearl": "Перламутр",
+        "vehicleFinishChrome": "Хром",
+        "garageFinish": "Покриття",
+        "garageTags": "Позначки на картці",
+        "garageTagsHint": "До трьох коротких слів на картці машини.",
+        "garageDrive2Title": "Бортжурнал на DRIVE2",
+        "garageDrive2Connect": "Прив’язати бортжурнал DRIVE2",
+        "garageDrive2Help": "У DRIVE2 відкрийте цю машину → «Поділитися» → «Копіювати посилання» та вставте його сюди.",
+        "garageDrive2Field": "Посилання на машину",
+        "garageDrive2Valid": "✓ Посилання на машину: {make} · {model}",
+        "garageDrive2Hint": "Потрібне посилання на машину в DRIVE2: drive2.ru/r/…",
+        "garageDrive2PublicNote": "Кнопку бортжурналу DRIVE2 побачать усі, кому видно цю машину.",
+        "garageDrive2LocalNote": "Посилання залишиться на цьому телефоні. Увійдіть і ввімкніть хмарну синхронізацію, щоб показати його іншим.",
+        "garageDrive2Unlink": "Відв’язати",
+        "garageMileage": "Пробіг",
+        "garageOnOdometer": "на одометрі",
+        "garageTracked": "З TripTrack — {distance}",
+        "garageTripPhotos": "Фото з поїздок",
+        "garageGearbox": "{type} {gears}",
+        "garagePlatform": "Майданчик",
+        "garagePower": "{value} к.с.",
+        "garageAcceleration": "0–100 за {value} с",
+        "garageTransmissionManual": "МКПП",
+        "garageTransmissionAutomatic": "АКПП",
+        "garageTransmissionCvt": "Варіатор",
+        "garageTransmissionAmt": "Робот",
+        "garageTransmissionDct": "Робот",
+    ]
+}
+
+extension Translations {
+    private static let ukProfileJournal: [String: String] = [
+        "profilePhotoCount": "{n} із {max}",
+        "profilePhotosSignIn": "Увійдіть, щоб фото побачили інші",
+        "profilePhotosEmpty": "Додайте фото — їх побачать на вашій картці",
+        "profilePhotosLimit": "У профілі вже дев’ять фото",
+        "profilePhotoFirst": "Зробити першим",
+        "profileShowcase": "Вітрина",
+        "profileShowcaseEmpty": "Закріпіть до трьох поїздок через «…» на екрані поїздки — їх першими побачать на вашій картці",
+        "profileShowcaseElsewhere": "Ще {n} — закріплено на іншому пристрої",
+        "profilePin": "Закріпити в профілі",
+        "profileUnpin": "Відкріпити з профілю",
+        "profileShowcaseLimit": "Уже закріплено три поїздки — відкріпіть одну",
+    ]
 }
