@@ -30,7 +30,8 @@ struct BluetoothScanSheet: View {
         let l = lang.language
 
         Group {
-            if bluetoothDetector.isBluetoothAvailable {
+            // Пока система не ответила, показываем поиск, а не «выключен».
+            if !bluetoothDetector.isBluetoothOff {
                 VStack(spacing: 0) {
                     header(c: c, l: l)
                     scanContent(c: c, l: l)

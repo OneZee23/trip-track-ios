@@ -10,7 +10,17 @@ enum BluetoothEvent {
 }
 
 final class BluetoothDetector: NSObject, ObservableObject {
-    @Published var isBluetoothAvailable: Bool = false
+    /// Состояние Bluetooth, каким его сообщила система. Пока менеджера нет
+    /// или он не ответил — `.unknown`, и это НЕ «выключен».
+    ///
+    /// Раньше здесь был флаг `isBluetoothAvailable = false` по умолчанию, а
+    /// менеджер заводит только автозапуск. С выключенным автозапуском флаг не
+    /// менялся никогда, и страница машины писала «Bluetooth выключен» при
+    /// включённом Bluetooth (владелец на 0.9.1 (95), 24 окт 2026).
+    @Published private(set) var powerState: CBManagerState = .unknown
+    var isBluetoothAvailable: Bool { powerState == .poweredOn }
+    /// Только подтверждённое системой «выключен».
+    var isBluetoothOff: Bool { powerState == .poweredOff }
     @Published var discoveredDevices: [DiscoveredDevice] = []
     @Published var isScanning: Bool = false
 
@@ -58,7 +68,15 @@ final class BluetoothDetector: NSObject, ObservableObject {
         ])
     }
 
+    /// Узнать состояние для экрана, не вызывая системный запрос: менеджер
+    /// заводится, только если доступ к Bluetooth уже дан. Сканирования нет.
+    func refreshPowerState() {
+        guard centralManager == nil, CBManager.authorization == .allowedAlways else { return }
+        startMonitoring()
+    }
+
     func stopMonitoring() {
+        powerState = .unknown
         btLog.notice("[bt.stop_monitor] tracked_devices=\(self.connectedDeviceNames.count, privacy: .public)")
         stopScanning()
         centralManager = nil
@@ -125,7 +143,7 @@ extension BluetoothDetector: CBCentralManagerDelegate {
         btLog.notice("[bt.state_changed] state=\(BluetoothDetector.stateString(central.state), privacy: .public) pendingScan=\(self.pendingScan, privacy: .public) connected_count=\(self.connectedDeviceNames.count, privacy: .public)")
 
         Task { @MainActor [weak self] in
-            self?.isBluetoothAvailable = central.state == .poweredOn
+            self?.powerState = central.state
         }
 
         // Start deferred scan if BT just became available

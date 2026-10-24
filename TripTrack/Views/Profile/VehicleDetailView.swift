@@ -188,7 +188,10 @@ struct VehicleDetailView: View {
                 .scrollIndicators(.hidden)
             }
             .background(c.bg)
-            .task { connectedStereo = AudioRouteDetector.currentBluetoothOutputName() }
+            .task {
+                connectedStereo = AudioRouteDetector.currentBluetoothOutputName()
+                bluetoothDetector.refreshPowerState()
+            }
             .task(id: vehicleId) { await loadPassport() }
             // Машину могли удалить с другого экрана (или синком) прямо сейчас.
             // Раньше `if let vehicle` без `else` оставлял пустой экран без
@@ -989,7 +992,7 @@ struct VehicleDetailView: View {
         let linked = settings.bluetoothDevice(forVehicle: vehicleId)
         let isConnected = linked.map { $0.name == connectedStereo } ?? false
 
-        if !bluetoothDetector.isBluetoothAvailable {
+        if bluetoothDetector.isBluetoothOff {
             stereoRow(
                 icon: "antenna.radiowaves.left.and.right.slash",
                 tint: AppTheme.red,
