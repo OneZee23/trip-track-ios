@@ -14,13 +14,19 @@ struct VehicleStage: View {
     private var spriteWidth: CGFloat { width * 0.76 }
     private var spriteHeight: CGFloat { spriteWidth * CGFloat(VehicleSpriteMetrics.canvasAspect) }
     private var ink: (top: Double, bottom: Double) { VehicleSpriteMetrics.inkBounds(style: bodyStyle) }
-    private var inkHeight: CGFloat { spriteHeight * CGFloat(ink.bottom - ink.top) }
-    private var height: CGFloat { max(width * 0.62, inkHeight + width * 0.22) }
+    private var height: CGFloat { Self.height(for: assetName, width: width) }
     private var platformY: CGFloat { height - width * 92 / 170 / 2 }
     private var wheelY: CGFloat { height - width * 92 / 170 + width * 85 / 170 * 0.80 }
     private var paintedAsset: String? {
         guard let assetName else { return nil }
         return finish == .matte ? assetName + "_matte" : assetName
+    }
+
+    static func height(for assetName: String?, width: CGFloat) -> CGFloat {
+        let style = assetName.map(VehicleAvatar.style(ofAsset:)) ?? VehicleAvatar.defaultStyle
+        let ink = VehicleSpriteMetrics.inkBounds(style: style)
+        let inkHeight = width * 0.76 * CGFloat(VehicleSpriteMetrics.canvasAspect) * CGFloat(ink.bottom - ink.top)
+        return max(width * 0.62, inkHeight + width * 0.22)
     }
 
     var body: some View {

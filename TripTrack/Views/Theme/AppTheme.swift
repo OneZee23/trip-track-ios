@@ -105,6 +105,16 @@ enum AppTheme {
                 ? Color(red: 30/255, green: 30/255, blue: 32/255)
                 : Color.white
         }
+        var roadHeroCard: Color {
+            scheme == .dark
+                ? Color(red: 36/255, green: 37/255, blue: 42/255)
+                : Color(red: 1, green: 250/255, blue: 247/255)
+        }
+        var roadHeroAccent: Color {
+            scheme == .dark
+                ? Color(red: 1, green: 156/255, blue: 123/255)
+                : AppTheme.accent
+        }
         /// Цифры дистанции в плитках итога (финиш, поездка, путешествие).
         /// Тот же зелёный, что `AppTheme.green`, но в светлой теме на 10 %
         /// темнее: #2EAE50 на белой карточке даёт 2.88 : 1 — ниже порога 3 : 1

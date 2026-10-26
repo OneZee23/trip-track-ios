@@ -1,13 +1,7 @@
 import XCTest
 
-/// The «Me» card is light unless a profile background is chosen (13 Oct 2026).
-///
-/// Owner, on 0.9.0 (79): the dark default made «Me» look like it already had
-/// a cover, while «Фон профиля» said «Обычный» — the setting looked like it did
-/// nothing. Measured by pixels, not by eye. Light theme: the default must be
-/// light and a chosen background must darken the same card. Dark theme: every
-/// card is dark there, so the check is the warm accent tint, which neither a
-/// background nor the dark ink card of 0.9.0 (79) has.
+/// Обрамление дефолта остаётся спокойным в обеих темах. Полоса дороги
+/// меняется по часам и не входит в пробу; выбранный фон красит всю карточку.
 @MainActor
 final class MeHeroBackgroundTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
@@ -33,12 +27,11 @@ final class MeHeroBackgroundTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        // A band across the card between the avatar row and the stats line,
-        // left of the text: background, not glyphs.
+        // Под аватаром, до полосы дороги: только обрамление, без текста.
         let avatar = app.buttons["profile_avatar"].firstMatch.frame
         let scale = shot.image.scale
         let band = CGRect(x: avatar.minX * scale, y: (avatar.maxY + 6) * scale,
-                          width: 12 * scale, height: max(4, (strip.frame.minY - avatar.maxY - 12)) * scale)
+                          width: 12 * scale, height: 4 * scale)
         guard let cg = shot.image.cgImage?.cropping(to: band) else {
             XCTFail("No pixels for the card band"); return Tone(light: 0, red: 0, blue: 0)
         }
@@ -67,12 +60,12 @@ final class MeHeroBackgroundTests: XCTestCase {
         XCTAssertLessThan(chosen.light, plain.light - 0.3, "A chosen background must darken the card")
     }
 
-    func testDarkThemeDefaultCarriesTheWarmTintNotACover() throws {
+    func testDarkThemeDefaultKeepsQuietChrome() throws {
         let plain = try heroTone(theme: "dark", background: "")
         let chosen = try heroTone(theme: "dark", background: "ocean")
         print("PROBE hero dark: default=\(plain) ocean=\(chosen)")
-        XCTAssertGreaterThan(plain.red - plain.blue, 0.02,
-                             "The default dark card carries the warm accent tint")
+        XCTAssertEqual(plain.red, 36.0 / 255, accuracy: 0.03)
+        XCTAssertEqual(plain.blue, 42.0 / 255, accuracy: 0.03)
         XCTAssertGreaterThan(chosen.blue - chosen.red, 0.02,
                              "A chosen background shows its own artwork")
     }

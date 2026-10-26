@@ -1,14 +1,7 @@
 import SwiftUI
 
-/// Identity and trip totals on «Me». A chosen profile background is shown
-/// here as others see it; without one the card is light.
-///
-/// The default is a warm tint with an accent edge (owner, 13 Oct 2026,
-/// variant C). Variant A, a dark card with a glow, shipped in 0.9.0 (79) and
-/// was rolled back the next day: «Me» gave everyone a striking cover without
-/// choosing one, so the profile background setting (eleven free, eight PRO)
-/// looked like it did nothing. Only a chosen background darkens this card, so
-/// what people see here is what others see on their profile.
+/// Общий герой своего и чужого профиля. Дорога живёт только у обычного
+/// фона без фото; выбранное оформление по-прежнему заполняет всю карточку.
 struct ProfileHeroCard: View {
     let background: ProfileBackground
     let avatarEmoji: String
@@ -46,19 +39,22 @@ struct ProfileHeroCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var roadTime: RoadSceneTime = .day
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var plus = PlusAccess.shared
     @ObservedObject private var photos = ProfilePhotoStore.shared
 
     private var hasPhotos: Bool { isForeign ? !(publicProfile?.photos ?? []).isEmpty : !photos.photos.isEmpty }
 
-    /// The background as others see it; `nil` for the light default. An
-    /// expired PRO falls back here too (`effective`), never to a dark card.
+    /// Эффективное оформление для показа. Истёкший PRO возвращает обычный
+    /// фон, сохраняя платный выбор в настройках.
     private var chosenCover: ProfileBackground? {
         let effective = background.effective(isPlus: paidCosmetics)
         return effective == .none ? nil : effective
     }
     private var hasCover: Bool { chosenCover != nil }
+    private var showsRoad: Bool { !hasCover && !hasPhotos }
     private var colors: AppTheme.Colors { AppTheme.colors(for: scheme) }
     private var ink: Color { hasCover ? .white : colors.text }
     private var secondaryInk: Color { hasCover ? .white.opacity(0.85) : colors.textSecondary }
@@ -84,9 +80,17 @@ struct ProfileHeroCard: View {
                                   onSettings: isForeign ? nil : onTapSettings)
                 coverPanel
             } else {
-                originalCard.padding(.horizontal, 16).padding(.top, 4)
+                Group {
+                    if showsRoad { roadCard }
+                    else { originalCard }
+                }
+                .padding(.horizontal, 16).padding(.top, 4)
                 if !isForeign { ProfileCoverPager(isOwn: true) }
             }
+        }
+        .onAppear { roadTime = .current() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { roadTime = .current() }
         }
     }
 
@@ -165,6 +169,38 @@ struct ProfileHeroCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(hasCover ? .clear : AppTheme.accent.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var roadCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 18) {
+                identityRow
+                if let bio, !bio.isEmpty {
+                    Text(bio).font(.interScaled(14, relativeTo: .subheadline))
+                        .foregroundStyle(ink).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("profile_bio")
+                }
+            }
+            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 14)
+            ProfileGarageHeader(isForeign: isForeign, publicVehicle: publicVehicle,
+                                showsPaidCosmetics: paidCosmetics, roadTime: roadTime,
+                                ink: ink, secondaryInk: secondaryInk,
+                                onTap: onTapVehicle, onAdd: onAddVehicle)
+            VStack(alignment: .leading, spacing: 18) {
+                if isForeign { followersLine }
+                if showsStats {
+                    Rectangle().fill(rule).frame(height: 1)
+                    statsRow
+                }
+            }
+            .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 20)
+        }
+        .background(colors.roadHeroCard)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(AppTheme.accent.opacity(0.22), lineWidth: 1)
         }
     }
 
@@ -258,7 +294,7 @@ struct ProfileHeroCard: View {
                 HStack(spacing: 5) {
                     Text("LVL \(level)")
                         .font(.custom("Handjet-Black", size: 17, relativeTo: .subheadline))
-                        .foregroundStyle(hasCover ? .white : AppTheme.accent)
+                        .foregroundStyle(hasCover ? .white : showsRoad ? colors.roadHeroAccent : AppTheme.accent)
                     Text(rankTitle)
                         .font(.interScaled(12, weight: .medium, relativeTo: .caption))
                         .foregroundStyle(secondaryInk)

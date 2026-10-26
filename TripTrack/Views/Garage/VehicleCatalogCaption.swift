@@ -10,6 +10,7 @@ struct VehicleCatalogCaption: View {
     var variantID: String?
     var showsCapsule = false
     var foreground: Color? = nil
+    var scalesText = false
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -36,7 +37,7 @@ struct VehicleCatalogCaption: View {
         VStack(spacing: 10) {
             if !modelLine.isEmpty {
                 Text(modelLine)
-                    .font(.inter(showsCapsule ? 13 : 12))
+                    .font(scalesText ? .interScaled(12, relativeTo: .caption) : .inter(showsCapsule ? 13 : 12))
                     .foregroundStyle(foreground ?? c.textSecondary)
                     .multilineTextAlignment(.center)
             }
