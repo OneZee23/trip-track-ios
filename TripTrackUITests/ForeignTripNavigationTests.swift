@@ -40,6 +40,29 @@ final class ForeignTripNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab_home"].firstMatch.waitForExistence(timeout: 5))
     }
 
+    /// Поездка — плечо публичного путешествия автора: на экране поездки есть
+    /// строка «Часть путешествия», и она открывает путешествие (0.9.2).
+    func testForeignTripLinksToItsJourney() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-debug-foreign-trip", "-debug-foreign-journey"]
+        app.launch()
+        let preview = app.staticTexts["Foreign trip preview"].firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 15))
+        preview.tap()
+        let row = app.buttons["detail_journey_row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "A journey leg says so on its own screen")
+        XCTAssertTrue(row.label.contains("Тверская петля"))
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "foreign_trip_journey_row"
+        shot.lifetime = .keepAlways
+        add(shot)
+        row.tap()
+        let title = app.staticTexts["detail_title"].firstMatch
+        let left = expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: title)
+        wait(for: [left], timeout: 10)
+    }
+
     /// Controls survive even when the underlying MKMapView was left in a
     /// discarded slot. Inspect the centre of the hero, excluding chrome.
     private func assertMapHasContent(_ app: XCUIApplication, name: String) {

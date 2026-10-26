@@ -47,6 +47,18 @@ extension AppStrings {
     static func profileAddCover(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileAddCover", ru: "Добавить обложку", en: "Add cover")
     }
+    /// Строка в «Мой профиль» — постоянная дверь к обложке, когда приглашение
+    /// на «Я» скрыто крестиком (TestFlight 0.9.2 (96), 26 окт 2026: «если я не
+    /// хочу ковер добавлять, он мне будет вечно его предлагать?»).
+    static func myProfileRowCover(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "myProfileRowCover", ru: "Обложка", en: "Cover")
+    }
+    static func myProfileCoverUnset(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "myProfileCoverUnset", ru: "Не задана", en: "Not set")
+    }
+    static func profileCoverPromptHide(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileCoverPromptHide", ru: "Скрыть", en: "Hide")
+    }
     static func profileAddPhoto(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profileAddPhoto", ru: "Добавить фото", en: "Add photo")
     }

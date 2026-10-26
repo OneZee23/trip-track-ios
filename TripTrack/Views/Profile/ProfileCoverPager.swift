@@ -8,13 +8,11 @@ struct ProfileCoverPager: View {
     var onSettings: (() -> Void)? = nil
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var store = ProfilePhotoStore.shared
-    @State private var picking: [PhotosPickerItem] = []
-    @State private var saving = false
     @State private var page = 0
     @State private var showsPicker = false
     @State private var addsAfterViewer = false
     @State private var selected: Selection?
-    @State private var toastItem: ToastItem?
+    @AppStorage(ProfileCoverPrompt.hiddenKey) private var promptHidden = false
     /// Carry the frozen pages in the presentation item itself. Publishing
     /// pages and selection as separate State values can present the old empty
     /// array on the first tap, before SwiftUI has read the new pages.
@@ -23,7 +21,6 @@ struct ProfileCoverPager: View {
         let index: Int
         let pages: [PhotoFullScreenView.Page]
     }
-    private static let log = Logger(subsystem: "com.triptrack", category: "profile.photos.picker")
 
     private var pages: [PhotoFullScreenView.Page] {
         if isOwn {
@@ -45,36 +42,11 @@ struct ProfileCoverPager: View {
         Group {
             if !pages.isEmpty {
                 cover
-            } else if isOwn {
-                Button { showsPicker = true } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "photo.badge.plus")
-                        Text(AppStrings.profileAddCover(lang.language))
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
-                    }
-                    .font(.interScaled(14, weight: .medium, relativeTo: .subheadline))
-                    .foregroundStyle(AppTheme.accent).padding(.horizontal, 14)
-                    .frame(minHeight: 48).contentShape(Rectangle())
-                }
-                .buttonStyle(PressableCardStyle()).surfaceCard()
-                .padding(.horizontal, 16).padding(.top, 12)
-                .accessibilityIdentifier("profile_photos_add")
+            } else if isOwn && !promptHidden {
+                addCoverPrompt
             }
         }
-        .photosPicker(isPresented: $showsPicker, selection: $picking,
-                      maxSelectionCount: max(1, 9 - store.photos.count), matching: .images)
-        .onChange(of: picking) { _, items in
-            guard !items.isEmpty else { return }
-            Task { await save(items) }
-        }
-        .onChange(of: store.limitReached) { _, reached in
-            if isOwn && reached {
-                toastItem = ToastItem(type: .info, message: AppStrings.profilePhotosLimit(lang.language))
-                store.limitReached = false
-            }
-        }
-        .toast(item: $toastItem)
+        .profileCoverImport(isPresented: $showsPicker)
         .onChange(of: pages.map(\.id)) { _, _ in page = 0 }
         .fullScreenCover(item: $selected, onDismiss: {
             if addsAfterViewer { addsAfterViewer = false; showsPicker = true }
@@ -143,22 +115,38 @@ struct ProfileCoverPager: View {
         }
     }
 
-    private func save(_ items: [PhotosPickerItem]) async {
-        saving = true
-        defer { saving = false; picking = [] }
-        let session = store.session
-        for item in items {
-            do {
-                guard let data = try await item.loadTransferable(type: Data.self) else { continue }
-                try await store.add(data, session: session)
-            } catch is CancellationError {
-                break
-            } catch ProfilePhotoStore.StoreError.limitReached {
-                toastItem = ToastItem(type: .info, message: AppStrings.profilePhotosLimit(lang.language))
-                break
-            } catch {
-                Self.log.error("profile photo import failed: \(error.localizedDescription)")
+    /// Приглашение, которое можно скрыть: обложка — по желанию, и строка не
+    /// имеет права висеть вечно (TestFlight 0.9.2 (96)). Скрытая, она уходит
+    /// насовсем, а дверь к обложке остаётся в «Мой профиль» → «Обложка».
+    private var addCoverPrompt: some View {
+        HStack(spacing: 0) {
+            Button { showsPicker = true } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "photo.badge.plus")
+                    Text(AppStrings.profileAddCover(lang.language))
+                    Spacer(minLength: 8)
+                }
+                .font(.interScaled(14, weight: .medium, relativeTo: .subheadline))
+                .foregroundStyle(AppTheme.accent).padding(.leading, 14)
+                .frame(minHeight: 48).contentShape(Rectangle())
             }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("profile_photos_add")
+            Button {
+                Haptics.tap()
+                withAnimation(.easeOut(duration: 0.2)) { promptHidden = true }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityLabel(AppStrings.profileCoverPromptHide(lang.language))
+            .accessibilityIdentifier("profile_photos_add_hide")
         }
+        .surfaceCard()
+        .padding(.horizontal, 16).padding(.top, 12)
     }
 }

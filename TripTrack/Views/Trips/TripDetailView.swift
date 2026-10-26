@@ -2462,6 +2462,7 @@ isOwn
             VStack(alignment: .leading, spacing: 10) {
                 titleBlock(trip: trip, c: c)
                 chipsRow(trip: trip, c: c)
+                journeyLinkRow(trip: trip)
             }
 
             // Черновик спрашивает там, где на него смотрят (спека §3.3).
@@ -2629,6 +2630,31 @@ isOwn
         // It used to reserve 90pt for a tab bar this screen does not show.
         .padding(.bottom, safeAreaBottom + 20)
         .background(c.bg)
+    }
+
+    // MARK: - Journey link
+
+    /// Строка «Часть путешествия», если поездка — плечо путешествия.
+    ///
+    /// Своя поездка спрашивает свои путешествия (`tripJourney`) и открывает
+    /// то же, что «…» → «Открыть путешествие». Чужая берёт `journey` из ответа
+    /// сервера — оно приходит, только когда путешествие автора публично, — и
+    /// открывается в том же стеке, что и профиль автора. Без общего стека
+    /// (ни один живой путь сейчас) строки у чужой поездки нет: нажатие,
+    /// которое ничего не делает, хуже отсутствующего.
+    @ViewBuilder
+    private func journeyLinkRow(trip: Trip) -> some View {
+        if isOwn, let journey = tripJourney {
+            JourneyLinkRow(title: journey.title, startDate: journey.startDate, endDate: journey.endDate) {
+                openedJourneyId = journey.id
+            }
+            .accessibilityIdentifier("detail_journey_row")
+        } else if !isOwn, let journey = liveSocial?.journey, let pushPath {
+            JourneyLinkRow(title: journey.title, startDate: journey.startDate, endDate: journey.endDate) {
+                pushPath.wrappedValue.cappedAppend(.publicJourney(journey.id))
+            }
+            .accessibilityIdentifier("detail_journey_row")
+        }
     }
 
     // MARK: - Chips row

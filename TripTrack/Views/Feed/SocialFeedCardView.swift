@@ -446,39 +446,13 @@ struct SocialFeedCardView: View {
     @ViewBuilder
     private func journeyRow(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if let journey = trip.journey {
-            Button {
-                Haptics.tap()
+            JourneyLinkRow(title: journey.title, startDate: journey.startDate, endDate: journey.endDate) {
                 onOpenJourney?(journey.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "suitcase.fill")
-                        .font(.system(size: 12, weight: .bold))
-                    Text(journeyRowText(journey, lng: lng))
-                        .font(.inter(12, weight: .semibold))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(AppTheme.accent)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 13)
             .padding(.bottom, 10)
             .accessibilityIdentifier("feed_card_journey")
         }
-    }
-
-    private func journeyRowText(_ journey: SocialFeedTripJourney, lng: LanguageManager.Language) -> String {
-        let title = journey.title ?? AppStrings.journeyWord(lng)
-        let days = JourneyWindow.days(startDate: journey.startDate, endDate: journey.endDate)
-        return AppStrings.journeyPartOf(lng, title: title)
-            + " · \(days) \(AppStrings.nounDays(lng, days))"
     }
 
     // MARK: - Action Bar (Telegram-style: one pill per used emoji)

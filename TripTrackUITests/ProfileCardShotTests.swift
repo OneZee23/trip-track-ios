@@ -56,6 +56,18 @@ final class ProfileCardShotTests: XCTestCase {
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 5), "The native photo picker opens")
     }
 
+    /// Приглашение «Добавить обложку» скрывается крестиком, а дверь к обложке
+    /// остаётся в «Мой профиль» (TestFlight 0.9.2 (96)).
+    func testCoverPromptCanBeHidden() {
+        launchOwn(extra: ["-seed-profile-no-cover"])
+        let add = app.buttons["profile_photos_add"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 30))
+        app.buttons["profile_photos_add_hide"].firstMatch.tap()
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: add)
+        wait(for: [gone], timeout: 5)
+        capture("own-cover-prompt-hidden")
+    }
+
     func testPinnedFirstAndRoutineExpansion() {
         launchOwn(extra: ["-seed-profile-journal"])
         XCTAssertTrue(app.staticTexts["profile_cover_counter"].firstMatch.waitForExistence(timeout: 30))

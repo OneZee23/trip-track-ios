@@ -34,6 +34,8 @@ enum DebugProfileCardSeed {
         }
         if ProcessInfo.processInfo.arguments.contains("-seed-profile-no-cover") {
             ProfilePhotoStore.shared.wipe()
+            // Чистое состояние приглашения: прошлый прогон мог его скрыть.
+            UserDefaults.standard.removeObject(forKey: ProfileCoverPrompt.hiddenKey)
         } else if ProfilePhotoStore.shared.photos.isEmpty {
             for index in 0..<4 {
                 if let data = image(index) { try? await ProfilePhotoStore.shared.add(data) }

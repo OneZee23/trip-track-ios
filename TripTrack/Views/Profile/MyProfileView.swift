@@ -43,6 +43,10 @@ struct MyProfileView: View {
     @ObservedObject private var plus = PlusAccess.shared
 
     @State private var isEditingAvatar = false
+    /// Обложка — своей строкой здесь, потому что приглашение на «Я» можно
+    /// скрыть, а дверь к обложке должна остаться.
+    @State private var isPickingCover = false
+    @ObservedObject private var coverPhotos = ProfilePhotoStore.shared
     /// Follower / following totals for THIS account, straight from the same
     /// profile GET the follow list uses for its segment chips. nil = not
     /// answered yet, and the counters print «—» rather than a zero nobody
@@ -119,6 +123,7 @@ struct MyProfileView: View {
         .scrollIndicators(.hidden)
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
+        .profileCoverImport(isPresented: $isPickingCover)
         .hideAppTabBar()
         .safeAreaInset(edge: .top, spacing: 0) {
             CustomNavBar(title: AppStrings.myProfileTitle(l))
@@ -519,6 +524,17 @@ struct MyProfileView: View {
 
             sectionHeading(AppStrings.profileAppearanceGroup(l), c).padding(.top, 12)
             card(c) {
+                row(
+                    icon: "photo.badge.plus",
+                    label: AppStrings.myProfileRowCover(l),
+                    value: coverPhotos.photos.isEmpty
+                        ? AppStrings.myProfileCoverUnset(l)
+                        : AppStrings.photosCount(l, n: coverPhotos.photos.count),
+                    isUnset: coverPhotos.photos.isEmpty,
+                    identifier: "my_profile_row_cover",
+                    action: { isPickingCover = true }
+                )
+                divider(c)
                 // Not in canon, moved here from «Настройки».
                 //
                 // The banner it picks is drawn on THIS profile — on this very

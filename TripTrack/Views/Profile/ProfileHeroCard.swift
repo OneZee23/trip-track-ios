@@ -298,19 +298,25 @@ struct ProfileHeroCard: View {
         .accessibilityIdentifier("profile_follow")
     }
 
+    /// Три числа во всю ширину карточки: первое у левого края, последнее у
+    /// правого, промежутки поровну. Колонки по трети с выравниванием влево
+    /// оставляли справа пустую треть под «регионами» (TestFlight 0.9.2 (96),
+    /// 26 окт 2026: «справа пустое пространство в карточке»). Крупный шрифт
+    /// доступности по-прежнему ставит их столбиком.
     private var statsRow: some View {
         Button {
             Haptics.tap()
             onTapStats()
         } label: {
-            let layout = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-            layout {
-                column(value: privacyStats ? "••••" : "\(trips)", label: AppStrings.trips(lang.language))
-                column(value: privacyStats ? "••••" : Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
-                       label: AppStrings.statsKmTotal(lang.language, unit: distanceUnit))
-                column(value: privacyStats ? "••••" : "\(regions)", label: AppStrings.statsRegions(lang.language))
+            Group {
+                if typeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 16) { statColumns(stretch: true) }
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        statColumns(stretch: false)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
             .contentShape(Rectangle())
         }
@@ -319,7 +325,17 @@ struct ProfileHeroCard: View {
         .disabled(!detailsEnabled || (isForeign && privacyStats))
     }
 
-    private func column(value: String, label: String) -> some View {
+    @ViewBuilder
+    private func statColumns(stretch: Bool) -> some View {
+        column(value: privacyStats ? "••••" : "\(trips)", label: AppStrings.trips(lang.language), stretch: stretch)
+        if !stretch { Spacer(minLength: 0) }
+        column(value: privacyStats ? "••••" : Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
+               label: AppStrings.statsKmTotal(lang.language, unit: distanceUnit), stretch: stretch)
+        if !stretch { Spacer(minLength: 0) }
+        column(value: privacyStats ? "••••" : "\(regions)", label: AppStrings.statsRegions(lang.language), stretch: stretch)
+    }
+
+    private func column(value: String, label: String, stretch: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
                 .font(.interScaled(hasPhotos ? 19 : 22, weight: hasPhotos ? .heavy : .bold, relativeTo: .title3).monospacedDigit())
@@ -331,6 +347,6 @@ struct ProfileHeroCard: View {
                 .foregroundStyle(secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: stretch ? .infinity : nil, alignment: .leading)
     }
 }

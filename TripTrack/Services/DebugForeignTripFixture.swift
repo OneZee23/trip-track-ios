@@ -130,7 +130,22 @@ enum DebugForeignTripFixture {
         ]
     }
 
+    /// `-debug-foreign-journey`: поездка — плечо публичного путешествия
+    /// автора (0.9.2), чтобы экран поездки показал «Часть путешествия».
+    private static var withJourney: Bool {
+        ProcessInfo.processInfo.arguments.contains("-debug-foreign-journey")
+    }
+
     private static func trip(refreshed: Bool) -> [String: Any] {
+        var item = tripItem(refreshed: refreshed)
+        if withJourney {
+            item["journey"] = ["id": "D37A4000-0000-4000-8000-000000000081", "title": "Тверская петля",
+                               "startDate": "2026-09-23T08:00:00Z", "endDate": "2026-09-25T20:00:00Z"]
+        }
+        return item
+    }
+
+    private static func tripItem(refreshed: Bool) -> [String: Any] {
         [
             "id": "D37A1000-0000-4000-8000-000000000081",
             "author": [
