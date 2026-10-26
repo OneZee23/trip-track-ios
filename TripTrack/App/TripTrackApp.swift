@@ -105,6 +105,9 @@ struct TripTrackApp: App {
         // `StoreRecoveryView` drives the retry that releases them.
         if StoreHealth.shared.isOpen {
             AppBootstrap.startServicesOnce()
+            // Шейдеры тумана — в фоне, до первого открытия «Атласа»
+            // (Sentry APPLE-IOS-11, см. `FogPipelineCache`).
+            FogPipelineCache.prewarm()
             StartupTrace.mark("app init done (services started)")
         } else {
             StartupTrace.mark("app init done — STORE NOT OPEN, services held")

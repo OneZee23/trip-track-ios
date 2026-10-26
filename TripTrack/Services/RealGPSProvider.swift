@@ -33,8 +33,6 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
 
     private(set) var currentLocation: LocationUpdate?
 
-    /// System-cached last known location (available without active updates).
-    var cachedSystemLocation: CLLocation? { manager.location }
 
     var locationPublisher: AnyPublisher<LocationUpdate, Never> {
         locationSubject.eraseToAnyPublisher()

@@ -255,7 +255,7 @@ final class MapViewModel: ObservableObject {
         setupRecordingBindings()
         StartupTrace.mark("MapViewModel.init setupRecordingBindings")
         setupSunBasedTheme()
-        checkSunTheme() // Immediate check using cached location
+        checkSunTheme()
         StartupTrace.mark("MapViewModel.init sunTheme")
         refreshTripStats()
         StartupTrace.mark("MapViewModel.init refreshTripStats")
@@ -1620,11 +1620,16 @@ final class MapViewModel: ObservableObject {
         UserDefaults.standard.set(night, forKey: "liveActivityDarkMode")
     }
 
+    /// Только живой фикс. Последнее известное системе место
+    /// (`CLLocationManager.location`) здесь больше НЕ читается: это
+    /// синхронный XPC к locationd, и на запуске он держал главный поток
+    /// больше двух секунд (Sentry APPLE-IOS-Z, 0.9.0 (88), из
+    /// `MapViewModel.init`). Тема живой активности от этого не страдает:
+    /// прошлое значение лежит в `UserDefaults`, а первый фикс обновит его
+    /// через `setupSunBasedTheme`.
     func checkSunTheme() {
         if let loc = locationManager.currentLocation {
             updateThemeForSun(coordinate: loc.coordinate)
-        } else if let cached = locationManager.cachedSystemLocation {
-            updateThemeForSun(coordinate: cached.coordinate)
         }
     }
 }

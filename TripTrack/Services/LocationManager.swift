@@ -17,8 +17,6 @@ class LocationManager: ObservableObject {
     @Published private(set) var mode: TrackingMode = .real
     @Published var isDeveloperMode: Bool = false
     
-    /// System-cached last known location (available without active tracking).
-    var cachedSystemLocation: CLLocation? { realGPS.cachedSystemLocation }
 
     // Провайдеры
     private(set) var realGPS = RealGPSProvider()

@@ -73,7 +73,7 @@ enum FogOffscreen {
                                   palette: palette, carve: carve, reveal: reveal, cells: cells),
               let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
-              let encoder = FogFrameEncoder(device: device) else { return nil }
+              let encoder = FogPipelineCache.encoder(device: device) else { return nil }
 
         let width = max(1, Int(params.drawableSize.width.rounded()))
         let height = max(1, Int(params.drawableSize.height.rounded()))

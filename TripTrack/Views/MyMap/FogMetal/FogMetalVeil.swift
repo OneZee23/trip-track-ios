@@ -166,7 +166,7 @@ final class FogMetalVeil: MTKView {
     static func make(notifications: NotificationCenter = .default) -> FogMetalVeil? {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
-              let encoder = FogFrameEncoder(device: device) else { return nil }
+              let encoder = FogPipelineCache.encoder(device: device) else { return nil }
         return FogMetalVeil(
             device: device, queue: queue, encoder: encoder, notifications: notifications)
     }
