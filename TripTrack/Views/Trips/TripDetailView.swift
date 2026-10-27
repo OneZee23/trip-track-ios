@@ -2704,10 +2704,10 @@ isOwn
     }
 
     /// Цвет машины поездки для машинки на карте. `nil` — транспорта нет или
-    /// у него эмодзи вместо спрайта: цвета в этом случае просто нет.
+    /// у него эмодзи вне `VehicleAvatar.legacyColors`: цвета тогда нет.
     private var tripCarColorName: String? {
         guard let vehicle = tripVehicle else { return nil }
-        return VehicleAvatar.decompose(vehicle.avatarEmoji)?.color
+        return VehicleAvatar.drawnColor(of: vehicle.avatarEmoji)
     }
 
     private var tripVehicle: Vehicle? {

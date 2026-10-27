@@ -126,12 +126,12 @@ final class MapViewModel: ObservableObject {
     /// ходу можно, и маркер обязан догнать); пока не пишем — той, на которую
     /// уйдёт следующая. Это ровно источник чипа в верхнем ряду, чтобы экран не
     /// расходился в показаниях сам с собой. `nil` — «Без транспорта» или
-    /// машина с эмодзи вместо спрайта: цвета там нет, маркер возьмёт
-    /// умолчание гаража.
+    /// эмодзи вне `VehicleAvatar.legacyColors`: цвета там нет, маркер
+    /// возьмёт умолчание гаража.
     var activeCarColorName: String? {
         let id = tripManager.activeTrip?.vehicleId ?? SettingsManager.shared.activeRecordableVehicleId
         guard let vehicle = SettingsManager.shared.vehicle(for: id) else { return nil }
-        return VehicleAvatar.decompose(vehicle.avatarEmoji)?.color
+        return VehicleAvatar.drawnColor(of: vehicle.avatarEmoji)
     }
 
     // MARK: - Dependencies
@@ -757,7 +757,10 @@ final class MapViewModel: ObservableObject {
             vehicleName: isTransfer
                 ? AppStrings.tripTransferTitle(lang)
                 : (vehicle?.name ?? AppStrings.vehicleTypeCar(lang)),
-            vehicleAvatar: isTransfer ? "🧍" : (vehicle?.avatarEmoji ?? "🚗")
+            // Старое эмодзи уезжает машиной того же цвета, как в гараже.
+            vehicleAvatar: isTransfer ? "🧍" : vehicle.map {
+                VehicleAvatar.drawnColor(of: $0.avatarEmoji).map(VehicleAvatar.legacyName(color:)) ?? $0.avatarEmoji
+            } ?? "🚗"
         )
     }
 

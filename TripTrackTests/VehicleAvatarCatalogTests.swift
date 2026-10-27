@@ -109,9 +109,35 @@ final class VehicleAvatarWireCompatibilityTests: XCTestCase {
         XCTAssertEqual(VehicleAvatar.assetName(style: nil, avatar: wire), "pixel_car_red")
     }
 
-    /// An emoji avatar has no sprite and must say so rather than compose one.
-    func testEmojiAvatarHasNoAsset() {
-        XCTAssertNil(VehicleAvatar.assetName(style: "car", avatar: "🏎️"))
+    /// Every emoji a vehicle could wear before the sprites is drawn as the
+    /// car of its colour, with or without the variation selector.
+    func testEveryLegacyEmojiIsDrawnAsASprite() {
+        for emoji in Vehicle.legacyEmojiAvatars {
+            let bare = emoji.replacingOccurrences(of: "\u{FE0F}", with: "")
+            for form in [emoji, bare, bare + "\u{FE0F}"] {
+                let asset = VehicleAvatar.assetName(style: "car", avatar: form)
+                XCTAssertNotNil(asset, form)
+                XCTAssertTrue(asset.map { VehicleAvatar.allAssets.contains($0) } ?? false, form)
+            }
+        }
+    }
+
+    /// The paint is the emoji's, the silhouette is still the vehicle's own.
+    func testLegacyEmojiKeepsItsColourAndTakesTheStyle() {
+        XCTAssertEqual(VehicleAvatar.assetName(style: "car", avatar: "🚗"), "pixel_car_red")
+        XCTAssertEqual(VehicleAvatar.assetName(style: "crossover", avatar: "🚙"), "pixel_crossover_blue")
+        XCTAssertEqual(VehicleAvatar.color(of: "🏎️"), "red")
+        XCTAssertEqual(VehicleAvatar.drawnColor(of: "🛻"), "green")
+        let moto = Vehicle(avatarEmoji: "🏍️", type: .moto)
+        XCTAssertEqual(moto.avatarImageName, "pixel_motorcycle_silver")
+    }
+
+    /// An emoji outside the table has no sprite and must say so rather than
+    /// compose one: it is drawn as text.
+    func testUnknownEmojiHasNoAsset() {
+        XCTAssertNil(VehicleAvatar.assetName(style: "car", avatar: "🦄"))
+        XCTAssertNil(VehicleAvatar.drawnColor(of: "🦄"))
+        XCTAssertEqual(VehicleAvatar.color(of: "🦄"), VehicleAvatar.defaultColor)
     }
 
     func testColourSurvivesARoundTrip() {

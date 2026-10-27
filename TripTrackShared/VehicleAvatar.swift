@@ -155,11 +155,41 @@ public enum VehicleAvatar {
     /// before this client has the sprite for it, and the same reasoning that
     /// protects old builds from new names has to protect this build too.
     ///
-    /// Nil only for emoji avatars, which are drawn as text on purpose.
+    /// Nil only for an emoji outside `legacyColors`, drawn as text.
     public static func assetName(style: String?, avatar: String) -> String? {
-        guard let (_, color) = decompose(avatar) else { return nil }
+        guard let color = drawnColor(of: avatar) else { return nil }
         let resolved = style.flatMap { styles.contains($0) ? $0 : nil } ?? defaultStyle
         return compose(style: resolved, color: color)
+    }
+
+    // MARK: - Emoji from before the sprites
+
+    /// The eight emoji a vehicle could wear before the sprites, and the paint
+    /// each one is drawn in since 0.9.2: the colour of the emoji itself, so a
+    /// red 🚗 stays a red car. Until then they were drawn as text, and on the
+    /// pixel road of the «Я» hero an emoji on a drawn platform read as a bug
+    /// (owner on 0.9.2 (98), 27 Oct 2026).
+    ///
+    /// The stored value is not rewritten: a client from before 0.9.2 still
+    /// shows the emoji, and nothing on the wire changes. The silhouette comes
+    /// from `avatarStyle`, as for any sprite.
+    ///
+    /// Keys carry no variation selector: «🏎️» arrives with U+FE0F or
+    /// without it depending on who typed it.
+    public static let legacyColors: [String: String] = [
+        "🏎": "red", "🚗": "red", "🏍": "silver", "🚙": "blue",
+        "🛻": "green", "🏁": "black", "🗺": "blue", "⛽": "red",
+    ]
+
+    /// The paint a legacy emoji avatar is drawn in; nil for anything else.
+    public static func legacyColor(of avatar: String) -> String? {
+        legacyColors[avatar.replacingOccurrences(of: "\u{FE0F}", with: "")]
+    }
+
+    /// The paint this avatar is drawn in: a sprite's own colour or a legacy
+    /// emoji's. Nil only for an emoji outside `legacyColors`.
+    public static func drawnColor(of avatar: String) -> String? {
+        decompose(avatar)?.color ?? legacyColor(of: avatar)
     }
 
     /// The silhouette half of a composed asset name, for layout code that has
@@ -170,7 +200,7 @@ public enum VehicleAvatar {
 
     /// The colour half of an avatar name, for the picker's swatch selection.
     public static func color(of avatar: String) -> String {
-        decompose(avatar)?.color ?? defaultColor
+        drawnColor(of: avatar) ?? defaultColor
     }
 
     /// What goes in `avatarEmoji` for a chosen colour — always legacy-safe.

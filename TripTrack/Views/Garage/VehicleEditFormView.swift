@@ -805,7 +805,7 @@ struct VehicleEditFormView: View {
                         ))
                 )
         } else {
-            // A vehicle saved before the sprites replaced the emoji set.
+            // An emoji outside `VehicleAvatar.legacyColors`.
             Text(selectedAvatar)
                 .font(.inter(56))
                 .frame(height: 88)
@@ -815,22 +815,12 @@ struct VehicleEditFormView: View {
     private func colorRow(c: AppTheme.Colors) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                // The old emoji keeps a seat at the front rather than being
-                // dropped: opening the form must never silently restyle a
-                // vehicle somebody chose on purpose.
-                if let legacy = legacyAvatar {
-                    swatchButton(isSelected: selectedAvatar == legacy,
-                                 label: legacy, c: c) {
-                        selectedAvatar = legacy
-                    } fill: {
-                        Circle()
-                            .fill(c.cardAlt)
-                            .overlay(Text(legacy).font(.inter(17)))
-                    }
-                }
+                // A legacy emoji has no seat of its own since 0.9.2: it is
+                // drawn as the car of its colour, so that swatch is the one
+                // selected, and opening the form still restyles nothing.
                 ForEach(VehicleAvatar.colors, id: \.self) { color in
                     let rgb = VehicleAvatar.swatch(color)
-                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar),
+                    swatchButton(isSelected: VehicleAvatar.drawnColor(of: selectedAvatar) == color,
                                  label: AppStrings.avatarColorName(lang.language, color: color),
                                  c: c) {
                         selectedAvatar = VehicleAvatar.legacyName(color: color)
@@ -884,9 +874,7 @@ struct VehicleEditFormView: View {
     }
 
     /// Which silhouette and which colour the current selection decomposes to.
-    /// A legacy emoji parses to neither, so both fall back to the defaults —
-    /// which is what makes the first tap on any swatch move the vehicle onto
-    /// the sprite set instead of doing nothing.
+    /// A legacy emoji gives the colour it is drawn in (`legacyColors`).
     private var selectedStyle: String { selectedAvatarStyle }
 
     private var selectedColor: String {
@@ -896,13 +884,6 @@ struct VehicleEditFormView: View {
     /// What the hero and the style tiles actually draw.
     private var previewAssetName: String? {
         VehicleAvatar.assetName(style: selectedAvatarStyle, avatar: selectedAvatar)
-    }
-
-    /// The emoji an existing vehicle was created with, when it is not one of the
-    /// pixel cars. Nil for new vehicles and for anything already on the new set.
-    private var legacyAvatar: String? {
-        guard let vehicle = editedVehicle, !vehicle.isPixelAvatar else { return nil }
-        return vehicle.avatarEmoji
     }
 
     private func avatarCell<Content: View>(
