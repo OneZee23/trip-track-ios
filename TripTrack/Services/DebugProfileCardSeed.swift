@@ -17,6 +17,16 @@ enum DebugProfileCardSeed {
         }.jpegData(compressionQuality: 0.7)
     }
 
+    /// До первого кадра, а не в `run()`: стирание обложек чистит общий кэш
+    /// снимков, и посреди первой загрузки фото машины в шапке загрузка
+    /// отбрасывалась — на месте фото стояла заглушка (`-seed-garage-photo`).
+    @MainActor static func clearCoverIfAsked() {
+        guard ProcessInfo.processInfo.arguments.contains("-seed-profile-no-cover") else { return }
+        ProfilePhotoStore.shared.wipe()
+        // Чистое состояние приглашения: прошлый прогон мог его скрыть.
+        UserDefaults.standard.removeObject(forKey: ProfileCoverPrompt.hiddenKey)
+    }
+
     @MainActor static func run() async {
         let settings = SettingsManager.shared
         let context = PersistenceController.shared.container.viewContext
@@ -32,11 +42,8 @@ enum DebugProfileCardSeed {
         for trip in trips {
             if let id = trip.id, !settings.pinnedTripIds.contains(id) { settings.togglePinnedTrip(id) }
         }
-        if ProcessInfo.processInfo.arguments.contains("-seed-profile-no-cover") {
-            ProfilePhotoStore.shared.wipe()
-            // Чистое состояние приглашения: прошлый прогон мог его скрыть.
-            UserDefaults.standard.removeObject(forKey: ProfileCoverPrompt.hiddenKey)
-        } else if ProfilePhotoStore.shared.photos.isEmpty {
+        if !ProcessInfo.processInfo.arguments.contains("-seed-profile-no-cover"),
+           ProfilePhotoStore.shared.photos.isEmpty {
             for index in 0..<4 {
                 if let data = image(index) { try? await ProfilePhotoStore.shared.add(data) }
             }
