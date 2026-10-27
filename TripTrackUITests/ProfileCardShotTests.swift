@@ -58,11 +58,20 @@ final class ProfileCardShotTests: XCTestCase {
 
     func testRoadDawnLight() { roadFrame(time: "dawn", theme: "light", sky: 0xF3BF9F) }
     func testRoadDayLight() { roadFrame(time: "day", theme: "light", sky: 0x74CAD7) }
-    func testRoadSunsetLight() { roadFrame(time: "sunset", theme: "light", sky: 0xE87346) }
+    func testRoadSunsetLight() { roadFrame(time: "sunset", theme: "light", sky: 0x5B4373) }
     func testRoadNightLight() { roadFrame(time: "night", theme: "light", sky: 0x243450) }
     func testRoadDawnDark() { roadFrame(time: "dawn", theme: "dark", sky: 0xF3BF9F) }
     func testRoadDayDark() { roadFrame(time: "day", theme: "dark", sky: 0x74CAD7) }
-    func testRoadSunsetDark() { roadFrame(time: "sunset", theme: "dark", sky: 0xE87346) }
+    func testRoadSunsetDark() { roadFrame(time: "sunset", theme: "dark", sky: 0x5B4373) }
+
+    /// Машина с фото: снимок занимает всю полосу, сцены вокруг нет (вариант А
+    /// 27 окт 2026). В углу полосы — небо самого снимка, а не ночное.
+    func testRoadPhotoFillsTheBand() {
+        launchOwn(theme: "dark", extra: ["-seed-profile-no-cover", "-debug-road-time", "night", "-seed-garage-photo"])
+        XCTAssertTrue(app.buttons["profile_photos_add"].firstMatch.waitForExistence(timeout: 30))
+        assertSky(0x8FB3CF)
+        capture("road-photo-night-dark")
+    }
     func testRoadNightDark() { roadFrame(time: "night", theme: "dark", sky: 0x243450) }
 
     func testRoadYieldsToChosenFreeBackground() {

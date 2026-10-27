@@ -31,8 +31,17 @@ struct ProfileGarageHeader: View {
     private var pageHeight: CGFloat {
         if onCoverEdge { return 188 }
         guard roadTime != nil else { return width * 0.78 + 62 }
-        let stageHeight = vehicles.map { VehicleStage.height(for: $0.avatarImageName, width: width) }.max() ?? 0
-        return stageHeight + 20 + roadCaptionHeight
+        return roadStageHeight + 20 + roadCaptionHeight
+    }
+    /// One band height on every page of the pager: the tallest drawn car.
+    /// A photo fills the band, a sprite stands on its floor.
+    private var roadStageHeight: CGFloat {
+        if isForeign, let v = publicVehicle {
+            return VehicleStage.height(
+                for: VehicleAvatar.assetName(style: v.avatarStyle, avatar: v.avatarEmoji), width: width)
+        }
+        return vehicles.map { VehicleStage.height(for: $0.avatarImageName, width: width) }.max()
+            ?? VehicleStage.height(for: nil, width: width)
     }
 
     var body: some View {
@@ -85,14 +94,13 @@ struct ProfileGarageHeader: View {
             onTap(v.id)
         } label: {
             VStack(spacing: 8) {
-                VehicleStage(
-                    assetName: v.avatarImageName, fallbackEmoji: v.avatarEmoji,
-                    style: .effective(id: v.cardStyle, isPlus: plus.isPlus),
-                    finish: .effective(v.paintFinish, isPlus: plus.isPlus), photo: mainPhotos[v.id], width: width)
-                    .frame(height: onCoverEdge ? 155 : nil, alignment: .bottom)
-                    .padding(.vertical, roadTime == nil ? 0 : 10)
-                    .frame(maxWidth: .infinity)
-                    .background { if let roadTime { ProfileRoadScene(time: roadTime) } }
+                let photo = mainPhotos[v.id]
+                band(photo: photo.map { VehiclePhotoImage.Source.local(filename: $0.filename) }) {
+                    VehicleStage(
+                        assetName: v.avatarImageName, fallbackEmoji: v.avatarEmoji,
+                        style: .effective(id: v.cardStyle, isPlus: plus.isPlus),
+                        finish: .effective(v.paintFinish, isPlus: plus.isPlus), photo: photo, width: width)
+                }
                 let layout = onCoverEdge ? AnyLayout(HStackLayout(spacing: 5)) : AnyLayout(VStackLayout(spacing: 8))
                 layout {
                     name(v.name.isEmpty ? AppStrings.defaultVehicleName(lang.language) : v.name)
@@ -114,16 +122,15 @@ struct ProfileGarageHeader: View {
             onTap(v.id)
         } label: {
             VStack(spacing: 8) {
-                VehicleStage(
-                    assetName: VehicleAvatar.assetName(style: v.avatarStyle, avatar: v.avatarEmoji),
-                    fallbackEmoji: v.avatarEmoji,
-                    style: .effective(id: v.cardStyle, isPlus: showsPaidCosmetics),
-                    finish: .effective(v.paintFinish, isPlus: showsPaidCosmetics),
-                    remotePhoto: v.mainPhoto.flatMap { $0.isEmpty ? nil : URL(string: $0) }, width: width)
-                    .frame(height: onCoverEdge ? 155 : nil, alignment: .bottom)
-                    .padding(.vertical, roadTime == nil ? 0 : 10)
-                    .frame(maxWidth: .infinity)
-                    .background { if let roadTime { ProfileRoadScene(time: roadTime) } }
+                let photo = v.mainPhoto.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+                band(photo: photo.map { VehiclePhotoImage.Source.remote(url: $0) }) {
+                    VehicleStage(
+                        assetName: VehicleAvatar.assetName(style: v.avatarStyle, avatar: v.avatarEmoji),
+                        fallbackEmoji: v.avatarEmoji,
+                        style: .effective(id: v.cardStyle, isPlus: showsPaidCosmetics),
+                        finish: .effective(v.paintFinish, isPlus: showsPaidCosmetics),
+                        remotePhoto: photo, width: width)
+                }
                 let layout = onCoverEdge ? AnyLayout(HStackLayout(spacing: 5)) : AnyLayout(VStackLayout(spacing: 8))
                 layout {
                     name(v.name)
@@ -136,6 +143,33 @@ struct ProfileGarageHeader: View {
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier("garage_header_vehicle")
+    }
+
+    /// The car above its name. On the road a photo fills the band edge to
+    /// edge and the scene steps aside: a daytime photo pasted onto the drawn
+    /// night road read as a collage, with strips of the scene left round it
+    /// like a frame (owner on 0.9.2 (98), 27 Oct 2026). The road is only for
+    /// a drawn car. Off the road the stage draws the photo itself, as before.
+    @ViewBuilder
+    private func band(photo: VehiclePhotoImage.Source?, stage: () -> VehicleStage) -> some View {
+        if let roadTime {
+            if let photo {
+                Color.clear
+                    .frame(maxWidth: .infinity).frame(height: roadStageHeight + 20)
+                    .overlay { VehiclePhotoImage(source: photo, maxSize: 460) }
+                    .clipped()
+            } else {
+                stage()
+                    .frame(height: roadStageHeight, alignment: .bottom)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background { ProfileRoadScene(time: roadTime) }
+            }
+        } else {
+            stage()
+                .frame(height: onCoverEdge ? 155 : nil, alignment: .bottom)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     private func name(_ value: String) -> some View {
