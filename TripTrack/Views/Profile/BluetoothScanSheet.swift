@@ -12,7 +12,7 @@ struct BluetoothScanSheet: View {
     @ObservedObject private var bluetoothDetector = AutoTripService.shared.bluetoothDetector
     @ObservedObject private var settings = SettingsManager.shared
 
-    /// The Bluetooth output the phone is playing through, kept live.
+    /// The Bluetooth or CarPlay output the phone is playing through, kept live.
     ///
     /// This used to be read straight from `AudioRouteDetector` inside `body`.
     /// That detector publishes nothing, so the section it feeds was frozen at
@@ -20,6 +20,7 @@ struct BluetoothScanSheet: View {
     /// likeliest moment to open this sheet is right before the stereo
     /// connects, which is exactly the case it missed.
     @State private var currentAudioOutput: String?
+    @State private var currentAudioIsCarPlay = false
 
     // The two states want opposite sizing, so each carries its own: the scan
     // list keeps a fixed detent, the BT-off message is measured. Flipping
@@ -31,7 +32,7 @@ struct BluetoothScanSheet: View {
 
         Group {
             // Пока система не ответила, показываем поиск, а не «выключен».
-            if !bluetoothDetector.isBluetoothOff {
+            if currentAudioOutput != nil || !bluetoothDetector.isBluetoothOff {
                 VStack(spacing: 0) {
                     header(c: c, l: l)
                     scanContent(c: c, l: l)
@@ -55,12 +56,12 @@ struct BluetoothScanSheet: View {
         }
         .presentationDragIndicator(.visible)
         .task {
-            currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
+            readCurrentAudioOutput()
             bluetoothDetector.startScanning()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: AudioRouteDetector.routeChangeNotification)) { _ in
-            currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
+            readCurrentAudioOutput()
         }
     }
 
@@ -152,7 +153,12 @@ struct BluetoothScanSheet: View {
         }
     }
 
-    // MARK: - Current Audio Output (classic BT — e.g. stereo already playing)
+    // MARK: - Current Audio Output (Bluetooth or CarPlay)
+
+    private func readCurrentAudioOutput() {
+        currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
+        currentAudioIsCarPlay = AudioRouteDetector.currentOutputIsCarPlay()
+    }
 
     @ViewBuilder
     private func audioOutputSection(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
@@ -178,7 +184,7 @@ struct BluetoothScanSheet: View {
                                 .foregroundStyle(c.text)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
-                            Text(AppStrings.bluetoothAudio(l))
+                            Text(currentAudioIsCarPlay ? "CarPlay" : AppStrings.bluetoothAudio(l))
                                 .font(.inter(12))
                                 .foregroundStyle(c.textTertiary)
                         }

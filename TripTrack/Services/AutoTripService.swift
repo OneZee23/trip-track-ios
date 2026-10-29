@@ -22,6 +22,11 @@ final class AutoTripService: ObservableObject {
     private let notificationManager = NotificationManager.shared
     private let settings = SettingsManager.shared
 
+    private var linkedStereoConnected: Bool {
+        guard let name = audioRouteDetector.currentBluetoothOutput() else { return false }
+        return settings.isSavedBluetoothDevice(name: name)
+    }
+
     private var autoStopTimer: Timer?
     private var notificationObservers: [Any] = []
     private var keepAliveLocationManager: CLLocationManager?
@@ -120,7 +125,12 @@ final class AutoTripService: ObservableObject {
         guard settings.autoRecordMode != .off else { return }
 
         motionDetector.queryRecentAutomotive { [weak self] isAutomotive in
-            guard let self, isAutomotive else { return }
+            guard let self,
+                  AutoTripPolicy.motionSignalStartsTrip(
+                    trigger: self.settings.autoRecordTrigger,
+                    isAutomotive: isAutomotive,
+                    linkedStereoConnected: self.linkedStereoConnected
+                  ) else { return }
             if self.mapViewModel != nil {
                 self.handleAutomotiveDetected()
             } else {
@@ -142,10 +152,15 @@ final class AutoTripService: ObservableObject {
         guard probe.authorizationStatus == .authorizedAlways else { return }
 
         let delegate = KeepAliveLocationDelegate { [weak self] in
-            // Woken by significant location change — check for automotive activity
-            self?.motionDetector.queryRecentAutomotive { isAutomotive in
-                guard isAutomotive else { return }
-                self?.handleAutomotiveDetected()
+            // Woken by significant location change — check motion and the linked stereo.
+            self?.motionDetector.queryRecentAutomotive { [weak self] isAutomotive in
+                guard let self,
+                      AutoTripPolicy.motionSignalStartsTrip(
+                        trigger: self.settings.autoRecordTrigger,
+                        isAutomotive: isAutomotive,
+                        linkedStereoConnected: self.linkedStereoConnected
+                      ) else { return }
+                self.handleAutomotiveDetected()
             }
         }
         let manager = CLLocationManager()
@@ -174,6 +189,15 @@ final class AutoTripService: ObservableObject {
     private func handleAutomotiveDetected() {
         guard let vm = mapViewModel else {
             autoLog.notice("[auto.detected.skip] reason=no_view_model")
+            return
+        }
+
+        guard AutoTripPolicy.motionSignalStartsTrip(
+            trigger: settings.autoRecordTrigger,
+            isAutomotive: true,
+            linkedStereoConnected: linkedStereoConnected
+        ) else {
+            autoLog.notice("[auto.detected.skip] reason=stereo_only_without_stereo")
             return
         }
 

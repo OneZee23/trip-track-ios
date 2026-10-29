@@ -2225,13 +2225,47 @@ enum AppStrings {
     static func nearbyDevices(_ lang: LanguageManager.Language) -> String {
         tr(lang, "nearbyDevices", ru: "Устройства рядом", en: "Nearby devices")
     }
-    /// Автостарт идёт и по датчику движения, без магнитолы
+    /// В режиме «Движение или магнитола» автостарт идёт и по датчику движения
     /// (`AutoTripService.handleAutomotiveDetected`): человек должен знать, что
     /// запись начнётся и в такси, и в чужой машине.
     static func autoRecordDescription(_ lang: LanguageManager.Language) -> String {
         tr(lang, "autoRecordDescription",
            ru: "Запись начнётся сама, когда телефон заметит поездку на машине или подключится к магнитоле",
            en: "Recording starts by itself when the phone senses a drive or connects to the car stereo")
+    }
+    static func autoRecordTriggerSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerSection", ru: "Когда начинать", en: "When to start")
+    }
+    static func autoRecordTriggerMotion(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerMotion", ru: "Движение или магнитола", en: "Motion or stereo")
+    }
+    static func autoRecordTriggerStereo(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerStereo", ru: "Только магнитола", en: "Stereo only")
+    }
+    static func autoRecordTriggerMotionCaption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerMotionCaption",
+           ru: "Датчик движения срабатывает и в такси, и когда вы пассажир",
+           en: "The motion sensor also fires in a taxi or when you ride as a passenger")
+    }
+    static func autoRecordTriggerStereoCaption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerStereoCaption",
+           ru: "Запись начнётся, только когда телефон подключится к привязанной магнитоле или CarPlay",
+           en: "Recording starts only when the phone connects to a linked stereo or CarPlay")
+    }
+    static func autoRecordTriggerNeedsStereo(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerNeedsStereo",
+           ru: "Чтобы выбрать «Только магнитола», привяжите магнитолу выше",
+           en: "Link a stereo above to choose “Stereo only”")
+    }
+    static func autoRecordTriggerStereoMissing(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordTriggerStereoMissing",
+           ru: "Магнитола не привязана, автозапись не начнётся",
+           en: "No stereo linked, so auto-record won't start")
+    }
+    static func autoRecordStereoOnlyDescription(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "autoRecordStereoOnlyDescription",
+           ru: "Запись начнётся сама, когда телефон подключится к привязанной магнитоле",
+           en: "Recording starts by itself when the phone connects to a linked stereo")
     }
     /// С 0.8.1 «Напоминание» не ждёт нажатия: запись идёт сразу, черновиком
     /// (`AutoTripService`, `startRecording(confirmation: .draft)`). Прежний
