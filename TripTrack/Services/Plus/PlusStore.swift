@@ -181,6 +181,7 @@ final class PlusStore: ObservableObject {
     private var productRequestGeneration: UInt64 = 0
     private let fetchProducts: @MainActor () async throws -> [Product]
     private let fetchIntroEligibility: @MainActor ([Product]) async -> Bool
+    private let readStorefrontCode: @MainActor () async -> String?
     private var recheckTask: Task<Void, Never>?
     private var foregroundObserver: NSObjectProtocol?
     private var foregroundTask: Task<Void, Never>?
@@ -239,10 +240,14 @@ final class PlusStore: ObservableObject {
         fetchIntroEligibility: @escaping @MainActor ([Product]) async -> Bool = { products in
             guard let subscription = products.compactMap(\.subscription).first else { return false }
             return await subscription.isEligibleForIntroOffer
+        },
+        readStorefrontCode: @escaping @MainActor () async -> String? = {
+            await Storefront.current?.countryCode
         }
     ) {
         self.fetchProducts = fetchProducts
         self.fetchIntroEligibility = fetchIntroEligibility
+        self.readStorefrontCode = readStorefrontCode
     }
 
     // MARK: - Чистые правила
@@ -371,8 +376,26 @@ final class PlusStore: ObservableObject {
             try? await Task.sleep(
                 nanoseconds: UInt64(Self.foregroundDebounce * 1_000_000_000))
             guard !Task.isCancelled else { return }
+            await self?.refreshUnknownStorefront()
             await self?.refreshEntitlements()
         }
+    }
+
+    /// Витрину, которую этот процесс так и не узнал, спросить ещё раз.
+    ///
+    /// Первый запуск засевает «прятать ли PRO» по региону ТЕЛЕФОНА, а
+    /// `Storefront.current` офлайн молчит. Человек с телефоном в регионе
+    /// «Россия» и иностранным Apple ID, запустивший приложение без сети, до
+    /// 0.9.3 не видел PRO, пока процесс не умрёт, а живёт он сутками (разбор
+    /// покупок 29 окт 2026). Известная витрина не переспрашивается: её смены
+    /// приносит `Storefront.updates`.
+    /// - Returns: узнали ли витрину сейчас.
+    @discardableResult
+    func refreshUnknownStorefront() async -> Bool {
+        guard storefrontCountry == nil else { return false }
+        guard let reload = storefrontDidChange(await readStorefrontCode()) else { return false }
+        await reload.value
+        return true
     }
 
     /// Витрина, продукты, права — в этом порядке: цена и наличие продуктов
@@ -681,7 +704,7 @@ final class PlusStore: ObservableObject {
     // MARK: - Витрина
 
     private func readStorefront() async {
-        applyStorefront(await Storefront.current?.countryCode)
+        applyStorefront(await readStorefrontCode())
     }
 
     /// Смена страны меняет и каталог. Иначе PRO уже виден на новой витрине,

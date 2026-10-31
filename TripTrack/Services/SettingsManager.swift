@@ -358,6 +358,12 @@ final class SettingsManager: ObservableObject {
             UserDefaults.standard.set(autoRecordMode.rawValue, forKey: "autoRecordMode")
         }
     }
+    @Published var autoRecordTrigger: AutoRecordTrigger = .motionOrStereo {
+        didSet {
+            guard !isLoadingAutoRecord else { return }
+            UserDefaults.standard.set(autoRecordTrigger.rawValue, forKey: "autoRecordTrigger")
+        }
+    }
     @Published var autoStopTimeout: Int = 3 {
         didSet {
             guard !isLoadingAutoRecord else { return }
@@ -554,6 +560,7 @@ final class SettingsManager: ObservableObject {
            let mode = AutoRecordMode(rawValue: raw) {
             autoRecordMode = mode
         }
+        autoRecordTrigger = AutoRecordTrigger.parse(UserDefaults.standard.string(forKey: "autoRecordTrigger"))
         let timeout = UserDefaults.standard.integer(forKey: "autoStopTimeout")
         autoStopTimeout = timeout > 0 ? timeout : 3
         if let data = UserDefaults.standard.data(forKey: "savedBluetoothDevices"),

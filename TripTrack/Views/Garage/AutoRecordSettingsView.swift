@@ -108,7 +108,9 @@ struct AutoRecordSettingsView: View {
 
             Rectangle().fill(c.border).frame(height: 1)
 
-            Text(AppStrings.autoRecordDescription(l))
+            Text(settings.autoRecordTrigger == .stereoOnly
+                 ? AppStrings.autoRecordStereoOnlyDescription(l)
+                 : AppStrings.autoRecordDescription(l))
                 .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
         }
@@ -124,6 +126,15 @@ struct AutoRecordSettingsView: View {
             .padding(.top, 6)
             .padding(.horizontal, 2)
         stereoCard(c: c, l: l)
+
+        GarageSectionLabel(text: AppStrings.autoRecordTriggerSection(l))
+            .padding(.top, 6)
+            .padding(.horizontal, 2)
+        triggerSegment(c: c, l: l)
+        Text(triggerCaption(l: l))
+            .font(.inter(12))
+            .foregroundStyle(c.textTertiary)
+            .padding(.horizontal, 2)
 
         GarageSectionLabel(text: AppStrings.autoRecordMode(l))
             .padding(.top, 6)
@@ -207,28 +218,91 @@ struct AutoRecordSettingsView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Mode Segment (custom, Figma style)
+    // MARK: - Trigger Segment
 
-    private func modeSegment(c: AppTheme.Colors) -> some View {
-        let l = lang.language
-        return HStack(spacing: 4) {
-            modeSegmentButton(title: AppStrings.autoRecordRemind(l), mode: .remind, c: c)
-            modeSegmentButton(title: AppStrings.autoRecordAuto(l), mode: .auto, c: c)
+    private func triggerSegment(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack(spacing: 4) {
+            segmentButton(
+                title: AppStrings.autoRecordTriggerMotion(l),
+                isSelected: settings.autoRecordTrigger == .motionOrStereo,
+                c: c
+            ) {
+                settings.autoRecordTrigger = .motionOrStereo
+            }
+            .accessibilityIdentifier("auto_record_trigger_motion")
+
+            segmentButton(
+                title: AppStrings.autoRecordTriggerStereo(l),
+                isSelected: settings.autoRecordTrigger == .stereoOnly,
+                // Уже выбранный вариант не гаснет, даже если магнитолу
+                // отвязали: блёклая подложка читалась бы «не выбрано», а
+                // о том, что запись не начнётся, говорит подпись ниже.
+                isEnabled: !settings.savedBluetoothDevices.isEmpty
+                    || settings.autoRecordTrigger == .stereoOnly,
+                c: c
+            ) {
+                settings.autoRecordTrigger = .stereoOnly
+            }
+            .accessibilityIdentifier("auto_record_trigger_stereo")
         }
         .padding(3)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func modeSegmentButton(title: String, mode: AutoRecordMode, c: AppTheme.Colors) -> some View {
-        let isSelected = settings.autoRecordMode == mode
+    private func triggerCaption(l: LanguageManager.Language) -> String {
+        switch (settings.autoRecordTrigger, settings.savedBluetoothDevices.isEmpty) {
+        case (.motionOrStereo, false): return AppStrings.autoRecordTriggerMotionCaption(l)
+        case (.motionOrStereo, true): return AppStrings.autoRecordTriggerNeedsStereo(l)
+        case (.stereoOnly, false): return AppStrings.autoRecordTriggerStereoCaption(l)
+        case (.stereoOnly, true): return AppStrings.autoRecordTriggerStereoMissing(l)
+        }
+    }
+
+    // MARK: - Mode Segment (custom, Figma style)
+
+    private func modeSegment(c: AppTheme.Colors) -> some View {
+        let l = lang.language
+        return HStack(spacing: 4) {
+            segmentButton(
+                title: AppStrings.autoRecordRemind(l),
+                isSelected: settings.autoRecordMode == .remind,
+                c: c
+            ) {
+                settings.autoRecordMode = .remind
+                AutoTripService.shared.startIfNeeded()
+            }
+            segmentButton(
+                title: AppStrings.autoRecordAuto(l),
+                isSelected: settings.autoRecordMode == .auto,
+                c: c
+            ) {
+                settings.autoRecordMode = .auto
+                AutoTripService.shared.startIfNeeded()
+            }
+        }
+        .padding(3)
+        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func segmentButton(
+        title: String,
+        isSelected: Bool,
+        isEnabled: Bool = true,
+        c: AppTheme.Colors,
+        action: @escaping () -> Void
+    ) -> some View {
         return Button {
             Haptics.selection()
-            settings.autoRecordMode = mode
-            AutoTripService.shared.startIfNeeded()
+            action()
         } label: {
             Text(title)
                 .font(.inter(14, weight: isSelected ? .bold : .medium))
                 .foregroundStyle(isSelected ? c.text : c.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                // «Движение или магнитола» жирным занимает всю половину, и
+                // без полей буквы ложились на край подложки.
+                .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .background {
@@ -245,6 +319,11 @@ struct AutoRecordSettingsView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+        // Выбранный вариант виден глазу подложкой; VoiceOver обязан
+        // услышать то же самое.
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Auto-Stop Timeout

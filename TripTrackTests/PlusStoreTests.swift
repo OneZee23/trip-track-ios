@@ -201,6 +201,41 @@ final class PlusStoreTests: XCTestCase {
         XCTAssertEqual(requests, 2)
     }
 
+    /// Запуск без сети на телефоне с регионом «Россия»: витрина неизвестна, и
+    /// PRO спрятан по региону телефона. Возвращение в приложение спрашивает
+    /// витрину снова, а уже известную не трогает (разбор 29 окт 2026).
+    func testUnknownStorefrontIsAskedAgainOnReturn() async {
+        let restore = savedStorefront()
+        defer { restore() }
+        PlusAccess.shared.storefrontHidesPlus = true
+        var answer: String?
+        var reads = 0
+        var catalogs = 0
+        let store = PlusStore(fetchProducts: {
+            catalogs += 1
+            return []
+        }, readStorefrontCode: {
+            reads += 1
+            return answer
+        })
+
+        let silent = await store.refreshUnknownStorefront()
+        XCTAssertFalse(silent)
+        XCTAssertNil(store.storefrontCountry)
+        XCTAssertTrue(PlusAccess.shared.storefrontHidesPlus, "молчание Apple ничего не открывает")
+
+        answer = "USA"
+        let learned = await store.refreshUnknownStorefront()
+        XCTAssertTrue(learned)
+        XCTAssertEqual(store.storefrontCountry, "USA")
+        XCTAssertFalse(PlusAccess.shared.storefrontHidesPlus)
+        XCTAssertEqual(catalogs, 1, "новая витрина перечитывает каталог")
+
+        let again = await store.refreshUnknownStorefront()
+        XCTAssertFalse(again)
+        XCTAssertEqual(reads, 2, "известную витрину не переспрашиваем")
+    }
+
     /// Запрос, начатый пейволом/холодным стартом, не принадлежит задаче
     /// события витрины и не отменяется вместе с ней. Его поздний ответ всё
     /// равно не должен перезаписать новый каталог.

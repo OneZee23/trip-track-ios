@@ -6,6 +6,28 @@ import Foundation
 /// place instead of grepping for `5 * 60` across seven files.
 enum AutoTripPolicy {
 
+    // MARK: - Что запускает поездку без магнитолы
+
+    /// Может ли сигнал движения (живой датчик или пробуждение по significant
+    /// location change) начать поездку. Путь магнитолы, событие аудиомаршрута,
+    /// живёт отдельно и одинаков для обоих режимов.
+    ///
+    /// «Только магнитола» (0.9.3): датчик «automotive» срабатывает и в такси,
+    /// и в автобусе, и у пассажира, а об этом просили двое (3 и 29 окт 2026).
+    /// Без магнитолы движение там не значит ничего, а с подключённой
+    /// привязанной магнитолой пробуждение начинает поездку, даже если датчик
+    /// ещё не решил, что это машина.
+    static func motionSignalStartsTrip(
+        trigger: AutoRecordTrigger,
+        isAutomotive: Bool,
+        linkedStereoConnected: Bool
+    ) -> Bool {
+        switch trigger {
+        case .motionOrStereo: return isAutomotive
+        case .stereoOnly: return linkedStereoConnected
+        }
+    }
+
     // MARK: - Что делать, когда магнитола отключилась
 
     /// Решение об отключении Bluetooth, вынесенное из `AutoTripService`.
