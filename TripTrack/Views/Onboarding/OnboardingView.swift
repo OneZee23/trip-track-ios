@@ -594,6 +594,7 @@ struct OnboardingView: View {
             Image("HiddenEdgesIllustration")
                 .resizable().interpolation(.none).scaledToFit()
                 .frame(width: 210, height: 210)
+                .id(scheme)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .padding(.top, 48).accessibilityHidden(true)
             Text(AppStrings.hiddenQuestionTitle(l))

@@ -46,6 +46,7 @@ final class PlacesTabViewModel: ObservableObject {
     private let repository: TripRepository
     private var cancellables = Set<AnyCancellable>()
     private var suggestionTask: Task<Void, Never>?
+    private var filmingHiddenTrips: [Trip] = []
 
     /// Окно склейки заказов на пересчёт подсказок. Не `let` — тест не должен
     /// ждать треть секунды на каждую проверку.
@@ -59,6 +60,10 @@ final class PlacesTabViewModel: ObservableObject {
         // `$places`, значила бы два reload() на одну и ту же правку.
         NotificationCenter.default.publisher(for: .placesChanged)
             .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reload() }
+            .store(in: &cancellables)
+        FilmingModeManager.shared.$state
+            .dropFirst()
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
         // Подсказки живут не только местами: новая поездка добавляет конец
@@ -85,14 +90,47 @@ final class PlacesTabViewModel: ObservableObject {
     func reload() {
         let places = manager.places
         let passesByPlace = manager.passes(for: places.map(\.id))
-        items = PlaceListItem.sorted(places.map { place in
+        let builtItems = PlaceListItem.sorted(places.map { place in
             PlaceListItem.build(place: place, passes: passesByPlace[place.id] ?? [])
         })
-        lastPass = freshestReading(passesByPlace)
+        if FilmingModeManager.shared.isActive {
+            filmingHiddenTrips = loadTripsWithHiddenParts()
+            let zone = HomeSettings.load().activeZone
+            let edge = PrivacySettings.load().edgeMetres
+            items = builtItems.filter {
+                !FilmingModeFilters.hidesPlace($0.place.coordinate, trips: filmingHiddenTrips,
+                                               homeZone: zone, defaultEdgeMetres: edge)
+            }
+        } else {
+            items = builtItems
+        }
+        let visiblePlaceIDs = Set(items.map(\.place.id))
+        let visiblePasses = passesByPlace.filter { visiblePlaceIDs.contains($0.key) }
+        lastPass = freshestReading(visiblePasses)
         // Поднимаются только когда их будут показывать: у человека с сотней
         // мест эта секция не рисуется, и выборка ему ни к чему.
         recentTrips = items.isEmpty ? repository.fetchTrips(limit: Self.recentTripsShown, offset: 0) : []
         refreshSuggestions()
+    }
+
+    private func loadTripsWithHiddenParts() -> [Trip] {
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        let store = CoreDataTripRepository(persistenceController: .shared)
+        var trips: [Trip] = []
+        var offset = 0
+        let pageSize = 500
+        while true {
+            let page = repository.fetchTrips(limit: pageSize, offset: offset)
+            for summary in page {
+                let parts = summary.hiddenParts ?? TripHiddenParts()
+                guard (parts.startMetres ?? defaults) > 0 || (parts.endMetres ?? defaults) > 0
+                        || !parts.sections.isEmpty else { continue }
+                if let trip = store.fetchTripDetail(id: summary.id) { trips.append(trip) }
+            }
+            guard page.count == pageSize else { break }
+            offset += pageSize
+        }
+        return trips
     }
 
     /// Самый свежий проезд по всем местам — и только если он ещё не погашен.
@@ -149,7 +187,15 @@ final class PlacesTabViewModel: ObservableObject {
             let taken = Set(self.manager.places.map(\.id)).union(self.repository.checkpointPlaceIds())
             let found = await PlaceSuggestions.buildDetached(previews: previews, taken: taken)
             guard !Task.isCancelled else { return }
-            self.suggestions = found.map { suggestion in
+            let isFilming = FilmingModeManager.shared.isActive
+            let hiddenTrips = self.filmingHiddenTrips
+            let homeZone = HomeSettings.load().activeZone
+            let defaultEdge = PrivacySettings.load().edgeMetres
+            self.suggestions = found.filter { suggestion in
+                !isFilming || !FilmingModeFilters.hidesPlace(
+                    suggestion.coordinate, trips: hiddenTrips,
+                    homeZone: homeZone, defaultEdgeMetres: defaultEdge)
+            }.map { suggestion in
                 var named = suggestion
                 // Только кэш геокодера: своего запроса подсказка не делает —
                 // пять сетевых кругов на открытие вкладки. Нет имени — нет и

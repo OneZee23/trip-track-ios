@@ -1019,6 +1019,7 @@ struct PublishTripSheet: View {
                     }.padding(12).background(c.card, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(PressableCardStyle())
+                .accessibilityLabel(AppStrings.hiddenPublishRow(language, summary: hiddenSummary(trip)))
                 .accessibilityIdentifier("publish_hidden_row")
                 if let quickHideEdge {
                     HStack {
@@ -1028,8 +1029,17 @@ struct PublishTripSheet: View {
                         Button {
                             Haptics.tap(); onQuickHide(quickHideEdge)
                         } label: {
-                            Text(AppStrings.hiddenQuickHide(language)).font(.inter(12.5, weight: .bold)).foregroundStyle(AppTheme.accent)
-                        }.buttonStyle(PressableCardStyle()).accessibilityIdentifier("publish_quick_hide")
+                            Text(AppStrings.hiddenQuickHide(
+                                language,
+                                distance: Measure.radius(metres: 500, unit: distanceUnit, lang: language)
+                            )).font(.inter(12.5, weight: .bold)).foregroundStyle(AppTheme.accent)
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .accessibilityLabel(AppStrings.hiddenQuickHide(
+                            language,
+                            distance: Measure.radius(metres: 500, unit: distanceUnit, lang: language)
+                        ))
+                        .accessibilityIdentifier("publish_quick_hide")
                     }.padding(12).background(c.cardAlt, in: RoundedRectangle(cornerRadius: 14))
                 }
             }
@@ -1103,6 +1113,7 @@ struct PublishTripSheet: View {
         // short confirmation that left half a screen of empty card under the
         // buttons.
         .contentSizedSheet(background: c.card)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("publish_trip_sheet")
         .task(id: trip?.id) {
             guard let trip else { quickHideEdge = nil; return }
@@ -1130,8 +1141,8 @@ struct PublishTripSheet: View {
         let defaults = PrivacySettings.load().edgeMetres ?? 0
         func value(_ metres: Int?) -> String {
             let metres = metres ?? defaults
-            return metres == 0 ? AppStrings.hiddenNone(language) :
-                Measure.distance(metres: Double(metres), unit: distanceUnit, lang: language)
+            return metres == 0 ? "" :
+                Measure.radius(metres: Double(metres), unit: distanceUnit, lang: language)
         }
         return AppStrings.hiddenSummary(
             language,

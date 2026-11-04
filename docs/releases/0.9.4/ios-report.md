@@ -26,7 +26,9 @@
   photos; poster paths split at breaks.
 - Added the filming-mode state model and screen-capture observer, plus manual
   and automatic controls in Privacy Settings. The own trip detail masks hidden
-  route sections and hidden photos while filming mode is active.
+  route sections and hidden photos while filming mode is active. Atlas builds
+  from a separate masked public-preview layer and filters its photo pins with
+  the same privacy resolution.
 - Added the current privacy and filming strings to all 13 language tables.
   Localization tests enforce matching keys and number/unit discipline.
 - Added the «Скрытые участки и режим съёмки (0.9.4)» rules to `CLAUDE.md`.
@@ -49,59 +51,24 @@
   `HiddenPhotoSyncTests`, `PublicJourneyDTOTests`,
   `MapSnapshotContentCacheTests`, `HiddenPartsPosterTests`,
   `FilmingModeStateTests`, `HiddenPartsEditorModelTests`,
-  `HiddenPartsEditorShotTests`, `HiddenPartsSurfaceShotTests`.
+  `FilmingModeFiltersTests`, `HiddenPartsEditorShotTests`,
+  `HiddenPartsSurfaceShotTests`.
+  `FilmingModeShotTests` captures Atlas and Places with the mode off and on.
 
 ## Verification
 
-- The bridge ran `xcodegen generate` twice and `build-for-testing`; the latest
-  build passed.
-- Passed bridge test runs: `HiddenPartsVectorTests`,
-  `TripSyncPayloadMapperTests`, `HiddenPhotoSyncTests`,
-  `PublicJourneyDTOTests`, `FeedPreviewCachePerfTests`,
-  `MapSnapshotContentCacheTests`, `FilmingModeStateTests`,
-  `PrivacyFlowE2ETests`, `HiddenPartsPosterTests`, and `LocalizationTests`.
-- The combined regression request for all nine classes also passed:
-  `HiddenPartsVectorTests`, `TripSyncPayloadMapperTests`,
-  `HiddenPhotoSyncTests`, `PublicJourneyDTOTests`,
-  `MapSnapshotContentCacheTests`, `FilmingModeStateTests`,
-  `PrivacyFlowE2ETests`, `HiddenPartsPosterTests`, and `LocalizationTests`.
-- The first localization run caught the fixed-radius labels in the existing
-  number/unit guard. The three preset keys now document why their units are
-  fixed; the localization rerun passed.
-- Build/test requests and results are in `.codex-work`; tests ran through the
-  supplied simulator bridge.
+- The bridge ran `xcodegen generate` twice and `build-for-testing`; the build
+  passed.
+- `FilmingModeFiltersTests`, `FilmingModeStateTests`,
+  `HiddenPartsEditorModelTests`, `HiddenPartsCopyTests`, `LocalizationTests`
+  and `AtlasPresentationTests` passed.
+- `HiddenPartsSurfaceShotTests` passed the question, onboarding, privacy,
+  publish and own-map captures in light and dark.
+- `FilmingModeShotTests` passed Atlas and Places captures with filming mode
+  off and on. The inspected images hide the home marker, home-area places and
+  the photo pin in a hidden run when filming mode is on.
+- `LocalizationTests` passed its 13-language key and number/unit checks.
+  UI-test API traffic points to localhost.
+- Capture images and `manifest.json` are in `.codex-work/shots/`.
 
-## This run
-
-- Added the staged «Скрыть от других» editor and its trip menu, edit sheet,
-  publish sheet and own-trip-card entry points. Middle sections snap to route
-  points, merge on overlap and can be resized on the trip bar. The number
-  switch previews visible distance and duration.
-- Added Style A to own trip and journey maps and own trip thumbnails. Public
-  previews and journeys split at `previewBreaks`; replay fades at remote
-  recording breaks; missing public routes show «Маршрут скрыт автором».
-- Added the public publish-map preview, hidden-summary row, home/place/previous
-  trip quick-hide hints, one-time privacy question, onboarding art and the
-  complete local privacy section with the home entry.
-- Added the hidden-edges screen copy to all 13 languages, DEBUG seed/open flags,
-  editor/question model tests, and light/dark UI screenshot tests.
-
-## Verification and limits
-
-- The final bridge `build` passed. `HiddenPartsEditorModelTests` and
-  `LocalizationTests` passed, including key parity, translation reachability
-  and number/unit checks.
-- The editor screenshot class passed once and exported fresh/dark, sections and
-  numbers captures. I inspected them against the approved mockups, shortened
-  the map and moved the screen to a full-screen surface. The first captures
-  exposed an empty debug seed; the seed now loads full trip details, and the
-  scroll content has extra room above the home indicator.
-- UI screenshot recaptures and the question/onboarding/settings/publish/map
-  shot class returned `unknown request` from the bridge after those final
-  changes. The latest code builds, but its UI captures still need a bridge run
-  and visual review.
-- App-wide filming filters for Atlas, Places, location dots, galleries and
-  other own surfaces remain in the next run, as scoped by the request.
-
-No version/build number or git state was changed. The UI fixtures use local
-data only. The bridge did not launch the final recapture requests.
+No app version or git state was changed.

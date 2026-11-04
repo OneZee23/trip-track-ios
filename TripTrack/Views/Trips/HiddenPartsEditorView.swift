@@ -14,6 +14,7 @@ struct HiddenPartsEditorView: View {
     @State private var choosing: EdgeChoice?
     @State private var firstSectionFix: TripRouteLocator.Fix?
     @State private var mapShowsPublic = false
+    @State private var hiddenTitlePlace: (isStart: Bool, locality: String)?
 
     fileprivate enum EdgeChoice { case start, end, sectionStart, sectionEnd }
     private let presets: [Int] = [0, 200, 500, 1_000, 2_000]
@@ -103,14 +104,17 @@ struct HiddenPartsEditorView: View {
         .background(c.bg.ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
         .accessibilityIdentifier("hidden_parts_editor")
+        .task(id: trip.id) { hiddenTitlePlace = resolveHiddenTitlePlace() }
+        .onChange(of: draft.startMetres) { _, _ in hiddenTitlePlace = resolveHiddenTitlePlace() }
+        .onChange(of: draft.endMetres) { _, _ in hiddenTitlePlace = resolveHiddenTitlePlace() }
         .sheet(item: Binding(get: { choosing.map(ChoiceSheet.init) }, set: { choosing = $0?.choice })) { sheet in
             SettingsOptionPicker(
                 title: AppStrings.hiddenChooseEdge(lang.language),
                 options: presets,
                 selection: selectedValue(for: sheet.choice),
                 footnote: AppStrings.hiddenTapMapHint(lang.language),
-                badge: { Measure.distance(metres: Double($0), unit: distanceUnit, lang: lang.language) },
-                label: { $0 == 0 ? AppStrings.hiddenNone(lang.language) : Measure.distance(metres: Double($0), unit: distanceUnit, lang: lang.language) },
+                badge: { Measure.radius(metres: Double($0), unit: distanceUnit, lang: lang.language) },
+                label: { $0 == 0 ? AppStrings.hiddenNone(lang.language) : Measure.radius(metres: Double($0), unit: distanceUnit, lang: lang.language) },
                 onSelect: { value in applyPreset(value, to: sheet.choice) },
                 accessibilityPrefix: "hidden_edge"
             )
@@ -213,7 +217,7 @@ struct HiddenPartsEditorView: View {
                 ForEach(presets, id: \.self) { metres in
                     let isSelected = (value ?? PrivacySettings.load().edgeMetres ?? 0) == metres
                     Button { Haptics.selection(); applyPreset(metres, to: choice) } label: {
-                        Text(metres == 0 ? AppStrings.hiddenNone(l) : Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l))
+                        Text(metres == 0 ? AppStrings.hiddenNone(l) : Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l))
                             .font(.inter(12, weight: .semibold)).foregroundStyle(isSelected ? .white : c.text)
                             .padding(.horizontal, 11).padding(.vertical, 9)
                             .background(isSelected ? AppTheme.accent : c.card, in: Capsule())
@@ -282,14 +286,31 @@ struct HiddenPartsEditorView: View {
     }
 
     private var shouldShowTitleHint: Bool {
-        !trip.titleIsCustom && ((draft.startMetres ?? PrivacySettings.load().edgeMetres ?? 0) > 0 || (draft.endMetres ?? PrivacySettings.load().edgeMetres ?? 0) > 0)
+        hiddenTitlePlace != nil
     }
 
     private func titleHint(_ language: LanguageManager.Language) -> String {
-        let hidesStart = (draft.startMetres ?? PrivacySettings.load().edgeMetres ?? 0) > 0
-        return hidesStart
+        return hiddenTitlePlace?.isStart == true
             ? AppStrings.hiddenTitleHintStart(language, title: trip.title ?? "")
             : AppStrings.hiddenTitleHint(language, title: trip.title ?? "")
+    }
+
+    private func resolveHiddenTitlePlace() -> (isStart: Bool, locality: String)? {
+        guard !trip.titleIsCustom, let title = trip.title, !title.isEmpty,
+              let first = trip.trackPoints.first, let last = trip.trackPoints.last else { return nil }
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        let repository = CoreDataTripRepository(persistenceController: .shared)
+        let candidates: [(isStart: Bool, isHidden: Bool, coordinate: CLLocationCoordinate2D)] = [
+            (true, (draft.startMetres ?? defaults) > 0, first.coordinate),
+            (false, (draft.endMetres ?? defaults) > 0, last.coordinate)
+        ]
+        for candidate in candidates where candidate.isHidden {
+            guard let locality = repository.cachedGeocode(for: candidate.coordinate)?.locality,
+                  !locality.isEmpty,
+                  title.localizedCaseInsensitiveContains(locality) else { continue }
+            return (candidate.isStart, locality)
+        }
+        return nil
     }
 
     private func summary(_ l: LanguageManager.Language) -> String {
@@ -298,7 +319,7 @@ struct HiddenPartsEditorView: View {
 
     private func formatMetres(_ value: Int?) -> String {
         let metres = value ?? PrivacySettings.load().edgeMetres ?? 0
-        return metres == 0 ? AppStrings.hiddenNone(lang.language) : Measure.distance(metres: Double(metres), unit: distanceUnit, lang: lang.language)
+        return metres == 0 ? "" : Measure.radius(metres: Double(metres), unit: distanceUnit, lang: lang.language)
     }
 
     private func position(_ date: Date) -> CGFloat {

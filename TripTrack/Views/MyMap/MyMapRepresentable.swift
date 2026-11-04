@@ -455,6 +455,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     /// только на телефоне.
     var placePins: [AtlasPlacePin] = []
     var selectedPlaceId: UUID? = nil
+    var showsUserLocation = true
     /// Подписи регионов следуют языку приложения, который живёт в
     /// EnvironmentObject — координатору до него не дотянуться.
     var language: LanguageManager.Language
@@ -543,7 +544,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         map.pointOfInterestFilter = .excludingAll
         map.showsCompass = false
         map.showsScale = false
-        map.showsUserLocation = true
+        map.showsUserLocation = showsUserLocation
         map.isPitchEnabled = false
         map.isRotateEnabled = false
         map.delegate = context.coordinator
@@ -589,6 +590,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         controller.bottomOverlayMaxWidth = bottomOverlayMaxWidth
         controller.setAppearance(appearance)
         let coordinator = context.coordinator
+        coordinator.showsUserLocation = showsUserLocation
+        map.showsUserLocation = showsUserLocation
         coordinator.syncAppearance(appearance, on: map)
         coordinator.onZoomLevelChange = onZoomLevelChange
         coordinator.onSelectTrip = onSelectTrip
@@ -640,6 +643,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onSelectHint: ((String) -> Void)?
         var onSelectPlace: ((UUID) -> Void)?
         var onSelectHome: (() -> Void)?
+        var showsUserLocation = true
         /// Уже поставленные булавки мест — дифф по ним, а не по числу.
         private var installedPlaces: [AtlasPlacePin] = []
         private var installedPlaceLanguage: LanguageManager.Language?
@@ -1322,17 +1326,18 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // остальное, и приехать после тумана она не имеет права.
             host?.setAppearance(vm.appearance)
             syncAppearance(vm.appearance, on: map)
-            syncData(map, exploration: vm.exploration, revealed: vm.revealed,
+            map.showsUserLocation = showsUserLocation
+            syncData(map, exploration: vm.displayExploration, revealed: vm.displayRevealed,
                      language: lastLanguage,
-                     veil: MyMapView.showsVeil ? vm.fogVeil : nil, vein: vm.routeVein)
+                     veil: MyMapView.showsVeil ? vm.displayFogVeil : nil, vein: vm.displayRouteVein)
             syncSeals(map, seals: vm.seals, language: lastLanguage)
             syncHints(map, hints: vm.riddleHints, language: lastLanguage,
                       selectedId: lastSelectedHintId)
             syncSelectedRoute(map, route: vm.selectedRoute, language: lastLanguage)
             syncSelection(map, selection: vm.selection)
-            syncPlaces(map, pins: vm.placePins, selectedId: vm.selectedPlaceId, language: lastLanguage)
-            syncHome(map, home: vm.homePin)
-            applyInitialCameraIfNeeded(map, exploration: vm.exploration)
+            syncPlaces(map, pins: vm.displayPlacePins, selectedId: vm.selectedPlaceId, language: lastLanguage)
+            syncHome(map, home: vm.displayHomePin)
+            applyInitialCameraIfNeeded(map, exploration: vm.displayExploration)
             if let command = vm.cameraCommand {
                 apply(command, to: map)
                 // Вне прохода обновления SwiftUI — обнулять можно прямо здесь.

@@ -14,7 +14,8 @@ final class FilmingModeManager: ObservableObject {
         state = FilmingModeState(
             manual: settings.filmingManual,
             automatic: settings.filmingAuto,
-            isCaptured: UIScreen.main.isCaptured)
+            isCaptured: UIScreen.main.isCaptured,
+            debugForced: Self.isDebugForceEnabled)
         center.publisher(for: UIScreen.capturedDidChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refresh() }
@@ -32,6 +33,15 @@ final class FilmingModeManager: ObservableObject {
         state = FilmingModeState(
             manual: settings.filmingManual,
             automatic: settings.filmingAuto,
-            isCaptured: UIScreen.main.isCaptured)
+            isCaptured: UIScreen.main.isCaptured,
+            debugForced: Self.isDebugForceEnabled)
+    }
+
+    private static var isDebugForceEnabled: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-force-filming-mode")
+        #else
+        return false
+        #endif
     }
 }

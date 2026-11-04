@@ -87,6 +87,7 @@ struct PrivacySettingsView: View {
         // half one keeps the settings card it came from in view behind it.
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("privacy_screen")
         .sheet(isPresented: $showEdgePicker) {
             SettingsOptionPicker(
@@ -94,7 +95,7 @@ struct PrivacySettingsView: View {
                 options: PrivacyEdgeOption.allCases,
                 selection: PrivacyEdgeOption(edgeMetres: privacySettings.edgeMetres),
                 footnote: AppStrings.privacyEdgeFootnote(l),
-                badge: { $0.badge },
+                badge: { $0.badge(unit: distanceUnit, language: l) },
                 label: { $0.label(l) },
                 onSelect: { option in
                     privacySettings.edgeMetres = option.metres
@@ -238,7 +239,7 @@ struct PrivacySettingsView: View {
 
     private func edgeValue(_ l: LanguageManager.Language) -> String {
         guard let metres = privacySettings.edgeMetres else { return AppStrings.privacyEdgeNever(l) }
-        return Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l)
+        return Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l)
     }
 
     private func card(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
@@ -625,7 +626,9 @@ private enum PrivacyEdgeOption: CaseIterable, Hashable {
     }
 
     var metres: Int { self == .none ? 0 : self == .twoHundred ? 200 : self == .fiveHundred ? 500 : 1000 }
-    var badge: String { self == .none ? "—" : "\(metres)" }
+    func badge(unit: DistanceUnit, language: LanguageManager.Language) -> String {
+        metres == 0 ? "—" : Measure.radius(metres: Double(metres), unit: unit, lang: language)
+    }
 
     func label(_ language: LanguageManager.Language) -> String {
         switch self {

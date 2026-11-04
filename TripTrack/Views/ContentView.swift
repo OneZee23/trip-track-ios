@@ -246,8 +246,7 @@ struct ContentView: View {
             }
             if arguments.contains("-open-privacy-settings") {
                 selectedTab = .profile
-                try? await Task.sleep(for: .milliseconds(500))
-                NotificationCenter.default.post(name: .openPrivacySettings, object: nil)
+                return
             }
             if arguments.contains("-open-hidden-editor") || arguments.contains("-open-publish-sheet") || arguments.contains("-open-trip-map") {
                 try? await Task.sleep(for: .milliseconds(700))

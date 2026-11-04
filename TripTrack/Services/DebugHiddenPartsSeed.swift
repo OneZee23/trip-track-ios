@@ -12,8 +12,12 @@ enum DebugHiddenPartsSeed {
 
     static func seed() {
         let repository = CoreDataTripRepository(persistenceController: .shared)
-        guard let listedTrip = repository.fetchTrips(limit: 50, offset: 0).first(where: { $0.endDate != nil }),
-              let trip = repository.fetchTripDetail(id: listedTrip.id), trip.trackPoints.count >= 6 else { return }
+        let trips = repository.fetchTrips(limit: 500, offset: 0)
+        for trip in trips where trip.endDate != nil {
+            repository.seedMissingTrackPointSpeeds(for: trip.id)
+        }
+        guard let listedTrip = trips.first(where: { $0.endDate != nil }) else { return }
+        guard let trip = repository.fetchTripDetail(id: listedTrip.id), trip.trackPoints.count >= 6 else { return }
         let start = trip.trackPoints[trip.trackPoints.count / 3].timestamp
         let end = trip.trackPoints[(trip.trackPoints.count * 2) / 3].timestamp
         let arguments = ProcessInfo.processInfo.arguments
@@ -25,6 +29,18 @@ enum DebugHiddenPartsSeed {
                 sections: [HiddenSection(id: UUID(), from: start, to: end)],
                 numbersVisibleOnly: false)
         repository.updateHiddenParts(for: trip.id, parts: parts)
+        if arguments.contains("-seed-filming-mode") {
+            let centre = PlaceManager.shared.places.first?.coordinate
+                ?? trip.trackPoints.first?.coordinate
+            if let centre {
+                var home = HomeSettings.load()
+                home.latitude = centre.latitude
+                home.longitude = centre.longitude
+                home.radius = .yard
+                home.trimsPublicTracks = true
+                home.save()
+            }
+        }
         UserDefaults.standard.set(trip.id.uuidString, forKey: "debug.hiddenParts.tripId")
     }
 }

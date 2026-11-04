@@ -27,7 +27,13 @@ final class HiddenPartsSurfaceShotTests: XCTestCase {
 
     func testPrivacySettingsLightAndDark() {
         for theme in ["light", "dark"] {
-            launch(theme: theme, flags: ["-open-privacy-settings"])
+            launch(theme: theme, flags: [])
+            XCTAssertTrue(app.buttons["tab_profile"].waitForExistence(timeout: 30))
+            app.buttons["tab_profile"].tap()
+            XCTAssertTrue(app.buttons["profile_gear"].waitForExistence(timeout: 30))
+            app.buttons["profile_gear"].tap()
+            XCTAssertTrue(app.buttons["settings_privacy"].waitForExistence(timeout: 15))
+            app.buttons["settings_privacy"].tap()
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "privacy_screen").firstMatch.waitForExistence(timeout: 30))
             XCTAssertTrue(app.buttons["privacy_home_row"].exists)
             capture("hidden-privacy-\(theme)")
@@ -60,9 +66,13 @@ final class HiddenPartsSurfaceShotTests: XCTestCase {
 
     private func launch(theme: String, flags: [String]) {
         app = XCUIApplication()
-        app.launchArguments = ["-hasCompletedOnboarding", "<true/>", "-ui-testing",
-                              "-appLanguage", "ru", "-AppleLanguages", "(ru)",
-                              "-appThemeMode", theme] + flags
+        let onboarding = flags.contains("-ui-test-onboarding")
+        app.launchArguments = ["-ui-testing", "-appLanguage", "ru", "-AppleLanguages", "(ru)",
+                               "-appThemeMode", theme]
+        if !onboarding {
+            app.launchArguments += ["-hasCompletedOnboarding", "<true/>"]
+        }
+        app.launchArguments += flags
         app.launch()
     }
 

@@ -389,7 +389,7 @@ enum AtlasSharePoster {
     /// пришёл (сеть); зовущий в этом случае делится одним текстом.
     @MainActor
     static func make(vm: MyMapViewModel, caption: String) async -> UIImage? {
-        let layer = vm.revealed
+        let layer = vm.displayRevealed
         let seals = vm.seals
         guard let rect = frame(for: layer) else {
             log.notice("постер: открытого нет, картинки не будет")

@@ -18,4 +18,8 @@ final class FilmingModeStateTests: XCTestCase {
     func testManualModeRemainsActiveAfterCaptureStops() {
         XCTAssertTrue(FilmingModeState(manual: true, automatic: false, isCaptured: false).isActive)
     }
+
+    func testDebugForceKeepsModeActiveWithoutCapture() {
+        XCTAssertTrue(FilmingModeState(debugForced: true).isActive)
+    }
 }

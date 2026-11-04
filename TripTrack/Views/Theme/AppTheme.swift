@@ -67,6 +67,8 @@ enum AppTheme {
         let isDark = tc.userInterfaceStyle == .dark
         return isDark ? UIColor.white.withAlphaComponent(0.28) : UIColor(red: 155/255, green: 155/255, blue: 165/255, alpha: 1)
     })
+    /// Dark glyphs on the fixed white lock markers used over both map themes.
+    static let mapLockInk = Color(red: 30/255, green: 30/255, blue: 35/255)
     static let border = Color(UIColor { tc in
         let isDark = tc.userInterfaceStyle == .dark
         return isDark ? UIColor.white.withAlphaComponent(0.08) : UIColor(red: 0, green: 0, blue: 0, alpha: 0.05)

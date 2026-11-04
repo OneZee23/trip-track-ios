@@ -60,6 +60,7 @@ struct HiddenEdgesQuestionSheet: View {
         .background(c.bg)
         .contentSizedSheet(background: c.bg)
         .presentationDragIndicator(.visible)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hidden_edges_question")
         .onChange(of: selection) { _, value in
             wholeRouteCount = value.map(wholeRouteHiddenCount) ?? 0
@@ -73,7 +74,7 @@ struct HiddenEdgesQuestionSheet: View {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 21, weight: .regular)).foregroundStyle(selected ? AppTheme.accent : c.textTertiary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(metres == 0 ? AppStrings.privacyEdgeNever(l) : Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l))
+                    Text(metres == 0 ? AppStrings.privacyEdgeNever(l) : Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l))
                         .font(.inter(15, weight: .bold)).foregroundStyle(c.text)
                     if metres > 0 {
                         Text(AppStrings.hiddenOptionDetail(l, metres: metres))
@@ -89,7 +90,7 @@ struct HiddenEdgesQuestionSheet: View {
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(metres == 0 ? AppStrings.privacyEdgeNever(l) : "\(Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l)), \(AppStrings.hiddenOptionDetail(l, metres: metres))")
+        .accessibilityLabel(metres == 0 ? AppStrings.privacyEdgeNever(l) : "\(Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l)), \(AppStrings.hiddenOptionDetail(l, metres: metres))")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("hidden_question_option_\(metres)")
     }

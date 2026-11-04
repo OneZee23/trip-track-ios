@@ -11,6 +11,7 @@ struct MyMapView: View {
     @Environment(\.colorScheme) private var scheme
     // Singleton by design — survives tab switches (see MyMapViewModel.shared).
     @ObservedObject private var vm = MyMapViewModel.shared
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
     @State private var zoomLevel: MapZoomLevel = .far
     /// Wrapper rather than a retroactive `UUID: Identifiable` conformance —
     /// that one would leak app-wide from a map file.
@@ -94,17 +95,19 @@ struct MyMapView: View {
     private func stage(_ slot: AtlasSlot) -> some View {
         ZStack {
             MyMapRepresentable(
-                exploration: vm.exploration,
-                revealed: vm.revealed,
-                veil: Self.showsVeil ? vm.fogVeil : nil,
-                vein: vm.routeVein,
+                exploration: vm.displayExploration,
+                revealed: vm.displayRevealed,
+                veil: Self.showsVeil ? vm.displayFogVeil : nil,
+                vein: vm.displayRouteVein,
                 selectedRoute: vm.selectedRoute,
                 selection: vm.selection,
                 seals: vm.seals,
                 riddleHints: vm.riddleHints,
                 selectedHintId: openedHint?.id,
-                placePins: vm.placePins,
+                placePins: vm.displayPlacePins,
                 selectedPlaceId: vm.selectedPlaceId,
+                showsUserLocation: FilmingModeFilters.keepsLocationDot(
+                    isFilming: filmingMode.isActive, isRecordingScreen: false),
                 language: lang.language,
                 // Логотип Apple и «Legal» встают над свёрнутым листом: под
                 // непрозрачным туманом он накрыл бы их насовсем.
@@ -170,6 +173,20 @@ struct MyMapView: View {
             .ignoresSafeArea()
 
             topScrim
+
+            if filmingMode.isActive && vm.isPreparingFilmingLayer {
+                Text(AppStrings.filmingPreparing(lang.language))
+                    .font(.inter(13, weight: .semibold))
+                    .foregroundStyle(AppTheme.colors(for: scheme).text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(AppTheme.colors(for: scheme).card,
+                                in: Capsule())
+                    .padding(.top, 94)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: .top)
+                    .accessibilityIdentifier("filming_atlas_preparing")
+            }
 
             mapControls(slot)
 
@@ -298,7 +315,7 @@ struct MyMapView: View {
                 }
             )
                 // Высота ЧИСЛОМ: прежние 340 плюс строка дома (56).
-                .presentationDetents([.height(396)])
+                .presentationDetents([.height(452)])
         }
         .sheet(isPresented: $showHome) {
             HomeSheet()
@@ -597,8 +614,8 @@ struct MyMapView: View {
             AppStrings.mapOpenedSummary(
                 lang.language,
                 distance: Measure.distance(
-                    km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
-                regions: vm.exploration.regionCount
+                    km: vm.displayRevealed.openedKm, unit: distanceUnit, lang: lang.language),
+                regions: vm.displayExploration.regionCount
             )
         ]
         // Ноль не печатается вовсе. «0 знаков» под «Атласом» — это обещание
@@ -689,7 +706,7 @@ struct MyMapView: View {
     /// места, — второго места для карточки на этом экране быть не должно.
     @ViewBuilder
     private func homeCard(_ slot: AtlasSlot) -> some View {
-        if vm.homeSelected, vm.homePin != nil {
+        if !filmingMode.isActive, vm.homeSelected, vm.homePin != nil {
             VStack {
                 Spacer(minLength: 0)
                 AtlasPlaceCard(
@@ -760,7 +777,7 @@ struct MyMapView: View {
         let caption = AppStrings.posterCaption(
             lang.language,
             distance: Measure.distance(
-                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
+                    km: vm.displayRevealed.openedKm, unit: distanceUnit, lang: lang.language),
             seals: vm.seals.count
         )
         Task {

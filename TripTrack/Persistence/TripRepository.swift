@@ -738,6 +738,21 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
+#if DEBUG
+    func seedMissingTrackPointSpeeds(for tripId: UUID) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        let request: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "trip == %@", entity)
+        let points = ((try? context.fetch(request)) ?? []).sorted(by: TripEntity.trackPointOrder)
+        guard !points.isEmpty else { return }
+        for (index, point) in points.enumerated() {
+            let progress = Double(index) / Double(max(1, points.count - 1))
+            point.speed = 4.0 + 28.0 * abs(sin(progress * .pi * 1.4))
+        }
+        persistenceController.save()
+    }
+#endif
+
     @MainActor
     private func photoIdsForTrip(tripId: UUID) -> [UUID] {
         let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
@@ -1284,11 +1299,22 @@ final class CoreDataTripRepository: TripRepository {
 
         let points: [TrackPoint]
         if includeTrackPoints {
-            points = entity.orderedTrackPoints.compactMap { pe in
+            let orderedPoints = entity.orderedTrackPoints
+            #if DEBUG
+            let seedSpeeds = ProcessInfo.processInfo.arguments.contains("-seed-hidden-parts")
+                || ProcessInfo.processInfo.arguments.contains("-seed-hidden-parts-fresh")
+            #else
+            let seedSpeeds = false
+            #endif
+            points = orderedPoints.enumerated().compactMap { index, pe in
                 guard let pid = pe.id, let ts = pe.timestamp else { return nil }
+                let progress = Double(index) / Double(max(1, orderedPoints.count - 1))
+                let speed = seedSpeeds && pe.speed <= 0
+                    ? 4.0 + 28.0 * abs(sin(progress * .pi * 1.4))
+                    : pe.speed
                 return TrackPoint(
                     id: pid, latitude: pe.latitude, longitude: pe.longitude,
-                    altitude: pe.altitude, speed: pe.speed, course: pe.course,
+                    altitude: pe.altitude, speed: speed, course: pe.course,
                     horizontalAccuracy: pe.horizontalAccuracy, timestamp: ts,
                     isInterpolated: pe.isInterpolated
                 )

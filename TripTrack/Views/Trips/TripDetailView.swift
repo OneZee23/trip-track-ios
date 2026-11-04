@@ -207,6 +207,7 @@ struct TripDetailView: View {
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
     @State private var showPublishSheet = false
+    @State private var debugPublishTrip: Trip?
     @State private var showHiddenQuestionForPublish = false
     /// Drives the «Публикуется…» / publish-error toast overlay after the
     /// user confirms a publish. Watches SyncQueue for the trip's upload op.
@@ -964,8 +965,11 @@ struct TripDetailView: View {
         guard arguments.contains("-open-hidden-editor") || arguments.contains("-open-publish-sheet") || arguments.contains("-open-trip-map") else { return }
         didHandleDebugScreenLaunch = true
         if arguments.contains("-open-hidden-editor") { showHiddenPartsEditor = true }
-        else if arguments.contains("-open-publish-sheet") { showPublishSheet = true }
-        else { expandMap() }
+        else if arguments.contains("-open-publish-sheet") {
+            debugPublishTrip = trip
+            showPublishSheet = true
+        }
+        else if !arguments.contains("-open-trip-map") { expandMap() }
         #endif
     }
 
@@ -1394,7 +1398,7 @@ struct TripDetailView: View {
                 language: lang.language,
                 message: publishConfirmMessage,
                 descriptionText: trip?.tripDescription ?? "",
-                trip: trip,
+                trip: debugPublishTrip ?? trip,
                 onEditHidden: {
                     showPublishSheet = false
                     Task { @MainActor in
@@ -1654,8 +1658,8 @@ struct TripDetailView: View {
         let defaults = PrivacySettings.load().edgeMetres ?? 0
         func formatted(_ value: Int?) -> String {
             let metres = value ?? defaults
-            return metres == 0 ? AppStrings.hiddenNone(lang.language) :
-                Measure.distance(metres: Double(metres), unit: distanceUnit, lang: lang.language)
+            return metres == 0 ? "" :
+                Measure.radius(metres: Double(metres), unit: distanceUnit, lang: lang.language)
         }
         return AppStrings.hiddenSummary(
             lang.language,
@@ -2521,6 +2525,8 @@ isOwn
             coordinates: cachedCoordinates,
             speeds: cachedSpeeds,
             routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
+            hiddenRuns: isOwn ? cachedHiddenRuns : [],
+            hiddenLockPoints: isOwn ? cachedHiddenLocks : [],
             playbackBreaks: isOwn ? (trip?.recordingBreaks ?? []) : remotePlaybackBreaks,
             timestamps: replayInput.timestamps,
             replayCoordinates: replayInput.coords,
@@ -4194,8 +4200,9 @@ isOwn
     /// `OwnTripPhotosModel.merge`. `PhotoStorageService.localFileExists`
     /// caches, so asking once per body pass is a dictionary hit.
     private var ownPhotoItems: [OwnTripPhotosModel.Item] {
+        let tripPhotos = trip?.photos ?? []
         let merged = OwnTripPhotosModel.merge(
-            local: trip?.photos ?? [],
+            local: tripPhotos,
             remote: remotePhotos,
             localFileExists: { PhotoStorageService.localFileExists(filename: $0) }
         )
@@ -4206,8 +4213,26 @@ isOwn
         // (taking a trip private does exactly that), and a row is the last
         // record that the photo was ever there. Hiding is reversible; deleting
         // is not, and this is not the code that gets to decide.
-        guard canJudgeMissingPhotos else { return merged }
-        return merged.filter { if case .missing = $0.source { return false } else { return true } }
+        let available = canJudgeMissingPhotos
+            ? merged.filter { if case .missing = $0.source { return false } else { return true } }
+            : merged
+        guard filmingMode.isActive, let trip else { return available }
+        let resolution = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone)
+        let hiddenIds = Set(tripPhotos.filter {
+            HiddenPartsResolver.photoIsHidden(capturedAt: $0.capturedAt,
+                coordinate: $0.exifCoordinate, resolution: resolution,
+                points: trip.trackPoints, zone: HomeSettings.load().activeZone)
+        }.map(\.id))
+        let knownPhotoIds = Set(tripPhotos.map(\.id))
+        return available.filter { item in
+            guard !hiddenIds.contains(item.id) else { return false }
+            if case .remote = item.source { return knownPhotoIds.contains(item.id) }
+            return true
+        }
     }
 
     /// Whether "the server does not have this picture" is something this

@@ -14,6 +14,7 @@ private let journeyDetailLog = Logger(subsystem: "com.triptrack", category: "jou
 /// Тело разрезано на методы с первой строки, а не когда компилятор начнёт
 /// падать по таймауту: `TripDetailView` этот предел уже нашёл.
 struct JourneyDetailView: View {
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
     /// Своё путешествие живёт по `id` (см. заголовок файла). Чужое (S6)
     /// приезжает ЦЕЛИКОМ в `social` — второго запроса «дай мне путешествие
     /// такого-то по id» на клиенте нет, DTO с шапкой и плечами уже несёт всё,
@@ -718,7 +719,7 @@ struct JourneyDetailView: View {
     private var editSheet: some View {
         Group {
             if let journey {
-                JourneyEditSheet(journey: journey, photos: trips.flatMap(\.photos))
+                JourneyEditSheet(journey: journey, photos: trips.flatMap { visiblePhotos(in: $0) })
                     .environmentObject(lang)
             }
         }
@@ -777,7 +778,7 @@ struct JourneyDetailView: View {
         (hiddenRouteRuns, hiddenRouteLocks) = hiddenGeometry(for: legs)
         checkpointMarkers = legs.flatMap(markers(of:))
         coverPhoto = journey.coverPhotoId.flatMap { id in
-            legs.lazy.flatMap(\.photos).first { $0.id == id }
+            legs.lazy.flatMap { visiblePhotos(in: $0) }.first { $0.id == id }
         }
         loaded = true
         loadLocalityNames(agg: agg)
@@ -787,17 +788,26 @@ struct JourneyDetailView: View {
         var points: [CLLocationCoordinate2D] = []
         var breaks: [Int] = []
         for leg in legs {
-            let route = leg.previewCoordinates
+            let filming = !isSocial && filmingMode.isActive
+            let privacy: HiddenPartsResolution? = filming ? HiddenPartsResolver.resolve(
+                points: leg.trackPoints, recordingBreaks: leg.recordingBreaks,
+                startMetres: leg.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: leg.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: leg.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone
+            ) : nil
+            let route = privacy?.previewPoints ?? leg.previewCoordinates
             guard !route.isEmpty else { continue }
             let offset = points.count
             if offset > 0 { breaks.append(offset) }
-            breaks.append(contentsOf: (leg.previewBreaks ?? []).filter { $0 > 0 && $0 < route.count }.map { $0 + offset })
+            let routeBreaks = privacy?.previewBreaks ?? (leg.previewBreaks ?? [])
+            breaks.append(contentsOf: routeBreaks.filter { $0 > 0 && $0 < route.count }.map { $0 + offset })
             points.append(contentsOf: route)
         }
         return (points, breaks.sorted())
     }
 
     private func hiddenGeometry(for legs: [Trip]) -> ([[CLLocationCoordinate2D]], [CLLocationCoordinate2D]) {
+        guard isSocial || !filmingMode.isActive else { return ([], []) }
         var runs: [[CLLocationCoordinate2D]] = []
         var locks: [CLLocationCoordinate2D] = []
         let defaults = PrivacySettings.load().edgeMetres ?? 0
@@ -813,6 +823,21 @@ struct JourneyDetailView: View {
             locks.append(contentsOf: resolution.lockPoints)
         }
         return (runs, locks)
+    }
+
+    private func visiblePhotos(in trip: Trip) -> [TripPhoto] {
+        guard !isSocial, filmingMode.isActive else { return trip.photos }
+        let zone = HomeSettings.load().activeZone
+        let resolution = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: zone)
+        return trip.photos.filter { photo in
+            !HiddenPartsResolver.photoIsHidden(capturedAt: photo.capturedAt,
+                coordinate: photo.exifCoordinate, resolution: resolution,
+                points: trip.trackPoints, zone: zone)
+        }
     }
 
     /// Имена мест — отдельным шагом, после того как остальное уже нарисовано.

@@ -2155,10 +2155,11 @@ struct RouteMapView: UIViewRepresentable {
                 let rect = CGRect(x: 0, y: 0, width: 21, height: 21)
                 UIColor.white.setFill()
                 context.cgContext.fillEllipse(in: rect)
-                UIColor.label.withAlphaComponent(0.18).setStroke()
+                UIColor(AppTheme.mapLockInk).withAlphaComponent(0.18).setStroke()
                 context.cgContext.setLineWidth(1)
                 context.cgContext.strokeEllipse(in: rect.insetBy(dx: 0.5, dy: 0.5))
-                let symbol = UIImage(systemName: "lock.fill")?.withTintColor(.label, renderingMode: .alwaysOriginal)
+                let symbol = UIImage(systemName: "lock.fill")?
+                    .withTintColor(UIColor(AppTheme.mapLockInk), renderingMode: .alwaysOriginal)
                 symbol?.draw(in: CGRect(x: 6.3, y: 5.5, width: 8.4, height: 10))
             }
         }

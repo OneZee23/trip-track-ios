@@ -163,6 +163,14 @@ struct ProfileSettingsSheet: View {
                 showPrivacy = true
             }
         }
+#if DEBUG
+        .task {
+            guard opensPrivacy,
+                  ProcessInfo.processInfo.arguments.contains("-open-privacy-settings") else { return }
+            try? await Task.sleep(for: .milliseconds(650))
+            showPrivacy = true
+        }
+#endif
         .sheet(isPresented: $showPrivacy) {
             // Same instance, not a second one: two loaders would each POST all
             // five notification flags and overwrite each other. See the type.

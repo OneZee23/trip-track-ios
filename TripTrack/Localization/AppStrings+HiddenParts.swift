@@ -12,8 +12,47 @@ extension AppStrings {
     static func hiddenTapStart(_ l: LanguageManager.Language) -> String { tr(l, "hiddenTapStart", ru: "Нажмите на маршрут, где начинается участок", en: "Tap where the section starts") }
     static func hiddenTapEnd(_ l: LanguageManager.Language) -> String { tr(l, "hiddenTapEnd", ru: "Нажмите на маршрут, где заканчивается участок", en: "Tap where the section ends") }
     static func hiddenSummary(_ l: LanguageManager.Language, start: String, end: String, sections: Int) -> String {
-        tr(l, "hiddenSummary", ru: "Начало {start} · конец {end} · участков в середине: {count}", en: "Start {start} · end {end} · middle sections: {count}")
-            .replacingOccurrences(of: "{start}", with: start).replacingOccurrences(of: "{end}", with: end).replacingOccurrences(of: "{count}", with: String(sections))
+        var parts: [String] = []
+        if !start.isEmpty { parts.append("\(hiddenStart(l)) \(start)") }
+        if !end.isEmpty { parts.append("\(hiddenEnd(l)) \(end)") }
+        if sections > 0 { parts.append(hiddenMiddleCount(l, count: sections)) }
+        return parts.isEmpty ? hiddenNothing(l) : parts.joined(separator: " · ")
+    }
+
+    static func hiddenNothing(_ l: LanguageManager.Language) -> String {
+        switch l {
+        case .ru: "Ничего не скрыто"
+        case .en: "Nothing is hidden"
+        case .de: "Nichts wird verborgen"
+        case .es: "No hay nada oculto"
+        case .fr: "Rien n’est masqué"
+        case .it: "Non c’è nulla di nascosto"
+        case .pl: "Nic nie jest ukryte"
+        case .id: "Tidak ada yang disembunyikan"
+        case .tr: "Gizlenen bir şey yok"
+        case .fil: "Walang nakatago"
+        case .uk: "Нічого не приховано"
+        case .kk: "Ештеңе жасырылмаған"
+        case .pt: "Nada está oculto"
+        }
+    }
+
+    private static func hiddenMiddleCount(_ l: LanguageManager.Language, count: Int) -> String {
+        switch l {
+        case .ru: "\(count) \(plural(l, count, one: "участок", few: "участка", many: "участков")) в середине"
+        case .en: "\(count) \(plural(l, count, one: "section", many: "sections")) in the middle"
+        case .de: "\(count) \(plural(l, count, one: "Abschnitt", many: "Abschnitte")) in der Mitte"
+        case .es: "\(count) \(plural(l, count, one: "tramo", many: "tramos")) en medio"
+        case .fr: "\(count) \(plural(l, count, one: "portion", many: "portions")) au milieu"
+        case .it: "\(count) \(plural(l, count, one: "tratto", many: "tratti")) in mezzo"
+        case .pl: "\(count) \(plural(l, count, one: "odcinek", few: "odcinki", many: "odcinków")) w środku"
+        case .id: "\(count) bagian tengah"
+        case .tr: "Ortada \(count) bölüm"
+        case .fil: "\(count) bahaging nasa gitna"
+        case .uk: "\(count) \(plural(l, count, one: "ділянка", few: "ділянки", many: "ділянок")) посередині"
+        case .kk: "Ортада \(count) бөлік"
+        case .pt: "\(count) \(plural(l, count, one: "trecho", many: "trechos")) no meio"
+        }
     }
     static func hiddenSectionTitle(_ l: LanguageManager.Language, start: String, end: String) -> String {
         tr(l, "hiddenSectionTitle", ru: "Участок {start} — {end}", en: "Section {start} — {end}")
@@ -29,8 +68,63 @@ extension AppStrings {
     }
     static func hiddenLocalCardTitle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenLocalCardTitle", ru: "Останется только на этом телефоне", en: "Stays on this phone") }
     static func hiddenLocalCardBody(_ l: LanguageManager.Language, pieces: Int, photos: Int) -> String {
-        tr(l, "hiddenLocalCardBody", ru: "Скрытые участки: {pieces}, фото с них: {photos}. Они не попадут в ленту и облачную копию.", en: "Hidden sections: {pieces}; photos from them: {photos}. They stay out of the feed and cloud copy.")
-            .replacingOccurrences(of: "{pieces}", with: String(pieces)).replacingOccurrences(of: "{photos}", with: String(photos))
+        let count = plural(l, pieces,
+            one: "скрытый кусок", few: "скрытых куска", many: "скрытых кусков")
+        let hiddenParts = "\(pieces) \(count)"
+        switch l {
+        case .ru:
+            let verb = plural(l, pieces, one: "не попадёт", few: "не попадут", many: "не попадут")
+            if photos == 0 { return "\(hiddenParts) \(verb) ни в ленту, ни в облачную копию." }
+            return "\(hiddenParts) и \(photos) фото с них \(verb) ни в ленту, ни в облачную копию."
+        case .en:
+            if photos == 0 { return "\(pieces) hidden \(plural(l, pieces, one: "piece", many: "pieces")) won't reach the feed or cloud copy." }
+            return "\(pieces) hidden \(plural(l, pieces, one: "piece", many: "pieces")) and \(photos) \(plural(l, photos, one: "photo", many: "photos")) from them won't reach the feed or cloud copy."
+        case .de:
+            let sections = plural(l, pieces, one: "verborgener Abschnitt", many: "verborgene Abschnitte")
+            if photos == 0 { return "\(pieces) \(sections) erscheinen weder im Feed noch in der Cloud-Kopie." }
+            return "\(pieces) \(sections) und \(photos) \(plural(l, photos, one: "Foto", many: "Fotos")) davon erscheinen weder im Feed noch in der Cloud-Kopie."
+        case .es:
+            let sections = plural(l, pieces, one: "tramo oculto", many: "tramos ocultos")
+            if photos == 0 { return "\(pieces) \(sections) no aparecerán en el feed ni en la copia en la nube." }
+            return "\(pieces) \(sections) y \(photos) \(plural(l, photos, one: "foto", many: "fotos")) no aparecerán en el feed ni en la copia en la nube."
+        case .fr:
+            let sections = plural(l, pieces, one: "portion masquée", many: "portions masquées")
+            if photos == 0 { return "\(pieces) \(sections) ne sera envoyée ni dans le fil ni dans la copie cloud." }
+            return "\(pieces) \(sections) et \(photos) \(plural(l, photos, one: "photo", many: "photos")) ne seront envoyées ni dans le fil ni dans la copie cloud."
+        case .it:
+            let sections = plural(l, pieces, one: "tratto nascosto", many: "tratti nascosti")
+            if photos == 0 { return "\(pieces) \(sections) non finirà nel feed né nella copia cloud." }
+            return "\(pieces) \(sections) e \(photos) foto non finiranno nel feed né nella copia cloud."
+        case .pl:
+            let sections = plural(l, pieces, one: "ukryty odcinek", few: "ukryte odcinki", many: "ukrytych odcinków")
+            if photos == 0 { return "\(pieces) \(sections) nie trafi do kanału ani kopii w chmurze." }
+            return "\(pieces) \(sections) i \(photos) \(plural(l, photos, one: "zdjęcie", few: "zdjęcia", many: "zdjęć")) nie trafią do kanału ani kopii w chmurze."
+        case .id:
+            let sections = plural(l, pieces, one: "bagian tersembunyi", many: "bagian tersembunyi")
+            if photos == 0 { return "\(pieces) \(sections) tidak akan masuk ke feed atau salinan cloud." }
+            return "\(pieces) \(sections) dan \(photos) foto darinya tidak akan masuk ke feed atau salinan cloud."
+        case .tr:
+            let sections = plural(l, pieces, one: "gizli bölüm", many: "gizli bölüm")
+            if photos == 0 { return "\(pieces) \(sections) akışa veya bulut kopyasına gitmez." }
+            return "\(pieces) \(sections) ve bunlardan \(photos) fotoğraf akışa veya bulut kopyasına gitmez."
+        case .fil:
+            let sections = plural(l, pieces, one: "nakatagong bahagi", many: "nakatagong bahagi")
+            let photoNoun = plural(l, photos, one: "larawan", many: "larawan")
+            if photos == 0 { return "Hindi mapupunta sa feed o cloud copy ang \(pieces) \(sections)." }
+            return "Hindi mapupunta sa feed o cloud copy ang \(pieces) \(sections) at \(photos) \(photoNoun) kasama nito."
+        case .uk:
+            let sections = plural(l, pieces, one: "прихована ділянка", few: "приховані ділянки", many: "прихованих ділянок")
+            if photos == 0 { return "\(pieces) \(sections) не потрапить ні в стрічку, ні в хмарну копію." }
+            return "\(pieces) \(sections) та \(photos) фото з них не потраплять ні в стрічку, ні в хмарну копію."
+        case .kk:
+            let sections = plural(l, pieces, one: "жасырын бөлік", many: "жасырын бөлік")
+            if photos == 0 { return "\(pieces) \(sections) лентаға да, бұлттағы көшірмеге де жіберілмейді." }
+            return "\(pieces) \(sections) пен олардағы \(photos) фото лентаға да, бұлттағы көшірмеге де жіберілмейді."
+        case .pt:
+            let sections = plural(l, pieces, one: "trecho oculto", many: "trechos ocultos")
+            if photos == 0 { return "\(pieces) \(sections) não irá para o feed nem para a cópia na nuvem." }
+            return "\(pieces) \(sections) e \(photos) \(plural(l, photos, one: "foto", many: "fotos")) não irão para o feed nem para a cópia na nuvem."
+        }
     }
     static func hiddenTitleHint(_ l: LanguageManager.Language, title: String) -> String {
         tr(l, "hiddenTitleHint", ru: "Название «{title}» называет место финиша. Изменить название", en: "The title “{title}” names the finish. Change title")
@@ -64,12 +158,16 @@ extension AppStrings {
     static func hiddenSettingsFootnote(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSettingsFootnote", ru: "Поменять можно в Настройках → Конфиденциальность", en: "Change this in Settings → Privacy") }
     static func hiddenPublishPreviewTitle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPublishPreviewTitle", ru: "Так её увидят в ленте и в профиле", en: "How it will look in the feed and profile") }
     static func hiddenPublishRow(_ l: LanguageManager.Language, summary: String) -> String {
-        tr(l, "hiddenPublishRow", ru: "Скрыто: {summary}", en: "Hidden: {summary}")
+        guard summary != hiddenNothing(l) else { return hiddenEditorTitle(l) }
+        return tr(l, "hiddenPublishRow", ru: "Скрыто: {summary}", en: "Hidden: {summary}")
             .replacingOccurrences(of: "{summary}", with: summary)
     }
     static func hiddenOvernightHint(_ l: LanguageManager.Language) -> String { tr(l, "hiddenOvernightHint", ru: "Скрыть конец? Здесь вы ночевали", en: "Hide the end? You stayed overnight here") }
     static func hiddenHomeHint(_ l: LanguageManager.Language) -> String { tr(l, "hiddenHomeHint", ru: "Скрыть начало? Здесь ваш дом", en: "Hide the start? Your home is here") }
-    static func hiddenQuickHide(_ l: LanguageManager.Language) -> String { tr(l, "hiddenQuickHide", ru: "Скрыть 500 м", en: "Hide 500 m") }
+    static func hiddenQuickHide(_ l: LanguageManager.Language, distance: String) -> String {
+        tr(l, "hiddenQuickHide", ru: "Скрыть {distance}", en: "Hide {distance}")
+            .replacingOccurrences(of: "{distance}", with: distance)
+    }
     static func hiddenPrivacyIntro(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPrivacyIntro", ru: "Скрывается у всех поездок, кроме тех, где вы задали своё. Ни в ленту, ни в облако не уходит.", en: "Applies to trips without a custom setting. Hidden parts stay out of the feed and cloud.") }
     static func hiddenPrivacyModeFootnote(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPrivacyModeFootnote", ru: "В режиме съёмки карты и «Места» скрывают закрытые участки, дом и синюю точку. Экран записи сохраняет точку.", en: "Filming mode hides private sections, home and your location dot on maps and Places. The recording screen keeps the dot.") }
     static func hiddenRouteLockAccessibility(_ l: LanguageManager.Language) -> String { tr(l, "hiddenRouteLockAccessibility", ru: "Граница скрытого участка", en: "Hidden route boundary") }

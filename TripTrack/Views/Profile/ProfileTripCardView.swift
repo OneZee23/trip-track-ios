@@ -37,6 +37,7 @@ struct ProfileTripCardView: View {
     /// singleton — ProfileView's own pattern for it — keeps the card from
     /// printing a different number than the screen one tap deeper.
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -181,10 +182,14 @@ struct ProfileTripCardView: View {
                 sections: trip.hiddenParts?.sections ?? [],
                 zone: HomeSettings.load().activeZone
             )
+            let hidePrivateGeometry = filmingMode.isActive
             MapSnapshotPreview(
-                coordinates: coords, tripId: trip.id, breaks: trip.previewBreaks ?? [],
-                hiddenRuns: privacy.hiddenRuns.map { $0.map(\.coordinate) },
-                hiddenLockPoints: privacy.lockPoints, height: mapHeight
+                coordinates: hidePrivateGeometry ? privacy.previewPoints : coords,
+                tripId: trip.id,
+                breaks: hidePrivateGeometry ? privacy.previewBreaks : (trip.previewBreaks ?? []),
+                hiddenRuns: hidePrivateGeometry ? [] : privacy.hiddenRuns.map { $0.map(\.coordinate) },
+                hiddenLockPoints: hidePrivateGeometry ? [] : privacy.lockPoints,
+                height: mapHeight
             )
                 .frame(height: mapHeight)
                 .frame(maxWidth: .infinity)
