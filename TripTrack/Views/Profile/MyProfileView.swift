@@ -302,8 +302,7 @@ struct MyProfileView: View {
                                 // `avatarEmoji` is only ever written from this
                                 // grid and from the server's copy of it, both of
                                 // which are single emoji.
-                                Text(settings.avatarEmoji)
-                                    .font(.inter(48))
+                                AvatarGlyph(emoji: settings.avatarEmoji, fontSize: 48)
                             }
                             // A ring in the PAGE colour, so the disc reads as
                             // punched out of the banner rather than dropped on
@@ -449,8 +448,7 @@ struct MyProfileView: View {
             Haptics.tap()
             select(emoji)
         } label: {
-            Text(emoji)
-                .font(.inter(30))
+            AvatarGlyph(emoji: emoji, fontSize: 30)
                 .frame(maxWidth: Self.tileMaxWidth, minHeight: Self.tileHeight)
                 .background(
                     RoundedRectangle(cornerRadius: 14)

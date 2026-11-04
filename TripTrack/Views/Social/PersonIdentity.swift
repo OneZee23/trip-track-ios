@@ -19,7 +19,7 @@ struct PersonAvatar: View {
         Circle()
             .fill(fill ?? c.cardAlt)
             .frame(width: size, height: size)
-            .overlay { Text(author.avatarEmoji ?? "🚗").font(.inter(size * 0.53)) }
+            .overlay { AvatarGlyph(emoji: author.avatarEmoji ?? "🚗", fontSize: size * 0.53) }
             // `from` reads an unknown or absent frame as none, and the server
             // sends a frame only for a live subscription — nothing to recheck.
             .avatarFrame(AvatarFrame.from(author.avatarFrame), lineWidth: size >= 56 ? 3 : 2)

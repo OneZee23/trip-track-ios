@@ -41,8 +41,7 @@ struct ProDemoPreviewView: View {
 
     private func profileStrip(_ l: LanguageManager.Language) -> some View {
         VStack(spacing: 8) {
-            Text(data.avatarEmoji)
-                .font(.inter(28))
+            AvatarGlyph(emoji: data.avatarEmoji, fontSize: 28)
                 .frame(width: 56, height: 56)
                 .background(Circle().fill(.white.opacity(0.18)))
                 .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))
@@ -74,8 +73,7 @@ struct ProDemoPreviewView: View {
     }
 
     private func avatarRing() -> some View {
-        Text(data.avatarEmoji)
-            .font(.inter(40))
+        AvatarGlyph(emoji: data.avatarEmoji, fontSize: 40)
             .frame(width: 80, height: 80)
             .background(Circle().fill(.white.opacity(0.18)))
             .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))

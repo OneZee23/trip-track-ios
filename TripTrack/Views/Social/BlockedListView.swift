@@ -95,7 +95,7 @@ struct BlockedListView: View {
             Circle()
                 .fill(c.cardAlt)
                 .frame(width: 42, height: 42)
-                .overlay { Text(user.avatarEmoji ?? "🚗").font(.inter(22)) }
+                .overlay { AvatarGlyph(emoji: user.avatarEmoji ?? "🚗", fontSize: 22) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.displayName ?? (AppStrings.blockedListUser(lng)))

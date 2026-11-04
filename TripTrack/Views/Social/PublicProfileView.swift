@@ -672,8 +672,7 @@ struct PublicProfileView: View {
         VStack(spacing: 12) {
             switch state {
             case .closed(let name, let avatar):
-                Text(avatar ?? "🙂")
-                    .font(.inter(44))
+                AvatarGlyph(emoji: avatar ?? "🙂", fontSize: 44)
                     .frame(width: 84, height: 84)
                     .background(c.cardAlt, in: Circle())
                 Text(name)

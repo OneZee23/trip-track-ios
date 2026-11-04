@@ -487,7 +487,7 @@ struct TripDetailView: View {
                     Circle()
                         .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
                         .frame(width: 28, height: 28)
-                        .overlay { Text(author.avatarEmoji ?? "🚗").font(.inter(16)) }
+                        .overlay { AvatarGlyph(emoji: author.avatarEmoji ?? "🚗", fontSize: 16) }
                     Text(author.displayName ?? (AppStrings.companionsNoName(lang.language)))
                         .font(.inter(13, weight: .bold))
                         .foregroundStyle(.white)
@@ -3422,7 +3422,7 @@ isOwn
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.inter(18)) }
+                    .overlay { AvatarGlyph(emoji: entry.user.avatarEmoji ?? "🚗", fontSize: 18) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))
                         .font(.inter(14, weight: .semibold))

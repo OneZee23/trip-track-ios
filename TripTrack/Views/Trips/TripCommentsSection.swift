@@ -226,7 +226,7 @@ struct TripCommentsSection: View {
                             Circle()
                                 .fill(AppTheme.accent.opacity(0.12))
                                 .frame(width: 30, height: 30)
-                                .overlay { Text(settings.avatarEmoji).font(.inter(15)) }
+                                .overlay { AvatarGlyph(emoji: settings.avatarEmoji, fontSize: 15) }
                             Text(store.comments.isEmpty
                                  ? AppStrings.writeFirstMessage(lang.language)
                                  : AppStrings.commentPlaceholder(lang.language))
@@ -392,7 +392,7 @@ struct TripCommentsSection: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 34, height: 34)
-                    .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.inter(17)) }
+                    .overlay { AvatarGlyph(emoji: comment.user.avatarEmoji ?? "🚗", fontSize: 17) }
                     .avatarFrame(AvatarFrame.from(comment.user.avatarFrame), lineWidth: 2)
             }
 
@@ -520,7 +520,7 @@ struct TripCommentsSection: View {
             Circle()
                 .fill(AppTheme.accent.opacity(0.12))
                 .frame(width: 30, height: 30)
-                .overlay { Text(settings.avatarEmoji).font(.inter(15)) }
+                .overlay { AvatarGlyph(emoji: settings.avatarEmoji, fontSize: 15) }
 
             TextField(AppStrings.commentPlaceholder(lang.language), text: $draft, axis: .vertical)
                 .font(.inter(14))

@@ -220,8 +220,7 @@ struct ProfileHeroCard: View {
                     Haptics.tap()
                     onTapProfile()
                 } label: {
-                    Text(avatarEmoji)
-                        .font(.inter(hasPhotos ? 26 : 32))
+                    AvatarGlyph(emoji: avatarEmoji, fontSize: hasPhotos ? 26 : 32)
                         .frame(width: hasPhotos ? 46 : 60, height: hasPhotos ? 46 : 60)
                         .background(hasCover ? .white.opacity(0.16) : colors.cardAlt, in: Circle())
                         .avatarFrame(

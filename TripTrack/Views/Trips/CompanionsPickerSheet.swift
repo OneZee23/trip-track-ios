@@ -309,7 +309,7 @@ struct CompanionsPickerSheet: View {
                 Circle()
                     .fill(c.cardAlt)
                     .frame(width: 36, height: 36)
-                    .overlay { Text(row.candidate.avatarEmoji ?? "🙂").font(.inter(18)) }
+                    .overlay { AvatarGlyph(emoji: row.candidate.avatarEmoji ?? "🙂", fontSize: 18) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.candidate.displayName ?? (AppStrings.companionsNoName(lang.language)))

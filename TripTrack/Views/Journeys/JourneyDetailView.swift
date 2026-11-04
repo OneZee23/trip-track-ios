@@ -339,8 +339,7 @@ struct JourneyDetailView: View {
                 pushPath?.wrappedValue.cappedAppend(.profile(author.id, author))
             } label: {
                 HStack(spacing: 10) {
-                    Text(author.avatarEmoji ?? "🚗")
-                        .font(.inter(18))
+                    AvatarGlyph(emoji: author.avatarEmoji ?? "🚗", fontSize: 18)
                         .frame(width: 34, height: 34)
                         .background(colors.cardAlt, in: Circle())
                     VStack(alignment: .leading, spacing: 1) {

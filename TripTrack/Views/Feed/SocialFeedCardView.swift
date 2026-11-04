@@ -135,8 +135,7 @@ struct SocialFeedCardView: View {
                 .fill(c.cardAlt)
                 .frame(width: 36, height: 36)
                 .overlay {
-                    Text(trip.author.avatarEmoji ?? "🙂")
-                        .font(.inter(19))
+                    AvatarGlyph(emoji: trip.author.avatarEmoji ?? "🙂", fontSize: 19)
                 }
                 // Рамка «Плюса». Сервер присылает её только у аккаунта с
                 // живой подпиской, поэтому здесь ничего не перепроверяется —

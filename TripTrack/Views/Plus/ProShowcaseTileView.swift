@@ -157,8 +157,7 @@ private struct ProShowcaseProfilePreview: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         HStack(spacing: 12) {
-            Text(settings.avatarEmoji)
-                .font(.inter(20))
+            AvatarGlyph(emoji: settings.avatarEmoji, fontSize: 20)
                 .frame(width: 44, height: 44)
                 .background(Circle().fill(.white.opacity(0.18)))
                 .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))

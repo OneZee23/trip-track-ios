@@ -236,7 +236,7 @@ struct TripCompanionsSection: View {
         HStack(spacing: -10) {
             ForEach(Array(summary.avatars.enumerated()), id: \.offset) { index, emoji in
                 avatarCircle(c) {
-                    Text(emoji).font(.inter(17))
+                    AvatarGlyph(emoji: emoji, fontSize: 17)
                 }
                 .zIndex(Double(summary.avatars.count - index))
             }

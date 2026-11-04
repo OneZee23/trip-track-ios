@@ -761,10 +761,9 @@ struct NotificationsInboxView: View {
             .fill(isSystemRow ? AppTheme.accent.opacity(0.15) : c.cardAlt)
             .frame(width: 40, height: 40)
             .overlay {
-                Text(isSystemRow
+                AvatarGlyph(emoji: isSystemRow
                      ? (item.emoji ?? fallbackGlyph(item))
-                     : (item.actor?.avatarEmoji ?? item.emoji ?? fallbackGlyph(item)))
-                    .font(.inter(20))
+                     : (item.actor?.avatarEmoji ?? item.emoji ?? fallbackGlyph(item)), fontSize: 20)
             }
             .overlay(alignment: .bottomTrailing) {
                 kindBadge(item, c: c)

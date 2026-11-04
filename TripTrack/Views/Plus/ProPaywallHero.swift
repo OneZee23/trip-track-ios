@@ -16,8 +16,7 @@ struct ProPaywallHero: View {
             onTap()
         } label: {
             HStack(spacing: 16) {
-                Text(avatarEmoji)
-                    .font(.inter(29))
+                AvatarGlyph(emoji: avatarEmoji, fontSize: 29)
                     .frame(width: 56, height: 56)
                     .background(.white.opacity(0.16), in: Circle())
                     .avatarFrame(Self.frame, lineWidth: 3)

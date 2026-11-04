@@ -297,7 +297,7 @@ struct CompanionsRosterSheet: View {
             Circle()
                 .fill(c.cardAlt)
                 .frame(width: 38, height: 38)
-                .overlay { Text(row.companion.avatarEmoji ?? "🙂").font(.inter(18)) }
+                .overlay { AvatarGlyph(emoji: row.companion.avatarEmoji ?? "🙂", fontSize: 18) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.companion.displayName ?? AppStrings.companionsNoName(lang.language))

@@ -4286,6 +4286,21 @@ could resurrect an outdated premium even though the restoration guard passed.
   `TripDetailOpeningTests` covers forced-light opening, route/controls and
   reopen. XCUI waits for idle, so inspect simctl video for push middle frames.
 
+## Аватары своей отрисовки (0.9.4)
+
+Аватар человека — строка эмодзи: iPhone рисовал её эмодзи Apple, Android — эмодзи Google. Картинки Apple на Android
+ставить нельзя, и владелец 4 ноября 2026 выбрал один свой набор для обеих платформ (стиль «мягкий 3D»).
+
+- Рисует `AvatarGlyph(emoji:fontSize:)` на месте прежнего `Text(emoji).font(.inter(fontSize))`: картинка занимает
+  тот же квадрат, что занимал глиф (1.15 / 0.86 от кегля).
+- Набор — 18 картинок: 12 из выбора и 6 снятых, которые ещё носят (`MyProfileView.avatars`). Исходники 512 px лежат в
+  `Tools/Avatars`, в каталог их кладёт `Tools/install_avatars.py` (256 px, `Assets.xcassets/Avatars`). Тот же набор
+  ставит Android (`AvatarGlyph.kt`).
+- В базе и на проводе по-прежнему эмодзи: сервер и старые клиенты ничего не замечают. Эмодзи вне набора рисуется
+  шрифтом, U+FE0F необязателен.
+- Аватары машин (`Vehicle.avatarEmoji`) не трогаются: у них свои пиксельные спрайты.
+- Держит `AvatarArtTests`.
+
 ## Гараж (0.9.1)
 
 Flow 1: машина живёт между личностью и числами `ProfileHeroCard`. Свой и
