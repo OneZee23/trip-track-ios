@@ -18,6 +18,29 @@ final class SpeedPolyline: MKPolyline {
     var endFraction: Double = 1
 }
 
+final class HiddenRoutePolyline: MKPolyline {}
+
+final class HiddenLockAnnotation: MKPointAnnotation {}
+
+final class HiddenRouteRenderer: MKPolylineRenderer {
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        guard let points = polyline.points() as UnsafeMutablePointer<MKMapPoint>? else { return }
+        let path = CGMutablePath()
+        path.move(to: point(for: points[0]))
+        for index in 1..<polyline.pointCount { path.addLine(to: point(for: points[index])) }
+        context.saveGState()
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.setLineWidth((lineWidth + 2) / zoomScale)
+        context.setLineDash(phase: 0, lengths: [0.1 / zoomScale, 7.2 / zoomScale])
+        context.setStrokeColor(UIColor.white.cgColor)
+        context.addPath(path)
+        context.strokePath()
+        context.restoreGState()
+        super.draw(mapRect, zoomScale: zoomScale, in: context)
+    }
+}
+
 /// Линия маршрута с тёмной обводкой — для карты под туманом.
 ///
 /// Обводка не украшение: внутри прочищенного коридора лежит живая карта Apple,
@@ -175,6 +198,7 @@ final class CheckpointAnnotation: NSObject, MKAnnotation {
 
 final class PlaybackCarAnnotation: NSObject, MKAnnotation {
     @objc dynamic var coordinate: CLLocationCoordinate2D
+    var opacity: CGFloat = 1
     init(coordinate: CLLocationCoordinate2D) { self.coordinate = coordinate }
 }
 
@@ -202,6 +226,9 @@ struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []
     var routeBreaks: [Int] = []
+    var hiddenRuns: [[CLLocationCoordinate2D]] = []
+    var hiddenLockPoints: [CLLocationCoordinate2D] = []
+    var hiddenLockAccessibilityLabel: String = "Hidden route boundary"
     var isInteractive: Bool = false
     /// Отметки на маршруте — с подписью и снимком.
     var checkpointMarkers: [CheckpointMarker] = []
@@ -253,6 +280,7 @@ struct RouteMapView: UIViewRepresentable {
     /// passed through here — the view does not interpolate, it only
     /// renders. Driven by CADisplayLink at the display's native rate.
     var playbackCarCoord: CLLocationCoordinate2D? = nil
+    var playbackCarOpacity: Double = 1
     /// Index of the last original GPS coordinate the playback head has
     /// passed. The view checks this against its remembered last value
     /// before swapping the trail polyline overlay — replacing the
@@ -623,6 +651,8 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.onCheckpointTap = onCheckpointTap
         context.coordinator.syncFocus(focusCoordinate, on: mapView)
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
+        context.coordinator.syncHiddenRuns(hiddenRuns, locks: hiddenLockPoints, on: mapView)
+        context.coordinator.hiddenLockAccessibilityLabel = hiddenLockAccessibilityLabel
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
         if owns {
             context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView, animated: animatesFit)
@@ -630,6 +660,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
+            carOpacity: playbackCarOpacity,
             trailIndex: playbackTrailIndex,
             coords: playbackCoords ?? coordinates,
             mapView: mapView
@@ -1515,6 +1546,7 @@ struct RouteMapView: UIViewRepresentable {
         /// MapKit вправе выбросить и создать заново, и вместе с ним пропал бы
         /// весь набранный поворот.
         private var carCourse: Double = 0
+        private var carOpacity: CGFloat = 1
         /// Был ли курс хоть раз достоверным. Пока не был — держать нечего, и
         /// первый же ответ геометрии ставится без доводки.
         private var carHasCourse = false
@@ -1631,6 +1663,7 @@ struct RouteMapView: UIViewRepresentable {
 
         func applyPlayback(
             carCoord: CLLocationCoordinate2D?,
+            carOpacity: Double,
             trailIndex: Int,
             coords: [CLLocationCoordinate2D],
             mapView: MKMapView,
@@ -1659,6 +1692,7 @@ struct RouteMapView: UIViewRepresentable {
             // момент рвала картинку.
             let fraction = progressFraction(car: car, trailIndex: trailIndex, coords: coords)
             relight(to: fraction, mapView: mapView)
+            self.carOpacity = CGFloat(min(1, max(0, carOpacity)))
 
             // Car position — KVO-observed `@objc dynamic coordinate` on
             // PlaybackCarAnnotation lets MapKit reposition the view
@@ -1669,8 +1703,11 @@ struct RouteMapView: UIViewRepresentable {
             updateCarHeading(at: car, passed: trailIndex, coords: coords, mapView: mapView)
             if let annotation = playbackCar {
                 annotation.coordinate = car
+                annotation.opacity = self.carOpacity
+                mapView.view(for: annotation)?.alpha = self.carOpacity
             } else {
                 let annotation = PlaybackCarAnnotation(coordinate: car)
+                annotation.opacity = self.carOpacity
                 mapView.addAnnotation(annotation)
                 playbackCar = annotation
             }
@@ -1750,6 +1787,14 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let veil = overlay as? FogVeilOverlay {
                 return FogVeilRenderer(veil: veil)
+            }
+            if let hidden = overlay as? HiddenRoutePolyline {
+                let renderer = HiddenRouteRenderer(polyline: hidden)
+                renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
+                renderer.strokeColor = UIColor.label.withAlphaComponent(0.55)
+                renderer.lineCap = .round
+                renderer.lineDashPattern = [NSNumber(value: 0.1), NSNumber(value: 7.2)]
+                return renderer
             }
             if let speedLine = overlay as? SpeedPolyline {
                 // Неизвестная скорость — достройка: серый пунктир без обводки
@@ -1906,6 +1951,30 @@ struct RouteMapView: UIViewRepresentable {
 
         var onPhotoTap: ((UUID) -> Void)?
         private var photoAnnotations: [PhotoAnnotation] = []
+        private var hiddenOverlays: [HiddenRoutePolyline] = []
+        private var hiddenAnnotations: [HiddenLockAnnotation] = []
+        private var hiddenSignature = ""
+        var hiddenLockAccessibilityLabel = "Hidden route boundary"
+
+        func syncHiddenRuns(_ runs: [[CLLocationCoordinate2D]], locks: [CLLocationCoordinate2D], on mapView: MKMapView) {
+            let signature = (runs.flatMap { $0 } + locks).map { "\($0.latitude),\($0.longitude)" }.joined(separator: ";")
+            guard signature != hiddenSignature else { return }
+            hiddenSignature = signature
+            mapView.removeOverlays(hiddenOverlays)
+            mapView.removeAnnotations(hiddenAnnotations)
+            hiddenOverlays = runs.compactMap { run in
+                guard run.count > 1 else { return nil }
+                var coordinates = run
+                return HiddenRoutePolyline(coordinates: &coordinates, count: coordinates.count)
+            }
+            hiddenAnnotations = locks.map { coordinate in
+                let marker = HiddenLockAnnotation()
+                marker.coordinate = coordinate
+                return marker
+            }
+            mapView.addOverlays(hiddenOverlays, level: .aboveRoads)
+            mapView.addAnnotations(hiddenAnnotations)
+        }
 
         func syncPhotoPins(_ pins: [PhotoPin], on mapView: MKMapView) {
             // Сравниваем и по картинкам: миниатюры доезжают позже координат, и
@@ -1951,6 +2020,20 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is HiddenLockAnnotation {
+                let identifier = "HiddenRouteLock"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.image = Self.hiddenLockImage()
+                view.isAccessibilityElement = true
+                view.accessibilityLabel = hiddenLockAccessibilityLabel
+                view.displayPriority = .required
+                view.collisionMode = .circle
+                view.zPriority = MKAnnotationViewZPriority(rawValue: 995)
+                return view
+            }
             if let candidate = annotation as? CheckpointCandidateAnnotation {
                 let id = "CheckpointCandidate"
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
@@ -2036,6 +2119,7 @@ struct RouteMapView: UIViewRepresentable {
                 view.setState(carState)
                 view.setScale(metersPerPoint: mapView.metersPerScreenPoint)
                 view.apply(course: carCourse, cameraHeading: mapView.camera.heading)
+                view.alpha = (annotation as? PlaybackCarAnnotation)?.opacity ?? 1
                 view.displayPriority = .required
                 view.collisionMode = .none
                 view.zPriority = .max
@@ -2063,6 +2147,20 @@ struct RouteMapView: UIViewRepresentable {
             }
             view.centerOffset = .zero
             return view
+        }
+
+        private static func hiddenLockImage() -> UIImage {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 21, height: 21))
+            return renderer.image { context in
+                let rect = CGRect(x: 0, y: 0, width: 21, height: 21)
+                UIColor.white.setFill()
+                context.cgContext.fillEllipse(in: rect)
+                UIColor.label.withAlphaComponent(0.18).setStroke()
+                context.cgContext.setLineWidth(1)
+                context.cgContext.strokeEllipse(in: rect.insetBy(dx: 0.5, dy: 0.5))
+                let symbol = UIImage(systemName: "lock.fill")?.withTintColor(.label, renderingMode: .alwaysOriginal)
+                symbol?.draw(in: CGRect(x: 6.3, y: 5.5, width: 8.4, height: 10))
+            }
         }
     }
 }

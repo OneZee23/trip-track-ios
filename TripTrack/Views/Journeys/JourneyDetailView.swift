@@ -56,6 +56,9 @@ struct JourneyDetailView: View {
     /// Склейка `previewPolyline` плеч. Карта режет её по разрывам больше
     /// километра сама, так что каждое плечо выходит своей ниткой.
     @State private var coordinates: [CLLocationCoordinate2D] = []
+    @State private var routeBreaks: [Int] = []
+    @State private var hiddenRouteRuns: [[CLLocationCoordinate2D]] = []
+    @State private var hiddenRouteLocks: [CLLocationCoordinate2D] = []
     /// Имена мест из кэша геокодера, посчитанные один раз на загрузку: ходить
     /// в CoreData из `body` — значит ходить туда на каждый кадр прокрутки.
     /// Отметки всех плеч кружками. Без миниатюр: снимок грузится с диска, а
@@ -388,6 +391,9 @@ struct JourneyDetailView: View {
             // жест по карте внутри прокрутки съедает саму прокрутку.
             RouteMapView(
                 coordinates: coordinates,
+                routeBreaks: routeBreaks,
+                hiddenRuns: isSocial ? [] : hiddenRouteRuns,
+                hiddenLockPoints: isSocial ? [] : hiddenRouteLocks,
                 isInteractive: false,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .compact,
@@ -396,9 +402,17 @@ struct JourneyDetailView: View {
         } else {
             Color.black.opacity(0.88)
                 .overlay {
-                    Image(systemName: "map")
-                        .font(.largeTitle)
-                        .foregroundStyle(.white.opacity(0.35))
+                    if isSocial && trips.contains(where: { $0.distance > 0 }) {
+                        Text(AppStrings.routeHiddenByAuthor(lang.language))
+                            .font(.inter(14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    } else {
+                        Image(systemName: "map")
+                            .font(.largeTitle)
+                            .foregroundStyle(.white.opacity(0.35))
+                    }
                 }
         }
     }
@@ -716,6 +730,9 @@ struct JourneyDetailView: View {
     private var fullscreenMap: some View {
         FullscreenMapSheet(
             coordinates: coordinates,
+            routeBreaks: routeBreaks,
+            hiddenRuns: isSocial ? [] : hiddenRouteRuns,
+            hiddenLockPoints: isSocial ? [] : hiddenRouteLocks,
             distanceMeters: aggregate.totalMetres,
             checkpointMarkers: checkpointMarkers,
             showsFog: false,
@@ -740,7 +757,9 @@ struct JourneyDetailView: View {
             let agg = JourneyAggregate.build(trips: legs)
             trips = legs
             aggregate = agg
-            coordinates = legs.flatMap(\.previewCoordinates)
+            (coordinates, routeBreaks) = routeGeometry(for: legs)
+            hiddenRouteRuns = []
+            hiddenRouteLocks = []
             checkpointMarkers = legs.flatMap(markers(of:))
             coverPhoto = nil
             loaded = true
@@ -754,13 +773,46 @@ struct JourneyDetailView: View {
         aggregate = agg
         // Через `previewCoordinates`, а не `decodePolyline` напрямую: те же
         // байты уже разобраны для карточки в «Моих» и лежат в `NSCache`.
-        coordinates = legs.flatMap(\.previewCoordinates)
+        (coordinates, routeBreaks) = routeGeometry(for: legs)
+        (hiddenRouteRuns, hiddenRouteLocks) = hiddenGeometry(for: legs)
         checkpointMarkers = legs.flatMap(markers(of:))
         coverPhoto = journey.coverPhotoId.flatMap { id in
             legs.lazy.flatMap(\.photos).first { $0.id == id }
         }
         loaded = true
         loadLocalityNames(agg: agg)
+    }
+
+    private func routeGeometry(for legs: [Trip]) -> ([CLLocationCoordinate2D], [Int]) {
+        var points: [CLLocationCoordinate2D] = []
+        var breaks: [Int] = []
+        for leg in legs {
+            let route = leg.previewCoordinates
+            guard !route.isEmpty else { continue }
+            let offset = points.count
+            if offset > 0 { breaks.append(offset) }
+            breaks.append(contentsOf: (leg.previewBreaks ?? []).filter { $0 > 0 && $0 < route.count }.map { $0 + offset })
+            points.append(contentsOf: route)
+        }
+        return (points, breaks.sorted())
+    }
+
+    private func hiddenGeometry(for legs: [Trip]) -> ([[CLLocationCoordinate2D]], [CLLocationCoordinate2D]) {
+        var runs: [[CLLocationCoordinate2D]] = []
+        var locks: [CLLocationCoordinate2D] = []
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        let zone = HomeSettings.load().activeZone
+        for leg in legs where !leg.trackPoints.isEmpty {
+            let resolution = HiddenPartsResolver.resolve(
+                points: leg.trackPoints, recordingBreaks: leg.recordingBreaks,
+                startMetres: leg.hiddenParts?.startMetres ?? defaults,
+                endMetres: leg.hiddenParts?.endMetres ?? defaults,
+                sections: leg.hiddenParts?.sections ?? [], zone: zone
+            )
+            runs.append(contentsOf: resolution.hiddenRuns.map { $0.map(\.coordinate) })
+            locks.append(contentsOf: resolution.lockPoints)
+        }
+        return (runs, locks)
     }
 
     /// Имена мест — отдельным шагом, после того как остальное уже нарисовано.

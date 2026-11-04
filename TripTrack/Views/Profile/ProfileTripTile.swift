@@ -75,12 +75,23 @@ struct ProfileTripTile: View {
     private func thumbnail(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
         if coords.count > 1 {
+            let privacy = HiddenPartsResolver.resolve(
+                points: trip.trackPoints,
+                recordingBreaks: trip.recordingBreaks,
+                startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: trip.hiddenParts?.sections ?? [],
+                zone: HomeSettings.load().activeZone
+            )
             // A real street-map snapshot, not the beige plate Figma draws —
             // tiles are cached per trip+theme+size, so a grid scroll stays as
             // cheap as the feed's.
             MapSnapshotPreview(
                 coordinates: coords,
                 tripId: trip.id,
+                breaks: trip.previewBreaks ?? [],
+                hiddenRuns: privacy.hiddenRuns.map { $0.map(\.coordinate) },
+                hiddenLockPoints: privacy.lockPoints,
                 height: Self.thumbHeight,
                 width: Self.thumbWidth
             )

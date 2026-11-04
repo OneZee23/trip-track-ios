@@ -40,6 +40,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
     @Published private(set) var isPlaying: Bool = false
     /// Interpolated car position for the current frame. nil = not playing.
     @Published private(set) var currentCoord: CLLocationCoordinate2D? = nil
+    @Published private(set) var currentOpacity: Double = 1
     /// Index of the last *original* GPS coordinate the playback head has
     /// passed. Used by the map view to decide whether to redraw the
     /// trail polyline. -1 = trail not yet rendered.
@@ -143,6 +144,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
         // Seed the published state so the first frame doesn't render
         // an empty car/trail.
         currentCoord = resampled[0]
+        currentOpacity = 1
         currentTrailIndex = trailHead[0]
         isPlaying = true
         startedAt = CACurrentMediaTime()
@@ -191,6 +193,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
         resampled.removeAll(keepingCapacity: false)
         trailHead.removeAll(keepingCapacity: false)
         currentCoord = nil
+        currentOpacity = 1
         currentTrailIndex = -1
         isPlaying = false
         progress = 0

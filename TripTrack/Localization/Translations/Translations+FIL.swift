@@ -37,6 +37,7 @@ extension Translations {
         table["profileRoutineMany"] = "{n} paulit-ulit na biyahe"
         table["profileMoreTrips"] = "{n} pa"
         table.merge(Translations.hiddenPrivacyFIL) { _, new in new }
+        table.merge(Translations.hiddenPartsFIL) { _, new in new }
         return table
     }()
 

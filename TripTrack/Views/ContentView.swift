@@ -20,6 +20,7 @@ extension Notification.Name {
     /// открытый поверх настроек, был бы вторым экраном той же личности с
     /// собственным загрузчиком.
     static let openOwnProfilePreview = Notification.Name("openOwnProfilePreview")
+    static let openPrivacySettings = Notification.Name("openPrivacySettings")
     static let navigateToProfile = Notification.Name("navigateToProfile")
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
     static let tripDeleted = Notification.Name("tripDeleted")
@@ -112,6 +113,8 @@ extension View {
 
 struct ContentView: View {
     @StateObject private var mapVM = MapViewModel()
+    @State private var showHiddenEdgesQuestion = false
+    @State private var didCheckHiddenQuestion = false
     /// Selected tab is `@AppStorage`-backed so onboarding can hand the
     /// user directly into the Record tab — landing on the empty feed
     /// after a fresh install gives no obvious next step, whereas Record
@@ -191,6 +194,21 @@ struct ContentView: View {
                 .environmentObject(mapVM)
                 .environmentObject(lang)
         }
+        .sheet(isPresented: $showHiddenEdgesQuestion, onDismiss: {
+            if !UserDefaults.standard.bool(forKey: "privacy.edgeQuestionAnswered") {
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionPendingOnPublish")
+            }
+        }) {
+            HiddenEdgesQuestionSheet(onboarding: false) { metres in
+                var settings = PrivacySettings.load()
+                settings.edgeMetres = metres
+                settings.save()
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
+                UserDefaults.standard.set(false, forKey: "privacy.edgeQuestionPendingOnPublish")
+                showHiddenEdgesQuestion = false
+            }
+            .environmentObject(lang)
+        }
         // Trip summary — root-level for the same reason: «Завершить и
         // сохранить» in the recovery prompt finishes a trip from ANY tab;
         // TrackingView only exists while .record is selected.
@@ -212,6 +230,45 @@ struct ContentView: View {
             .presentationDragIndicator(.hidden)
             .interactiveDismissDisabled()
         }
+        .task {
+            try? await Task.sleep(for: .milliseconds(900))
+            presentHiddenQuestionIfIdle()
+        }
+        #if DEBUG
+        .task {
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-ui-testing"), !arguments.contains("-open-hidden-question") {
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
+            }
+            if arguments.contains("-open-hidden-question") {
+                showHiddenEdgesQuestion = true
+                return
+            }
+            if arguments.contains("-open-privacy-settings") {
+                selectedTab = .profile
+                try? await Task.sleep(for: .milliseconds(500))
+                NotificationCenter.default.post(name: .openPrivacySettings, object: nil)
+            }
+            if arguments.contains("-open-hidden-editor") || arguments.contains("-open-publish-sheet") || arguments.contains("-open-trip-map") {
+                try? await Task.sleep(for: .milliseconds(700))
+                let storedId = UserDefaults.standard.string(forKey: "debug.hiddenParts.tripId").flatMap(UUID.init(uuidString:))
+                let repository = CoreDataTripRepository(persistenceController: .shared)
+                let seededTrip: Trip? = storedId.flatMap { repository.fetchTripDetail(id: $0) }
+                let trip = seededTrip ?? repository.fetchTrips(limit: 50, offset: 0).first
+                if arguments.contains("-debug-publish-home-hint"), let trip,
+                   let endpoint = trip.trackPoints.last?.coordinate {
+                    var parts = trip.hiddenParts ?? TripHiddenParts()
+                    parts.endMetres = 0
+                    repository.updateHiddenParts(for: trip.id, parts: parts)
+                    var home = HomeSettings.load()
+                    home.latitude = endpoint.latitude
+                    home.longitude = endpoint.longitude
+                    home.save()
+                }
+                if let trip { NotificationCenter.default.post(name: .openTripDetail, object: trip.id) }
+            }
+        }
+        #endif
         .fullScreenCover(isPresented: $mapVM.showBadgeCelebration) {
             BadgeCelebrationView(
                 badges: mapVM.pendingBadges,
@@ -247,6 +304,10 @@ struct ContentView: View {
             // and no word about where their recording went — the record screen
             // says that itself, and it can only say it if we leave them on it.
             guard (note.object as? Bool) != true else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(900))
+                presentHiddenQuestionIfIdle()
+            }
             guard selectedTab == .record else { return }
             withAnimation(.easeInOut(duration: 0.3)) {
                 selectedTab = .profile
@@ -350,6 +411,17 @@ struct ContentView: View {
             mapVM.debugShowSummaryForLastTrip()
             #endif
         }
+    }
+
+    private func presentHiddenQuestionIfIdle() {
+        guard !didCheckHiddenQuestion else { return }
+        guard HiddenEdgesQuestionPolicy.shouldAskOnOpen(
+            answered: UserDefaults.standard.bool(forKey: "privacy.edgeQuestionAnswered"),
+            recording: mapVM.isRecording,
+            anotherSheetOpen: mapVM.showRecoveryPrompt || mapVM.lastCompletedTrip != nil
+        ) else { return }
+        didCheckHiddenQuestion = true
+        showHiddenEdgesQuestion = true
     }
 
     private func dismissSummary() {

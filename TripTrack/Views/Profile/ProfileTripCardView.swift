@@ -173,7 +173,19 @@ struct ProfileTripCardView: View {
     private func mapSection(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
         if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: mapHeight)
+            let privacy = HiddenPartsResolver.resolve(
+                points: trip.trackPoints,
+                recordingBreaks: trip.recordingBreaks,
+                startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: trip.hiddenParts?.sections ?? [],
+                zone: HomeSettings.load().activeZone
+            )
+            MapSnapshotPreview(
+                coordinates: coords, tripId: trip.id, breaks: trip.previewBreaks ?? [],
+                hiddenRuns: privacy.hiddenRuns.map { $0.map(\.coordinate) },
+                hiddenLockPoints: privacy.lockPoints, height: mapHeight
+            )
                 .frame(height: mapHeight)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))

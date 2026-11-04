@@ -59,6 +59,7 @@ struct Trip: Identifiable, Codable {
     var vehicleId: UUID?
     var fuelCurrency: String?
     var previewPolyline: Data?
+    var previewBreaks: [Int]? = nil
     var earnedBadgeIds: [String]
     /// XP this single trip was worth, stamped when it finished.
     ///
@@ -377,7 +378,7 @@ struct Trip: Identifiable, Codable {
          region: String? = nil, isPrivate: Bool = true,
          isTransfer: Bool = false, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
-         previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
+         previewPolyline: Data? = nil, previewBreaks: [Int]? = nil, earnedBadgeIds: [String] = [],
          xpEarned: Int = 0,
          companions: [TripCompanion] = [], isOnServer: Bool = false,
          source: TripOrigin = .recorded,
@@ -408,6 +409,7 @@ struct Trip: Identifiable, Codable {
         self.vehicleId = vehicleId
         self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline
+        self.previewBreaks = previewBreaks
         self.earnedBadgeIds = earnedBadgeIds
         self.xpEarned = xpEarned
         self.companions = companions
@@ -425,7 +427,7 @@ struct Trip: Identifiable, Codable {
         case storedRecordingBreaks = "recordingBreaks"
         case photos, checkpoints, segments, hiddenParts, title, titleIsCustom, tripDescription
         case fuelUsed, elevation, region, isPrivate, isTransfer, vehicleId
-        case fuelCurrency, previewPolyline, earnedBadgeIds, xpEarned, companions
+        case fuelCurrency, previewPolyline, previewBreaks, earnedBadgeIds, xpEarned, companions
         case isOnServer, source, confirmation, roadFillState, energyMode
     }
 
@@ -454,6 +456,7 @@ struct Trip: Identifiable, Codable {
             vehicleId: try c.decodeIfPresent(UUID.self, forKey: .vehicleId),
             fuelCurrency: try c.decodeIfPresent(String.self, forKey: .fuelCurrency),
             previewPolyline: try c.decodeIfPresent(Data.self, forKey: .previewPolyline),
+            previewBreaks: try c.decodeIfPresent([Int].self, forKey: .previewBreaks),
             earnedBadgeIds: try c.decode([String].self, forKey: .earnedBadgeIds),
             xpEarned: try c.decode(Int.self, forKey: .xpEarned),
             companions: try c.decodeIfPresent([TripCompanion].self, forKey: .companions) ?? [],

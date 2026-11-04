@@ -26,6 +26,7 @@ struct OnboardingView: View {
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
     // so UI tests / simulator screenshot runs can open any page directly.
     @State private var currentPage = UserDefaults.standard.integer(forKey: "onboardingStartPage")
+    @State private var hiddenEdgeSelection: Int?
     @StateObject private var permissions = OnboardingPermissionCoordinator()
 
     var body: some View {
@@ -43,6 +44,7 @@ struct OnboardingView: View {
                 case 1: valuePropPage
                 case 2: locationPage
                 case 3: autoRecordPage
+                case 4: hiddenEdgesPage
                 default: notificationsPage
                 }
             }
@@ -70,7 +72,7 @@ struct OnboardingView: View {
 
     private var paginationDots: some View {
         HStack(spacing: 7) {
-            ForEach(0..<5, id: \.self) { page in
+            ForEach(0..<6, id: \.self) { page in
                 Capsule()
                     .fill(page == currentPage ? AppTheme.accent : Color(red: 155/255, green: 155/255, blue: 165/255).opacity(0.4))
                     .frame(width: page == currentPage ? 18 : 7, height: 7)
@@ -583,6 +585,57 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
             .padding(.bottom, 56)
         }
+    }
+
+    private var hiddenEdgesPage: some View {
+        let c = AppTheme.colors(for: scheme)
+        let l = lang.language
+        return VStack(spacing: 0) {
+            Image("HiddenEdgesIllustration")
+                .resizable().interpolation(.none).scaledToFit()
+                .frame(width: 210, height: 210)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .padding(.top, 48).accessibilityHidden(true)
+            Text(AppStrings.hiddenQuestionTitle(l))
+                .accessibilityIdentifier("onboarding_hidden_edges_title")
+                .font(.inter(24, weight: .heavy)).foregroundStyle(c.text)
+                .multilineTextAlignment(.center).padding(.horizontal, 28).padding(.top, 22)
+            Text(AppStrings.hiddenQuestionBody(l))
+                .font(.inter(14)).foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28).padding(.top, 8)
+            VStack(spacing: 7) {
+                ForEach([0, 200, 500, 1_000], id: \.self) { metres in
+                    Button { Haptics.selection(); hiddenEdgeSelection = metres } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: hiddenEdgeSelection == metres ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(hiddenEdgeSelection == metres ? AppTheme.accent : c.textTertiary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(metres == 0 ? AppStrings.privacyEdgeNever(l) : Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l))
+                                    .font(.inter(14, weight: .bold)).foregroundStyle(c.text)
+                                if metres > 0 { Text(AppStrings.hiddenOptionDetail(l, metres: metres)).font(.inter(11.5)).foregroundStyle(c.textSecondary) }
+                            }
+                            Spacer()
+                        }.padding(.horizontal, 12).padding(.vertical, 8).background(c.card, in: RoundedRectangle(cornerRadius: 13))
+                            .overlay(RoundedRectangle(cornerRadius: 13).stroke(hiddenEdgeSelection == metres ? AppTheme.accent : .clear, lineWidth: 1.5))
+                    }.buttonStyle(PressableCardStyle()).accessibilityIdentifier("onboarding_hidden_option_\(metres)")
+                }
+            }.padding(.horizontal, 24).padding(.top, 14)
+            Spacer(minLength: 8)
+            Button {
+                guard let hiddenEdgeSelection else { return }
+                var settings = PrivacySettings.load()
+                settings.edgeMetres = hiddenEdgeSelection
+                settings.save()
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
+                withAnimation { currentPage = 5 }
+            } label: {
+                Text(AppStrings.hiddenSave(l)).font(.inter(16, weight: .bold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 15)
+                    .background(hiddenEdgeSelection == nil ? c.textTertiary : AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+            }.buttonStyle(PressableCardStyle()).disabled(hiddenEdgeSelection == nil)
+                .padding(.horizontal, 24).padding(.bottom, 54).accessibilityIdentifier("onboarding_hidden_save")
+        }.accessibilityIdentifier("onboarding_hidden_edges_page")
     }
 
     // MARK: - Notifications Page (canon «Уведомления»)

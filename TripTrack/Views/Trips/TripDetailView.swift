@@ -41,6 +41,7 @@ struct TripDetailView: View {
     /// speed while the owner of the same trip got all three. `/social/trip`
     /// serves the points; this is where they land.
     @State private var remoteTrack: [SocialTrackPoint] = []
+    @State private var remotePlaybackBreaks: [Date] = []
     @State private var trip: Trip?
     @State private var openingTransitionFinished = false
     /// Photos of someone else's trip live on the server, not in Documents.
@@ -90,6 +91,8 @@ struct TripDetailView: View {
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
     @State private var cachedRouteBreaks: [Int] = []
+    @State private var cachedHiddenRuns: [[CLLocationCoordinate2D]] = []
+    @State private var cachedHiddenLocks: [CLLocationCoordinate2D] = []
     /// Shape selection happens on data load, never during map expansion.
     @State private var localReplayInput = TripReplayInput.empty
     @State private var remoteReplayInput = TripReplayInput.empty
@@ -116,6 +119,8 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    @State private var showHiddenPartsEditor = false
+    @State private var didHandleDebugScreenLaunch = false
     /// Открытая отметка — лист с именем, снимком и удалением.
     @State private var selectedCheckpoint: TripCheckpoint?
     /// Открытый отрезок — лист с именем и удалением (0.6.8).
@@ -202,6 +207,7 @@ struct TripDetailView: View {
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
     @State private var showPublishSheet = false
+    @State private var showHiddenQuestionForPublish = false
     /// Drives the «Публикуется…» / publish-error toast overlay after the
     /// user confirms a publish. Watches SyncQueue for the trip's upload op.
     @State private var publishWatchActive = false
@@ -538,6 +544,12 @@ struct TripDetailView: View {
             }
         }
         var items: [ActionPopoverList.Item] = [
+            .init(
+                title: AppStrings.hiddenEditorTitle(lang.language), systemImage: "eye.slash",
+                accessibilityId: "detail_action_hidden_parts"
+            ) {
+                present { showHiddenPartsEditor = true }
+            },
             .init(
                 title: AppStrings.edit(lang.language), systemImage: "pencil",
                 accessibilityId: "detail_action_edit"
@@ -917,6 +929,7 @@ struct TripDetailView: View {
         // таймауту, причём в случайном месте, а не там, где добавили строку.
         // Разбиение на два выражения возвращает компилятору дыхание.
         tripDetailBody
+        .onChange(of: trip?.id) { _, _ in handleDebugScreenLaunchIfRequested() }
         .sheet(item: $selectedCheckpoint) { checkpointPresentation($0) }
         .sheet(item: $selectedSegment) { segmentPresentation($0) }
         .sheet(isPresented: $showJourneyComposer) { journeyPresentation() }
@@ -942,6 +955,18 @@ struct TripDetailView: View {
             buildCaches(for: trip)
             photoGeometryRevision &+= 1
         }
+    }
+
+    private func handleDebugScreenLaunchIfRequested() {
+        #if DEBUG
+        guard !didHandleDebugScreenLaunch, trip != nil else { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-open-hidden-editor") || arguments.contains("-open-publish-sheet") || arguments.contains("-open-trip-map") else { return }
+        didHandleDebugScreenLaunch = true
+        if arguments.contains("-open-hidden-editor") { showHiddenPartsEditor = true }
+        else if arguments.contains("-open-publish-sheet") { showPublishSheet = true }
+        else { expandMap() }
+        #endif
     }
 
     /// Просмотрщик снимков — слой поверх всего, включая раскрытую карту.
@@ -1268,10 +1293,7 @@ struct TripDetailView: View {
         }
         // Имя отметки дозревает из геокодера уже после того, как она встала
         // на карту, — без этого маркер до выхода с экрана звался бы «#1».
-        .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged)) { note in
-            guard let changed = note.object as? UUID, changed == tripId else { return }
-            reloadCheckpoints()
-        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged), perform: handleCheckpointChange)
         // Место переименовали или удалили во вкладке «Места», либо досчитался
         // новый проезд — чип у отметки обновляется без перезахода на экран.
         .onReceive(NotificationCenter.default.publisher(for: .placesChanged)) { _ in
@@ -1372,9 +1394,59 @@ struct TripDetailView: View {
                 language: lang.language,
                 message: publishConfirmMessage,
                 descriptionText: trip?.tripDescription ?? "",
+                trip: trip,
+                onEditHidden: {
+                    showPublishSheet = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        showHiddenPartsEditor = true
+                    }
+                },
+                onQuickHide: { edge in
+                    guard let trip else { return }
+                    var parts = trip.hiddenParts ?? TripHiddenParts()
+                    if edge == .start { parts.startMetres = 500 } else { parts.endMetres = 500 }
+                    CoreDataTripRepository(persistenceController: .shared).updateHiddenParts(for: trip.id, parts: parts)
+                    if let updated = viewModel.tripDetail(id: trip.id) { replaceTrip(with: updated) }
+                },
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
             .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: $showHiddenPartsEditor) {
+            if let trip {
+                HiddenPartsEditorView(
+                    trip: trip,
+                    onSave: { parts in
+                        CoreDataTripRepository(persistenceController: .shared)
+                            .updateHiddenParts(for: trip.id, parts: parts)
+                        if let updated = viewModel.tripDetail(id: trip.id) { replaceTrip(with: updated) }
+                    },
+                    onRename: {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            showEditSheet = true
+                        }
+                    }
+                )
+                .environmentObject(lang)
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .sheet(isPresented: $showHiddenQuestionForPublish) {
+            HiddenEdgesQuestionSheet(onboarding: false) { metres in
+                var settings = PrivacySettings.load()
+                settings.edgeMetres = metres
+                settings.save()
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
+                UserDefaults.standard.set(false, forKey: "privacy.edgeQuestionPendingOnPublish")
+                showHiddenQuestionForPublish = false
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 260_000_000)
+                    showPublishSheet = true
+                }
+            }
+            .environmentObject(lang)
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -1420,6 +1492,12 @@ struct TripDetailView: View {
                 TripEditSheet(
                     trip: t,
                     vehicles: settings.vehicles,
+                    onEditHiddenParts: {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            showHiddenPartsEditor = true
+                        }
+                    },
                     onSave: { newTitle, newNotes, newVehicleId, newIsPrivate, newIsTransfer in
                         let saved = applyEdits(
                             title: newTitle, notes: newNotes,
@@ -1473,6 +1551,11 @@ struct TripDetailView: View {
         )
     }
 
+    private func handleCheckpointChange(_ note: Notification) {
+        guard let changed = note.object as? UUID, changed == tripId else { return }
+        reloadCheckpoints()
+    }
+
     // MARK: - Caches
 
     /// A full re-read may carry new route points even if its id, dates and
@@ -1490,11 +1573,14 @@ struct TripDetailView: View {
     /// playback series, chart series and the movement/altitude stats.
     private func buildCaches(for t: Trip, replay: TripReplayInput? = nil) {
         let shouldMaskForFilming = isOwn && filmingMode.isActive
-        let mask = shouldMaskForFilming ? HiddenPartsResolver.resolve(
+        let privacyResolution = isOwn ? HiddenPartsResolver.resolve(
             points: t.trackPoints, recordingBreaks: t.recordingBreaks,
             startMetres: t.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
             endMetres: t.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
             sections: t.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone) : nil
+        cachedHiddenRuns = (isOwn && !shouldMaskForFilming) ? (privacyResolution?.hiddenRuns.map { $0.map(\.coordinate) } ?? []) : []
+        cachedHiddenLocks = (isOwn && !shouldMaskForFilming) ? (privacyResolution?.lockPoints ?? []) : []
+        let mask = shouldMaskForFilming ? privacyResolution : nil
         let routeRuns: [[TrackPoint]]
         if let mask { routeRuns = mask.visibleRuns }
         else {
@@ -1562,6 +1648,21 @@ struct TripDetailView: View {
             // trip opened onto a world map with two pins on it.
             isPreviewRoute = true
         }
+    }
+
+    private func hiddenPartsSummary(_ trip: Trip) -> String {
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        func formatted(_ value: Int?) -> String {
+            let metres = value ?? defaults
+            return metres == 0 ? AppStrings.hiddenNone(lang.language) :
+                Measure.distance(metres: Double(metres), unit: distanceUnit, lang: lang.language)
+        }
+        return AppStrings.hiddenSummary(
+            lang.language,
+            start: formatted(trip.hiddenParts?.startMetres),
+            end: formatted(trip.hiddenParts?.endMetres),
+            sections: trip.hiddenParts?.sections.count ?? 0
+        )
     }
 
     /// Ряд графика по своим точкам. Километры считаются по координатам
@@ -1650,6 +1751,7 @@ struct TripDetailView: View {
         }
         if let track = res.track {
             remoteTrack = track
+            remotePlaybackBreaks = res.breaks ?? []
             remoteReplayInput = TripReplayInput(
                 coords: track.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) },
                 speeds: track.map(\.speed), timestamps: track.map(\.t))
@@ -2246,6 +2348,9 @@ isOwn
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
                         routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
+                        hiddenRuns: isOwn ? cachedHiddenRuns : [],
+                        hiddenLockPoints: isOwn ? cachedHiddenLocks : [],
+                        hiddenLockAccessibilityLabel: AppStrings.hiddenRouteLockAccessibility(lang.language),
                         // Deliberately NOT interactive, and the expand button
                         // below is why: panning happens fullscreen. While this
                         // map took drags it also ate the only one that could
@@ -2289,9 +2394,17 @@ isOwn
                 } else {
                     c.cardAlt
                         .overlay {
-                            Image(systemName: "map")
-                                .font(.largeTitle)
-                                .foregroundStyle(c.textTertiary)
+                            if !isOwn, (liveSocial?.distance ?? 0) > 0 {
+                                Text(AppStrings.routeHiddenByAuthor(lang.language))
+                                    .font(.inter(13, weight: .semibold))
+                                    .foregroundStyle(c.textSecondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
+                            } else {
+                                Image(systemName: "map")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(c.textTertiary)
+                            }
                         }
                 }
             }
@@ -2408,6 +2521,7 @@ isOwn
             coordinates: cachedCoordinates,
             speeds: cachedSpeeds,
             routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
+            playbackBreaks: isOwn ? (trip?.recordingBreaks ?? []) : remotePlaybackBreaks,
             timestamps: replayInput.timestamps,
             replayCoordinates: replayInput.coords,
             replaySpeeds: replayInput.speeds,
@@ -2605,6 +2719,23 @@ isOwn
             companionsSection(trip: trip)
 
             notesSection(trip: trip, c: c)
+
+            if isOwn, !cachedHiddenRuns.isEmpty {
+                Button { Haptics.tap(); showHiddenPartsEditor = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "eye.slash").foregroundStyle(AppTheme.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(AppStrings.hiddenEditorTitle(lang.language)).font(.inter(15, weight: .bold)).foregroundStyle(c.text)
+                            Text(hiddenPartsSummary(trip))
+                                .font(.inter(12)).foregroundStyle(c.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(c.textTertiary)
+                    }.padding(14).background(c.card, in: RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("trip_hidden_parts_card")
+            }
 
             photosSection(c)
 
@@ -3279,6 +3410,12 @@ isOwn
     private func requestPublish() {
         guard auth.isSignedIn else {
             signInPrompt = .publish
+            return
+        }
+        if HiddenEdgesQuestionPolicy.shouldAskBeforePublish(
+            pending: UserDefaults.standard.bool(forKey: "privacy.edgeQuestionPendingOnPublish"),
+            answered: UserDefaults.standard.bool(forKey: "privacy.edgeQuestionAnswered")) {
+            showHiddenQuestionForPublish = true
             return
         }
         showPublishSheet = true

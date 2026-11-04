@@ -42,6 +42,7 @@ struct PrivacySettingsView: View {
     @State private var probing = false
     @State private var privacySettings = PrivacySettings.load()
     @State private var showEdgePicker = false
+    @State private var showHomeSettings = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -102,6 +103,9 @@ struct PrivacySettingsView: View {
                 accessibilityPrefix: "privacy_edges"
             )
         }
+        .sheet(isPresented: $showHomeSettings) {
+            HomeSheet().environmentObject(lang)
+        }
         .task {
             // The one caller of /auth/me on this path. Before this screen
             // existed the switch was drawn only if some OTHER screen had
@@ -150,6 +154,19 @@ struct PrivacySettingsView: View {
                 ProfileSectionLabel(text: AppStrings.privacyPlacesSection(l))
                 Button {
                     Haptics.tap()
+                    showHomeSettings = true
+                } label: {
+                    HStack {
+                        Text(AppStrings.homeSheetTitle(l)).font(.inter(14, weight: .semibold)).foregroundStyle(c.text)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(c.textTertiary)
+                    }.contentShape(Rectangle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("privacy_home_row")
+                rowDivider(c)
+                Button {
+                    Haptics.tap()
                     showEdgePicker = true
                 } label: {
                     HStack {
@@ -168,8 +185,12 @@ struct PrivacySettingsView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableCardStyle())
                 .accessibilityIdentifier("privacy_trip_edges")
+                Text(AppStrings.hiddenPrivacyIntro(l))
+                    .font(.inter(11.5))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
 
@@ -203,7 +224,7 @@ struct PrivacySettingsView: View {
                     )
                 )
                 .accessibilityIdentifier("privacy_filming_auto")
-                Text(AppStrings.filmingFootnote(l))
+                Text(AppStrings.hiddenPrivacyModeFootnote(l))
                     .font(.inter(11.5))
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

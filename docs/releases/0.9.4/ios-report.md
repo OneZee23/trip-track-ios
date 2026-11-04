@@ -42,10 +42,14 @@
   `StoryShareData` and poster rendering.
 - Localization: `AppStrings.swift`, `Translations+HiddenPrivacy.swift`,
   `LocalizationTests.swift`.
+- New UI: `HiddenPartsEditorView.swift`, `HiddenEdgesQuestionSheet.swift`,
+  `PrivacySettingsView.swift`, the publish-sheet route preview and the own-map
+  route overlays.
 - Tests: `HiddenPartsVectorTests`, `TripSyncPayloadMapperTests`,
   `HiddenPhotoSyncTests`, `PublicJourneyDTOTests`,
   `MapSnapshotContentCacheTests`, `HiddenPartsPosterTests`,
-  `FilmingModeStateTests`.
+  `FilmingModeStateTests`, `HiddenPartsEditorModelTests`,
+  `HiddenPartsEditorShotTests`, `HiddenPartsSurfaceShotTests`.
 
 ## Verification
 
@@ -67,31 +71,37 @@
 - Build/test requests and results are in `.codex-work`; tests ran through the
   supplied simulator bridge.
 
-## Remaining work and deviations
+## This run
 
-The implementation is incomplete against the spec. The following release work
-remains:
+- Added the staged «Скрыть от других» editor and its trip menu, edit sheet,
+  publish sheet and own-trip-card entry points. Middle sections snap to route
+  points, merge on overlap and can be resized on the trip bar. The number
+  switch previews visible distance and duration.
+- Added Style A to own trip and journey maps and own trip thumbnails. Public
+  previews and journeys split at `previewBreaks`; replay fades at remote
+  recording breaks; missing public routes show «Маршрут скрыт автором».
+- Added the public publish-map preview, hidden-summary row, home/place/previous
+  trip quick-hide hints, one-time privacy question, onboarding art and the
+  complete local privacy section with the home entry.
+- Added the hidden-edges screen copy to all 13 languages, DEBUG seed/open flags,
+  editor/question model tests, and light/dark UI screenshot tests.
 
-- The hidden-parts editor and its entry points, route-bar handles, two-tap
-  section creation, staged apply/cancel, number switch, visible-only preview,
-  title hint and «already seen» note.
-- Own-map Style A dotted hidden runs and lock pins on the hero, fullscreen map,
-  journeys and cards. Recording breaks are preserved on the own trip detail;
-  hidden-run rendering is not yet wired there.
-- Other people's route splitting in journeys and profile fog, replay fades at
-  breaks, visible-edge start/finish markers, and the full no-route fallback.
-- Publish-sheet public preview and overnight/home hint.
-- The one-time question sheet, onboarding page and placeholder
-  `HiddenEdgesIllustration` asset. Settings currently has edge and filming
-  controls, but not the complete spec layout or home entry.
-- App-wide filming filters for Atlas and its revealed public-preview layer,
-  home and place markers, places list rows, map location dots, cards, journeys,
-  replay and galleries. Only own trip detail route/photo masking is wired.
-- The spec's complete string catalog and screenshot tests for the editor,
-  publish sheet, question and settings.
-- Integration tests for actual photo queue writes, a one-time question shown
-  once, and full visibility guards. The photo tests currently cover sync
-  decisions; the filming tests cover the state machine.
+## Verification and limits
 
-No version/build number or git state was changed. No staging deployment was
-performed; the server branch and staging check are outside this iOS work.
+- The final bridge `build` passed. `HiddenPartsEditorModelTests` and
+  `LocalizationTests` passed, including key parity, translation reachability
+  and number/unit checks.
+- The editor screenshot class passed once and exported fresh/dark, sections and
+  numbers captures. I inspected them against the approved mockups, shortened
+  the map and moved the screen to a full-screen surface. The first captures
+  exposed an empty debug seed; the seed now loads full trip details, and the
+  scroll content has extra room above the home indicator.
+- UI screenshot recaptures and the question/onboarding/settings/publish/map
+  shot class returned `unknown request` from the bridge after those final
+  changes. The latest code builds, but its UI captures still need a bridge run
+  and visual review.
+- App-wide filming filters for Atlas, Places, location dots, galleries and
+  other own surfaces remain in the next run, as scoped by the request.
+
+No version/build number or git state was changed. The UI fixtures use local
+data only. The bridge did not launch the final recapture requests.
