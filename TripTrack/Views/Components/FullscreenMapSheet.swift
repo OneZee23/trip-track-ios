@@ -25,6 +25,7 @@ struct FullscreenMapSheet: View {
     /// m/s, aligned with `coordinates` — paints the route and sets the top
     /// end of the speed plaque's scale.
     var speeds: [Double] = []
+    var routeBreaks: [Int] = []
     /// Per-point timestamps, aligned with `coordinates`. Their presence is
     /// what turns this sheet into the replay: a social preview polyline ships
     /// none, and without them there is no clock to play a drive against.
@@ -189,6 +190,7 @@ struct FullscreenMapSheet: View {
             RouteMapView(
                 coordinates: coordinates,
                 speeds: speeds,
+                routeBreaks: routeBreaks,
                 isInteractive: mapIsInteractive,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .labelled,

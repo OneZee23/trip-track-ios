@@ -326,13 +326,23 @@ struct SocialFeedCardView: View {
         // caches rendered tiles per trip+theme, so the feed stays cheap.
         let coords = trip.previewCoordinates
         if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 178)
+            MapSnapshotPreview(coordinates: coords, tripId: trip.id, breaks: trip.previewBreaks ?? [], height: 178)
                 .frame(height: 178)
                 .frame(maxWidth: .infinity)
                 // Figma: the canvas is full-card-width with 12pt rounded
                 // corners (measured off the FeedCard render), not a hard
                 // rectangle.
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else if trip.previewBreaks != nil && trip.previewPolyline == nil && trip.distance > 0 {
+            ZStack {
+                Rectangle().fill(c.cardAlt)
+                Text(AppStrings.routeHiddenByAuthor(lang.language))
+                    .font(.inter(13, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+            }
+            .frame(height: 178)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         } else {
             // A trip whose preview polyline is missing (or decodes to a single
             // point) used to drop the ENTIRE 178pt band, so the card silently

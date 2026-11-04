@@ -46,6 +46,7 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    func updateHiddenParts(for tripId: UUID, parts: TripHiddenParts?)
     /// Пометить поездку трансфером (человек ехал пассажиром) или снять метку.
     func updateTransfer(for tripId: UUID, isTransfer: Bool)
     /// Photos whose only copy is the server's — see the implementation.
@@ -712,6 +713,31 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
+    func updateHiddenParts(for tripId: UUID, parts: TripHiddenParts?) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        if let parts, let data = try? JSONEncoder().encode(parts) {
+            entity.setValue(String(data: data, encoding: .utf8), forKey: "hiddenPartsJSON")
+        } else {
+            entity.setValue(nil, forKey: "hiddenPartsJSON")
+        }
+        entity.lastModifiedAt = Date()
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+        persistenceController.save()
+        Task { @MainActor in
+            if let trip = self.tripFromEntity(entity) {
+                HiddenPhotoSync.reconcile(trip: trip, entity: entity, context: self.context)
+            }
+        }
+        guard Self.confirmation(of: entity) != .draft else { return }
+        guard entity.serverCreatedAt != nil || !entity.isPrivate else { return }
+        let action: SyncOperation.Action = entity.serverCreatedAt == nil ? .upload : .update
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: action))
+        }
+    }
+
     @MainActor
     private func photoIdsForTrip(tripId: UUID) -> [UUID] {
         let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
@@ -1303,6 +1329,9 @@ final class CoreDataTripRepository: TripRepository {
         let segments = Self.decodeSegments(entity.segmentsJSON).filter {
             checkpointIds.contains($0.fromCheckpointId) && checkpointIds.contains($0.toCheckpointId)
         }
+        let hiddenParts: TripHiddenParts? = (entity.value(forKey: "hiddenPartsJSON") as? String)
+            .flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONDecoder().decode(TripHiddenParts.self, from: $0) }
 
         let badgeIds: [String]
         if let json = entity.badgesJSON,
@@ -1328,6 +1357,7 @@ final class CoreDataTripRepository: TripRepository {
             averageSpeed: entity.averageSpeed, trackPoints: points, photos: photos,
             checkpoints: checkpoints,
             segments: segments,
+            hiddenParts: hiddenParts,
             title: entity.title, titleIsCustom: entity.titleIsCustom,
             tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
@@ -1426,21 +1456,31 @@ final class CoreDataTripRepository: TripRepository {
         // carries no local edit. Otherwise its FIRST pull loses source=manual
         // and makes a web-created route eligible for recorded-trip rewards.
         let hasLocalEdits = existing != nil && entity.syncStatus == SyncStatus.pendingUpload.rawValue
+        let localOwnsFullMaskedTrip = existing != nil && !entity.orderedTrackPoints.isEmpty &&
+            (HomeSettings.load().activeZone != nil || p.hiddenParts != nil || !(p.hiddenRanges ?? []).isEmpty)
         // Old servers omit this field. Never erase a recorded pause merely
         // because an older peer knows only about coordinates and timestamps.
         if !hasLocalEdits, let breaks = p.recordingBreaks {
             Self.setRecordingBreaks(breaks, on: entity)
         }
+        if !hasLocalEdits, let hiddenParts = p.hiddenParts,
+           let data = try? JSONEncoder().encode(hiddenParts) {
+            entity.setValue(String(data: data, encoding: .utf8), forKey: "hiddenPartsJSON")
+        }
         entity.id = p.id
         entity.title = p.title
         entity.tripDescription = p.description
-        entity.startDate = p.startDate
-        entity.endDate = p.endDate
-        entity.distance = p.distance
-        entity.maxSpeed = p.maxSpeed
-        entity.averageSpeed = p.averageSpeed
-        entity.fuelUsed = p.fuelUsed
-        entity.elevation = p.elevation
+        if !localOwnsFullMaskedTrip {
+            entity.startDate = p.startDate
+            entity.endDate = p.endDate
+            entity.distance = p.distance
+            entity.maxSpeed = p.maxSpeed
+            entity.averageSpeed = p.averageSpeed
+        }
+        if !localOwnsFullMaskedTrip {
+            entity.fuelUsed = p.fuelUsed
+            entity.elevation = p.elevation
+        }
         entity.region = p.region
         entity.isPrivate = p.isPrivate
         entity.vehicleId = p.vehicleId
@@ -1476,7 +1516,8 @@ final class CoreDataTripRepository: TripRepository {
         // (0.6.8) — локальное точнее серверного. Проверка «своё превью есть»
         // стоит ПЕРВОЙ: у поездки со второго телефона его нет, и ей серверное
         // как раз нужно.
-        if entity.previewPolyline == nil || HomeSettings.load().activeZone == nil {
+        if !localOwnsFullMaskedTrip && entity.previewPolyline == nil ||
+            (!localOwnsFullMaskedTrip && HomeSettings.load().activeZone == nil) {
             entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
             // Кэш держал старую форму до перезапуска приложения.
             Trip.invalidatePreviewCache(for: p.id)
@@ -1496,7 +1537,7 @@ final class CoreDataTripRepository: TripRepository {
 
         // Only replace track points when server actually sent them (detail/push).
         // Pull delta omits track points — keep local ones intact.
-        if let serverPoints = p.trackPoints {
+        if !localOwnsFullMaskedTrip, let serverPoints = p.trackPoints {
             // `trackPoints` is an ORDERED relationship (NSOrderedSet), not
             // NSSet — casting straight to `Set<TrackPointEntity>` always
             // fails and silently skips deletion, leaving stale local points

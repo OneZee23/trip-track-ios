@@ -7,12 +7,16 @@ enum PhotoType: String {
 }
 
 /// Re-encodes JPEG data with all metadata stripped (EXIF, GPS, IPTC, XMP).
-/// Returns original data if re-encoding fails.
-private func stripImageMetadata(_ jpegData: Data) -> Data {
-    guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil) else { return jpegData }
+/// Fails the upload if metadata cannot be removed; raw bytes must never reach R2.
+private func stripImageMetadata(_ jpegData: Data) throws -> Data {
+    guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil) else {
+        throw APIError.transport("photo metadata could not be removed")
+    }
     let uti = CGImageSourceGetType(source) ?? ("public.jpeg" as CFString)
     let output = NSMutableData()
-    guard let destination = CGImageDestinationCreateWithData(output, uti, 1, nil) else { return jpegData }
+    guard let destination = CGImageDestinationCreateWithData(output, uti, 1, nil) else {
+        throw APIError.transport("photo metadata could not be removed")
+    }
     let options: [CFString: Any] = [
         kCGImageDestinationMetadata: CGImageMetadataCreateMutable(),
         kCGImageMetadataShouldExcludeGPS: kCFBooleanTrue as Any,
@@ -20,7 +24,7 @@ private func stripImageMetadata(_ jpegData: Data) -> Data {
     ]
     var err: Unmanaged<CFError>?
     guard CGImageDestinationCopyImageSource(destination, source, options as CFDictionary, &err) else {
-        return jpegData
+        throw APIError.transport("photo metadata could not be removed")
     }
     return output as Data
 }
@@ -67,7 +71,7 @@ final class R2PhotoStorage: RemotePhotoStorage {
         // `UIImage.draw` (used by the resize path in APISyncTransport) emits
         // pixel-only JPEGs with no EXIF/GPS to begin with — re-decoding via
         // CGImageSource just to copy nothing is ~50-200 ms wasted per upload.
-        let cleanData = metadataAlreadyClean ? data : stripImageMetadata(data)
+        let cleanData = metadataAlreadyClean ? data : try stripImageMetadata(data)
         var fields: [(name: String, value: String)] = [
             ("tripId", tripId.uuidString),
             ("photoId", photoId.uuidString),
@@ -95,7 +99,7 @@ final class R2PhotoStorage: RemotePhotoStorage {
         data: Data, isMain: Bool, takenAt: Date,
         metadataAlreadyClean: Bool = false
     ) async throws -> PhotoUploadResponse {
-        let cleanData = metadataAlreadyClean ? data : stripImageMetadata(data)
+        let cleanData = metadataAlreadyClean ? data : try stripImageMetadata(data)
         // Идентификаторы — СТРОЧНЫМИ. Postgres хранит uuid каноническим строчным
         // hex, а `UUID.uuidString` печатает заглавные; сервер до хотфикса
         // `100d8b7` сравнивал `vehicle_id` снимка со значением из формы как

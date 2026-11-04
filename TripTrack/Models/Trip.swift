@@ -29,6 +29,7 @@ struct Trip: Identifiable, Codable {
     /// сегмента нет, а связь на две отметки одной поездки — это две строки
     /// JSON. Сегменты с отметкой, которой больше нет, чтение молча отбрасывает.
     var segments: [TripSegment] = []
+    var hiddenParts: TripHiddenParts? = nil
 
     var title: String?
     /// Whether a PERSON put that title there, as opposed to the app stamping
@@ -369,6 +370,7 @@ struct Trip: Identifiable, Codable {
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
          checkpoints: [TripCheckpoint] = [],
          segments: [TripSegment] = [],
+         hiddenParts: TripHiddenParts? = nil,
          title: String? = nil, titleIsCustom: Bool = false,
          tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
@@ -394,6 +396,7 @@ struct Trip: Identifiable, Codable {
         self.photos = photos
         self.checkpoints = checkpoints
         self.segments = segments
+        self.hiddenParts = hiddenParts
         self.title = title
         self.titleIsCustom = titleIsCustom
         self.tripDescription = tripDescription
@@ -420,7 +423,7 @@ struct Trip: Identifiable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, startDate, endDate, distance, maxSpeed, averageSpeed, trackPoints
         case storedRecordingBreaks = "recordingBreaks"
-        case photos, checkpoints, segments, title, titleIsCustom, tripDescription
+        case photos, checkpoints, segments, hiddenParts, title, titleIsCustom, tripDescription
         case fuelUsed, elevation, region, isPrivate, isTransfer, vehicleId
         case fuelCurrency, previewPolyline, earnedBadgeIds, xpEarned, companions
         case isOnServer, source, confirmation, roadFillState, energyMode
@@ -439,6 +442,7 @@ struct Trip: Identifiable, Codable {
             photos: try c.decode([TripPhoto].self, forKey: .photos),
             checkpoints: try c.decodeIfPresent([TripCheckpoint].self, forKey: .checkpoints) ?? [],
             segments: try c.decodeIfPresent([TripSegment].self, forKey: .segments) ?? [],
+            hiddenParts: try c.decodeIfPresent(TripHiddenParts.self, forKey: .hiddenParts),
             title: try c.decodeIfPresent(String.self, forKey: .title),
             titleIsCustom: try c.decodeIfPresent(Bool.self, forKey: .titleIsCustom) ?? false,
             tripDescription: try c.decodeIfPresent(String.self, forKey: .tripDescription),

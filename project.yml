@@ -259,6 +259,8 @@ targets:
       # `TripTrackTests` выше, отдельной строки ей не нужно.
       - path: TripTrack/Resources/Secrets.json
         buildPhase: resources
+      - path: docs/releases/0.9.4/hidden-parts-vectors.json
+        buildPhase: resources
       # Конфигурация StoreKit — в ресурсы ТЕСТОВОГО бандла, не приложения:
       # `SKTestSession(contentsOf:)` читает её файлом, а таргет `TripTrack`
       # по-прежнему её не видит (иначе она уехала бы в релизную сборку, см.

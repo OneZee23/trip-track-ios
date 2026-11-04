@@ -97,6 +97,7 @@ struct SharePosterMap {
     let image: UIImage
     /// Route points normalised to 0…1 of the image, in draw order.
     let points: [CGPoint]
+    var breaks: [Int] = []
 }
 
 /// The shareable card. One view drives the in-sheet preview and the export:
@@ -197,11 +198,11 @@ struct SharePosterView: View {
             // Map-aligned: points are already in the snapshot's projection.
             SharePosterRoute(points: map.points.map {
                 CGPoint(x: $0.x * size.width, y: $0.y * size.height)
-            }, lineWidth: width)
+            }, lineWidth: width, breaks: map.breaks)
         } else if data.coordinates.count > 1 {
             SharePosterRoute(
                 points: Self.project(data.coordinates, in: size, inset: width * 2.4),
-                lineWidth: width
+                lineWidth: width, breaks: data.breaks
             )
             .padding(format == .sticker ? 12 * s : 0)
         }
@@ -333,6 +334,7 @@ struct SharePosterView: View {
 struct SharePosterRoute: View {
     let points: [CGPoint]
     let lineWidth: CGFloat
+    var breaks: [Int] = []
 
     var body: some View {
         GeometryReader { geo in
@@ -354,17 +356,19 @@ struct SharePosterRoute: View {
 
     private var path: Path {
         var p = Path()
-        p.move(to: points[0])
-        // Quadratic smoothing through midpoints — raw GPS samples read as a
-        // jagged scribble at poster scale.
-        if points.count > 2 {
-            for i in 1..<points.count - 1 {
-                let mid = CGPoint(x: (points[i].x + points[i + 1].x) / 2,
-                                  y: (points[i].y + points[i + 1].y) / 2)
-                p.addQuadCurve(to: mid, control: points[i])
+        let starts = [0] + breaks.filter { $0 > 0 && $0 < points.count }.sorted()
+        let ends = Array(starts.dropFirst()) + [points.count]
+        for (start, end) in zip(starts, ends) where end - start > 1 {
+            p.move(to: points[start])
+            if end - start > 2 {
+                for i in (start + 1)..<(end - 1) {
+                    let mid = CGPoint(x: (points[i].x + points[i + 1].x) / 2,
+                                      y: (points[i].y + points[i + 1].y) / 2)
+                    p.addQuadCurve(to: mid, control: points[i])
+                }
             }
+            p.addLine(to: points[end - 1])
         }
-        p.addLine(to: points[points.count - 1])
         return p
     }
 

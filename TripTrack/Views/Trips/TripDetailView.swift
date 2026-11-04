@@ -89,6 +89,7 @@ struct TripDetailView: View {
     @State private var toastItem: ToastItem?
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
+    @State private var cachedRouteBreaks: [Int] = []
     /// Shape selection happens on data load, never during map expansion.
     @State private var localReplayInput = TripReplayInput.empty
     @State private var remoteReplayInput = TripReplayInput.empty
@@ -237,6 +238,7 @@ struct TripDetailView: View {
     /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
     /// own trips only; preview-only trips fall back to the inline crawl.
     @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
     /// Reacting goes through the same store the feed uses, so a reaction left
     /// here shows on the card you came from.
     @ObservedObject private var socialFeed = SocialFeedStore.shared
@@ -935,6 +937,11 @@ struct TripDetailView: View {
         // после этой строки и подумай, кто кого закрывает.
         .overlay { photoViewerLayer() }
         .environment(\.colorScheme, scheme)
+        .onChange(of: filmingMode.isActive) { _, _ in
+            guard isOwn, let trip else { return }
+            buildCaches(for: trip)
+            photoGeometryRevision &+= 1
+        }
     }
 
     /// Просмотрщик снимков — слой поверх всего, включая раскрытую карту.
@@ -1482,7 +1489,31 @@ struct TripDetailView: View {
     /// frame: full coords for the fullscreen map, downsampled poster/
     /// playback series, chart series and the movement/altitude stats.
     private func buildCaches(for t: Trip, replay: TripReplayInput? = nil) {
-        let pts = t.trackPoints
+        let shouldMaskForFilming = isOwn && filmingMode.isActive
+        let mask = shouldMaskForFilming ? HiddenPartsResolver.resolve(
+            points: t.trackPoints, recordingBreaks: t.recordingBreaks,
+            startMetres: t.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: t.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: t.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone) : nil
+        let routeRuns: [[TrackPoint]]
+        if let mask { routeRuns = mask.visibleRuns }
+        else {
+            let annotated = RecordingBreaks.annotate(t.trackPoints, breaks: t.recordingBreaks)
+            var runs: [[TrackPoint]] = []
+            for point in annotated {
+                if runs.last?.last?.recordingSegmentIndex != point.recordingSegmentIndex { runs.append([]) }
+                runs[runs.count - 1].append(point)
+            }
+            routeRuns = runs
+        }
+        var breakOffsets: [Int] = []
+        var routePointCount = 0
+        for (index, run) in routeRuns.enumerated() {
+            if index > 0 { breakOffsets.append(routePointCount) }
+            routePointCount += run.count
+        }
+        cachedRouteBreaks = breakOffsets
+        let pts = routeRuns.flatMap { $0 }
         if pts.count > 1 {
             localReplayInput = replay ?? TripReplayInput(points: pts)
             cachedCoordinates = pts.map(\.coordinate)
@@ -1871,13 +1902,30 @@ isOwn
             segmentHistory = [:]
             return
         }
+        let shouldMaskForFilming = filmingMode.isActive
+        let mask = shouldMaskForFilming ? HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone) : nil
+        let photos = trip.photos.filter { photo in
+            guard let mask else { return true }
+            return !HiddenPartsResolver.photoIsHidden(
+                capturedAt: photo.capturedAt, coordinate: photo.exifCoordinate,
+                resolution: mask, points: trip.trackPoints, zone: HomeSettings.load().activeZone)
+        }
+        let checkpoints = trip.checkpoints.filter { checkpoint in
+            guard let mask else { return true }
+            return !mask.hiddenRanges.contains { $0.from <= checkpoint.timestamp && checkpoint.timestamp <= $0.to }
+        }
+        let points = mask?.visiblePoints ?? trip.trackPoints
 
         // Geometry uses one immutable snapshot off the main actor. A photo's
         // distance prefix and reading are shared by its pin and its moment.
         let geometryRevision = photoGeometryRevision
         guard let prepared = try? await TripPhotoPlacement.prepareAsync(
-            photos: trip.photos, checkpoints: trip.checkpoints,
-            points: trip.trackPoints, startDate: trip.startDate) else { return }
+            photos: photos, checkpoints: checkpoints,
+            points: points, startDate: trip.startDate) else { return }
         func isCurrentSnapshot() -> Bool {
             !Task.isCancelled && isOwn && self.trip?.id == trip.id
                 && photoGeometryRevision == geometryRevision && self.trip?.startDate == trip.startDate
@@ -1903,7 +1951,7 @@ isOwn
                 reading: reading, filename: item.filename))
         }
         var markers: [CheckpointMarker] = []
-        for (index, checkpoint) in trip.checkpoints.enumerated() {
+        for (index, checkpoint) in checkpoints.enumerated() {
             // Отметка без места на карту не идёт (0.8.3): она вернулась с
             // сервера обрезанной приватной зоной, и рисовать её в Гвинейском
             // заливе значило бы соврать координатой. В «Моментах» она есть.
@@ -1936,7 +1984,7 @@ isOwn
 
         // Свободные снимки для ленты — те же, что стоят булавками на карте,
         // но с «сколько до сюда»: ленте нужны время и километры, не координата.
-        let photosByID = Dictionary(trip.photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let photosByID = Dictionary(photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let loose: [TripMoments.PlacedPhoto] = placed.compactMap { item in
             guard let photo = photosByID[item.id], let fix = prepared.fixes[item.id] else { return nil }
             return TripMoments.PlacedPhoto(photo: photo, fix: fix)
@@ -2197,6 +2245,7 @@ isOwn
                     RouteMapView(
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
+                        routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
                         // Deliberately NOT interactive, and the expand button
                         // below is why: panning happens fullscreen. While this
                         // map took drags it also ate the only one that could
@@ -2358,6 +2407,7 @@ isOwn
         FullscreenMapSheet(
             coordinates: cachedCoordinates,
             speeds: cachedSpeeds,
+            routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
             timestamps: replayInput.timestamps,
             replayCoordinates: replayInput.coords,
             replaySpeeds: replayInput.speeds,

@@ -114,6 +114,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     /// reactions/comments sections all key off this).
     let isPrivate: Bool?
     let previewPolyline: String?
+    var previewBreaks: [Int]? = nil
     // `var` so SocialFeedStore can apply optimistic bumps when the user adds
     // or removes a photo on their own trip — eliminates the 1-2s gap between
     // local save and server-side `/social/feed` re-render.
@@ -155,7 +156,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, author, title, description, startDate, endDate
         case distance, duration, maxSpeed, elevation, maxAltitude
-        case drivingTime, stoppedTime, region, isPrivate, previewPolyline
+        case drivingTime, stoppedTime, region, isPrivate, previewPolyline, previewBreaks
         case photoCount, firstPhotoThumbnail, vehicle
         case reactionCount, reactionBreakdown, myReaction, badgeIds
         case commentCountRaw = "commentCount"
@@ -425,6 +426,7 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
     /// km/h, and ONLY sent by the pre-feed-shape mapper. The feed item derives
     /// average speed from distance ÷ duration instead of carrying one.
     var averageSpeed: Double? = nil
+    var previewBreaks: [Int]? = nil
 
     /// The feed's item for this trip. `fallbackAuthor` is the profile being
     /// looked at — it only gets used against a server that predates the
@@ -447,6 +449,7 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
             region: region,
             isPrivate: isPrivate,
             previewPolyline: previewPolyline,
+            previewBreaks: previewBreaks,
             photoCount: photoCount ?? 0,
             firstPhotoThumbnail: firstPhotoThumbnail,
             vehicle: vehicle,
@@ -1100,6 +1103,7 @@ struct SocialTripResponse: Codable {
     /// Present only when asked for, and empty for a trip whose points never
     /// reached the server (older syncs shipped the preview polyline alone).
     var track: [SocialTrackPoint]? = nil
+    var breaks: [Date]? = nil
 }
 
 // MARK: - Trip photos (public view)

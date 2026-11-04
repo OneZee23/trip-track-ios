@@ -201,6 +201,7 @@ struct PhotoPin: Equatable {
 struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []
+    var routeBreaks: [Int] = []
     var isInteractive: Bool = false
     /// Отметки на маршруте — с подписью и снимком.
     var checkpointMarkers: [CheckpointMarker] = []
@@ -450,13 +451,22 @@ struct RouteMapView: UIViewRepresentable {
             // Preview polylines are treated as one solid segment — their
             // points are sparsely sampled so gap detection would shred
             // them into singleton segments that render as nothing.
+            let starts = ([0] + routeBreaks.filter { $0 > 0 && $0 < coordinates.count }.sorted())
+            let ends = Array(starts.dropFirst()) + [coordinates.count]
+            let coordinateRuns = zip(starts, ends).map { Array(coordinates[$0..<$1]) }
             let segments: [([CLLocationCoordinate2D], [Double])]
             if treatAsPreview {
-                segments = [(coordinates, speeds.count == coordinates.count ? speeds : [])]
+                segments = zip(starts, ends).map { start, end in
+                    (Array(coordinates[start..<end]), speeds.count == coordinates.count ? Array(speeds[start..<end]) : [])
+                }
             } else if speeds.count == coordinates.count {
-                segments = Self.splitIntoSegments(coordinates, speeds: speeds, gapThreshold: Self.gapThreshold)
+                segments = zip(coordinateRuns, zip(starts, ends)).flatMap { run, bounds in
+                    Self.splitIntoSegments(run, speeds: Array(speeds[bounds.0..<bounds.1]), gapThreshold: Self.gapThreshold)
+                }
             } else {
-                segments = Self.splitIntoSegments(coordinates, speeds: [], gapThreshold: Self.gapThreshold)
+                segments = coordinateRuns.flatMap {
+                    Self.splitIntoSegments($0, speeds: [], gapThreshold: Self.gapThreshold)
+                }
             }
 
             var unionRect: MKMapRect = .null

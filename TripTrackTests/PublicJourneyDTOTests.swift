@@ -24,12 +24,17 @@ final class PublicJourneyDTOTests: XCTestCase {
     }()
 
     func testFeedTripDecodesJourneyAndSurvivesItsAbsence() throws {
-        let with = Data(#"{"id":"11111111-1111-4111-8111-111111111111","author":{"id":"22222222-2222-4222-8222-222222222222","displayName":"A","avatarEmoji":null,"profileLevel":1},"title":null,"description":null,"startDate":"2026-09-13T10:00:00.000Z","endDate":null,"distance":1000,"duration":60,"maxSpeed":null,"elevation":null,"maxAltitude":null,"drivingTime":null,"stoppedTime":null,"region":null,"isPrivate":false,"previewPolyline":null,"photoCount":0,"firstPhotoThumbnail":null,"vehicle":null,"reactionCount":0,"reactionBreakdown":[],"myReaction":null,"badgeIds":[],"commentCount":0,"journey":{"id":"33333333-3333-4333-8333-333333333333","title":"Грузия","startDate":"2026-09-12T00:00:00.000Z","endDate":null}}"#.utf8)
+        let with = Data(#"{"id":"11111111-1111-4111-8111-111111111111","author":{"id":"22222222-2222-4222-8222-222222222222","displayName":"A","avatarEmoji":null,"profileLevel":1},"title":null,"description":null,"startDate":"2026-09-13T10:00:00.000Z","endDate":null,"distance":1000,"duration":60,"maxSpeed":null,"elevation":null,"maxAltitude":null,"drivingTime":null,"stoppedTime":null,"region":null,"isPrivate":false,"previewPolyline":null,"previewBreaks":[2],"photoCount":0,"firstPhotoThumbnail":null,"vehicle":null,"reactionCount":0,"reactionBreakdown":[],"myReaction":null,"badgeIds":[],"commentCount":0,"journey":{"id":"33333333-3333-4333-8333-333333333333","title":"Грузия","startDate":"2026-09-12T00:00:00.000Z","endDate":null}}"#.utf8)
         let t = try decoder.decode(SocialFeedTrip.self, from: with)
         XCTAssertEqual(t.journey?.title, "Грузия")
+        XCTAssertEqual(t.previewBreaks, [2])
         XCTAssertNil(t.journey?.endDate)
-        let without = try decoder.decode(SocialFeedTrip.self, from: Data(String(decoding: with, as: UTF8.self).replacingOccurrences(of: ",\"journey\":{\"id\":\"33333333-3333-4333-8333-333333333333\",\"title\":\"Грузия\",\"startDate\":\"2026-09-12T00:00:00.000Z\",\"endDate\":null}", with: "").utf8))
+        let withoutJSON = String(decoding: with, as: UTF8.self)
+            .replacingOccurrences(of: ",\"previewBreaks\":[2]", with: "")
+            .replacingOccurrences(of: ",\"journey\":{\"id\":\"33333333-3333-4333-8333-333333333333\",\"title\":\"Грузия\",\"startDate\":\"2026-09-12T00:00:00.000Z\",\"endDate\":null}", with: "")
+        let without = try decoder.decode(SocialFeedTrip.self, from: Data(withoutJSON.utf8))
         XCTAssertNil(without.journey)
+        XCTAssertNil(without.previewBreaks)
     }
 
     func testPublicJourneysResponseDecodes() throws {

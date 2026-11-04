@@ -6,6 +6,7 @@ import MapKit
 struct MapSnapshotPreview: View {
     let coordinates: [CLLocationCoordinate2D]
     let tripId: UUID
+    var breaks: [Int] = []
     var height: CGFloat = 80
     /// Render width for the MKMapSnapshotter image. Defaults to a
     /// feed-card-sized 340pt; callers presenting in a wider slot (the share
@@ -89,7 +90,18 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v5"
+        "\(tripId.uuidString)-\(Self.contentKey(coordinates, breaks: breaks))-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v6"
+    }
+
+    static func contentKey(_ coordinates: [CLLocationCoordinate2D], breaks: [Int] = []) -> Int {
+        var hasher = Hasher()
+        hasher.combine(coordinates.count)
+        hasher.combine(breaks)
+        for coordinate in coordinates {
+            hasher.combine(coordinate.latitude.bitPattern)
+            hasher.combine(coordinate.longitude.bitPattern)
+        }
+        return hasher.finalize()
     }
 
     @MainActor
@@ -129,6 +141,7 @@ struct MapSnapshotPreview: View {
             image = await Task.detached(priority: .userInitiated) {
                 await Self.renderSnapshot(
                     coordinates: coordinates,
+                    breaks: breaks,
                     region: region,
                     size: snapshotSize,
                     scale: scale,
@@ -158,6 +171,7 @@ struct MapSnapshotPreview: View {
 
     private static func renderSnapshot(
         coordinates: [CLLocationCoordinate2D],
+        breaks: [Int],
         region: MKCoordinateRegion,
         size: CGSize,
         scale: CGFloat,
@@ -201,12 +215,16 @@ struct MapSnapshotPreview: View {
             gc.setLineJoin(.round)
 
             let points = coordinates.map { result.point(for: $0) }
-            gc.beginPath()
-            gc.move(to: points[0])
-            for i in 1..<points.count {
-                gc.addLine(to: points[i])
+            let runStarts = [0] + breaks.filter { $0 > 0 && $0 < points.count }.sorted()
+            let runEnds = runStarts.dropFirst() + [points.count]
+            for (start, end) in zip(runStarts, runEnds) where end - start > 1 {
+                gc.beginPath()
+                gc.move(to: points[start])
+                for i in (start + 1)..<end {
+                    gc.addLine(to: points[i])
+                }
+                gc.strokePath()
             }
-            gc.strokePath()
 
             // Start dot (green)
             let dotRadius: CGFloat = 2.5

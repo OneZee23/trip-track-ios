@@ -36,6 +36,7 @@ extension Translations {
         table["profileRoutineFew"] = "{n} viaggi ripetuti"
         table["profileRoutineMany"] = "{n} viaggi ripetuti"
         table["profileMoreTrips"] = "Altri {n}"
+        table.merge(Translations.hiddenPrivacyIT) { _, new in new }
         return table
     }()
 

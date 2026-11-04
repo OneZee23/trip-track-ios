@@ -6,4 +6,5 @@ enum PhotoUploadStatus: Int16 {
     case uploading = 1
     case uploaded = 2
     case failed = 3
+    case hiddenByPrivacy = 4
 }

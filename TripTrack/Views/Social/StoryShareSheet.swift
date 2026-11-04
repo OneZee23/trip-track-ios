@@ -29,6 +29,7 @@ struct StoryShareData {
     let avgSpeed: Measure.Parts
     let region: String?
     let coordinates: [CLLocationCoordinate2D]
+    let breaks: [Int]
     let authorEmoji: String
     let authorName: String
     /// First photo of the trip, for the «Фото-фон» card. Nil = this trip has
@@ -58,6 +59,7 @@ extension StoryShareData {
             avgSpeed: Measure.speedParts(ms: trip.averageSpeedMS, unit: unit, lang: lang),
             region: trip.region,
             coordinates: trip.previewCoordinates,
+            breaks: trip.previewBreaks ?? [],
             authorEmoji: trip.author.avatarEmoji ?? "🚗",
             authorName: trip.author.displayName ?? (AppStrings.blockedListUser(lang)),
             // `photoCount`, not `firstPhotoThumbnail`: the thumbnail can still
@@ -78,19 +80,46 @@ extension StoryShareData {
         let df = DateFormatter()
         df.locale = lang.locale
         df.dateFormat = "d MMM yyyy"
+        let resolution = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone)
+        let visiblePoints = resolution.visiblePoints
+        let numbersVisibleOnly = trip.hiddenParts?.numbersVisibleOnly == true
+        let publicDistance = resolution.visibleRuns.reduce(0.0) { total, run in
+            let samples = run.filter(\.countsForDistance).map {
+                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude,
+                                        timestamp: $0.timestamp, recordingSegmentIndex: $0.recordingSegmentIndex,
+                                        speed: $0.speed)
+            }
+            return total + TripDistanceGate.totalDistance(samples)
+        }
+        let publicStart = visiblePoints.first?.timestamp ?? trip.startDate
+        let publicEnd = visiblePoints.last?.timestamp ?? publicStart
+        let posterDistance = numbersVisibleOnly ? publicDistance : trip.distance
+        let posterDuration = numbersVisibleOnly
+            ? max(0, publicEnd.timeIntervalSince(publicStart)) : trip.duration
+        let visiblePhoto = trip.photos.first { photo in
+            !HiddenPartsResolver.photoIsHidden(
+                capturedAt: photo.capturedAt, coordinate: photo.exifCoordinate,
+                resolution: resolution, points: trip.trackPoints, zone: HomeSettings.load().activeZone)
+        }
         return StoryShareData(
             tripId: trip.id,
-            title: trip.title ?? df.string(from: trip.startDate),
-            dateText: df.string(from: trip.startDate),
+            title: trip.title ?? df.string(from: publicStart),
+            dateText: df.string(from: publicStart),
             distance: Measure.distanceParts(
-                metres: trip.distance, unit: unit, lang: lang, style: .tenths),
-            durationText: trip.formattedDuration,
-            avgSpeed: Measure.speedParts(ms: trip.averageSpeed, unit: unit, lang: lang),
+                metres: posterDistance, unit: unit, lang: lang, style: .tenths),
+            durationText: Trip.formattedTimeHuman(posterDuration, lang: lang),
+            avgSpeed: Measure.speedParts(
+                ms: posterDuration > 0 ? posterDistance / posterDuration : 0, unit: unit, lang: lang),
             region: trip.region,
-            coordinates: trip.previewCoordinates,
+            coordinates: resolution.previewPoints.count > 1 ? resolution.previewPoints : [],
+            breaks: resolution.previewBreaks,
             authorEmoji: authorEmoji,
             authorName: authorName,
-            photoSource: trip.photos.first.map { SharePosterPhotoSource.local(filename: $0.filename) },
+            photoSource: visiblePhoto.map { SharePosterPhotoSource.local(filename: $0.filename) },
             language: lang
         )
     }
@@ -469,7 +498,7 @@ struct StoryShareSheet: View {
         isLoadingMap = true
         defer { isLoadingMap = false }
         posterMap = await SharePosterRenderer.map(
-            for: data.coordinates, tripId: data.tripId, format: format
+            for: data.coordinates, breaks: data.breaks, tripId: data.tripId, format: format
         )
     }
 
