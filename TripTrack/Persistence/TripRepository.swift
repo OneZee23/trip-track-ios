@@ -1297,31 +1297,25 @@ final class CoreDataTripRepository: TripRepository {
         guard let id = entity.id, let startDate = entity.startDate else { return nil }
         let breaks = Self.recordingBreaks(of: entity)
 
-        let points: [TrackPoint]
+        let readPoints: [TrackPoint]
         if includeTrackPoints {
-            let orderedPoints = entity.orderedTrackPoints
-            #if DEBUG
-            let seedSpeeds = ProcessInfo.processInfo.arguments.contains("-seed-hidden-parts")
-                || ProcessInfo.processInfo.arguments.contains("-seed-hidden-parts-fresh")
-            #else
-            let seedSpeeds = false
-            #endif
-            points = orderedPoints.enumerated().compactMap { index, pe in
+            readPoints = entity.orderedTrackPoints.compactMap { pe in
                 guard let pid = pe.id, let ts = pe.timestamp else { return nil }
-                let progress = Double(index) / Double(max(1, orderedPoints.count - 1))
-                let speed = seedSpeeds && pe.speed <= 0
-                    ? 4.0 + 28.0 * abs(sin(progress * .pi * 1.4))
-                    : pe.speed
                 return TrackPoint(
                     id: pid, latitude: pe.latitude, longitude: pe.longitude,
-                    altitude: pe.altitude, speed: speed, course: pe.course,
+                    altitude: pe.altitude, speed: pe.speed, course: pe.course,
                     horizontalAccuracy: pe.horizontalAccuracy, timestamp: ts,
                     isInterpolated: pe.isInterpolated
                 )
             }
         } else {
-            points = []
+            readPoints = []
         }
+        #if DEBUG
+        let points = DebugHiddenPartsSeed.paintsSpeeds ? DebugHiddenPartsSeed.paintingSpeeds(readPoints) : readPoints
+        #else
+        let points = readPoints
+        #endif
 
         let photos: [TripPhoto] = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let filename = pe.filename, let ts = pe.timestamp else { return nil }

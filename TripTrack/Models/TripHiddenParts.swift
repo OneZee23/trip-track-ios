@@ -61,7 +61,12 @@ enum HiddenPartsResolver {
         }
         while true {
             let runs = makeRuns(hidden: hidden, points: points, breaks: breaks)
-            let slivers = runs.filter { $0.count < 2 || (isBetweenHiddenRuns($0, runs: runs, hidden: hidden) && runDistance($0, points: points) < 100) }
+            // A lone point is a sliver only NEXT TO a hidden piece: a pause can leave one point between
+            // two recording breaks, and with nothing hidden the trip must leave the phone unchanged.
+            let slivers = runs.filter {
+                ($0.count < 2 && touchesHidden($0, hidden: hidden)) ||
+                    (isBetweenHiddenRuns($0, runs: runs, hidden: hidden) && runDistance($0, points: points) < 100)
+            }
             if slivers.isEmpty { break }
             for run in slivers { for index in run { hidden[index] = true } }
         }
@@ -94,10 +99,10 @@ enum HiddenPartsResolver {
         if let capturedAt { return resolution.hiddenRanges.contains { $0.from <= capturedAt && capturedAt <= $0.to } }
         if let coordinate, let zone, PrivacyZone.hides(coordinate, centre: zone.centre, radius: zone.radius) { return true }
         guard let coordinate else { return false }
-        let hiddenIndices = makeContiguousRuns(points.map { point in
-            !resolution.visiblePoints.contains(where: { $0.id == point.id })
-        }).flatMap { $0 }
-        return hiddenIndices.contains { GeometryUtils.haversineDistance(coordinate, points[$0].coordinate) <= 150 }
+        // A set, not `contains(where:)` per point: that was points × visible points per photo, minutes
+        // on a long trip, and it runs on every upload of a trip with photos.
+        let visibleIds = Set(resolution.visiblePoints.map(\.id))
+        return points.contains { !visibleIds.contains($0.id) && GeometryUtils.haversineDistance(coordinate, $0.coordinate) <= 150 }
     }
 
     private static func makeRuns(hidden: [Bool], points: [TrackPoint], breaks: [Date]) -> [[Int]] {
@@ -109,6 +114,11 @@ enum HiddenPartsResolver {
         }
         if !current.isEmpty { result.append(current) }
         return result
+    }
+
+    private static func touchesHidden(_ run: [Int], hidden: [Bool]) -> Bool {
+        guard let first = run.first, let last = run.last else { return false }
+        return (first > 0 && hidden[first - 1]) || (last + 1 < hidden.count && hidden[last + 1])
     }
 
     private static func makeContiguousRuns(_ values: [Bool]) -> [[Int]] {

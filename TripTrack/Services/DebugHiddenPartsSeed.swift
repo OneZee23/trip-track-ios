@@ -3,11 +3,30 @@ import Foundation
 
 @MainActor
 enum DebugHiddenPartsSeed {
-    static let launchArgument = "-seed-hidden-parts"
+    nonisolated static let launchArgument = "-seed-hidden-parts"
 
-    static var isRequested: Bool {
+    static var isRequested: Bool { paintsSpeeds }
+
+    /// The demo route is drawn in speed colours, but the launch post-processing rewrites the speeds
+    /// `seedMissingTrackPointSpeeds` stores, and without them the visible runs read as grey road-gap
+    /// dashes. So the reader paints them on the way out, in DEBUG runs with this flag only; the read
+    /// path of every other run is the plain one.
+    nonisolated static var paintsSpeeds: Bool {
         let arguments = ProcessInfo.processInfo.arguments
         return arguments.contains(launchArgument) || arguments.contains("-seed-hidden-parts-fresh")
+    }
+
+    nonisolated static func paintingSpeeds(_ points: [TrackPoint]) -> [TrackPoint] {
+        points.enumerated().map { index, point in
+            guard point.speed <= 0 else { return point }
+            let progress = Double(index) / Double(max(1, points.count - 1))
+            return TrackPoint(
+                id: point.id, latitude: point.latitude, longitude: point.longitude,
+                altitude: point.altitude, speed: 4.0 + 28.0 * abs(sin(progress * .pi * 1.4)), course: point.course,
+                horizontalAccuracy: point.horizontalAccuracy, timestamp: point.timestamp,
+                isInterpolated: point.isInterpolated, recordingSegmentIndex: point.recordingSegmentIndex
+            )
+        }
     }
 
     static func seed() {

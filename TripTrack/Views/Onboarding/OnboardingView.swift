@@ -612,7 +612,7 @@ struct OnboardingView: View {
                             Image(systemName: hiddenEdgeSelection == metres ? "largecircle.fill.circle" : "circle")
                                 .foregroundStyle(hiddenEdgeSelection == metres ? AppTheme.accent : c.textTertiary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(metres == 0 ? AppStrings.privacyEdgeNever(l) : Measure.distance(metres: Double(metres), unit: distanceUnit, lang: l))
+                                Text(metres == 0 ? AppStrings.privacyEdgeNever(l) : Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l))
                                     .font(.inter(14, weight: .bold)).foregroundStyle(c.text)
                                 if metres > 0 { Text(AppStrings.hiddenOptionDetail(l, metres: metres)).font(.inter(11.5)).foregroundStyle(c.textSecondary) }
                             }

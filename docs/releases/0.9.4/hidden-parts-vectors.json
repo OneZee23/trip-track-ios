@@ -2500,6 +2500,89 @@
     },
     "hiddenPhotoIds": []
    }
+  },
+  {
+   "name": "breaks-alone",
+   "input": {
+    "startMetres": 0,
+    "endMetres": 0,
+    "sections": [],
+    "zone": null,
+    "recordingBreaks": [
+     5,
+     15
+    ]
+   },
+   "expect": {
+    "hiddenRanges": [],
+    "visibleRuns": [
+     [
+      0,
+      0
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      300
+     ]
+    ],
+    "previewPointCount": 301,
+    "previewBreaks": [
+     1,
+     2
+    ],
+    "publicNumbers": {
+     "distance": 2980.0,
+     "start": 0,
+     "end": 3000
+    },
+    "hiddenPhotoIds": []
+   }
+  },
+  {
+   "name": "lone-point-after-hidden",
+   "input": {
+    "startMetres": 0,
+    "endMetres": 0,
+    "sections": [
+     [
+      0,
+      20
+     ]
+    ],
+    "zone": null,
+    "recordingBreaks": [
+     35
+    ]
+   },
+   "expect": {
+    "hiddenRanges": [
+     [
+      0,
+      30
+     ]
+    ],
+    "visibleRuns": [
+     [
+      4,
+      300
+     ]
+    ],
+    "previewPointCount": 297,
+    "previewBreaks": [],
+    "publicNumbers": {
+     "distance": 2960.0,
+     "start": 40,
+     "end": 3000
+    },
+    "hiddenPhotoIds": [
+     "p-start-time",
+     "p-no-time-near-start"
+    ]
+   }
   }
  ]
 }

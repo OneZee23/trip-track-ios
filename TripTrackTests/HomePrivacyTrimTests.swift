@@ -138,8 +138,12 @@ final class HomePrivacyTrimTests: XCTestCase {
 
         let p = payload(for: trip)
 
+        // С 0.9.4 зона — один из скрытых кусков, и правило у них общее: одинокая
+        // точка рядом со скрытым — не линия, а подсказка, где двор. Поэтому
+        // последняя точка (2 км, сразу после возвращения домой) не уезжает, а
+        // 1.5 и 3 км — уезжают.
         let sent = try! XCTUnwrap(p.trackPoints)
-        XCTAssertEqual(sent.count, 3, "три точки снаружи квартала обязаны уехать")
+        XCTAssertEqual(sent.count, 2, "две точки снаружи квартала обязаны уехать")
         for wire in sent {
             let c = CLLocationCoordinate2D(latitude: wire.latitude, longitude: wire.longitude)
             XCTAssertFalse(PrivacyZone.hides(c, centre: home, radius: 500),
@@ -148,7 +152,7 @@ final class HomePrivacyTrimTests: XCTestCase {
 
         let preview = Trip.decodePolyline(
             Data(base64Encoded: try! XCTUnwrap(p.previewPolyline))!)
-        XCTAssertEqual(preview.count, 3, "превью обязано резаться тем же правилом")
+        XCTAssertEqual(preview.count, 2, "превью обязано резаться тем же правилом")
         for c in preview {
             XCTAssertFalse(PrivacyZone.hides(c, centre: home, radius: 500),
                            "двор виден в превью — карточка в чужой ленте рисует именно его")
@@ -217,7 +221,7 @@ final class HomePrivacyTrimTests: XCTestCase {
 
         let p = payload(for: trip)
 
-        XCTAssertEqual(try XCTUnwrap(p.trackPoints).count, 3)
+        XCTAssertEqual(try XCTUnwrap(p.trackPoints).count, 2, "одинокая точка у двора не уезжает (0.9.4)")
     }
 
     // MARK: B. Переотправка уже опубликованного

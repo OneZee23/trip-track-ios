@@ -37,14 +37,16 @@ def resolve(points, breaks, start_m, end_m, sections, zone):
         if any(f <= p['t'] <= t for f, t in sections): hidden[i] = True
         if zone and hav(p['c'], zone['c']) < zone['r']: hidden[i] = True
     seg = segments(points, breaks)
-    # Visible runs split at recording breaks; a run under 2 points, or under 100 m with hidden on both sides, is hidden.
+    # Visible runs split at recording breaks; a run under 2 points next to a hidden piece, or under 100 m with hidden
+    # on both sides, is hidden. A lone point between two recording breaks with nothing hidden stays: with nothing
+    # hidden the trip leaves the phone unchanged.
     changed = True
     while changed:
         changed = False
         for a, b in runs(hidden, seg, visible=True):
             left = a > 0 and hidden[a - 1]
             right = b < n - 1 and hidden[b + 1]
-            if (b - a + 1) < 2 or (left and right and d[b] - d[a] < SLIVER_METRES):
+            if ((b - a + 1) < 2 and (left or right)) or (left and right and d[b] - d[a] < SLIVER_METRES):
                 for i in range(a, b + 1): hidden[i] = True
                 changed = True
     return hidden
@@ -106,6 +108,8 @@ CASES = [
  ('zone-and-start', dict(start_m=205, end_m=0, sections=[], zone={'c': [45.0, 39.0], 'r': 305}, breaks=[])),
  ('recording-break', dict(start_m=0, end_m=505, sections=[], zone=None, breaks=[1505])),
  ('no-mask', dict(start_m=0, end_m=0, sections=[], zone=None, breaks=[])),
+ ('breaks-alone', dict(start_m=0, end_m=0, sections=[], zone=None, breaks=[5, 15])),
+ ('lone-point-after-hidden', dict(start_m=0, end_m=0, sections=[[0, 20]], zone=None, breaks=[35])),
 ]
 PHOTOS = [
  {'id': 'p-start-time', 'capturedAt': 20},
