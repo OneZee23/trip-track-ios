@@ -636,7 +636,7 @@ struct OnboardingView: View {
                     .background(hiddenEdgeSelection == nil ? c.textTertiary : AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
             }.buttonStyle(PressableCardStyle()).disabled(hiddenEdgeSelection == nil)
                 .padding(.horizontal, 24).padding(.bottom, 54).accessibilityIdentifier("onboarding_hidden_save")
-        }.accessibilityIdentifier("onboarding_hidden_edges_page")
+        }
     }
 
     // MARK: - Notifications Page (canon «Уведомления»)

@@ -237,7 +237,11 @@ struct ContentView: View {
         #if DEBUG
         .task {
             let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("-ui-testing"), !arguments.contains("-open-hidden-question") {
+            // Any test or demo launch counts as answered: the question is a sheet over the whole app,
+            // and seventy existing UI tests stopped at it (5 Nov 2026). `-open-hidden-question` asks for it.
+            let launchedByATest = arguments.contains("-ui-testing") || arguments.contains("-hasCompletedOnboarding")
+                || arguments.contains { $0.hasPrefix("-seed-") || $0.hasPrefix("-debug-") }
+            if launchedByATest, !arguments.contains("-open-hidden-question") {
                 UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
             }
             if arguments.contains("-open-hidden-question") {

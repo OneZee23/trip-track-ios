@@ -19,7 +19,7 @@ final class HiddenPartsSurfaceShotTests: XCTestCase {
     func testOnboardingHiddenEdgesPageLightAndDark() {
         for theme in ["light", "dark"] {
             launch(theme: theme, flags: ["-ui-test-onboarding", "-onboardingStartPage", "4"])
-            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "onboarding_hidden_edges_page").firstMatch.waitForExistence(timeout: 30))
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "onboarding_hidden_edges_title").firstMatch.waitForExistence(timeout: 30))
             capture("hidden-onboarding-\(theme)")
             app.terminate()
         }
