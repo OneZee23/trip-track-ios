@@ -78,4 +78,12 @@ final class HiddenPartsVectorTests: XCTestCase {
             total + GeometryUtils.haversineDistance(points[index].coordinate, points[index + 1].coordinate)
         }
     }
+
+    /// Drawing reaches the visible neighbours and never crosses a pause (same table as Android).
+    func testDrawnHiddenRunsReachTheVisibleNeighbours() {
+        XCTAssertEqual(HiddenPartsResolver.drawnHiddenRuns(hidden: [true, false, false, false], segments: [0, 0, 0, 0]), [[0, 1]])
+        XCTAssertEqual(HiddenPartsResolver.drawnHiddenRuns(hidden: [false, false, true, true, false], segments: [0, 0, 0, 0, 0]), [[1, 2, 3, 4]])
+        XCTAssertEqual(HiddenPartsResolver.drawnHiddenRuns(hidden: [false, true, true, true, false], segments: [0, 0, 0, 1, 1]), [[0, 1, 2], [3, 4]])
+        XCTAssertEqual(HiddenPartsResolver.drawnHiddenRuns(hidden: [false, false], segments: [0, 0]), [])
+    }
 }
