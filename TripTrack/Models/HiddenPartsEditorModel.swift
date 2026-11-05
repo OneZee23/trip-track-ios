@@ -77,3 +77,43 @@ enum HiddenEdgesQuestionPolicy {
         pending && !answered
     }
 }
+
+/// One time axis for the editor's trip bar: speed colours, hidden hatch and
+/// section handles all sit on it, from the first to the last recorded point.
+/// TestFlight 101 placed the colours by point number and the hatch by time,
+/// and on a trip whose points are uneven in time the hidden start showed up
+/// a quarter of the way along the bar (owner, 5 Nov 2026).
+struct HiddenTimelineAxis: Equatable {
+    let start: Date
+    let end: Date
+
+    init(points: [TrackPoint], tripStart: Date, tripEnd: Date?) {
+        start = points.first?.timestamp ?? tripStart
+        end = points.last?.timestamp ?? tripEnd ?? start
+    }
+
+    func fraction(of date: Date) -> CGFloat {
+        let length = end.timeIntervalSince(start)
+        guard length > 0 else { return 0 }
+        return CGFloat(min(1, max(0, date.timeIntervalSince(start) / length)))
+    }
+
+    func date(atFraction fraction: CGFloat) -> Date {
+        start.addingTimeInterval(Double(min(1, max(0, fraction))) * end.timeIntervalSince(start))
+    }
+
+    /// A handle snaps to the recorded point nearest in time: a boundary
+    /// between two points would hide half a segment. Points are in time order.
+    static func nearestTimestamp(to date: Date, in points: [TrackPoint]) -> Date? {
+        guard !points.isEmpty else { return nil }
+        var low = 0, high = points.count - 1
+        while low < high {
+            let middle = (low + high) / 2
+            if points[middle].timestamp < date { low = middle + 1 } else { high = middle }
+        }
+        if low > 0, date.timeIntervalSince(points[low - 1].timestamp) < points[low].timestamp.timeIntervalSince(date) {
+            return points[low - 1].timestamp
+        }
+        return points[low].timestamp
+    }
+}

@@ -1411,7 +1411,7 @@ struct TripDetailView: View {
                     var parts = trip.hiddenParts ?? TripHiddenParts()
                     if edge == .start { parts.startMetres = 500 } else { parts.endMetres = 500 }
                     CoreDataTripRepository(persistenceController: .shared).updateHiddenParts(for: trip.id, parts: parts)
-                    if let updated = viewModel.tripDetail(id: trip.id) { replaceTrip(with: updated) }
+                    reloadAfterHiddenPartsEdit(tripId: trip.id)
                 },
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
@@ -1424,7 +1424,7 @@ struct TripDetailView: View {
                     onSave: { parts in
                         CoreDataTripRepository(persistenceController: .shared)
                             .updateHiddenParts(for: trip.id, parts: parts)
-                        if let updated = viewModel.tripDetail(id: trip.id) { replaceTrip(with: updated) }
+                        reloadAfterHiddenPartsEdit(tripId: trip.id)
                     },
                     onRename: {
                         Task { @MainActor in
@@ -1570,6 +1570,15 @@ struct TripDetailView: View {
         pinsTask?.cancel()
         trip = updated
         // The keyed task schedules the next rebuild after the view updates.
+    }
+
+    /// The map draws hidden runs and locks from caches built off the trip, so
+    /// an edit rebuilds them at once. In TestFlight 101 they waited for the
+    /// next opening of the screen, and «Готово» looked like it did nothing.
+    private func reloadAfterHiddenPartsEdit(tripId: UUID) {
+        guard let updated = viewModel.tripDetail(id: tripId) else { return }
+        replaceTrip(with: updated)
+        buildCaches(for: updated)
     }
 
     /// One-pass derivation of everything the body must not recompute per

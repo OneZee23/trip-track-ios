@@ -25,6 +25,23 @@ final class HiddenPartsEditorShotTests: XCTestCase {
         capture("hidden-editor-dark")
     }
 
+    /// «Готово» must redraw the trip map at once. TestFlight 101 showed the
+    /// new locks only after the trip was opened again (owner, 5 Nov 2026).
+    func testDoneShowsTheNewLocksWithoutReopening() {
+        launch(theme: "dark", flags: ["-seed-hidden-parts-fresh", "-open-hidden-editor"])
+        let editor = app.descendants(matching: .any).matching(identifier: "hidden_parts_editor").firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 45))
+        let startChip = app.buttons["hidden_start_500"].firstMatch
+        XCTAssertTrue(startChip.waitForExistence(timeout: 10))
+        startChip.tap()
+        app.buttons["hidden_editor_done"].firstMatch.tap()
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 10))
+        let lock = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Граница скрытого участка", "Hidden route boundary")).firstMatch
+        XCTAssertTrue(lock.waitForExistence(timeout: 10), "The trip map kept the old route after «Готово»")
+        capture("hidden-editor-done-map")
+    }
+
     private func launch(theme: String, flags: [String]) {
         app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "<true/>", "-ui-testing",

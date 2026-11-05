@@ -161,13 +161,16 @@ struct HiddenPartsEditorView: View {
             let width = proxy.size.width
             ZStack(alignment: .leading) {
                 Capsule().fill(c.cardAlt).frame(height: 14)
-                if !trip.trackPoints.isEmpty {
-                    let sampleStride = max(1, trip.trackPoints.count / 48)
-                    ForEach(Array(stride(from: 0, to: trip.trackPoints.count, by: sampleStride)), id: \.self) { index in
-                        let band = SpeedColorScale.bands[SpeedColorScale.zone(forSpeedMS: trip.trackPoints[index].speed)]
+                if trip.trackPoints.count > 1 {
+                    let points = trip.trackPoints
+                    let sampleStride = max(1, points.count / 48)
+                    ForEach(Array(stride(from: 0, to: points.count - 1, by: sampleStride)), id: \.self) { index in
+                        let band = SpeedColorScale.bands[SpeedColorScale.zone(forSpeedMS: points[index].speed)]
+                        let from = position(points[index].timestamp)
+                        let to = position(points[min(index + sampleStride, points.count - 1)].timestamp)
                         Rectangle().fill(band.color)
-                            .frame(width: max(2, width * CGFloat(sampleStride) / CGFloat(trip.trackPoints.count)), height: 14)
-                            .offset(x: width * CGFloat(index) / CGFloat(trip.trackPoints.count))
+                            .frame(width: max(2, width * (to - from)), height: 14)
+                            .offset(x: width * from)
                     }
                 } else {
                     Capsule().fill(AppTheme.accent.opacity(0.7)).frame(height: 14)
@@ -201,7 +204,7 @@ struct HiddenPartsEditorView: View {
         }
         .frame(height: 24)
         .overlay(alignment: .bottom) {
-            HStack { Text(clock(trip.startDate)); Spacer(); Text(clock(trip.endDate ?? trip.startDate)) }
+            HStack { Text(clock(timeline.start)); Spacer(); Text(clock(timeline.end)) }
                 .font(.inter(10, weight: .medium)).foregroundStyle(c.textTertiary)
                 .offset(y: 15)
         }
@@ -222,6 +225,7 @@ struct HiddenPartsEditorView: View {
                             .padding(.horizontal, 11).padding(.vertical, 9)
                             .background(isSelected ? AppTheme.accent : c.card, in: Capsule())
                     }.buttonStyle(PressableCardStyle())
+                    .accessibilityIdentifier("hidden_\(choice == .start ? "start" : "end")_\(metres)")
                 }
             }
             if value == nil {
@@ -322,12 +326,11 @@ struct HiddenPartsEditorView: View {
         return metres == 0 ? "" : Measure.radius(metres: Double(metres), unit: distanceUnit, lang: lang.language)
     }
 
-    private func position(_ date: Date) -> CGFloat {
-        let start = trip.startDate.timeIntervalSince1970
-        let end = (trip.endDate ?? trip.trackPoints.last?.timestamp ?? trip.startDate).timeIntervalSince1970
-        guard end > start else { return 0 }
-        return CGFloat(min(1, max(0, (date.timeIntervalSince1970 - start) / (end - start))))
+    private var timeline: HiddenTimelineAxis {
+        HiddenTimelineAxis(points: trip.trackPoints, tripStart: trip.startDate, tripEnd: trip.endDate)
     }
+
+    private func position(_ date: Date) -> CGFloat { timeline.fraction(of: date) }
 
     private func clock(_ date: Date?) -> String {
         guard let date else { return "" }
@@ -355,10 +358,9 @@ struct HiddenPartsEditorView: View {
     private func handleDrag(_ id: UUID, movingStart: Bool, width: CGFloat, initialDate: Date) -> some Gesture {
         DragGesture(minimumDistance: 3).onChanged { value in
             guard width > 0 else { return }
-            let ratio = min(1, max(0, position(initialDate) + value.translation.width / width))
-            let index = Int(ratio * CGFloat(max(0, trip.trackPoints.count - 1)))
-            guard trip.trackPoints.indices.contains(index) else { return }
-            let time = trip.trackPoints[index].timestamp
+            let ratio = position(initialDate) + value.translation.width / width
+            guard let time = HiddenTimelineAxis.nearestTimestamp(
+                to: timeline.date(atFraction: ratio), in: trip.trackPoints) else { return }
             guard let item = draft.sections.firstIndex(where: { $0.id == id }) else { return }
             editorModel.moveBoundary(id, to: time, movingStart: movingStart)
         }
