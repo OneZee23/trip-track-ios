@@ -1352,6 +1352,9 @@ final class CoreDataTripRepository: TripRepository {
         let hiddenParts: TripHiddenParts? = (entity.value(forKey: "hiddenPartsJSON") as? String)
             .flatMap { $0.data(using: .utf8) }
             .flatMap { try? JSONDecoder().decode(TripHiddenParts.self, from: $0) }
+        let previewBreaks: [Int]? = (entity.value(forKey: "previewBreaksJSON") as? String)
+            .flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONDecoder().decode([Int].self, from: $0) }
 
         let badgeIds: [String]
         if let json = entity.badgesJSON,
@@ -1384,7 +1387,8 @@ final class CoreDataTripRepository: TripRepository {
             region: entity.region, isPrivate: entity.isPrivate,
             isTransfer: entity.isTransfer,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
-            previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
+            previewPolyline: entity.previewPolyline, previewBreaks: previewBreaks,
+            earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
             companions: companions, isOnServer: entity.serverCreatedAt != nil,
             source: Self.origin(of: entity),
@@ -1476,8 +1480,24 @@ final class CoreDataTripRepository: TripRepository {
         // carries no local edit. Otherwise its FIRST pull loses source=manual
         // and makes a web-created route eligible for recorded-trip rewards.
         let hasLocalEdits = existing != nil && entity.syncStatus == SyncStatus.pendingUpload.rawValue
-        let localOwnsFullMaskedTrip = existing != nil && !entity.orderedTrackPoints.isEmpty &&
-            (HomeSettings.load().activeZone != nil || p.hiddenParts != nil || !(p.hiddenRanges ?? []).isEmpty)
+        let localZone = HomeSettings.load().activeZone
+        // The local mask is resolved only when something on this phone can hide: by default nothing
+        // does, and a full pull must not materialise every trip's points for nothing (the 0.6.8
+        // App Hanging lesson). Cheap checks first; the point count last, it faults the relationship.
+        let maskCanMatter = existing != nil &&
+            (localZone != nil || (PrivacySettings.load().edgeMetres ?? 0) > 0 ||
+             entity.value(forKey: "hiddenPartsJSON") != nil) &&
+            (entity.trackPoints?.count ?? 0) > 0
+        let localTrip = maskCanMatter ? existing.flatMap { tripFromEntity($0) } : nil
+        let localMask = localTrip.map { localMaskResolution(for: $0, zone: localZone) }
+        let localOwnsFullMaskedTrip = localMask.map { !$0.hiddenRuns.isEmpty } ?? false
+        let locallyHiddenPhotoIds: Set<UUID>
+        if let localTrip, let localMask {
+            locallyHiddenPhotoIds = locallyHiddenPhotoIDs(
+                in: localTrip, resolution: localMask, zone: localZone)
+        } else {
+            locallyHiddenPhotoIds = []
+        }
         // Old servers omit this field. Never erase a recorded pause merely
         // because an older peer knows only about coordinates and timestamps.
         if !hasLocalEdits, let breaks = p.recordingBreaks {
@@ -1536,9 +1556,14 @@ final class CoreDataTripRepository: TripRepository {
         // (0.6.8) — локальное точнее серверного. Проверка «своё превью есть»
         // стоит ПЕРВОЙ: у поездки со второго телефона его нет, и ей серверное
         // как раз нужно.
-        if !localOwnsFullMaskedTrip && entity.previewPolyline == nil ||
-            (!localOwnsFullMaskedTrip && HomeSettings.load().activeZone == nil) {
+        if !localOwnsFullMaskedTrip {
             entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
+            if let previewBreaks = p.previewBreaks,
+               let data = try? JSONEncoder().encode(previewBreaks) {
+                entity.setValue(String(data: data, encoding: .utf8), forKey: "previewBreaksJSON")
+            } else {
+                entity.setValue(nil, forKey: "previewBreaksJSON")
+            }
             // Кэш держал старую форму до перезапуска приложения.
             Trip.invalidatePreviewCache(for: p.id)
         }
@@ -1584,7 +1609,9 @@ final class CoreDataTripRepository: TripRepository {
             let serverById = Dictionary((p.photos ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             for pe in localPhotos {
                 guard let pid = pe.id else { continue }
-                if pe.uploadStatus == PhotoUploadStatus.localOnly.rawValue {
+                let uploadStatus = PhotoUploadStatus(rawValue: pe.uploadStatus) ?? .localOnly
+                if HiddenPhotoSync.preservesLocalCopyDuringPull(
+                    isHiddenLocally: locallyHiddenPhotoIds.contains(pid), status: uploadStatus) {
                     continue
                 }
                 if !serverIds.contains(pid) {
@@ -1667,6 +1694,29 @@ final class CoreDataTripRepository: TripRepository {
 
         // Save deferred to PullApplier.flushPendingApplies() — batches a
         // /sync/pull's worth of writes into a single CoreData save call.
+    }
+
+    private func localMaskResolution(for trip: Trip, zone: Zone?) -> HiddenPartsResolution {
+        let settings = PrivacySettings.load()
+        return HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? settings.edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? settings.edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: zone)
+    }
+
+    private func locallyHiddenPhotoIDs(in trip: Trip, resolution: HiddenPartsResolution,
+                                       zone: Zone?) -> Set<UUID> {
+        Set(trip.photos.filter { photo in
+            let coordinate = photo.exifLatitude.flatMap { latitude in
+                photo.exifLongitude.map {
+                    CLLocationCoordinate2D(latitude: latitude, longitude: $0)
+                }
+            }
+            return HiddenPartsResolver.photoIsHidden(
+                capturedAt: photo.capturedAt, coordinate: coordinate,
+                resolution: resolution, points: trip.trackPoints, zone: zone)
+        }.map(\.id))
     }
 
     /// A server summary exists locally but its manual track has never been

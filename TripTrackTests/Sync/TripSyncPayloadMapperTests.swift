@@ -149,4 +149,30 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         XCTAssertEqual(payload.elevation, 18)
         XCTAssertEqual(payload.averageSpeed, payload.distance / 1_800, accuracy: 0.01)
     }
+
+    func testFullyHiddenVisibleOnlyTripDoesNotPublishFullMaximumAltitude() {
+        let context = container.viewContext
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let points = (0..<6).map { index in
+            TrackPoint(latitude: 40, longitude: Double(index) * 0.001,
+                       altitude: Double(index) * 100, speed: 10,
+                       timestamp: start.addingTimeInterval(Double(index) * 60))
+        }
+        let trip = Trip(
+            id: UUID(), startDate: start, endDate: points.last?.timestamp,
+            distance: 3_000, maxSpeed: 20, averageSpeed: 10,
+            trackPoints: points,
+            hiddenParts: TripHiddenParts(
+                sections: [HiddenSection(id: UUID(), from: points[0].timestamp,
+                                         to: points[5].timestamp)],
+                numbersVisibleOnly: true))
+        let entity = TripEntity(context: context)
+        entity.id = trip.id
+        entity.startDate = start
+
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
+
+        XCTAssertTrue(payload.trackPoints?.isEmpty == true)
+        XCTAssertNil(payload.maxAltitude)
+    }
 }

@@ -17,6 +17,10 @@ enum HiddenPhotoSync {
         return status == .hiddenByPrivacy ? .uploadAgain : .keep
     }
 
+    static func preservesLocalCopyDuringPull(isHiddenLocally: Bool, status: PhotoUploadStatus) -> Bool {
+        isHiddenLocally || status == .localOnly || status == .hiddenByPrivacy
+    }
+
     @MainActor
     @discardableResult
     static func reconcile(trip: Trip, entity: TripEntity, context: NSManagedObjectContext,

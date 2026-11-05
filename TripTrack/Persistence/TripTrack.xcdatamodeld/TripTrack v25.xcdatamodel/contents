@@ -11,6 +11,7 @@
         <attribute name="isPrivate" optional="YES" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="maxSpeed" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="previewPolyline" optional="YES" attributeType="Binary"/>
+        <attribute name="previewBreaksJSON" optional="YES" attributeType="String"/>
         <attribute name="region" optional="YES" attributeType="String"/>
         <attribute name="startDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="hiddenPartsJSON" optional="YES" attributeType="String"/>

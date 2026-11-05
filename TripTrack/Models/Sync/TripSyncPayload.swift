@@ -231,7 +231,9 @@ extension TripSyncPayload {
         // счёт ниже записал бы тоннель в «стоянку».
         let measured = trip.measuredPoints
         if !measured.isEmpty {
-            self.maxAltitude = visibleMetrics?.maxAltitude ?? measured.map(\.altitude).max()
+            self.maxAltitude = numbersVisibleOnly
+                ? visibleMetrics?.maxAltitude
+                : measured.map(\.altitude).max()
             let split = visibleMetrics.map { (driving: $0.drivingTime, stopped: $0.stoppedTime) }
                 ?? TripSyncPayload.computeMovementSplit(measured)
             self.drivingTime = Int(split.driving)
@@ -253,6 +255,8 @@ extension TripSyncPayload {
         self.fuelCurrency = trip.fuelCurrency
         let hasLoadedTrack = !trip.trackPoints.isEmpty
         self.previewBreaks = hasLoadedTrack ? mask.previewBreaks : nil
+        // The server uses these ranges when an older client re-sends full points;
+        // only the owner's synced trip receives them, never another viewer.
         self.hiddenRanges = hasLoadedTrack ? mask.hiddenRanges : nil
         self.hiddenParts = trip.hiddenParts
         if hasLoadedTrack {
@@ -296,6 +300,8 @@ extension TripSyncPayload {
                 exifLongitude: Self.wireExif(pe.exifLatitude?.doubleValue,
                                              pe.exifLongitude?.doubleValue, zone: zone)?.longitude)
         }
+        // Checkpoints and segments sync only to the owner's copy. Keep hidden
+        // checkpoint metadata there, but remove its coordinates like the home zone.
         self.checkpoints = trip.checkpoints.enumerated().map { index, c in
             let hiddenByTime = mask.hiddenRanges.contains { $0.from <= c.timestamp && c.timestamp <= $0.to }
             return TripCheckpointPayload(

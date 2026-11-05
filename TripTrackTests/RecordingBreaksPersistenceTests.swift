@@ -94,4 +94,34 @@ final class RecordingBreaksPersistenceTests: XCTestCase {
         repo.applyRemoteTrip(payload)
         XCTAssertEqual(CoreDataTripRepository.recordingBreaks(of: entity), [start.addingTimeInterval(10)])
     }
+
+    func testPulledPreviewRestoresBreakIndices() throws {
+        let pc = PersistenceController(inMemory: true)
+        let repo = CoreDataTripRepository(persistenceController: pc)
+        let id = UUID()
+        let points = (0..<8).map { index in
+            TrackPoint(latitude: 45, longitude: 39 + Double(index) * 0.01,
+                       timestamp: start.addingTimeInterval(Double(index) * 10))
+        }
+        let source = Trip(
+            id: id, startDate: start, trackPoints: points,
+            hiddenParts: TripHiddenParts(
+                sections: [HiddenSection(id: UUID(), from: points[3].timestamp,
+                                         to: points[4].timestamp)]))
+        let metadata = TripEntity(context: pc.container.viewContext)
+        metadata.id = id
+        metadata.startDate = start
+        metadata.lastModifiedAt = start
+        metadata.syncStatus = SyncStatus.synced.rawValue
+        let payload = TripSyncPayload(trip: source, entity: metadata, zone: nil)
+        XCTAssertEqual(payload.previewBreaks, [3])
+
+        repo.applyRemoteTrip(payload)
+
+        let restored = try XCTUnwrap(repo.fetchTripDetail(id: id))
+        XCTAssertEqual(restored.previewBreaks, [3])
+        XCTAssertEqual(restored.previewPolyline,
+                       payload.previewPolyline.flatMap { Data(base64Encoded: $0) })
+        pc.container.viewContext.reset()
+    }
 }
