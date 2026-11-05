@@ -271,8 +271,9 @@ struct HiddenPartsEditorView: View {
                 Text(AppStrings.hiddenAllTrip(l)).tag(false)
                 Text(AppStrings.hiddenWithoutHidden(l)).tag(true)
             }.pickerStyle(.segmented).accessibilityIdentifier("hidden_numbers_choice")
-            Text(AppStrings.hiddenNumbersPreview(l, distance: visibleDistance(), duration: visibleDuration()))
+            Text(numbersPreview(l))
                 .font(.inter(12)).foregroundStyle(c.textSecondary).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("hidden_numbers_preview")
         }
     }
 
@@ -343,16 +344,12 @@ struct HiddenPartsEditorView: View {
         return Measure.distance(metres: metres, unit: distanceUnit, lang: lang.language)
     }
 
-    private func visibleDistance() -> String {
-        let metres = resolution.visibleRuns.reduce(0.0) { sum, run in
-            sum + zip(run, run.dropFirst()).reduce(0.0) { $0 + GeometryUtils.haversineDistance($1.0.coordinate, $1.1.coordinate) }
-        }
-        return Measure.distance(metres: metres, unit: distanceUnit, lang: lang.language)
-    }
-
-    private func visibleDuration() -> String {
-        let seconds = resolution.visibleRuns.reduce(0.0) { $0 + (($1.last?.timestamp.timeIntervalSince($1.first?.timestamp ?? $1[0].timestamp)) ?? 0) }
-        return Trip.formattedTimeHuman(seconds, lang: lang.language)
+    private func numbersPreview(_ l: LanguageManager.Language) -> String {
+        let numbers = HiddenPartsEditorModel.numbersForOthers(
+            trip: trip, visibleRuns: resolution.visibleRuns, visibleOnly: draft.numbersVisibleOnly)
+        return AppStrings.hiddenNumbersPreview(
+            l, distance: Measure.distance(metres: numbers.metres, unit: distanceUnit, lang: l),
+            duration: Trip.formattedTimeHuman(numbers.seconds, lang: l))
     }
 
     private func handleDrag(_ id: UUID, movingStart: Bool, width: CGFloat, initialDate: Date) -> some Gesture {

@@ -117,3 +117,16 @@ struct HiddenTimelineAxis: Equatable {
         return points[low].timestamp
     }
 }
+
+extension HiddenPartsEditorModel {
+    /// What other people will see under the current choice: the numbers that
+    /// upload (`TripSyncPayload`). TestFlight 101 always printed the visible
+    /// numbers, so «Вся поездка» promised 1.6 km for a 2.6 km trip.
+    static func numbersForOthers(trip: Trip, visibleRuns: [[TrackPoint]],
+                                 visibleOnly: Bool) -> (metres: Double, seconds: TimeInterval) {
+        guard visibleOnly else { return (trip.distance, trip.duration) }
+        let visible = TripSyncPayload.visibleMetrics(visibleRuns)
+        guard let start = visible.startDate, let end = visible.endDate else { return (0, 0) }
+        return (visible.distance, end.timeIntervalSince(start))
+    }
+}

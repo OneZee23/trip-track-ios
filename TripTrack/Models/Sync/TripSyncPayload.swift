@@ -146,7 +146,8 @@ struct TripSyncPayload: Codable {
     var previewBreaks: [Int]? = nil
 }
 
-private struct VisibleTripMetrics {
+/// Internal for the editor's «Другие увидят…» caption, which must print what uploads.
+struct VisibleTripMetrics {
     let runs: [[TrackPoint]]
     let startDate: Date?
     let endDate: Date?
@@ -160,7 +161,7 @@ private struct VisibleTripMetrics {
 }
 
 extension TripSyncPayload {
-    private static func visibleMetrics(_ runs: [[TrackPoint]]) -> VisibleTripMetrics {
+    static func visibleMetrics(_ runs: [[TrackPoint]]) -> VisibleTripMetrics {
         let measuredRuns = runs.map { $0.filter(\.countsForDistance) }
         let measuredPoints = measuredRuns.flatMap { $0 }
         let first = runs.first?.first?.timestamp
