@@ -1503,9 +1503,12 @@ final class CoreDataTripRepository: TripRepository {
         if !hasLocalEdits, let breaks = p.recordingBreaks {
             Self.setRecordingBreaks(breaks, on: entity)
         }
-        if !hasLocalEdits, let hiddenParts = p.hiddenParts,
-           let data = try? JSONEncoder().encode(hiddenParts) {
-            entity.setValue(String(data: data, encoding: .utf8), forKey: "hiddenPartsJSON")
+        if !hasLocalEdits, let hiddenParts = p.hiddenParts {
+            if hiddenParts == TripHiddenParts() {
+                entity.setValue(nil, forKey: "hiddenPartsJSON")
+            } else if let data = try? JSONEncoder().encode(hiddenParts) {
+                entity.setValue(String(data: data, encoding: .utf8), forKey: "hiddenPartsJSON")
+            }
         }
         entity.id = p.id
         entity.title = p.title

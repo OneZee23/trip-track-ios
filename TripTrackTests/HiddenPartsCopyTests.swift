@@ -18,9 +18,29 @@ final class HiddenPartsCopyTests: XCTestCase {
     }
 
     func testLocalOnlyCardUsesSectionAndPhotoCounts() {
-        XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: 3, photos: 3),
-                       "3 скрытых куска и 3 фото с них не попадут ни в ленту, ни в облачную копию.")
-        XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: 1, photos: 0),
-                       "1 скрытый кусок не попадёт ни в ленту, ни в облачную копию.")
+        let russian: [(Int, String)] = [
+            (1, "1 скрытый кусок не попадёт ни в ленту, ни в облачную копию."),
+            (2, "2 скрытых куска не попадут ни в ленту, ни в облачную копию."),
+            (5, "5 скрытых кусков не попадут ни в ленту, ни в облачную копию."),
+            (11, "11 скрытых кусков не попадут ни в ленту, ни в облачную копию."),
+            (21, "21 скрытый кусок не попадёт ни в ленту, ни в облачную копию.")
+        ]
+        for (count, expected) in russian {
+            XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: count, photos: 0), expected)
+            XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: count, photos: 3),
+                           "\(count) \(count == 1 || count == 21 ? "скрытый кусок" : (2...4).contains(count % 10) && !(12...14).contains(count % 100) ? "скрытых куска" : "скрытых кусков") и 3 фото оттуда не попадут ни в ленту, ни в облачную копию.")
+        }
+        XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: 0, photos: 0),
+                       "0 скрытых кусков не попадут ни в ленту, ни в облачную копию.")
+        XCTAssertEqual(AppStrings.hiddenLocalCardBody(.ru, pieces: 0, photos: 3),
+                       "0 скрытых кусков и 3 фото оттуда не попадут ни в ленту, ни в облачную копию.")
+        XCTAssertEqual(AppStrings.hiddenNothing(.ru), "Ничего не скрыто")
+
+        for language: LanguageManager.Language in [.uk, .pl, .en] {
+            for count in [1, 2, 5, 11, 21, 0] {
+                XCTAssertFalse(AppStrings.hiddenLocalCardBody(language, pieces: count, photos: 0).isEmpty)
+                XCTAssertFalse(AppStrings.hiddenLocalCardBody(language, pieces: count, photos: 3).isEmpty)
+            }
+        }
     }
 }

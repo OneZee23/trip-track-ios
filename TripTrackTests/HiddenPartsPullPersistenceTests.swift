@@ -87,4 +87,33 @@ final class HiddenPartsPullPersistenceTests: XCTestCase {
         XCTAssertEqual((local.photos?.array as? [TripPhotoEntity])?.map(\.id), [photoId])
         XCTAssertTrue(FileManager.default.fileExists(atPath: imageURL.path))
     }
+
+    /// Clearing a trip's own settings must reach the server and stay cleared: an absent key means
+    /// «unchanged», so the payload always carries the object, empty when the trip follows the
+    /// default, and a pulled empty object clears the local one.
+    func testClearedMaskTravelsAsAnEmptyObjectAndClearsOnPull() throws {
+        let pc = PersistenceController(inMemory: true)
+        let repo = CoreDataTripRepository(persistenceController: pc)
+        let context = pc.container.viewContext
+        defer { context.reset() }
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let id = UUID()
+        let entity = TripEntity(context: context)
+        entity.id = id
+        entity.startDate = start
+        entity.endDate = start.addingTimeInterval(600)
+        entity.syncStatus = SyncStatus.synced.rawValue
+        entity.lastModifiedAt = start
+        let old = TripHiddenParts(startMetres: 500, endMetres: 500)
+        entity.setValue(String(data: try JSONEncoder().encode(old), encoding: .utf8), forKey: "hiddenPartsJSON")
+
+        let trip = Trip(id: id, startDate: start, endDate: entity.endDate, trackPoints: [])
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
+        XCTAssertEqual(payload.hiddenParts, TripHiddenParts(), "a cleared mask is sent, not left out")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
+        XCTAssertNotNil(json["hiddenParts"], "the key must be on the wire")
+
+        repo.applyRemoteTrip(payload)
+        XCTAssertNil(entity.value(forKey: "hiddenPartsJSON"), "a pulled empty object clears the local mask")
+    }
 }

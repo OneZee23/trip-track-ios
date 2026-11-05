@@ -2,6 +2,8 @@
 
 ## Implemented
 
+- Fixed hidden-part count agreement in Russian, Ukrainian and Polish copy; corrected the Russian privacy intro.
+
 - Added the v25 Core Data model and `TripHiddenParts`, `PrivacySettings`, and
   `HiddenPartsResolver`. The vector test now checks visible-run distance,
   visible start/end timestamps, preview point count, hidden ranges and photo

@@ -73,12 +73,16 @@ extension AppStrings {
         let hiddenParts = "\(pieces) \(count)"
         switch l {
         case .ru:
-            let verb = plural(l, pieces, one: "не попадёт", few: "не попадут", many: "не попадут")
-            if photos == 0 { return "\(hiddenParts) \(verb) ни в ленту, ни в облачную копию." }
-            return "\(hiddenParts) и \(photos) фото с них \(verb) ни в ленту, ни в облачную копию."
+            let piece = plural(l, pieces, one: "скрытый кусок", few: "скрытых куска", many: "скрытых кусков")
+            if photos == 0 {
+                let verb = plural(l, pieces, one: "не попадёт", few: "не попадут", many: "не попадут")
+                return "\(pieces) \(piece) \(verb) ни в ленту, ни в облачную копию."
+            }
+            return "\(pieces) \(piece) и \(photos) фото оттуда не попадут ни в ленту, ни в облачную копию."
         case .en:
-            if photos == 0 { return "\(pieces) hidden \(plural(l, pieces, one: "piece", many: "pieces")) won't reach the feed or cloud copy." }
-            return "\(pieces) hidden \(plural(l, pieces, one: "piece", many: "pieces")) and \(photos) \(plural(l, photos, one: "photo", many: "photos")) from them won't reach the feed or cloud copy."
+            let piece = plural(l, pieces, one: "hidden piece", many: "hidden pieces")
+            if photos == 0 { return "\(pieces) \(piece) won't reach the feed or cloud copy." }
+            return "\(pieces) \(piece) and \(photos) \(plural(l, photos, one: "photo", many: "photos")) from them won't reach the feed or cloud copy."
         case .de:
             let sections = plural(l, pieces, one: "verborgener Abschnitt", many: "verborgene Abschnitte")
             if photos == 0 { return "\(pieces) \(sections) erscheinen weder im Feed noch in der Cloud-Kopie." }
@@ -97,8 +101,11 @@ extension AppStrings {
             return "\(pieces) \(sections) e \(photos) foto non finiranno nel feed né nella copia cloud."
         case .pl:
             let sections = plural(l, pieces, one: "ukryty odcinek", few: "ukryte odcinki", many: "ukrytych odcinków")
-            if photos == 0 { return "\(pieces) \(sections) nie trafi do kanału ani kopii w chmurze." }
-            return "\(pieces) \(sections) i \(photos) \(plural(l, photos, one: "zdjęcie", few: "zdjęcia", many: "zdjęć")) nie trafią do kanału ani kopii w chmurze."
+            if photos == 0 {
+                let verb = pieces >= 2 && (2...4).contains(abs(pieces) % 10) && !(12...14).contains(abs(pieces) % 100) ? "nie trafią" : "nie trafi"
+                return "\(pieces) \(sections) \(verb) do kanału ani kopii w chmurze."
+            }
+            return "\(pieces) \(sections) i \(photos) \(plural(l, photos, one: "zdjęcie", few: "zdjęcia", many: "zdjęć")) stamtąd nie trafią do kanału ani kopii w chmurze."
         case .id:
             let sections = plural(l, pieces, one: "bagian tersembunyi", many: "bagian tersembunyi")
             if photos == 0 { return "\(pieces) \(sections) tidak akan masuk ke feed atau salinan cloud." }
@@ -114,8 +121,11 @@ extension AppStrings {
             return "Hindi mapupunta sa feed o cloud copy ang \(pieces) \(sections) at \(photos) \(photoNoun) kasama nito."
         case .uk:
             let sections = plural(l, pieces, one: "прихована ділянка", few: "приховані ділянки", many: "прихованих ділянок")
-            if photos == 0 { return "\(pieces) \(sections) не потрапить ні в стрічку, ні в хмарну копію." }
-            return "\(pieces) \(sections) та \(photos) фото з них не потраплять ні в стрічку, ні в хмарну копію."
+            if photos == 0 {
+                let verb = plural(l, pieces, one: "не потрапить", few: "не потраплять", many: "не потраплять")
+                return "\(pieces) \(sections) \(verb) ні у стрічку, ні в хмарну копію."
+            }
+            return "\(pieces) \(sections) і \(photos) фото звідти не потраплять ні у стрічку, ні в хмарну копію."
         case .kk:
             let sections = plural(l, pieces, one: "жасырын бөлік", many: "жасырын бөлік")
             if photos == 0 { return "\(pieces) \(sections) лентаға да, бұлттағы көшірмеге де жіберілмейді." }
@@ -168,7 +178,7 @@ extension AppStrings {
         tr(l, "hiddenQuickHide", ru: "Скрыть {distance}", en: "Hide {distance}")
             .replacingOccurrences(of: "{distance}", with: distance)
     }
-    static func hiddenPrivacyIntro(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPrivacyIntro", ru: "Скрывается у всех поездок, кроме тех, где вы задали своё. Ни в ленту, ни в облако не уходит.", en: "Applies to trips without a custom setting. Hidden parts stay out of the feed and cloud.") }
+    static func hiddenPrivacyIntro(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPrivacyIntro", ru: "Скрытые участки скрываются во всех поездках, кроме тех, где вы задали своё расстояние. Они не попадают ни в ленту, ни в облако.", en: "Applies to trips without a custom setting. Hidden parts stay out of the feed and cloud.") }
     static func hiddenPrivacyModeFootnote(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPrivacyModeFootnote", ru: "В режиме съёмки карты и «Места» скрывают закрытые участки, дом и синюю точку. Экран записи сохраняет точку.", en: "Filming mode hides private sections, home and your location dot on maps and Places. The recording screen keeps the dot.") }
     static func hiddenRouteLockAccessibility(_ l: LanguageManager.Language) -> String { tr(l, "hiddenRouteLockAccessibility", ru: "Граница скрытого участка", en: "Hidden route boundary") }
 }

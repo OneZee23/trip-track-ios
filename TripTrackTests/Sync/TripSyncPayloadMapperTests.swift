@@ -173,6 +173,6 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
 
         XCTAssertTrue(payload.trackPoints?.isEmpty == true)
-        XCTAssertNil(payload.maxAltitude)
+        XCTAssertEqual(payload.maxAltitude, 0, "zero, not nil: nil leaves the key out and the server keeps the old full maximum")
     }
 }

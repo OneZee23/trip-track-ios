@@ -231,8 +231,10 @@ extension TripSyncPayload {
         // счёт ниже записал бы тоннель в «стоянку».
         let measured = trip.measuredPoints
         if !measured.isEmpty {
+            // Zero, not nil, when nothing is visible: nil leaves the key out, and the server would keep
+            // the full maximum from an earlier upload.
             self.maxAltitude = numbersVisibleOnly
-                ? visibleMetrics?.maxAltitude
+                ? (visibleMetrics?.maxAltitude ?? 0)
                 : measured.map(\.altitude).max()
             let split = visibleMetrics.map { (driving: $0.drivingTime, stopped: $0.stoppedTime) }
                 ?? TripSyncPayload.computeMovementSplit(measured)
@@ -258,7 +260,9 @@ extension TripSyncPayload {
         // The server uses these ranges when an older client re-sends full points;
         // only the owner's synced trip receives them, never another viewer.
         self.hiddenRanges = hasLoadedTrack ? mask.hiddenRanges : nil
-        self.hiddenParts = trip.hiddenParts
+        // Always sent: an absent key means «unchanged» on the wire, so a cleared mask would stay on the
+        // server and the next pull would bring it back. An empty object means «follows the default».
+        self.hiddenParts = trip.hiddenParts ?? TripHiddenParts()
         if hasLoadedTrack {
             let coordinates = mask.previewPoints
             self.previewPolyline = coordinates.count >= 2
