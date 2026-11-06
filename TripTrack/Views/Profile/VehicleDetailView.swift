@@ -74,6 +74,8 @@ struct VehicleDetailView: View {
     /// Name of the Bluetooth audio device the phone is playing through,
     /// refreshed whenever the route changes. Nil when nothing is connected.
     @State private var connectedStereo: String?
+    /// Bumped on every route change; the read itself runs off the main thread.
+    @State private var routeChanges = 0
 
     @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
 
@@ -189,8 +191,11 @@ struct VehicleDetailView: View {
             }
             .background(c.bg)
             .task {
-                connectedStereo = AudioRouteDetector.currentBluetoothOutputName()
                 bluetoothDetector.refreshPowerState()
+            }
+            .task(id: routeChanges) {
+                let output = await AudioRouteDetector.stereoOutput()
+                if !Task.isCancelled { connectedStereo = output?.name }
             }
             .task(id: vehicleId) { await loadPassport() }
             // Машину могли удалить с другого экрана (или синком) прямо сейчас.
@@ -225,8 +230,8 @@ struct VehicleDetailView: View {
             // The stereo connects and drops while this screen is open — the
             // card claims «подключена», so it has to keep earning it.
             .onReceive(NotificationCenter.default.publisher(
-                for: AudioRouteDetector.routeChangeNotification)) { _ in
-                connectedStereo = AudioRouteDetector.currentBluetoothOutputName()
+                for: AudioRouteDetector.routeChangeNotification).receive(on: RunLoop.main)) { _ in
+                routeChanges &+= 1
             }
             .toolbar(.hidden, for: .navigationBar)
             // Re-enables the interactive pop gesture the hidden nav bar
