@@ -97,10 +97,32 @@ final class AudioRouteDetectorQueueTests: XCTestCase {
         XCTAssertEqual(events, [], "a stopped detector reported a stereo")
     }
 
+    func testARestartIgnoresAnswersFromTheSessionBefore() {
+        // The first session's read is slow and finds the stereo. By the time it
+        // lands, monitoring was stopped and started again, and the new session
+        // sees no stereo.
+        let (detector, log) = makeDetector(answers: [("Car stereo", 0.4), (nil, 0)])
+
+        detector.startMonitoring()
+        detector.stopMonitoring()
+        detector.startMonitoring()
+
+        drain()
+        XCTAssertEqual(log.reads, 2)
+        XCTAssertEqual(events, [], "an answer from the stopped session reached the new one")
+    }
+
+    @MainActor
     func testAScreenReadsTheStereoOffTheMainThread() async {
-        // The simulator has no stereo; the point is that the call returns.
-        let output = await AudioRouteDetector.stereoOutput()
-        XCTAssertNil(output)
+        let log = ReadLog(answers: [])
+        let output = await AudioRouteDetector.stereoOutput {
+            _ = log.next(onMain: Thread.isMainThread)
+            Thread.sleep(forTimeInterval: 0.3)
+            return .init(name: "Car stereo", isCarPlay: true)
+        }
+        XCTAssertEqual(output, .init(name: "Car stereo", isCarPlay: true))
+        XCTAssertEqual(log.reads, 1)
+        XCTAssertEqual(log.readsOnMain, 0)
     }
 }
 
