@@ -165,7 +165,7 @@ extension AppStrings {
         }
     }
     static func hiddenSave(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSave", ru: "Сохранить", en: "Save") }
-    static func hiddenSettingsFootnote(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSettingsFootnote", ru: "Поменять можно в Настройках → Конфиденциальность", en: "Change this in Settings → Privacy") }
+    static func hiddenSettingsFootnote(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSettingsFootnote", ru: "Поменять можно в Настройках → Приватность", en: "Change this in Settings → Privacy") }
     static func hiddenPublishPreviewTitle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenPublishPreviewTitle", ru: "Так её увидят в ленте и в профиле", en: "How it will look in the feed and profile") }
     static func hiddenPublishRow(_ l: LanguageManager.Language, summary: String) -> String {
         guard summary != hiddenNothing(l) else { return hiddenEditorTitle(l) }
