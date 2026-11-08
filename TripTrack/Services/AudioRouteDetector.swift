@@ -90,9 +90,9 @@ final class AudioRouteDetector: ObservableObject {
         audioLog.notice("[audio.app_became_active] schedule_route_check_in_s=\(Int(AutoTripPolicy.audioRouteSettleDelay), privacy: .public)")
         // At unlock iOS audio routing can briefly show a non-stereo output
         // (e.g. .builtInSpeaker) for a tick before settling back on the car
-        // route, which `checkCurrentRoute` would otherwise interpret as a
-        // disconnect and fire a stop prompt while the engine is still
-        // running and the stereo is still connected. Wait for it to settle.
+        // route. A missing stereo no longer reads as a disconnect at all
+        // (`applyCurrentRoute`); the wait keeps the check from dropping the
+        // stereo it would find a tick later.
         DispatchQueue.main.asyncAfter(deadline: .now() + AutoTripPolicy.audioRouteSettleDelay) { [weak self] in
             self?.checkCurrentRoute()
         }
@@ -137,6 +137,7 @@ final class AudioRouteDetector: ObservableObject {
             let names = previousRoute.outputs.filter { Self.isCarStereoPort($0.portType) }.map(\.portName)
             afterQueuedReads { $0.applyLostDevices(names) }
         case .categoryChange, .override, .routeConfigurationChange:
+            // Someone moved the output. It can find the stereo, not lose it.
             checkCurrentRoute()
         default:
             break
@@ -235,6 +236,17 @@ final class AudioRouteDetector: ObservableObject {
         readRoute { $0.applyCurrentRoute($1) }
     }
 
+    /// A route answer can say the stereo IS playing, never that it LEFT.
+    ///
+    /// The output moves without the stereo going anywhere: another app's
+    /// session takes the route (Yandex Maps with voice control activates
+    /// PlayAndRecord without Bluetooth and the phone's speaker becomes the
+    /// output), a call, Siri, the tick after unlock. Read as a disconnect,
+    /// that ended a resumed trip in auto mode the moment Yandex Maps opened
+    /// (owner's drive, 7 Nov 2026, 17:41:29). Only `.oldDeviceUnavailable`
+    /// with the stereo in the previous route says the device is gone. The
+    /// output is forgotten quietly, so the stereo coming back reads as a
+    /// connect, which keeps a recording going and never ends one.
     private func applyCurrentRoute(_ btDevice: String?) {
         if let btDevice, isSaved(btDevice) {
             if lastKnownBluetoothDevice != btDevice {
@@ -243,9 +255,8 @@ final class AudioRouteDetector: ObservableObject {
                 onDeviceEvent?(.connected(deviceName: btDevice))
             }
         } else if let prev = lastKnownBluetoothDevice {
-            audioLog.notice("[audio.route_check.lost_bt] was=\"\(prev, privacy: .public)\" current_output=\"\(btDevice ?? "nil", privacy: .public)\" → fire_disconnect")
+            audioLog.notice("[audio.route_check.output_moved] was=\"\(prev, privacy: .public)\" current_output=\"\(btDevice ?? "nil", privacy: .public)\" → no_disconnect")
             lastKnownBluetoothDevice = nil
-            onDeviceEvent?(.disconnected(deviceName: prev))
         }
     }
 

@@ -21,6 +21,7 @@ final class AutoStopOnPauseTests: XCTestCase {
         mode: AutoRecordMode,
         isRecording: Bool = true,
         isPaused: Bool = false,
+        driving: Bool = false,
         idle: Bool = false,
         distance: Double = 20_000,
         duration: TimeInterval = 3_600,
@@ -30,6 +31,7 @@ final class AutoStopOnPauseTests: XCTestCase {
             mode: mode,
             isRecording: isRecording,
             isPaused: isPaused,
+            isDriving: driving,
             isIdleBeyondFastStop: idle,
             tripDistance: distance,
             tripDuration: duration,
@@ -101,6 +103,25 @@ final class AutoStopOnPauseTests: XCTestCase {
         // Bluetooth, и отсрочка существует ровно для него.
         XCTAssertEqual(decide(mode: .auto, distance: 100, duration: 60, timeout: 3),
                        .promptThenStop(afterMinutes: 3))
+    }
+
+    // MARK: - На ходу магнитола не «приехали»
+
+    /// Bluetooth отвалился или звук забрало чужое приложение, а машина едет.
+    /// Раньше «Авто» закрывал поездку длиннее 500 м сразу, на любой скорости,
+    /// а «Напоминания» спрашивали водителя за рулём.
+    func testAStereoLostWhileDrivingIsIgnored() {
+        for mode in AutoRecordMode.allCases {
+            XCTAssertEqual(decide(mode: mode, driving: true), .ignore,
+                           "режим \(mode.rawValue): поездку на ходу закрыли или спросили")
+        }
+        XCTAssertEqual(decide(mode: .auto, driving: true, distance: 100, duration: 60), .ignore)
+    }
+
+    /// Стоянка по-прежнему заканчивает поездку: скорость на приборке падает
+    /// в ноль за пару секунд после остановки, и мотор глушат уже на нуле.
+    func testParkingStillEndsTheTripRightAway() {
+        XCTAssertEqual(decide(mode: .auto, driving: false, distance: 11_128, duration: 2_288), .stopNow)
     }
 
     func testNothingHappensWhenNothingIsRecording() {

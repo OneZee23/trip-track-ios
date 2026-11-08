@@ -73,16 +73,43 @@ final class AudioRouteDetectorQueueTests: XCTestCase {
 
     func testAnswersArriveInTheOrderTheRouteChanged() {
         // Start finds nothing, then the stereo connects with a slow answer and
-        // drops with a fast one. Out of order, the drop would land first and
-        // the stereo would stay «connected».
-        let (detector, _) = makeDetector(answers: [(nil, 0), ("Car stereo", 0.4), (nil, 0)])
+        // a second output takes over with a fast one. Out of order, the second
+        // would land first and the stereo would read as the current output.
+        let (detector, _) = makeDetector(answers: [(nil, 0), ("Car stereo", 0.4), ("Hands-free", 0)])
 
         detector.startMonitoring()
         postRouteChange(.newDeviceAvailable)
         postRouteChange(.routeConfigurationChange)
 
         drain()
-        XCTAssertEqual(events, ["connected:Car stereo", "disconnected:Car stereo"])
+        XCTAssertEqual(events, ["connected:Car stereo", "connected:Hands-free"])
+    }
+
+    /// The owner's drive, 7 Nov 2026, 17:41:29: Yandex Maps activated
+    /// PlayAndRecord without Bluetooth, the speaker became the output, and
+    /// the category change read as the stereo leaving. In auto mode that ended
+    /// the trip on the spot, with the car still running and paired.
+    func testAnotherAppTakingTheOutputIsNotADisconnect() {
+        let (detector, _) = makeDetector(answers: [("Car stereo", 0), (nil, 0)])
+
+        detector.startMonitoring()
+        postRouteChange(.categoryChange)
+
+        drain()
+        XCTAssertEqual(events, ["connected:Car stereo"], "a moved output ended the trip")
+    }
+
+    /// Forgotten quietly, the stereo coming back is a connect: it keeps a
+    /// recording going and starts one when nothing records.
+    func testTheStereoComingBackAfterAnotherAppReadsAsAConnect() {
+        let (detector, _) = makeDetector(answers: [("Car stereo", 0), (nil, 0), ("Car stereo", 0)])
+
+        detector.startMonitoring()
+        postRouteChange(.override)
+        postRouteChange(.categoryChange)
+
+        drain()
+        XCTAssertEqual(events, ["connected:Car stereo", "connected:Car stereo"])
     }
 
     func testStoppingDropsAnswersStillOnTheWay() {
