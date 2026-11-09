@@ -6,7 +6,8 @@ import Foundation
 final class TripIntentHandler {
     static let shared = TripIntentHandler()
 
-    var onPause: (() -> Void)?
+    /// The target state of the pressed button, `nil` for a card that only toggles.
+    var onPause: ((Bool?) -> Void)?
     var onStop: (() -> Void)?
     /// Отметка на маршруте, поставленная кнопкой на Live Activity.
     var onCheckpoint: (() -> Void)?
@@ -18,8 +19,8 @@ final class TripIntentHandler {
 
     private init() {}
 
-    func handlePause() {
-        onPause?()
+    func handlePause(target: Bool? = nil) {
+        onPause?(target)
     }
 
     func handleStop() {
@@ -32,5 +33,20 @@ final class TripIntentHandler {
 
     func handleStart(vehicleId: UUID?) {
         onStart?(vehicleId)
+    }
+}
+
+/// Whether a Live Activity pause button changes the recording.
+///
+/// The card can lag behind the app: ActivityKit spaces out updates in the
+/// background, so a pause made on the screen, CarPlay or the watch may still
+/// show «Пауза» on the lock screen. A toggle would then resume the trip the
+/// person had just paused. The button says what it showed, and a recording
+/// already in that state is left alone; only an old card without a target
+/// toggles, as before.
+enum PauseIntentDecision {
+    static func shouldToggle(target: Bool?, isPaused: Bool) -> Bool {
+        guard let target else { return true }
+        return target != isPaused
     }
 }

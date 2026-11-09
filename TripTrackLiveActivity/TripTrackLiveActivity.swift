@@ -202,7 +202,7 @@ struct TripTrackLiveActivity: Widget {
                                 // Pause takes the room, because pausing is what
                                 // you do dozens of times and finishing is what
                                 // you do once — same rule as the phone's HUD.
-                                Button(intent: PauseTripIntent()) {
+                                Button(intent: PauseTripIntent(pause: !context.state.isPaused)) {
                                     HStack(spacing: 7) {
                                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
                                             .font(.system(size: 13, weight: .bold))
@@ -602,7 +602,7 @@ private struct LiveLockScreenView: View {
                 // Paused is a state you should be able to read at a glance
                 // from the Lock Screen: the button goes solid accent and says
                 // «Продолжить», instead of looking identical to running.
-                Button(intent: PauseTripIntent()) {
+                Button(intent: PauseTripIntent(pause: !state.isPaused)) {
                     HStack(spacing: 6) {
                         Image(systemName: state.isPaused ? "play.fill" : "pause.fill")
                             .font(.system(size: 13, weight: .bold))
