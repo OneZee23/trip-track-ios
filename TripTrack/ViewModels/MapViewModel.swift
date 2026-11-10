@@ -1007,9 +1007,7 @@ final class MapViewModel: ObservableObject {
         if let trip = completedTrip, route == .discardJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
-            discardedJunkTripReason = TripJunkClassifier.reason(
-                distanceMeters: trip.distance, durationSeconds: trip.duration, maxSpeedMS: trip.maxSpeed
-            )
+            discardedJunkTripReason = trip.finishDiscardReason
             discardedJunkTrip = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)

@@ -90,6 +90,44 @@ extension AppStrings {
             case .kk: return "Жылдамдық бүкіл жазба бойы көлік сапары үшін тым төмен болды. Жазба тарихқа қосылмайды."
             case .pt: return "A velocidade foi sempre demasiado baixa para uma viagem de carro. A gravação não será adicionada ao histórico."
             }
+        case .noTrackPoints:
+            // Первая фраза — из Android (`android_recording_discarded_no_points`),
+            // вторая — та же, что у «.noDrivingSpeed» выше: обе уже переведены.
+            switch lang {
+            case .ru: return "В записи нет точек GPS. Запись не попадёт в историю."
+            case .en: return "No GPS points were recorded. This recording won’t be added to your history."
+            case .de: return "Es wurden keine GPS-Punkte aufgezeichnet. Die Aufzeichnung wird nicht im Verlauf gespeichert."
+            case .es: return "No se registraron puntos GPS. No se añadirá al historial."
+            case .fr: return "Aucun point GPS n’a été enregistré. Cet enregistrement ne sera pas ajouté à l’historique."
+            case .it: return "Non sono stati registrati punti GPS. La registrazione non verrà aggiunta alla cronologia."
+            case .pl: return "Nie zapisano punktów GPS. Nagranie nie zostanie dodane do historii."
+            case .id: return "Tidak ada titik GPS yang direkam. Rekaman ini tidak akan ditambahkan ke riwayat."
+            case .tr: return "GPS noktası kaydedilmedi. Bu kayıt geçmişe eklenmeyecek."
+            case .fil: return "Walang naitalang GPS point. Hindi ito idaragdag sa history."
+            case .uk: return "Точки GPS не записані. Запис не потрапить до історії."
+            case .kk: return "GPS нүктелері жазылмады. Жазба тарихқа қосылмайды."
+            case .pt: return "Nenhum ponto GPS foi gravado. A gravação não será adicionada ao histórico."
+            }
+        }
+    }
+
+    /// Тост после удалённой записи без точек. Тексты те же, что у Android
+    /// (`android_recording_discarded_no_points`): одна ситуация, одни слова.
+    static func recordingDiscardedNoPoints(_ lang: LanguageManager.Language) -> String {
+        switch lang {
+        case .ru: return "В записи нет точек GPS. Она удалена."
+        case .en: return "No GPS points were recorded. This recording was discarded."
+        case .de: return "Es wurden keine GPS-Punkte aufgezeichnet. Diese Aufnahme wurde verworfen."
+        case .es: return "No se registraron puntos GPS. Esta grabación se descartó."
+        case .fr: return "Aucun point GPS n’a été enregistré. Cet enregistrement a été supprimé."
+        case .it: return "Non sono stati registrati punti GPS. Questa registrazione è stata eliminata."
+        case .pl: return "Nie zapisano punktów GPS. To nagranie zostało usunięte."
+        case .id: return "Tidak ada titik GPS yang direkam. Rekaman ini dihapus."
+        case .tr: return "GPS noktası kaydedilmedi. Bu kayıt silindi."
+        case .fil: return "Walang naitalang GPS point. Itinapon ang recording na ito."
+        case .uk: return "Точки GPS не записані. Цей запис видалено."
+        case .kk: return "GPS нүктелері жазылмады. Бұл жазба жойылды."
+        case .pt: return "Nenhum ponto GPS foi gravado. Esta gravação foi descartada."
         }
     }
 

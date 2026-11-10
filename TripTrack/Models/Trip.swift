@@ -508,6 +508,18 @@ extension Trip {
             maxSpeedMS: maxSpeed
         )
     }
+
+    /// Тот же вопрос на ФИНИШЕ записи, где точки поездки при себе. Отдельно от
+    /// `isJunk`, потому что тот зовут и у лёгких поездок из списка, у которых
+    /// точек нет ни у одной: правило по точкам выбросило бы там всю историю.
+    var finishDiscardReason: TripJunkClassifier.Reason? {
+        TripJunkClassifier.finishReason(
+            distanceMeters: distance,
+            durationSeconds: duration,
+            maxSpeedMS: maxSpeed,
+            trackPointCount: trackPoints.count
+        )
+    }
 }
 
 /// Shared classifier so post-trip cleanup (MapViewModel.stopRecording) and
@@ -516,6 +528,8 @@ enum TripJunkClassifier {
     enum Reason: Equatable {
         case tooShort
         case noDrivingSpeed
+        /// Ни одной точки GPS. Решается только на финише (`finishReason`).
+        case noTrackPoints
     }
 
     /// Всё в СИ: это ПОРОГИ ЗАПИСИ, а не показ. Мусорная поездка одинакова у
@@ -534,6 +548,19 @@ enum TripJunkClassifier {
         if isParkingManeuver { return .tooShort }
         if isWalkingMisfire { return .noDrivingSpeed }
         return nil
+    }
+
+    /// Решение на финише записи, где известно число точек.
+    ///
+    /// Запись без единой точки GPS не поездка при любой длительности. Правила
+    /// по числам её не ловили между двумя и тремя минутами: «слишком короткая»
+    /// кончается на 120 с, «пешком» начинается после 180 с, и пустая запись
+    /// на 2:30 сохранялась в историю. Android убрал её в сборке 19, правило то
+    /// же. Сироту без точек `cleanupOrphanedTrips` удаляет и так.
+    static func finishReason(distanceMeters: Double, durationSeconds: TimeInterval,
+                             maxSpeedMS: Double, trackPointCount: Int) -> Reason? {
+        if trackPointCount == 0 { return .noTrackPoints }
+        return reason(distanceMeters: distanceMeters, durationSeconds: durationSeconds, maxSpeedMS: maxSpeedMS)
     }
 }
 

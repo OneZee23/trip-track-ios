@@ -9,9 +9,13 @@ struct RecordingFinishPreview {
     let distance: Double
     let duration: TimeInterval
     let maxSpeed: Double
+    /// Сколько точек GPS уже записано. Ноль — запись удалится при любой
+    /// длительности, и лист обязан сказать это до нажатия.
+    let trackPointCount: Int
 
     var discardReason: TripJunkClassifier.Reason? {
-        TripJunkClassifier.reason(distanceMeters: distance, durationSeconds: duration, maxSpeedMS: maxSpeed)
+        TripJunkClassifier.finishReason(distanceMeters: distance, durationSeconds: duration,
+                                        maxSpeedMS: maxSpeed, trackPointCount: trackPointCount)
     }
 
     /// Time and GPS continue while the question is open. If the outcome has

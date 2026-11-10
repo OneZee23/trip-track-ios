@@ -272,7 +272,7 @@ final class TripManager: ObservableObject {
         if let id = entity.id {
             ProductAnalytics.shared.recordingFinished(
                 id: id, saved: savedLocally,
-                eligible: completedTrip.map { !$0.isJunk } ?? false,
+                eligible: completedTrip.map { $0.finishDiscardReason == nil } ?? false,
                 elapsed: max(0, Date().timeIntervalSince(saveStartedAt)))
         }
 
@@ -296,7 +296,8 @@ final class TripManager: ObservableObject {
         let stats = finalRecordingStats(entity)
         return RecordingFinishPreview(tripID: id, endDate: end, distance: stats.distance,
                                       duration: end.timeIntervalSince(entity.startDate ?? end),
-                                      maxSpeed: stats.maxSpeed)
+                                      maxSpeed: stats.maxSpeed,
+                                      trackPointCount: entity.trackPoints?.count ?? 0)
     }
 
     private func recordingEndDate(for entity: TripEntity, suggested: Date?, now: Date) -> Date {

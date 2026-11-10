@@ -732,6 +732,14 @@ struct TrackingView: View {
         withAnimation(.easeOut(duration: 0.4)) { isMapReady = true }
     }
 
+    private var junkDiscardedText: String {
+        switch viewModel.discardedJunkTripReason {
+        case .noDrivingSpeed: return AppStrings.recordingDiscardedSlow(lang.language)
+        case .noTrackPoints: return AppStrings.recordingDiscardedNoPoints(lang.language)
+        case .tooShort, nil: return AppStrings.junkTripDiscarded(lang.language)
+        }
+    }
+
     /// «Поездка не сохранена — слишком короткая», said where the recording
     /// was, and cleared after a few seconds.
     private var junkDiscardedToast: some View {
@@ -739,9 +747,7 @@ struct TrackingView: View {
             Image(systemName: "trash")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.7))
-            Text(viewModel.discardedJunkTripReason == .noDrivingSpeed
-                 ? AppStrings.recordingDiscardedSlow(lang.language)
-                 : AppStrings.junkTripDiscarded(lang.language))
+            Text(junkDiscardedText)
                 .font(.inter(13, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
