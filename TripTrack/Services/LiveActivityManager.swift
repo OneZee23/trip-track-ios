@@ -79,9 +79,7 @@ final class LiveActivityManager {
         lastUpdateDate = nil
 
         Task {
-            for activity in Activity<TripActivityAttributes>.activities {
-                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
-            }
+            await Self.sweepLingering(keeping: { LiveActivityManager.shared.currentActivityID })
 
             let attributes = TripActivityAttributes(
                 tripId: tripId,
@@ -167,19 +165,18 @@ final class LiveActivityManager {
     // MARK: - End
 
     func endActivity() {
-        // End tracked activity
+        // End tracked activity. `nil` keeps the last content: reading
+        // `content` here would be one more synchronous call into ActivityKit.
         if let activity = currentActivity {
             Task {
-                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
+                await activity.end(nil, dismissalPolicy: .immediate)
             }
             currentActivity = nil
             lastUpdateDate = nil
         }
         // Also end any lingering activities (e.g. finished summary still showing)
         Task {
-            for activity in Activity<TripActivityAttributes>.activities {
-                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
-            }
+            await Self.sweepLingering(keeping: { LiveActivityManager.shared.currentActivityID })
         }
     }
 
@@ -201,16 +198,44 @@ final class LiveActivityManager {
         lastUpdateDate = nil
     }
 
-    // MARK: - Cleanup
+    // MARK: - Уборка
 
-    private func endAllActivities() {
-        if let activity = currentActivity {
-            Task { await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate) }
-            currentActivity = nil
-            lastUpdateDate = nil
-        }
-        for activity in Activity<TripActivityAttributes>.activities {
-            Task { await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate) }
+    /// Карточка, которую ведёт эта запись. Уборка её не трогает.
+    var currentActivityID: String? { currentActivity?.id }
+
+    /// Что уборке нужно от ActivityKit. Шов ради теста: медленный демон
+    /// ActivityKit в юнит-тесте иначе не изобразить.
+    struct SweepSource: Sendable {
+        var ids: @Sendable () -> [String]
+        var end: @Sendable (String) async -> Void
+
+        static let activityKit = SweepSource(
+            ids: { Activity<TripActivityAttributes>.activities.map(\.id) },
+            end: { id in
+                for activity in Activity<TripActivityAttributes>.activities where activity.id == id {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                }
+            }
+        )
+    }
+
+    /// Снять все карточки, кроме той, что ведёт запись, ВНЕ главного потока.
+    ///
+    /// `Activity.activities` — синхронный вызов в демон ActivityKit, и на
+    /// холодном старте он отвечает не сразу. Уборку зовёт запуск, когда записи
+    /// нет, и чтение списка из главного актёра стоило двух секунд зависания
+    /// (Sentry APPLE-IOS-1A: 0.9.3, iOS 27.2, `endActivity` на старте).
+    /// Функция неизолированная, поэтому список читается в фоне, а главный
+    /// актёр спрашивается об одном: какая карточка сейчас своя. Своя остаётся,
+    /// даже если `startActivity` завёл её, пока уборка шла: заказ уборки и её
+    /// работа теперь разнесены во времени.
+    nonisolated static func sweepLingering(
+        keeping current: @escaping @MainActor () -> String?,
+        source: SweepSource = .activityKit
+    ) async {
+        for id in source.ids() {
+            if await current() == id { continue }
+            await source.end(id)
         }
     }
 }

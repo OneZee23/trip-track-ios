@@ -556,7 +556,9 @@ final class TripManager: ObservableObject {
         // Runs even with zero orphans (the clean-stop case), which the old
         // early-return skipped. When we DID restore a recording above,
         // isRecording is true, so the live card is correctly left intact.
-        // `endActivity()` walks `Activity<TripActivityAttributes>.activities`.
+        // `endActivity()` walks `Activity<TripActivityAttributes>.activities`
+        // off the main thread: at cold start ActivityKit can take seconds to
+        // answer (see `LiveActivityManager.sweepLingering`).
         if !isRecording {
             Task { @MainActor in
                 LiveActivityManager.shared.endActivity()
