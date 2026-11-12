@@ -38,6 +38,7 @@ extension Translations {
         table["profileMoreTrips"] = "{n} más"
         table.merge(Translations.hiddenPrivacyES) { _, new in new }
         table.merge(Translations.hiddenPartsES) { _, new in new }
+        table.merge(Translations.hiddenLocksES) { _, new in new }
         return table
     }()
 

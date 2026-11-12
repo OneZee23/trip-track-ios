@@ -38,6 +38,7 @@ extension Translations {
         table["profileMoreTrips"] = "{n} lagi"
         table.merge(Translations.hiddenPrivacyID) { _, new in new }
         table.merge(Translations.hiddenPartsID) { _, new in new }
+        table.merge(Translations.hiddenLocksID) { _, new in new }
         return table
     }()
 
