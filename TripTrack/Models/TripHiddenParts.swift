@@ -45,14 +45,8 @@ enum HiddenPartsResolver {
         guard !points.isEmpty else {
             return HiddenPartsResolution(visibleRuns: [], hiddenRuns: [], lockPoints: [], hiddenRanges: [], previewBreaks: [])
         }
-        var odometer = Array(repeating: 0.0, count: points.count)
         let breaks = RecordingBreaks.normalized(recordingBreaks)
-        for i in 1..<points.count {
-            odometer[i] = odometer[i - 1]
-            if !RecordingBreaks.crosses(from: points[i - 1].timestamp, to: points[i].timestamp, breaks: breaks) {
-                odometer[i] += GeometryUtils.haversineDistance(points[i - 1].coordinate, points[i].coordinate)
-            }
-        }
+        let odometer = HiddenPartsGeometry.prefix(points: points, recordingBreaks: recordingBreaks)
         let total = odometer.last ?? 0
         var hidden = points.indices.map { i in
             odometer[i] < Double(max(0, startMetres)) || total - odometer[i] < Double(max(0, endMetres)) ||

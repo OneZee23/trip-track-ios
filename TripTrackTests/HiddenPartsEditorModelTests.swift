@@ -5,7 +5,7 @@ final class HiddenPartsEditorModelTests: XCTestCase {
     func testApplyStagesAndCancelRestoresSavedValues() {
         let original = TripHiddenParts(startMetres: 200, endMetres: 0)
         var model = HiddenPartsEditorModel(parts: original)
-        model.setStartPreset(1_000)
+        model.setStartMetres(1_000)
         XCTAssertEqual(model.apply().startMetres, 1_000)
         XCTAssertEqual(model.saved.startMetres, 200)
         model.cancel()
@@ -22,10 +22,10 @@ final class HiddenPartsEditorModelTests: XCTestCase {
         XCTAssertEqual(model.draft.sections[0].to, origin.addingTimeInterval(90))
     }
 
-    func testPresetValuesAreStoredAsMetres() {
+    func testEdgeValuesAreStoredAsMetres() {
         var model = HiddenPartsEditorModel(parts: TripHiddenParts())
-        model.setStartPreset(500)
-        model.setEndPreset(1_000)
+        model.setStartMetres(500)
+        model.setEndMetres(1_000)
         XCTAssertEqual(model.apply().startMetres, 500)
         XCTAssertEqual(model.apply().endMetres, 1_000)
     }

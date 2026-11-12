@@ -7,14 +7,14 @@ extension AppStrings {
     static func hiddenStart(_ l: LanguageManager.Language) -> String { tr(l, "hiddenStart", ru: "Начало", en: "Start") }
     static func hiddenEnd(_ l: LanguageManager.Language) -> String { tr(l, "hiddenEnd", ru: "Конец", en: "End") }
     static func hiddenNone(_ l: LanguageManager.Language) -> String { tr(l, "hiddenNone", ru: "Нет", en: "None") }
-    static func hiddenDefault(_ l: LanguageManager.Language) -> String { tr(l, "hiddenDefault", ru: "по умолчанию", en: "default") }
-    static func hiddenTapMapHint(_ l: LanguageManager.Language) -> String { tr(l, "hiddenTapMapHint", ru: "Нажмите на маршрут, чтобы выбрать участок", en: "Tap the route to choose a section") }
-    static func hiddenTapStart(_ l: LanguageManager.Language) -> String { tr(l, "hiddenTapStart", ru: "Нажмите на маршрут, где начинается участок", en: "Tap where the section starts") }
-    static func hiddenTapEnd(_ l: LanguageManager.Language) -> String { tr(l, "hiddenTapEnd", ru: "Нажмите на маршрут, где заканчивается участок", en: "Tap where the section ends") }
-    static func hiddenSummary(_ l: LanguageManager.Language, start: String, end: String, sections: Int) -> String {
+    /// `startParking`/`endParking`: the edge hides only the parked time (0.9.5 locks), named instead of a distance.
+    static func hiddenSummary(_ l: LanguageManager.Language, start: String, end: String, sections: Int,
+                              startParking: Bool = false, endParking: Bool = false) -> String {
         var parts: [String] = []
-        if !start.isEmpty { parts.append("\(hiddenStart(l)) \(start)") }
-        if !end.isEmpty { parts.append("\(hiddenEnd(l)) \(end)") }
+        if startParking { parts.append(hiddenSummaryStartParking(l)) }
+        else if !start.isEmpty { parts.append("\(hiddenStart(l)) \(start)") }
+        if endParking { parts.append(hiddenSummaryEndParking(l)) }
+        else if !end.isEmpty { parts.append("\(hiddenEnd(l)) \(end)") }
         if sections > 0 { parts.append(hiddenMiddleCount(l, count: sections)) }
         return parts.isEmpty ? hiddenNothing(l) : parts.joined(separator: " · ")
     }
@@ -146,7 +146,6 @@ extension AppStrings {
     }
     static func hiddenAlreadySeen(_ l: LanguageManager.Language) -> String { tr(l, "hiddenAlreadySeen", ru: "Кто уже видел поездку, мог запомнить её целиком.", en: "People who saw this trip may remember the full route.") }
     static func hiddenLocalOnlyNotice(_ l: LanguageManager.Language) -> String { tr(l, "hiddenLocalOnlyNotice", ru: "Скрытые куски есть только на телефоне, где записана поездка.", en: "Hidden sections are available only on the phone that recorded this trip.") }
-    static func hiddenChooseEdge(_ l: LanguageManager.Language) -> String { tr(l, "hiddenChooseEdge", ru: "Скрыть расстояние", en: "Hide distance") }
     static func hiddenSectionStartHandle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSectionStartHandle", ru: "Начало скрытого участка", en: "Hidden section start") }
     static func hiddenSectionEndHandle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenSectionEndHandle", ru: "Конец скрытого участка", en: "Hidden section end") }
     static func hiddenQuestionTitle(_ l: LanguageManager.Language) -> String { tr(l, "hiddenQuestionTitle", ru: "Скрывать начало и конец поездок?", en: "Hide the start and end of trips?") }

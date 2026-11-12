@@ -1,5 +1,7 @@
 #if DEBUG
 import Foundation
+import CoreData
+import CoreLocation
 
 @MainActor
 enum DebugHiddenPartsSeed {
@@ -35,13 +37,13 @@ enum DebugHiddenPartsSeed {
         for trip in trips where trip.endDate != nil {
             repository.seedMissingTrackPointSpeeds(for: trip.id)
         }
-        guard let listedTrip = trips.first(where: { $0.endDate != nil }) else { return }
-        guard let trip = repository.fetchTripDetail(id: listedTrip.id), trip.trackPoints.count >= 6 else { return }
+        let fixtureID = seedParkedTailTrip()
+        guard let trip = repository.fetchTripDetail(id: fixtureID), trip.trackPoints.count >= 6 else { return }
         let start = trip.trackPoints[trip.trackPoints.count / 3].timestamp
         let end = trip.trackPoints[(trip.trackPoints.count * 2) / 3].timestamp
         let arguments = ProcessInfo.processInfo.arguments
         let parts = arguments.contains("-seed-hidden-parts-fresh")
-            ? TripHiddenParts()
+            ? TripHiddenParts(startMetres: 0, endMetres: 0)
             : TripHiddenParts(
                 startMetres: 500,
                 endMetres: 1_000,
@@ -61,6 +63,74 @@ enum DebugHiddenPartsSeed {
             }
         }
         UserDefaults.standard.set(trip.id.uuidString, forKey: "debug.hiddenParts.tripId")
+    }
+
+    private static let parkedTailTripID = UUID(uuidString: "09500000-0000-4000-8000-000000000001")!
+
+    /// A fixed route plus five minutes of GPS jitter makes the parked-tail
+    /// boundary reproducible in map and editor screenshots.
+    private static func seedParkedTailTrip() -> UUID {
+        let context = PersistenceController.shared.container.viewContext
+        let request = NSFetchRequest<TripEntity>(entityName: "TripEntity")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "id == %@", parkedTailTripID as CVarArg)
+        if let existing = try? context.fetch(request).first {
+            if existing.orderedTrackPoints.count == 207 { return parkedTailTripID }
+            context.delete(existing)
+        }
+
+        let trip = TripEntity(context: context)
+        let start = Date().addingTimeInterval(-3_600)
+        trip.id = parkedTailTripID
+        trip.startDate = start
+        trip.endDate = start.addingTimeInterval(2_420)
+        trip.title = "Route with a parked tail"
+        trip.region = "Debug"
+        trip.isPrivate = true
+        trip.isTrackProcessed = true
+
+        let waypoints: [(Double, Double)] = [(55.700, 37.500), (55.737, 37.555), (55.775, 37.610), (55.812, 37.665)]
+        let routePointCount = 201
+        var coordinates: [CLLocationCoordinate2D] = []
+        coordinates.reserveCapacity(routePointCount + 6)
+        for index in 0..<routePointCount {
+            let progress = Double(index) / Double(routePointCount - 1) * Double(waypoints.count - 1)
+            let segment = min(waypoints.count - 2, Int(progress))
+            let fraction = progress - Double(segment)
+            let from = waypoints[segment]
+            let to = waypoints[segment + 1]
+            coordinates.append(CLLocationCoordinate2D(
+                latitude: from.0 + (to.0 - from.0) * fraction,
+                longitude: from.1 + (to.1 - from.1) * fraction))
+        }
+        let endpoint = coordinates[routePointCount - 1]
+        let jitter: [(Double, Double)] = [(0, 0), (0.00008, 0.00004), (-0.00006, 0.0001),
+                                         (0.00012, -0.00005), (-0.0001, -0.00006), (0.00004, 0.00008)]
+        for offset in jitter {
+            coordinates.append(CLLocationCoordinate2D(latitude: endpoint.latitude + offset.0,
+                                                       longitude: endpoint.longitude + offset.1))
+        }
+
+        for (index, coordinate) in coordinates.enumerated() {
+            let point = TrackPointEntity(context: context)
+            point.id = UUID()
+            point.latitude = coordinate.latitude
+            point.longitude = coordinate.longitude
+            point.altitude = 150
+            point.speed = index < routePointCount ? 8 : 0.4
+            point.course = 45
+            point.horizontalAccuracy = 5
+            point.timestamp = start.addingTimeInterval(index < routePointCount
+                ? Double(index) * 10
+                : 2_000 + Double(index - routePointCount + 1) * 60)
+            point.trip = trip
+        }
+        trip.distance = GeometryUtils.polylineLength(coordinates)
+        trip.averageSpeed = 8
+        trip.maxSpeed = 8
+        trip.previewPolyline = Trip.encodePolyline(coordinates)
+        try? context.save()
+        return parkedTailTripID
     }
 }
 #endif

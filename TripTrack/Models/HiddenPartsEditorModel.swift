@@ -10,8 +10,8 @@ struct HiddenPartsEditorModel: Equatable {
         draft = parts
     }
 
-    mutating func setStartPreset(_ metres: Int) { draft.startMetres = max(0, metres) }
-    mutating func setEndPreset(_ metres: Int) { draft.endMetres = max(0, metres) }
+    mutating func setStartMetres(_ metres: Int) { draft.startMetres = max(0, metres) }
+    mutating func setEndMetres(_ metres: Int) { draft.endMetres = max(0, metres) }
 
     mutating func addSection(from: Date, to: Date) {
         guard from != to else { return }
@@ -36,16 +36,7 @@ struct HiddenPartsEditorModel: Equatable {
     }
 
     static func merged(_ sections: [HiddenSection]) -> [HiddenSection] {
-        let sorted = sections.sorted { $0.from < $1.from }
-        var result: [HiddenSection] = []
-        for section in sorted {
-            if let last = result.last, section.from <= last.to {
-                result[result.count - 1].to = max(last.to, section.to)
-            } else {
-                result.append(section)
-            }
-        }
-        return result
+        HiddenPartsGeometry.mergedSections(sections)
     }
 
     static func preview(points: [TrackPoint], recordingBreaks: [Date], parts: TripHiddenParts,

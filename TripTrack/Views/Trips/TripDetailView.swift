@@ -120,6 +120,7 @@ struct TripDetailView: View {
     /// «…» popover on the poster header.
     @State private var showTripActions = false
     @State private var showHiddenPartsEditor = false
+    @State private var hiddenEditorFocusCoordinate: CLLocationCoordinate2D?
     @State private var didHandleDebugScreenLaunch = false
     /// Открытая отметка — лист с именем, снимком и удалением.
     @State private var selectedCheckpoint: TripCheckpoint?
@@ -1417,7 +1418,7 @@ struct TripDetailView: View {
             )
             .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $showHiddenPartsEditor) {
+        .fullScreenCover(isPresented: $showHiddenPartsEditor, onDismiss: { hiddenEditorFocusCoordinate = nil }) {
             if let trip {
                 HiddenPartsEditorView(
                     trip: trip,
@@ -1431,7 +1432,8 @@ struct TripDetailView: View {
                             try? await Task.sleep(nanoseconds: 260_000_000)
                             showEditSheet = true
                         }
-                    }
+                    },
+                    initialFocusCoordinate: hiddenEditorFocusCoordinate
                 )
                 .environmentObject(lang)
                 .presentationDragIndicator(.visible)
@@ -1579,6 +1581,13 @@ struct TripDetailView: View {
         guard let updated = viewModel.tripDetail(id: tripId) else { return }
         replaceTrip(with: updated)
         buildCaches(for: updated)
+    }
+
+    private func openHiddenEditor(at coordinate: CLLocationCoordinate2D) {
+        guard isOwn else { return }
+        Haptics.selection()
+        hiddenEditorFocusCoordinate = coordinate
+        showHiddenPartsEditor = true
     }
 
     /// One-pass derivation of everything the body must not recompute per
@@ -2364,6 +2373,7 @@ isOwn
                         hiddenRuns: isOwn ? cachedHiddenRuns : [],
                         hiddenLockPoints: isOwn ? cachedHiddenLocks : [],
                         hiddenLockAccessibilityLabel: AppStrings.hiddenRouteLockAccessibility(lang.language),
+                        onHiddenLockTap: isOwn ? { openHiddenEditor(at: $0) } : nil,
                         // Deliberately NOT interactive, and the expand button
                         // below is why: panning happens fullscreen. While this
                         // map took drags it also ate the only one that could
@@ -2545,6 +2555,7 @@ isOwn
             checkpointMarkers: checkpointMarkers,
             photoPins: photoPins,
             onPhotoTap: { openPhoto(id: $0) },
+            onHiddenLockTap: isOwn ? { openHiddenEditor(at: $0) } : nil,
             // Отмечать можно только СВОЮ поездку и только когда есть трек:
             // «сколько до сюда» считается по нему, а у чужой поездки его нет.
             trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],

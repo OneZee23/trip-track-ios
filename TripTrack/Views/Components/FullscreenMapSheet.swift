@@ -62,6 +62,8 @@ struct FullscreenMapSheet: View {
     var photoPins: [PhotoPin] = []
     /// Нажатие на снимок на карте.
     var onPhotoTap: ((UUID) -> Void)?
+    /// Собственная скрытая граница открывает редактор этой поездки.
+    var onHiddenLockTap: ((CLLocationCoordinate2D) -> Void)?
     /// Точки трека для «поставить отметку пальцем». Пусто — палец ничего не
     /// делает: считать «сколько до сюда» не по чему.
     var trackPoints: [TrackPoint] = []
@@ -196,6 +198,7 @@ struct FullscreenMapSheet: View {
                 routeBreaks: routeBreaks,
                 hiddenRuns: hiddenRuns,
                 hiddenLockPoints: hiddenLockPoints,
+                onHiddenLockTap: onHiddenLockTap,
                 isInteractive: mapIsInteractive,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .labelled,
