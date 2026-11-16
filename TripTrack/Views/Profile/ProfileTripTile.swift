@@ -21,6 +21,7 @@ struct ProfileTripTile: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
 
     /// The grid is two columns inside the screen's 16pt margins, so a real
     /// tile measures ~157–190pt across every supported device. Snapshotting at
@@ -75,12 +76,24 @@ struct ProfileTripTile: View {
     private func thumbnail(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
         if coords.count > 1 {
+            let privacy = HiddenPartsResolver.resolve(
+                points: trip.trackPoints,
+                recordingBreaks: trip.recordingBreaks,
+                startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: trip.hiddenParts?.sections ?? [],
+                zone: HomeSettings.load().activeZone
+            )
             // A real street-map snapshot, not the beige plate Figma draws —
             // tiles are cached per trip+theme+size, so a grid scroll stays as
             // cheap as the feed's.
+            let hidePrivateGeometry = filmingMode.isActive
             MapSnapshotPreview(
-                coordinates: coords,
+                coordinates: hidePrivateGeometry ? privacy.previewPoints : coords,
                 tripId: trip.id,
+                breaks: hidePrivateGeometry ? privacy.previewBreaks : (trip.previewBreaks ?? []),
+                hiddenRuns: hidePrivateGeometry ? [] : privacy.hiddenRuns.map { $0.map(\.coordinate) },
+                hiddenLockPoints: hidePrivateGeometry ? [] : privacy.lockPoints,
                 height: Self.thumbHeight,
                 width: Self.thumbWidth
             )

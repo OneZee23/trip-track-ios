@@ -14,6 +14,7 @@ private let journeyDetailLog = Logger(subsystem: "com.triptrack", category: "jou
 /// Тело разрезано на методы с первой строки, а не когда компилятор начнёт
 /// падать по таймауту: `TripDetailView` этот предел уже нашёл.
 struct JourneyDetailView: View {
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
     /// Своё путешествие живёт по `id` (см. заголовок файла). Чужое (S6)
     /// приезжает ЦЕЛИКОМ в `social` — второго запроса «дай мне путешествие
     /// такого-то по id» на клиенте нет, DTO с шапкой и плечами уже несёт всё,
@@ -56,6 +57,9 @@ struct JourneyDetailView: View {
     /// Склейка `previewPolyline` плеч. Карта режет её по разрывам больше
     /// километра сама, так что каждое плечо выходит своей ниткой.
     @State private var coordinates: [CLLocationCoordinate2D] = []
+    @State private var routeBreaks: [Int] = []
+    @State private var hiddenRouteRuns: [[CLLocationCoordinate2D]] = []
+    @State private var hiddenRouteLocks: [CLLocationCoordinate2D] = []
     /// Имена мест из кэша геокодера, посчитанные один раз на загрузку: ходить
     /// в CoreData из `body` — значит ходить туда на каждый кадр прокрутки.
     /// Отметки всех плеч кружками. Без миниатюр: снимок грузится с диска, а
@@ -388,6 +392,9 @@ struct JourneyDetailView: View {
             // жест по карте внутри прокрутки съедает саму прокрутку.
             RouteMapView(
                 coordinates: coordinates,
+                routeBreaks: routeBreaks,
+                hiddenRuns: isSocial ? [] : hiddenRouteRuns,
+                hiddenLockPoints: isSocial ? [] : hiddenRouteLocks,
                 isInteractive: false,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .compact,
@@ -396,9 +403,17 @@ struct JourneyDetailView: View {
         } else {
             Color.black.opacity(0.88)
                 .overlay {
-                    Image(systemName: "map")
-                        .font(.largeTitle)
-                        .foregroundStyle(.white.opacity(0.35))
+                    if isSocial && trips.contains(where: { $0.distance > 0 }) {
+                        Text(AppStrings.routeHiddenByAuthor(lang.language))
+                            .font(.inter(14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    } else {
+                        Image(systemName: "map")
+                            .font(.largeTitle)
+                            .foregroundStyle(.white.opacity(0.35))
+                    }
                 }
         }
     }
@@ -704,7 +719,7 @@ struct JourneyDetailView: View {
     private var editSheet: some View {
         Group {
             if let journey {
-                JourneyEditSheet(journey: journey, photos: trips.flatMap(\.photos))
+                JourneyEditSheet(journey: journey, photos: trips.flatMap { visiblePhotos(in: $0) })
                     .environmentObject(lang)
             }
         }
@@ -716,6 +731,9 @@ struct JourneyDetailView: View {
     private var fullscreenMap: some View {
         FullscreenMapSheet(
             coordinates: coordinates,
+            routeBreaks: routeBreaks,
+            hiddenRuns: isSocial ? [] : hiddenRouteRuns,
+            hiddenLockPoints: isSocial ? [] : hiddenRouteLocks,
             distanceMeters: aggregate.totalMetres,
             checkpointMarkers: checkpointMarkers,
             showsFog: false,
@@ -740,7 +758,9 @@ struct JourneyDetailView: View {
             let agg = JourneyAggregate.build(trips: legs)
             trips = legs
             aggregate = agg
-            coordinates = legs.flatMap(\.previewCoordinates)
+            (coordinates, routeBreaks) = routeGeometry(for: legs)
+            hiddenRouteRuns = []
+            hiddenRouteLocks = []
             checkpointMarkers = legs.flatMap(markers(of:))
             coverPhoto = nil
             loaded = true
@@ -754,13 +774,70 @@ struct JourneyDetailView: View {
         aggregate = agg
         // Через `previewCoordinates`, а не `decodePolyline` напрямую: те же
         // байты уже разобраны для карточки в «Моих» и лежат в `NSCache`.
-        coordinates = legs.flatMap(\.previewCoordinates)
+        (coordinates, routeBreaks) = routeGeometry(for: legs)
+        (hiddenRouteRuns, hiddenRouteLocks) = hiddenGeometry(for: legs)
         checkpointMarkers = legs.flatMap(markers(of:))
         coverPhoto = journey.coverPhotoId.flatMap { id in
-            legs.lazy.flatMap(\.photos).first { $0.id == id }
+            legs.lazy.flatMap { visiblePhotos(in: $0) }.first { $0.id == id }
         }
         loaded = true
         loadLocalityNames(agg: agg)
+    }
+
+    private func routeGeometry(for legs: [Trip]) -> ([CLLocationCoordinate2D], [Int]) {
+        var points: [CLLocationCoordinate2D] = []
+        var breaks: [Int] = []
+        for leg in legs {
+            let filming = !isSocial && filmingMode.isActive
+            let privacy: HiddenPartsResolution? = filming ? HiddenPartsResolver.resolve(
+                points: leg.trackPoints, recordingBreaks: leg.recordingBreaks,
+                startMetres: leg.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: leg.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: leg.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone
+            ) : nil
+            let route = privacy?.previewPoints ?? leg.previewCoordinates
+            guard !route.isEmpty else { continue }
+            let offset = points.count
+            if offset > 0 { breaks.append(offset) }
+            let routeBreaks = privacy?.previewBreaks ?? (leg.previewBreaks ?? [])
+            breaks.append(contentsOf: routeBreaks.filter { $0 > 0 && $0 < route.count }.map { $0 + offset })
+            points.append(contentsOf: route)
+        }
+        return (points, breaks.sorted())
+    }
+
+    private func hiddenGeometry(for legs: [Trip]) -> ([[CLLocationCoordinate2D]], [CLLocationCoordinate2D]) {
+        guard isSocial || !filmingMode.isActive else { return ([], []) }
+        var runs: [[CLLocationCoordinate2D]] = []
+        var locks: [CLLocationCoordinate2D] = []
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        let zone = HomeSettings.load().activeZone
+        for leg in legs where !leg.trackPoints.isEmpty {
+            let resolution = HiddenPartsResolver.resolve(
+                points: leg.trackPoints, recordingBreaks: leg.recordingBreaks,
+                startMetres: leg.hiddenParts?.startMetres ?? defaults,
+                endMetres: leg.hiddenParts?.endMetres ?? defaults,
+                sections: leg.hiddenParts?.sections ?? [], zone: zone
+            )
+            runs.append(contentsOf: resolution.hiddenRuns.map { $0.map(\.coordinate) })
+            locks.append(contentsOf: resolution.lockPoints)
+        }
+        return (runs, locks)
+    }
+
+    private func visiblePhotos(in trip: Trip) -> [TripPhoto] {
+        guard !isSocial, filmingMode.isActive else { return trip.photos }
+        let zone = HomeSettings.load().activeZone
+        let resolution = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: zone)
+        return trip.photos.filter { photo in
+            !HiddenPartsResolver.photoIsHidden(capturedAt: photo.capturedAt,
+                coordinate: photo.exifCoordinate, resolution: resolution,
+                points: trip.trackPoints, zone: zone)
+        }
     }
 
     /// Имена мест — отдельным шагом, после того как остальное уже нарисовано.

@@ -16,7 +16,9 @@ enum DebugForeignTripFixture {
     }
 
     /// The author's public profile, offline, for reviewing it in every state:
-    /// `-debug-foreign-profile pro|free|new` (default `pro`). `pro` wears a
+    /// `-debug-foreign-profile pro|free|new|longname|hugename` (default `pro`);
+    /// `longname` needs a smaller size for one line, `hugename` two lines even
+    /// at half size. Both names are invented. `pro` wears a
     /// premium background and frame; `new` is the zero-trip newcomer.
     static var profileVariant: String {
         let args = ProcessInfo.processInfo.arguments
@@ -188,7 +190,7 @@ enum DebugForeignTripFixture {
         }
         return [
             "id": authorId,
-            "displayName": isNew ? "Vixor66" : "Test Traveller",
+            "displayName": isNew ? "Vixor66" : variant == "longname" ? "Ярослав Подзаборовский" : variant == "hugename" ? "Константин Константинопольский-Преображенский" : "Test Traveller",
             "avatarEmoji": isNew ? "🤠" : "🚙",
             "profileLevel": isNew ? 1 : 21,
             // Inside level 21 (25 000 … 28 500): «Уровни» draws its bar (0.9.1).
@@ -214,7 +216,7 @@ enum DebugForeignTripFixture {
             "followerCount": isNew ? 1 : 48, "followingCount": isNew ? 0 : 23,
             "isFollowing": true,
             "bio": isNew ? NSNull() : "Езжу по выходным, люблю старые дороги",
-            "isPlus": variant == "pro",
+            "isPlus": variant == "pro" || variant == "longname" || variant == "hugename",
             "avatarFrame": variant == "pro" ? "frame_gold" : NSNull()
         ]
     }

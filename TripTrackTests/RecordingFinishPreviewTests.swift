@@ -26,12 +26,36 @@ final class RecordingFinishPreviewTests: XCTestCase {
             (10000, 900, 25)
         ]
         for (distance, duration, speed) in samples {
-            let trip = Trip(startDate: start, endDate: start.addingTimeInterval(duration),
-                            distance: distance, maxSpeed: speed)
-            let preview = preview(id: trip.id, distance: distance, duration: duration, speed: speed)
-            XCTAssertEqual(preview.discardReason != nil, trip.isJunk)
-            XCTAssertEqual(preview.discardReason != nil, TripWorldEntry.route(for: trip) == .discardJunk)
+            for pointCount in [0, 2] {
+                let points = (0..<pointCount).map { i in
+                    TrackPoint(latitude: 45 + Double(i) * 0.001, longitude: 38,
+                               timestamp: start.addingTimeInterval(duration * Double(i)))
+                }
+                let trip = Trip(startDate: start, endDate: start.addingTimeInterval(duration),
+                                distance: distance, maxSpeed: speed, trackPoints: points)
+                let preview = preview(id: trip.id, distance: distance, duration: duration, speed: speed,
+                                      points: pointCount)
+                XCTAssertEqual(preview.discardReason, trip.finishDiscardReason)
+                XCTAssertEqual(preview.discardReason != nil, TripWorldEntry.route(for: trip) == .discardJunk)
+                if pointCount > 0 {
+                    XCTAssertEqual(preview.discardReason != nil, trip.isJunk)
+                } else {
+                    XCTAssertEqual(preview.discardReason, .noTrackPoints)
+                }
+            }
         }
+    }
+
+    /// Окно между «слишком короткой» и «пешком»: без точек запись уходит, с
+    /// одной точкой правила прежние. Первая точка посреди открытого вопроса
+    /// меняет ответ, и прежнее нажатие «Удалить» его не принимает.
+    func testNoPointsDiscardsInTheGapBetweenShortAndSlow() {
+        let id = UUID()
+        let empty = preview(id: id, distance: 0, duration: 150, speed: 0, points: 0)
+        let onePoint = preview(id: id, distance: 0, duration: 150, speed: 0, points: 1)
+        XCTAssertEqual(empty.discardReason, .noTrackPoints)
+        XCTAssertNil(onePoint.discardReason)
+        XCTAssertFalse(empty.confirmsSameOutcome(as: onePoint))
     }
 
     func testCrossingATimeBoundaryRequiresANewConfirmation() {
@@ -58,9 +82,11 @@ final class RecordingFinishPreviewTests: XCTestCase {
         TripJunkClassifier.reason(distanceMeters: distance, durationSeconds: duration, maxSpeedMS: speed)
     }
 
-    private func preview(id: UUID, distance: Double, duration: Double, speed: Double) -> RecordingFinishPreview {
+    private func preview(id: UUID, distance: Double, duration: Double, speed: Double,
+                         points: Int = 2) -> RecordingFinishPreview {
         RecordingFinishPreview(tripID: id, endDate: start.addingTimeInterval(duration),
-                               distance: distance, duration: duration, maxSpeed: speed)
+                               distance: distance, duration: duration, maxSpeed: speed,
+                               trackPointCount: points)
     }
 }
 
@@ -143,7 +169,8 @@ final class RecordingFinishManagerTests: XCTestCase {
         let preview = try XCTUnwrap(manager.recordingFinishPreview(now: start.addingTimeInterval(-10)))
         XCTAssertEqual(preview.duration, 0)
         XCTAssertEqual(preview.endDate, start)
-        XCTAssertEqual(preview.discardReason, .tooShort)
+        // Ни одной точки: запись уходит по этой причине раньше, чем по длине.
+        XCTAssertEqual(preview.discardReason, .noTrackPoints)
         _ = manager.stopTrip(suggestedEndDate: preview.endDate)
     }
 }

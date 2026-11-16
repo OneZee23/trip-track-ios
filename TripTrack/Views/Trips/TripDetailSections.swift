@@ -986,10 +986,17 @@ struct PublishTripSheet: View {
     /// already computes.
     let message: String
     @State var descriptionText: String
+    var trip: Trip? = nil
+    var onEditHidden: () -> Void = {}
+    var onQuickHide: (QuickHideEdge) -> Void = { _ in }
     let onPublish: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @FocusState private var descFocused: Bool
+    @State private var quickHideEdge: QuickHideEdge?
+
+    enum QuickHideEdge { case start, end }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -997,6 +1004,45 @@ struct PublishTripSheet: View {
             Text(AppStrings.publishTripTitle(language))
                 .font(.inter(19, weight: .bold))
                 .foregroundStyle(c.text)
+
+            if let trip {
+                publicPreview(trip, c: c)
+                Button(action: onEditHidden) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "eye.slash").foregroundStyle(AppTheme.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(AppStrings.hiddenPublishRow(language, summary: hiddenSummary(trip)))
+                                .font(.inter(13.5, weight: .bold)).foregroundStyle(c.text)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(c.textTertiary)
+                    }.padding(12).background(c.card, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityLabel(AppStrings.hiddenPublishRow(language, summary: hiddenSummary(trip)))
+                .accessibilityIdentifier("publish_hidden_row")
+                if let quickHideEdge {
+                    HStack {
+                        Text(quickHideEdge == .start ? AppStrings.hiddenHomeHint(language) : AppStrings.hiddenOvernightHint(language))
+                            .font(.inter(12.5, weight: .medium)).foregroundStyle(c.textSecondary)
+                        Spacer(minLength: 6)
+                        Button {
+                            Haptics.tap(); onQuickHide(quickHideEdge)
+                        } label: {
+                            Text(AppStrings.hiddenQuickHide(
+                                language,
+                                distance: Measure.radius(metres: 500, unit: distanceUnit, lang: language)
+                            )).font(.inter(12.5, weight: .bold)).foregroundStyle(AppTheme.accent)
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .accessibilityLabel(AppStrings.hiddenQuickHide(
+                            language,
+                            distance: Measure.radius(metres: 500, unit: distanceUnit, lang: language)
+                        ))
+                        .accessibilityIdentifier("publish_quick_hide")
+                    }.padding(12).background(c.cardAlt, in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
 
             Text(message)
                 .font(.inter(14))
@@ -1067,6 +1113,69 @@ struct PublishTripSheet: View {
         // short confirmation that left half a screen of empty card under the
         // buttons.
         .contentSizedSheet(background: c.card)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("publish_trip_sheet")
+        .task(id: trip?.id) {
+            guard let trip else { quickHideEdge = nil; return }
+            quickHideEdge = nearbyUnhiddenEdge(for: trip)
+        }
+    }
+
+    private func publicPreview(_ trip: Trip, c: AppTheme.Colors) -> some View {
+        let parts = trip.hiddenParts ?? TripHiddenParts()
+        let result = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: parts.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: parts.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: parts.sections, zone: HomeSettings.load().activeZone)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(AppStrings.hiddenPublishPreviewTitle(language)).font(.inter(12, weight: .semibold)).foregroundStyle(c.textSecondary)
+            RouteMapView(coordinates: result.previewPoints, routeBreaks: result.previewBreaks,
+                         isInteractive: false, showsFog: false, elevationStyle: .flat,
+                         treatAsPreview: true)
+                .frame(height: 128).clipShape(RoundedRectangle(cornerRadius: 15))
+        }
+    }
+
+    private func hiddenSummary(_ trip: Trip) -> String {
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        func value(_ metres: Int?) -> String {
+            let metres = metres ?? defaults
+            return metres == 0 ? "" :
+                Measure.radius(metres: Double(metres), unit: distanceUnit, lang: language)
+        }
+        return AppStrings.hiddenSummary(
+            language,
+            start: value(trip.hiddenParts?.startMetres),
+            end: value(trip.hiddenParts?.endMetres),
+            sections: trip.hiddenParts?.sections.count ?? 0
+        )
+    }
+
+    private func nearbyUnhiddenEdge(for trip: Trip) -> QuickHideEdge? {
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        let startHidden = trip.hiddenParts?.startMetres ?? defaults
+        let endHidden = trip.hiddenParts?.endMetres ?? defaults
+        let references = [HomeSettings.load().coordinate].compactMap { $0 }
+            + PlaceManager.shared.places.map(\.coordinate)
+        if startHidden == 0, let start = trip.trackPoints.first?.coordinate,
+           references.contains(where: { GeometryUtils.haversineDistance(start, $0) <= 300 }) {
+            return .start
+        }
+        if endHidden == 0, let end = trip.trackPoints.last?.coordinate,
+           references.contains(where: { GeometryUtils.haversineDistance(end, $0) <= 300 }) {
+            return .end
+        }
+        guard startHidden == 0, let start = trip.trackPoints.first?.coordinate else { return nil }
+        let repository = CoreDataTripRepository(persistenceController: .shared)
+        let previousTrips = repository.fetchTrips(limit: 50, offset: 0)
+        let previous = previousTrips
+            .filter { $0.id != trip.id && ($0.endDate ?? $0.startDate) <= trip.startDate }
+            .max { $0.startDate < $1.startDate }
+        guard let previous,
+              let end = repository.fetchTripDetail(id: previous.id)?.trackPoints.last?.coordinate,
+              GeometryUtils.haversineDistance(start, end) <= 300 else { return nil }
+        return .start
     }
 }
 

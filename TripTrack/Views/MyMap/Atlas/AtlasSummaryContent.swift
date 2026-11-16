@@ -128,8 +128,8 @@ struct AtlasSummaryContent: View {
     }
 
     private var columns: [AtlasStatTrio.Column] {
-        let roads = Measure.distanceParts(km: vm.revealed.openedKm, unit: unit, lang: lang.language)
-        let total = Measure.distanceParts(km: vm.exploration.totalKm, unit: unit, lang: lang.language)
+        let roads = Measure.distanceParts(km: vm.displayRevealed.openedKm, unit: unit, lang: lang.language)
+        let total = Measure.distanceParts(km: vm.displayExploration.totalKm, unit: unit, lang: lang.language)
         return [
             .init(id: "roads", value: roads.value, unit: roads.unit,
                   caption: AppStrings.atlasNewRoads(lang.language), action: onExplain),
@@ -137,8 +137,8 @@ struct AtlasSummaryContent: View {
                   caption: AppStrings.atlasTotalShort(lang.language), action: onExplain),
             // Без действия: список поездок — отдельный экран, и пока его
             // нет, шеврон обещал бы переход, которого не будет.
-            .init(id: "trips", value: "\(vm.exploration.tripCount)", unit: nil,
-                  caption: AppStrings.tripsGenitive(lang.language, count: vm.exploration.tripCount))
+            .init(id: "trips", value: "\(vm.displayExploration.tripCount)", unit: nil,
+                  caption: AppStrings.tripsGenitive(lang.language, count: vm.displayExploration.tripCount))
         ]
     }
 
@@ -147,9 +147,9 @@ struct AtlasSummaryContent: View {
     private var regionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(AppStrings.atlasRegions(lang.language),
-                          link: "\(vm.exploration.regionCount)")
+                          link: "\(vm.displayExploration.regionCount)")
             VStack(spacing: 0) {
-                ForEach(Array(vm.exploration.regions.enumerated()), id: \.element.id) { index, region in
+                ForEach(Array(vm.displayExploration.regions.enumerated()), id: \.element.id) { index, region in
                     if index > 0 {
                         Rectangle().fill(AtlasTheme.separator)
                             .frame(height: 1).padding(.leading, 68)
@@ -206,7 +206,7 @@ struct AtlasSummaryContent: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(AppStrings.atlasCities(lang.language),
                           link: AppStrings.atlasCitiesOutOf(lang.language,
-                                                            visited: vm.overview.cityCount,
+                                                            visited: vm.displayOverview.cityCount,
                                                             total: totalCities))
             FlowRow(spacing: 8) {
                 ForEach(visitedCities, id: \.id) { city in
@@ -231,14 +231,14 @@ struct AtlasSummaryContent: View {
     }
 
     private var visitedCities: [AtlasOverviewIndex.City] {
-        vm.overview.cities(language: lang.language).filter(\.isVisited)
+        vm.displayOverview.cities(language: lang.language).filter(\.isVisited)
     }
 
     private var totalCities: Int {
-        vm.exploration.regions.reduce(0) { $0 + $1.totalCities }
+        vm.displayExploration.regions.reduce(0) { $0 + $1.totalCities }
     }
 
-    private var foggedCities: Int { Swift.max(0, totalCities - vm.overview.cityCount) }
+    private var foggedCities: Int { Swift.max(0, totalCities - vm.displayOverview.cityCount) }
 
     // MARK: Общее
 

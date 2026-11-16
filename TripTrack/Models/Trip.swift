@@ -29,6 +29,7 @@ struct Trip: Identifiable, Codable {
     /// сегмента нет, а связь на две отметки одной поездки — это две строки
     /// JSON. Сегменты с отметкой, которой больше нет, чтение молча отбрасывает.
     var segments: [TripSegment] = []
+    var hiddenParts: TripHiddenParts? = nil
 
     var title: String?
     /// Whether a PERSON put that title there, as opposed to the app stamping
@@ -58,6 +59,7 @@ struct Trip: Identifiable, Codable {
     var vehicleId: UUID?
     var fuelCurrency: String?
     var previewPolyline: Data?
+    var previewBreaks: [Int]? = nil
     var earnedBadgeIds: [String]
     /// XP this single trip was worth, stamped when it finished.
     ///
@@ -369,13 +371,14 @@ struct Trip: Identifiable, Codable {
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
          checkpoints: [TripCheckpoint] = [],
          segments: [TripSegment] = [],
+         hiddenParts: TripHiddenParts? = nil,
          title: String? = nil, titleIsCustom: Bool = false,
          tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
          region: String? = nil, isPrivate: Bool = true,
          isTransfer: Bool = false, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
-         previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
+         previewPolyline: Data? = nil, previewBreaks: [Int]? = nil, earnedBadgeIds: [String] = [],
          xpEarned: Int = 0,
          companions: [TripCompanion] = [], isOnServer: Bool = false,
          source: TripOrigin = .recorded,
@@ -394,6 +397,7 @@ struct Trip: Identifiable, Codable {
         self.photos = photos
         self.checkpoints = checkpoints
         self.segments = segments
+        self.hiddenParts = hiddenParts
         self.title = title
         self.titleIsCustom = titleIsCustom
         self.tripDescription = tripDescription
@@ -405,6 +409,7 @@ struct Trip: Identifiable, Codable {
         self.vehicleId = vehicleId
         self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline
+        self.previewBreaks = previewBreaks
         self.earnedBadgeIds = earnedBadgeIds
         self.xpEarned = xpEarned
         self.companions = companions
@@ -420,9 +425,9 @@ struct Trip: Identifiable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, startDate, endDate, distance, maxSpeed, averageSpeed, trackPoints
         case storedRecordingBreaks = "recordingBreaks"
-        case photos, checkpoints, segments, title, titleIsCustom, tripDescription
+        case photos, checkpoints, segments, hiddenParts, title, titleIsCustom, tripDescription
         case fuelUsed, elevation, region, isPrivate, isTransfer, vehicleId
-        case fuelCurrency, previewPolyline, earnedBadgeIds, xpEarned, companions
+        case fuelCurrency, previewPolyline, previewBreaks, earnedBadgeIds, xpEarned, companions
         case isOnServer, source, confirmation, roadFillState, energyMode
     }
 
@@ -439,6 +444,7 @@ struct Trip: Identifiable, Codable {
             photos: try c.decode([TripPhoto].self, forKey: .photos),
             checkpoints: try c.decodeIfPresent([TripCheckpoint].self, forKey: .checkpoints) ?? [],
             segments: try c.decodeIfPresent([TripSegment].self, forKey: .segments) ?? [],
+            hiddenParts: try c.decodeIfPresent(TripHiddenParts.self, forKey: .hiddenParts),
             title: try c.decodeIfPresent(String.self, forKey: .title),
             titleIsCustom: try c.decodeIfPresent(Bool.self, forKey: .titleIsCustom) ?? false,
             tripDescription: try c.decodeIfPresent(String.self, forKey: .tripDescription),
@@ -450,6 +456,7 @@ struct Trip: Identifiable, Codable {
             vehicleId: try c.decodeIfPresent(UUID.self, forKey: .vehicleId),
             fuelCurrency: try c.decodeIfPresent(String.self, forKey: .fuelCurrency),
             previewPolyline: try c.decodeIfPresent(Data.self, forKey: .previewPolyline),
+            previewBreaks: try c.decodeIfPresent([Int].self, forKey: .previewBreaks),
             earnedBadgeIds: try c.decode([String].self, forKey: .earnedBadgeIds),
             xpEarned: try c.decode(Int.self, forKey: .xpEarned),
             companions: try c.decodeIfPresent([TripCompanion].self, forKey: .companions) ?? [],
@@ -501,6 +508,18 @@ extension Trip {
             maxSpeedMS: maxSpeed
         )
     }
+
+    /// Тот же вопрос на ФИНИШЕ записи, где точки поездки при себе. Отдельно от
+    /// `isJunk`, потому что тот зовут и у лёгких поездок из списка, у которых
+    /// точек нет ни у одной: правило по точкам выбросило бы там всю историю.
+    var finishDiscardReason: TripJunkClassifier.Reason? {
+        TripJunkClassifier.finishReason(
+            distanceMeters: distance,
+            durationSeconds: duration,
+            maxSpeedMS: maxSpeed,
+            trackPointCount: trackPoints.count
+        )
+    }
 }
 
 /// Shared classifier so post-trip cleanup (MapViewModel.stopRecording) and
@@ -509,6 +528,8 @@ enum TripJunkClassifier {
     enum Reason: Equatable {
         case tooShort
         case noDrivingSpeed
+        /// Ни одной точки GPS. Решается только на финише (`finishReason`).
+        case noTrackPoints
     }
 
     /// Всё в СИ: это ПОРОГИ ЗАПИСИ, а не показ. Мусорная поездка одинакова у
@@ -527,6 +548,19 @@ enum TripJunkClassifier {
         if isParkingManeuver { return .tooShort }
         if isWalkingMisfire { return .noDrivingSpeed }
         return nil
+    }
+
+    /// Решение на финише записи, где известно число точек.
+    ///
+    /// Запись без единой точки GPS не поездка при любой длительности. Правила
+    /// по числам её не ловили между двумя и тремя минутами: «слишком короткая»
+    /// кончается на 120 с, «пешком» начинается после 180 с, и пустая запись
+    /// на 2:30 сохранялась в историю. Android убрал её в сборке 19, правило то
+    /// же. Сироту без точек `cleanupOrphanedTrips` удаляет и так.
+    static func finishReason(distanceMeters: Double, durationSeconds: TimeInterval,
+                             maxSpeedMS: Double, trackPointCount: Int) -> Reason? {
+        if trackPointCount == 0 { return .noTrackPoints }
+        return reason(distanceMeters: distanceMeters, durationSeconds: durationSeconds, maxSpeedMS: maxSpeedMS)
     }
 }
 

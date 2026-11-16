@@ -25,12 +25,20 @@ final class GarageTourTests: XCTestCase {
         // to be a row at the foot of the settings sheet, which is nobody's idea
         // of a place to walk into. The section header's «Весь транспорт ›» kept
         // the retired row's identifier, so the tour still has one thing to tap.
+        // Since the 2 Oct 2026 review a populated «Я» folds garage, PRO,
+        // achievements and clubs under one toggle, so open it first.
+        let sections = app.buttons["profile_sections_toggle"].firstMatch
+        if sections.waitForExistence(timeout: 5) { sections.tap() }
         let garage = app.buttons.matching(identifier: "settings_garage").firstMatch
-        for _ in 0..<5 where !garage.isHittable {
-            app.swipeUp()
-            usleep(600_000)
-        }
         XCTAssertTrue(garage.waitForExistence(timeout: 4), "the Я screen must offer the Garage")
+        // Slow drags, not swipeUp: a fling overshoots the header (see
+        // ProfileTapTargetsTests).
+        let window = app.windows.firstMatch
+        for _ in 0..<8 where !garage.isHittable || garage.frame.maxY > window.frame.height - 160 {
+            let from = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -160)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
         garage.tap()
         usleep(2_000_000)
 

@@ -79,11 +79,12 @@ final class ManualTripTrackLoader {
         guard payload.id == expected.id, payload.source == .manual,
               payload.conflictVersion == expected.conflictVersion,
               payload.lastModifiedAt == expected.lastModifiedAt,
-              let end = payload.endDate, end >= payload.startDate,
+              let start = payload.startDate,
+              let end = payload.endDate, end >= start,
               let points = payload.trackPoints,
               (2...maximumPoints).contains(points.count) else { return nil }
         var ids = Set<UUID>()
-        var previous = payload.startDate
+        var previous = start
         for point in points {
             guard point.latitude.isFinite, abs(point.latitude) <= 90,
                   point.longitude.isFinite, abs(point.longitude) <= 180,

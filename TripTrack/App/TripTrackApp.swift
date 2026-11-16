@@ -60,6 +60,13 @@ struct TripTrackApp: App {
             UserDefaults.standard.set(AppTab.maps.rawValue, forKey: AppTab.storageKey)
             DebugMapSeed.run(territory: TerritoryManager())
         }
+        if DebugHiddenPartsSeed.isRequested {
+            if !DebugMapSeed.isRequested {
+                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                DebugMapSeed.run(territory: TerritoryManager())
+            }
+            DebugHiddenPartsSeed.seed()
+        }
         // `-seed-hang-stress`: задача H — библиотека в масштабе Sentry-тегов
         // (400 поездок × 2000 точек) с латчами миграций, сброшенными как
         // после обновления из стора. Замерять после этого — время до
@@ -76,6 +83,10 @@ struct TripTrackApp: App {
         // onboarding when a UI test repeats the flow in the same container.
         if ProcessInfo.processInfo.arguments.contains("-ui-test-onboarding") {
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        }
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if launchArguments.contains("-ui-testing"), !launchArguments.contains("-open-hidden-question") {
+            UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
         }
         if DebugGarageSeed.isRequested { DebugGarageSeed.run() }
         if DebugProfileCardSeed.isRequested {

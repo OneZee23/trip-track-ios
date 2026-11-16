@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// «История» entry in LIST mode (Figma 1864:321). The canon draws the exact
 /// FeedCard master here, so this is `SocialFeedCardView`'s geometry rebuilt
@@ -37,6 +38,11 @@ struct ProfileTripCardView: View {
     /// singleton — ProfileView's own pattern for it — keeps the card from
     /// printing a different number than the screen one tap deeper.
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
+    /// The masked route a filming viewer sees. The history keeps trips
+    /// without their points, so it is read from the full trip; until it is
+    /// ready the card shows no route at all.
+    @State private var filmingRoute: FilmingCardRoute?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -61,6 +67,13 @@ struct ProfileTripCardView: View {
                     .padding(.bottom, 10)
 
                 mapSection(c)
+                    .task(id: FilmingCardRouteKey(active: filmingMode.isActive, tripId: trip.id, parts: trip.hiddenParts)) {
+                        guard filmingMode.isActive else { filmingRoute = nil; return }
+                        let repository = CoreDataTripRepository(persistenceController: .shared)
+                        let route = await FilmingCardRoute.make(for: trip) { id in await repository.fetchTripDetailAsync(id: id) }
+                        guard !Task.isCancelled else { return }
+                        filmingRoute = route
+                    }
 
                 metricsStrip(c)
                     .padding(.horizontal, 13)
@@ -172,8 +185,40 @@ struct ProfileTripCardView: View {
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
-        if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: mapHeight)
+        if coords.count > 1, filmingMode.isActive {
+            // The stored preview carries the hidden parts; filming shows only
+            // the visible runs of the full trip (TestFlight 101 drew no route).
+            if let route = filmingRoute, route.points.count > 1 {
+                MapSnapshotPreview(coordinates: route.points, tripId: trip.id, breaks: route.breaks, height: mapHeight)
+                    .frame(height: mapHeight)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if filmingRoute == nil {
+                Rectangle().fill(c.cardAlt)
+                    .frame(height: mapHeight)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                noMapBand(c)
+            }
+        } else if coords.count > 1 {
+            let privacy = HiddenPartsResolver.resolve(
+                points: trip.trackPoints,
+                recordingBreaks: trip.recordingBreaks,
+                startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+                sections: trip.hiddenParts?.sections ?? [],
+                zone: HomeSettings.load().activeZone
+            )
+            let hidePrivateGeometry = filmingMode.isActive
+            MapSnapshotPreview(
+                coordinates: hidePrivateGeometry ? privacy.previewPoints : coords,
+                tripId: trip.id,
+                breaks: hidePrivateGeometry ? privacy.previewBreaks : (trip.previewBreaks ?? []),
+                hiddenRuns: hidePrivateGeometry ? [] : privacy.hiddenRuns.map { $0.map(\.coordinate) },
+                hiddenLockPoints: hidePrivateGeometry ? [] : privacy.lockPoints,
+                height: mapHeight
+            )
                 .frame(height: mapHeight)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -184,16 +229,20 @@ struct ProfileTripCardView: View {
             // worse — the card collapses into a stub between full-height
             // neighbours — so the empty case gets that view's own failed
             // chrome, glyph centred since there's no faded route to defer to.
-            ZStack {
-                Rectangle().fill(c.cardAlt)
-                Image(systemName: "map.slash")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .frame(height: mapHeight)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            noMapBand(c)
         }
+    }
+
+    private func noMapBand(_ c: AppTheme.Colors) -> some View {
+        ZStack {
+            Rectangle().fill(c.cardAlt)
+            Image(systemName: "map.slash")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(c.textTertiary)
+        }
+        .frame(height: mapHeight)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Metrics
@@ -338,5 +387,34 @@ struct ProfileTripCardView: View {
             parts.append(region)
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+private struct FilmingCardRouteKey: Equatable {
+    let active: Bool
+    let tripId: UUID
+    let parts: TripHiddenParts?
+}
+
+/// The route a history card shows in filming mode: the visible runs of the
+/// full trip. The stored preview carries the hidden parts, and the history's
+/// trips come without points (5 Nov 2026).
+struct FilmingCardRoute {
+    let points: [CLLocationCoordinate2D]
+    let breaks: [Int]
+
+    static func make(for trip: Trip, load: (UUID) async -> Trip?) async -> FilmingCardRoute {
+        let source = trip.trackPoints.isEmpty ? await load(trip.id) : trip
+        guard let full = source, !full.trackPoints.isEmpty else { return FilmingCardRoute(points: [], breaks: []) }
+        let edge = PrivacySettings.load().edgeMetres
+        let zone = HomeSettings.load().activeZone
+        let resolution = await Task.detached(priority: .userInitiated) {
+            HiddenPartsResolver.resolve(
+                points: full.trackPoints, recordingBreaks: full.recordingBreaks,
+                startMetres: full.hiddenParts?.startMetres ?? edge ?? 0,
+                endMetres: full.hiddenParts?.endMetres ?? edge ?? 0,
+                sections: full.hiddenParts?.sections ?? [], zone: zone)
+        }.value
+        return FilmingCardRoute(points: resolution.previewPoints, breaks: resolution.previewBreaks)
     }
 }

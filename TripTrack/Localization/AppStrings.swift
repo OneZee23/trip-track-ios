@@ -4991,6 +4991,64 @@ enum AppStrings {
     static func privacyTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "privacyTitle", ru: "Приватность", en: "Privacy")
     }
+    static func privacyEdgesTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdgesTitle", ru: "Начало и конец поездок", en: "Trip start and end")
+    }
+    static func privacyPlacesSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyPlacesSection", ru: "Места, которые не видны другим", en: "Places others don't see")
+    }
+    static func privacyEdgeNever(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdgeNever", ru: "Не скрывать", en: "Don't hide")
+    }
+    static func privacyEdge200(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdge200", ru: "двор, парковка", en: "yard, parking")
+    }
+    static func privacyEdge500(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdge500", ru: "квартал, стоянка", en: "block, campsite")
+    }
+    static func privacyEdge1000(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdge1000", ru: "надёжнее для кемпинга", en: "safer for camping")
+    }
+    static func privacyEdgeFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyEdgeFootnote", ru: "Применяется ко всем поездкам, если для поездки не задано своё значение.", en: "Applies to every trip unless that trip has its own value.")
+    }
+    static func filmingTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "filmingTitle", ru: "Режим съёмки", en: "Filming mode")
+    }
+    static func filmingSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "filmingSubtitle", ru: "Скрытое не видно и на ваших экранах", en: "Hidden parts also disappear from your screens")
+    }
+    static func filmingAutoTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "filmingAutoTitle", ru: "Включать при записи экрана", en: "Turn on while recording")
+    }
+    static func filmingAutoSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "filmingAutoSubtitle", ru: "Сам включится и выключится", en: "Turns itself on and off")
+    }
+    static func filmingFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "filmingFootnote",
+           ru: "В режиме съёмки карты и «Места» показывают поездки без скрытых участков, дома и синей точки. На экране записи точка остаётся.",
+           en: "In filming mode, maps and Places hide hidden route sections, home and the blue location dot. The recording screen keeps the dot.")
+    }
+    static func filmingPreparing(_ lang: LanguageManager.Language) -> String {
+        switch lang {
+        case .ru: "Готовим режим съёмки"
+        case .en: "Preparing filming mode"
+        case .de: "Aufnahmemodus wird vorbereitet"
+        case .es: "Preparando el modo de grabación"
+        case .fr: "Préparation du mode vidéo"
+        case .it: "Preparazione della modalità ripresa"
+        case .pl: "Przygotowywanie trybu nagrywania"
+        case .id: "Menyiapkan mode perekaman"
+        case .tr: "Kayıt modu hazırlanıyor"
+        case .fil: "Inihahanda ang mode ng pagre-record"
+        case .uk: "Готуємо режим зйомки"
+        case .kk: "Түсіру режимі дайындалуда"
+        case .pt: "Preparando o modo de gravação"
+        }
+    }
+    static func routeHiddenByAuthor(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "routeHiddenByAuthor", ru: "Маршрут скрыт автором", en: "The route is hidden by its author")
+    }
     /// The row's own subtitle: what is inside, in three words.
     static func privacyRowSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "privacyRowSub", ru: "кто вас видит", en: "who can see you")

@@ -10,6 +10,7 @@ struct AtlasAppearanceSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var home = HomeManager.shared
     @Environment(\.distanceUnit) private var distanceUnit
+    @State private var privacySettings = PrivacySettings.load()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,16 @@ struct AtlasAppearanceSheet: View {
             Toggle(AppStrings.atlasShowPhotos(lang.language), isOn: $appearance.showsPhotos)
                 .frame(minHeight: 56)
                 .accessibilityIdentifier("atlas_photos_toggle")
+            AtlasTheme.separator.frame(height: 1)
+            Toggle(AppStrings.filmingTitle(lang.language), isOn: Binding(
+                get: { privacySettings.filmingManual },
+                set: { value in
+                    privacySettings.filmingManual = value
+                    privacySettings.save()
+                }
+            ))
+            .frame(minHeight: 56)
+            .accessibilityIdentifier("atlas_filming_toggle")
             AtlasTheme.separator.frame(height: 1)
             homeRow
         }

@@ -34,6 +34,7 @@ final class HomePrivacyResync {
     /// класс» из CLAUDE.md.
     init(center: NotificationCenter = .default) {
         center.publisher(for: .homePrivacyZoneChanged)
+            .merge(with: center.publisher(for: .privacyEdgeChanged))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.resendPublishedTrips() }
             .store(in: &cancellables)
@@ -44,17 +45,12 @@ final class HomePrivacyResync {
     /// синглтону (тот же приём, что у `RevealedLayerSync.start()`).
     func start() {}
 
-    /// Поставить каждую публичную поездку, которая УЖЕ лежит на сервере, в
-    /// очередь на `.update`.
+    /// Поставить каждую поездку с серверной копией в очередь на `.update`.
     ///
     /// Кого берём и почему именно этих:
-    /// - `isPrivate == NO` — приватную чужие глаза не видят, и переотправлять
-    ///   её ради обрезки нечего: её серверную копию обрежет первая же
-    ///   настоящая правка, а гнать всю библиотеку в очередь при включённом
-    ///   облаке значило бы залить сеть за один щелчок тумблера. Предикат тот
-    ///   же, что у `AuthService.unpublishAllPublicTrips` и
-    ///   `publishedTripCount`: «что видно чужим» в этом приложении
-    ///   спрашивают одной строкой.
+    /// Публичные копии и приватные Cloud Sync-копии обе содержат полный трек,
+    /// поэтому обе обязаны получить новую маску. Черновики и локальные поездки
+    /// без серверной строки сюда не входят.
     /// - `serverCreatedAt != nil` — на сервере её ещё не было, значит и
     ///   исправлять нечего: первый её апсерт уедет обрезанным сам.
     /// - не черновик. Публичным черновик не бывает по построению
@@ -75,14 +71,14 @@ final class HomePrivacyResync {
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
-            NSPredicate(format: "isPrivate == NO AND serverCreatedAt != nil"),
-            TripConfirmation.notDraftPredicate,
+            NSPredicate(format: "serverCreatedAt != nil"), TripConfirmation.notDraftPredicate,
         ])
         guard let entities = try? context.fetch(request), !entities.isEmpty else { return 0 }
 
         let cloudOn = SettingsManager.shared.cloudSyncEnabled
         var ids: [UUID] = []
         for entity in entities {
+            guard entity.isPrivate == false || cloudOn else { continue }
             guard let id = entity.id else { continue }
             entity.lastModifiedAt = Date()
             if CoreDataTripRepository.flipsPendingUpload(
@@ -99,8 +95,19 @@ final class HomePrivacyResync {
         // нужно: обрезанный список обязан ЗАМЕНИТЬ полный, а не дополнить его.
         for id in ids {
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+            guard let trip = CoreDataTripRepository().fetchTripDetail(id: id),
+                  let entity = fetchTripEntity(id: id) else { continue }
+            HiddenPhotoSync.reconcile(
+                trip: trip, entity: entity, context: context)
         }
-        log.notice("privacy zone changed — requeued \(ids.count, privacy: .public) published trips")
+        log.notice("privacy settings changed — requeued \(ids.count, privacy: .public) server trips")
         return ids.count
+    }
+
+    private func fetchTripEntity(id: UUID) -> TripEntity? {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        return try? PersistenceController.shared.container.viewContext.fetch(request).first
     }
 }

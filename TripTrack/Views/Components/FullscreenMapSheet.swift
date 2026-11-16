@@ -25,6 +25,10 @@ struct FullscreenMapSheet: View {
     /// m/s, aligned with `coordinates` — paints the route and sets the top
     /// end of the speed plaque's scale.
     var speeds: [Double] = []
+    var routeBreaks: [Int] = []
+    var hiddenRuns: [[CLLocationCoordinate2D]] = []
+    var hiddenLockPoints: [CLLocationCoordinate2D] = []
+    var playbackBreaks: [Date] = []
     /// Per-point timestamps, aligned with `coordinates`. Their presence is
     /// what turns this sheet into the replay: a social preview polyline ships
     /// none, and without them there is no clock to play a drive against.
@@ -58,6 +62,8 @@ struct FullscreenMapSheet: View {
     var photoPins: [PhotoPin] = []
     /// Нажатие на снимок на карте.
     var onPhotoTap: ((UUID) -> Void)?
+    /// Собственная скрытая граница открывает редактор этой поездки.
+    var onHiddenLockTap: ((CLLocationCoordinate2D) -> Void)?
     /// Точки трека для «поставить отметку пальцем». Пусто — палец ничего не
     /// делает: считать «сколько до сюда» не по чему.
     var trackPoints: [TrackPoint] = []
@@ -189,6 +195,10 @@ struct FullscreenMapSheet: View {
             RouteMapView(
                 coordinates: coordinates,
                 speeds: speeds,
+                routeBreaks: routeBreaks,
+                hiddenRuns: hiddenRuns,
+                hiddenLockPoints: hiddenLockPoints,
+                onHiddenLockTap: onHiddenLockTap,
                 isInteractive: mapIsInteractive,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .labelled,
@@ -213,6 +223,7 @@ struct FullscreenMapSheet: View {
                 // The car and its trail are RouteMapView's job already — the
                 // replay only has to say where the head is this frame.
                 playbackCarCoord: canReplay ? engine.headCoord : crawl.currentCoord,
+                playbackCarOpacity: canReplay ? engine.headOpacity : crawl.currentOpacity,
                 playbackTrailIndex: canReplay ? engine.trailIndex : crawl.currentTrailIndex,
                 playbackCoords: (canReplay || canCrawl) ? playbackSeries : nil,
                 playbackFollow: followsCar,
@@ -345,7 +356,8 @@ struct FullscreenMapSheet: View {
             engine.configure(
                 coords: playbackSeries,
                 timestamps: timestamps,
-                speeds: replaySpeeds.count == playbackSeries.count ? replaySpeeds : []
+                speeds: replaySpeeds.count == playbackSeries.count ? replaySpeeds : [],
+                breaks: playbackBreaks
             )
             engine.setHolds(at: checkpointMarkers.map(\.timestamp))
         }
@@ -1176,6 +1188,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
     var isPlaying: Bool { phase == .playing }
     /// Interpolated car position for the current frame.
     @Published private(set) var headCoord: CLLocationCoordinate2D?
+    @Published private(set) var headOpacity: Double = 1
     /// Last passed original coordinate — feeds the map's trail.
     @Published private(set) var trailIndex: Int = -1
     /// Interpolated speed at the head, km/h.
@@ -1207,6 +1220,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
     private var coords: [CLLocationCoordinate2D] = []
     private var timestamps: [Date] = []
     private var speeds: [Double] = []
+    private var breaks: [Date] = []
     /// Metres from the start at each coordinate — built once per configure, so
     /// the distance readout costs one lerp per frame instead of a walk.
     private var cumulativeMetres: [Double] = []
@@ -1256,12 +1270,14 @@ final class TripReplayEngine: NSObject, ObservableObject {
     func configure(
         coords: [CLLocationCoordinate2D],
         timestamps: [Date],
-        speeds: [Double]
+        speeds: [Double],
+        breaks: [Date] = []
     ) {
         guard coords.count >= 2, timestamps.count == coords.count else { return }
         self.coords = coords
         self.timestamps = timestamps
         self.speeds = speeds.count == coords.count ? speeds : []
+        self.breaks = breaks.sorted()
         var running: [Double] = [0]
         running.reserveCapacity(coords.count)
         for i in 1..<coords.count {
@@ -1280,6 +1296,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         currentSpeedMS = 0
         currentSpeedKnown = true
         headCoord = nil
+        headOpacity = 1
         trailIndex = -1
         cursor = 0
     }
@@ -1411,6 +1428,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
             latitude: coords[lo].latitude + (coords[hi].latitude - coords[lo].latitude) * frac,
             longitude: coords[lo].longitude + (coords[hi].longitude - coords[lo].longitude) * frac
         )
+        headOpacity = Self.opacity(at: target, breaks: breaks)
         trailIndex = lo
         if !speeds.isEmpty {
             let known = speeds[lo] >= 0 && speeds[hi] >= 0
@@ -1422,5 +1440,12 @@ final class TripReplayEngine: NSObject, ObservableObject {
             let covered = cumulativeMetres[lo] + (cumulativeMetres[hi] - cumulativeMetres[lo]) * frac
             distanceFraction = min(1, max(0, covered / total))
         }
+    }
+
+    private static func opacity(at date: Date, breaks: [Date]) -> Double {
+        guard let boundary = breaks.min(by: { abs($0.timeIntervalSince(date)) < abs($1.timeIntervalSince(date)) }) else { return 1 }
+        let delta = abs(boundary.timeIntervalSince(date))
+        guard delta < 5 else { return 1 }
+        return min(1, max(0, delta / 5))
     }
 }

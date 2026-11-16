@@ -18,11 +18,12 @@ enum SharePosterRenderer {
 
     static func map(
         for coordinates: [CLLocationCoordinate2D],
+        breaks: [Int] = [],
         tripId: UUID,
         format: SharePosterFormat
     ) async -> SharePosterMap? {
         guard format.showsMap, coordinates.count > 1 else { return nil }
-        let key = "\(tripId.uuidString)-\(format.rawValue)" as NSString
+        let key = "\(tripId.uuidString)-\(MapSnapshotPreview.contentKey(coordinates, breaks: breaks))-\(format.rawValue)" as NSString
         if let hit = cache.object(forKey: key) { return hit.value }
 
         // Render at export resolution: the preview is the same image scaled
@@ -51,7 +52,8 @@ enum SharePosterRenderer {
             options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
 
             var snapshot: MKMapSnapshotter.Snapshot?
-            for delay in [UInt64(0), 700_000_000, 2_000_000_000] {
+            let retryDelays: [UInt64] = [0, 700_000_000, 2_000_000_000]
+            for delay in retryDelays {
                 if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
                 if Task.isCancelled { return nil }
                 snapshot = try? await MKMapSnapshotter(options: options).start()
@@ -64,7 +66,7 @@ enum SharePosterRenderer {
                 let p = snap.point(for: c)
                 return CGPoint(x: p.x / imageSize.width, y: p.y / imageSize.height)
             }
-            return SharePosterMap(image: snap.image, points: points)
+            return SharePosterMap(image: snap.image, points: points, breaks: breaks)
         }.value
 
         if let result { cache.setObject(CacheBox(result), forKey: key) }

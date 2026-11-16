@@ -24,6 +24,7 @@ struct PrivacySettingsView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var settings = SettingsManager.shared
@@ -39,6 +40,9 @@ struct PrivacySettingsView: View {
     @State private var visibilityDrafts: [ProfileVisibilityBlock: Bool] = [:]
     @State private var visibilityGenerations: [ProfileVisibilityBlock: Int] = [:]
     @State private var probing = false
+    @State private var privacySettings = PrivacySettings.load()
+    @State private var showEdgePicker = false
+    @State private var showHomeSettings = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -49,6 +53,7 @@ struct PrivacySettingsView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
+                    localPrivacyCard(c, l)
                     if auth.isSignedIn {
                         card(c, l)
                         footnote(c, l)
@@ -82,7 +87,26 @@ struct PrivacySettingsView: View {
         // half one keeps the settings card it came from in view behind it.
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("privacy_screen")
+        .sheet(isPresented: $showEdgePicker) {
+            SettingsOptionPicker(
+                title: AppStrings.privacyEdgesTitle(l),
+                options: PrivacyEdgeOption.allCases,
+                selection: PrivacyEdgeOption(edgeMetres: privacySettings.edgeMetres),
+                footnote: AppStrings.privacyEdgeFootnote(l),
+                badge: { $0.badge(unit: distanceUnit, language: l) },
+                label: { $0.label(l) },
+                onSelect: { option in
+                    privacySettings.edgeMetres = option.metres
+                    privacySettings.save()
+                },
+                accessibilityPrefix: "privacy_edges"
+            )
+        }
+        .sheet(isPresented: $showHomeSettings) {
+            HomeSheet().environmentObject(lang)
+        }
         .task {
             // The one caller of /auth/me on this path. Before this screen
             // existed the switch was drawn only if some OTHER screen had
@@ -124,6 +148,99 @@ struct PrivacySettingsView: View {
     }
 
     // MARK: - Card
+
+    private func localPrivacyCard(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                ProfileSectionLabel(text: AppStrings.privacyPlacesSection(l))
+                Button {
+                    Haptics.tap()
+                    showHomeSettings = true
+                } label: {
+                    HStack {
+                        Text(AppStrings.homeSheetTitle(l)).font(.inter(14, weight: .semibold)).foregroundStyle(c.text)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(c.textTertiary)
+                    }.contentShape(Rectangle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("privacy_home_row")
+                rowDivider(c)
+                Button {
+                    Haptics.tap()
+                    showEdgePicker = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(AppStrings.privacyEdgesTitle(l))
+                                .font(.inter(14, weight: .semibold))
+                                .foregroundStyle(c.text)
+                            Text(edgeValue(l))
+                                .font(.inter(12))
+                                .foregroundStyle(c.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("privacy_trip_edges")
+                Text(AppStrings.hiddenPrivacyIntro(l))
+                    .font(.inter(11.5))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+
+            rowDivider(c)
+
+            VStack(alignment: .leading, spacing: 0) {
+                ProfileSectionLabel(text: AppStrings.filmingTitle(l))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 8)
+                PrivacyToggleRow(
+                    icon: "record.circle",
+                    tint: AppTheme.red,
+                    title: AppStrings.filmingTitle(l),
+                    subtitle: AppStrings.filmingSubtitle(l),
+                    isOn: Binding(
+                        get: { privacySettings.filmingManual },
+                        set: { value in privacySettings.filmingManual = value; privacySettings.save() }
+                    )
+                )
+                .accessibilityIdentifier("privacy_filming_manual")
+                rowDivider(c)
+                PrivacyToggleRow(
+                    icon: "dot.radiowaves.left.and.right",
+                    tint: AppTheme.blue,
+                    title: AppStrings.filmingAutoTitle(l),
+                    subtitle: AppStrings.filmingAutoSubtitle(l),
+                    isOn: Binding(
+                        get: { privacySettings.filmingAuto },
+                        set: { value in privacySettings.filmingAuto = value; privacySettings.save() }
+                    )
+                )
+                .accessibilityIdentifier("privacy_filming_auto")
+                Text(AppStrings.hiddenPrivacyModeFootnote(l))
+                    .font(.inter(11.5))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 14)
+            }
+        }
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    private func edgeValue(_ l: LanguageManager.Language) -> String {
+        guard let metres = privacySettings.edgeMetres else { return AppStrings.privacyEdgeNever(l) }
+        return Measure.radius(metres: Double(metres), unit: distanceUnit, lang: l)
+    }
 
     private func card(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
@@ -490,5 +607,35 @@ private struct PrivacyToggleRow: View {
         .padding(.vertical, 12)
         .opacity(isEnabled ? 1 : 0.55)
         .animation(.easeOut(duration: 0.2), value: isEnabled)
+    }
+}
+
+private enum PrivacyEdgeOption: CaseIterable, Hashable {
+    case none
+    case twoHundred
+    case fiveHundred
+    case oneThousand
+
+    init(edgeMetres: Int?) {
+        switch edgeMetres {
+        case 200: self = .twoHundred
+        case 500: self = .fiveHundred
+        case 1000: self = .oneThousand
+        default: self = .none
+        }
+    }
+
+    var metres: Int { self == .none ? 0 : self == .twoHundred ? 200 : self == .fiveHundred ? 500 : 1000 }
+    func badge(unit: DistanceUnit, language: LanguageManager.Language) -> String {
+        metres == 0 ? "—" : Measure.radius(metres: Double(metres), unit: unit, lang: language)
+    }
+
+    func label(_ language: LanguageManager.Language) -> String {
+        switch self {
+        case .none: AppStrings.privacyEdgeNever(language)
+        case .twoHundred: AppStrings.privacyEdge200(language)
+        case .fiveHundred: AppStrings.privacyEdge500(language)
+        case .oneThousand: AppStrings.privacyEdge1000(language)
+        }
     }
 }

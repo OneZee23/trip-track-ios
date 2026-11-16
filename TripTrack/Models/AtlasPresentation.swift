@@ -215,16 +215,29 @@ enum AtlasPreviewLayer {
                 : $0.startDate < $1.startDate
         }) {
             guard trip.previewPolyline?.isEmpty == false else { continue }
-            let coordinates = trip.previewCoordinates
-            guard coordinates.count > 1 else { continue }
-            let patches = RevealBuilder.patches(for: coordinates) { claimed[$0] ?? [] }
-            for (key, patch) in patches {
-                claimed[key, default: []].formUnion(patch.cells)
-                runs.append(contentsOf: patch.runs)
+            for run in previewRuns(trip) {
+                let patches = RevealBuilder.patches(for: run) { claimed[$0] ?? [] }
+                for (key, patch) in patches {
+                    claimed[key, default: []].formUnion(patch.cells)
+                    runs.append(contentsOf: patch.runs)
+                }
             }
         }
         return RevealedLayer.build(
             runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
+    }
+
+    static func previewRuns(_ trip: Trip) -> [[CLLocationCoordinate2D]] {
+        guard trip.previewPolyline?.isEmpty == false else { return [] }
+        let coordinates = trip.previewCoordinates
+        guard coordinates.count > 1 else { return [] }
+        let boundaries = Set((trip.previewBreaks ?? []).filter { $0 > 0 && $0 < coordinates.count })
+        var start = 0
+        return (boundaries.sorted() + [coordinates.count]).compactMap { end in
+            defer { start = end }
+            guard end - start > 1 else { return nil }
+            return Array(coordinates[start..<end])
+        }
     }
 }
 

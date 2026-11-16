@@ -64,7 +64,7 @@ struct TripSyncPayload: Codable {
     let id: UUID
     let title: String?
     let description: String?
-    let startDate: Date
+    let startDate: Date?
     let endDate: Date?
     let distance: Double
     let maxSpeed: Double
@@ -141,9 +141,61 @@ struct TripSyncPayload: Codable {
     var energyMode: String? = nil
     /// Absent means an older peer; an explicit empty array clears boundaries.
     var recordingBreaks: [Date]? = nil
+    var hiddenParts: TripHiddenParts? = nil
+    var hiddenRanges: [HiddenTimeRange]? = nil
+    var previewBreaks: [Int]? = nil
+}
+
+/// Internal for the editor's «Другие увидят…» caption, which must print what uploads.
+struct VisibleTripMetrics {
+    let runs: [[TrackPoint]]
+    let startDate: Date?
+    let endDate: Date?
+    let distance: Double
+    let maxSpeed: Double
+    let averageSpeed: Double
+    let drivingTime: TimeInterval
+    let stoppedTime: TimeInterval
+    let elevation: Double
+    let maxAltitude: Double?
 }
 
 extension TripSyncPayload {
+    static func visibleMetrics(_ runs: [[TrackPoint]]) -> VisibleTripMetrics {
+        let measuredRuns = runs.map { $0.filter(\.countsForDistance) }
+        let measuredPoints = measuredRuns.flatMap { $0 }
+        let first = runs.first?.first?.timestamp
+        let last = runs.last?.last?.timestamp
+        var distance = 0.0
+        var maximumSpeed = 0.0
+        var drivingTime: TimeInterval = 0
+        var stoppedTime: TimeInterval = 0
+        var elevation = 0.0
+
+        for run in measuredRuns where !run.isEmpty {
+            let samples = run.map {
+                TripDistanceGate.Sample(
+                    latitude: $0.latitude, longitude: $0.longitude,
+                    timestamp: $0.timestamp, recordingSegmentIndex: $0.recordingSegmentIndex,
+                    speed: $0.speed)
+            }
+            distance += TripDistanceGate.totalDistance(samples)
+            maximumSpeed = max(maximumSpeed, TripDistanceGate.maximumRecordedSpeed(samples))
+            let split = computeMovementSplit(run)
+            drivingTime += split.driving
+            stoppedTime += split.stopped
+            for (previous, current) in zip(run, run.dropFirst()) {
+                elevation += max(0, current.altitude - previous.altitude)
+            }
+        }
+        let elapsed = first.flatMap { start in last.map { $0.timeIntervalSince(start) } } ?? 0
+        return VisibleTripMetrics(
+            runs: runs, startDate: first, endDate: last, distance: distance,
+            maxSpeed: maximumSpeed, averageSpeed: elapsed > 0 ? distance / elapsed : 0,
+            drivingTime: drivingTime, stoppedTime: stoppedTime,
+            elevation: elevation, maxAltitude: measuredPoints.map(\.altitude).max())
+    }
+
     /// `zone` по умолчанию читается из нынешних настроек — это и есть
     /// продовый путь. Параметром она вынесена ПОТОМУ, что иначе пейлоад
     /// зависит от глобального `UserDefaults` молча: любой тест, собравший
@@ -158,20 +210,35 @@ extension TripSyncPayload {
         self.id = trip.id
         self.title = trip.title
         self.description = trip.tripDescription
-        self.startDate = trip.startDate
-        self.endDate = trip.endDate
-        self.distance = trip.distance
-        self.maxSpeed = trip.maxSpeed
-        self.averageSpeed = trip.averageSpeed
+        let mask = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: zone
+        )
+        let numbersVisibleOnly = trip.hiddenParts?.numbersVisibleOnly == true
+        let visibleMetrics = numbersVisibleOnly && !trip.trackPoints.isEmpty
+            ? Self.visibleMetrics(mask.visibleRuns)
+            : nil
+        self.startDate = numbersVisibleOnly ? visibleMetrics?.startDate : trip.startDate
+        self.endDate = numbersVisibleOnly ? visibleMetrics?.endDate : trip.endDate
+        self.distance = visibleMetrics?.distance ?? (numbersVisibleOnly ? 0 : trip.distance)
+        self.maxSpeed = visibleMetrics?.maxSpeed ?? (numbersVisibleOnly ? 0 : trip.maxSpeed)
+        self.averageSpeed = visibleMetrics?.averageSpeed ?? (numbersVisibleOnly ? 0 : trip.averageSpeed)
         self.fuelUsed = trip.fuelUsed
-        self.elevation = trip.elevation
+        self.elevation = numbersVisibleOnly ? (visibleMetrics?.elevation ?? 0) : trip.elevation
         // Extended metrics — derived from track points. Грубые и достроенные
         // точки в эти числа не идут (спека §2.4): у достройки скорость −1, и
         // счёт ниже записал бы тоннель в «стоянку».
         let measured = trip.measuredPoints
         if !measured.isEmpty {
-            self.maxAltitude = measured.map(\.altitude).max()
-            let split = TripSyncPayload.computeMovementSplit(measured)
+            // Zero, not nil, when nothing is visible: nil leaves the key out, and the server would keep
+            // the full maximum from an earlier upload.
+            self.maxAltitude = numbersVisibleOnly
+                ? (visibleMetrics?.maxAltitude ?? 0)
+                : measured.map(\.altitude).max()
+            let split = visibleMetrics.map { (driving: $0.drivingTime, stopped: $0.stoppedTime) }
+                ?? TripSyncPayload.computeMovementSplit(measured)
             self.drivingTime = Int(split.driving)
             self.stoppedTime = Int(split.stopped)
         } else {
@@ -189,7 +256,21 @@ extension TripSyncPayload {
         self.isTransfer = trip.isTransfer
         self.vehicleId = trip.vehicleId
         self.fuelCurrency = trip.fuelCurrency
-        self.previewPolyline = Self.wirePreview(trip.previewPolyline, zone: zone)
+        let hasLoadedTrack = !trip.trackPoints.isEmpty
+        self.previewBreaks = hasLoadedTrack ? mask.previewBreaks : nil
+        // The server uses these ranges when an older client re-sends full points;
+        // only the owner's synced trip receives them, never another viewer.
+        self.hiddenRanges = hasLoadedTrack ? mask.hiddenRanges : nil
+        // Always sent: an absent key means «unchanged» on the wire, so a cleared mask would stay on the
+        // server and the next pull would bring it back. An empty object means «follows the default».
+        self.hiddenParts = trip.hiddenParts ?? TripHiddenParts()
+        if hasLoadedTrack {
+            let coordinates = mask.previewPoints
+            self.previewPolyline = coordinates.count >= 2
+                ? Trip.encodePolyline(coordinates).base64EncodedString() : nil
+        } else {
+            self.previewPolyline = Self.wirePreview(trip.previewPolyline, zone: zone)
+        }
         self.badgesJson = entity.badgesJSON
         self.xpEarned = Int(entity.xpEarned)
         self.conflictVersion = Int(entity.conflictVersion)
@@ -203,11 +284,18 @@ extension TripSyncPayload {
         if trip.source == .manual, entity.serverCreatedAt != nil, trip.trackPoints.isEmpty {
             self.trackPoints = nil
         } else {
-            self.trackPoints = Self.wireTrack(trip.trackPoints, zone: zone)
+            self.trackPoints = hasLoadedTrack
+                ? mask.visiblePoints.map(TrackPointPayload.init)
+                : Self.wireTrack(trip.trackPoints, zone: zone)
         }
         self.recordingBreaks = trip.recordingBreaks
         self.photos = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
+            if hasLoadedTrack && HiddenPartsResolver.photoIsHidden(
+                capturedAt: pe.capturedAt,
+                coordinate: pe.exifLatitude.flatMap { latitude in
+                    pe.exifLongitude.map { CLLocationCoordinate2D(latitude: latitude.doubleValue, longitude: $0.doubleValue) }
+                }, resolution: mask, points: trip.trackPoints, zone: zone) { return nil }
             return TripPhotoMetadataPayload(
                 id: pid, filename: fn, caption: pe.caption,
                 timestamp: ts, sortOrder: Int(pe.sortOrder),
@@ -217,11 +305,14 @@ extension TripSyncPayload {
                 exifLongitude: Self.wireExif(pe.exifLatitude?.doubleValue,
                                              pe.exifLongitude?.doubleValue, zone: zone)?.longitude)
         }
+        // Checkpoints and segments sync only to the owner's copy. Keep hidden
+        // checkpoint metadata there, but remove its coordinates like the home zone.
         self.checkpoints = trip.checkpoints.enumerated().map { index, c in
-            TripCheckpointPayload(
+            let hiddenByTime = mask.hiddenRanges.contains { $0.from <= c.timestamp && c.timestamp <= $0.to }
+            return TripCheckpointPayload(
                 id: c.id, timestamp: c.timestamp,
-                latitude: Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.latitude,
-                longitude: Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.longitude,
+                latitude: hiddenByTime ? nil : Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.latitude,
+                longitude: hiddenByTime ? nil : Self.wireCheckpoint(c.latitude, c.longitude, zone: zone)?.longitude,
                 distanceFromStart: c.distanceFromStart, elapsedFromStart: c.elapsedFromStart,
                 name: c.name, photoId: c.photoId, photoIds: c.photoIds, placeId: c.placeId, sortOrder: index)
         }
@@ -323,7 +414,7 @@ extension TripSyncPayload {
     /// CoreData faulting behaviour at upload time.
     private static func computeMovementSplit(_ points: [TrackPoint]) -> (driving: TimeInterval, stopped: TimeInterval) {
         guard points.count >= 2 else { return (0, 0) }
-        let idleSpeedKmh = 5.0
+        let idleSpeedMS = 5.0 / 3.6
         let maxGap: TimeInterval = 60
         var drv: TimeInterval = 0
         var stp: TimeInterval = 0
@@ -331,8 +422,7 @@ extension TripSyncPayload {
             guard points[i].recordingSegmentIndex == points[i - 1].recordingSegmentIndex else { continue }
             let dt = points[i].timestamp.timeIntervalSince(points[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { continue }
-            let avgKmh = ((points[i].speed + points[i - 1].speed) / 2.0) * 3.6
-            if avgKmh < idleSpeedKmh {
+            if (points[i].speed + points[i - 1].speed) / 2.0 < idleSpeedMS {
                 stp += dt
             } else {
                 drv += dt

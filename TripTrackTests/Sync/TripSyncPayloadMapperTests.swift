@@ -1,6 +1,7 @@
 import XCTest
 @testable import TripTrack
 import CoreData
+import CoreLocation
 
 final class TripSyncPayloadMapperTests: XCTestCase {
     var container: NSPersistentContainer!
@@ -53,7 +54,10 @@ final class TripSyncPayloadMapperTests: XCTestCase {
             trackPoints: [
                 TrackPoint(id: UUID(), latitude: 50.0, longitude: 30.0, altitude: 0,
                            speed: 10, course: 0, horizontalAccuracy: 5,
-                           timestamp: Date(), isInterpolated: false)
+                           timestamp: Date(timeIntervalSince1970: 1_700_000_000), isInterpolated: false),
+                TrackPoint(id: UUID(), latitude: 50.001, longitude: 30.001, altitude: 0,
+                           speed: 10, course: 0, horizontalAccuracy: 5,
+                           timestamp: Date(timeIntervalSince1970: 1_700_000_010), isInterpolated: false)
             ],
             photos: [],
             title: "Morning trip",
@@ -74,11 +78,11 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         XCTAssertEqual(p.title, "Morning trip")
         XCTAssertEqual(p.region, "Berlin")
         XCTAssertEqual(p.isPrivate, false)
-        XCTAssertEqual(p.previewPolyline, "3q2+7w==")
+        XCTAssertEqual(p.previewPolyline, Trip.encodePolyline(trip.trackPoints.map(\.coordinate)).base64EncodedString())
         XCTAssertEqual(p.badgesJson, #"["badge1","badge2"]"#)
         XCTAssertEqual(p.xpEarned, 150)
         XCTAssertEqual(p.conflictVersion, 3)
-        XCTAssertEqual(p.trackPoints?.count, 1)
+        XCTAssertEqual(p.trackPoints?.count, 2)
         XCTAssertEqual(p.trackPoints?.first?.latitude, 50.0)
     }
 
@@ -105,5 +109,70 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         XCTAssertNil(p.previewPolyline)
         XCTAssertNil(p.badgesJson)
         XCTAssertEqual(p.trackPoints?.count ?? 0, 0)
+    }
+
+    func testVisibleOnlyNumbersUseVisibleRunsAndDates() throws {
+        let context = container.viewContext
+        let entity = TripEntity(context: context)
+        let tripId = UUID()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let points = (0...30).map { index in
+            TrackPoint(latitude: 40, longitude: Double(index) * 0.0001,
+                       altitude: Double(index), speed: 10,
+                       timestamp: start.addingTimeInterval(Double(index) * 60))
+        }
+        let hiddenParts = TripHiddenParts(
+            startMetres: 0, endMetres: 0,
+            sections: [HiddenSection(id: UUID(), from: points[10].timestamp, to: points[20].timestamp)],
+            numbersVisibleOnly: true)
+        let trip = Trip(
+            id: tripId, startDate: start, endDate: points.last?.timestamp,
+            distance: 3_000, maxSpeed: 99, averageSpeed: 99,
+            trackPoints: points, photos: [], hiddenParts: hiddenParts,
+            title: "Visible numbers", fuelUsed: 0, elevation: 999,
+            region: nil, isPrivate: false, earnedBadgeIds: [])
+        entity.id = tripId
+        entity.startDate = start
+        entity.distance = 3_000
+        entity.conflictVersion = 1
+        entity.lastModifiedAt = start
+        entity.xpEarned = 0
+
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
+        XCTAssertEqual(payload.trackPoints?.count, 20)
+        XCTAssertEqual(payload.startDate, points[0].timestamp)
+        XCTAssertEqual(payload.endDate, points[30].timestamp)
+        XCTAssertLessThan(payload.distance, trip.distance)
+        XCTAssertEqual(payload.distance, 18 * CLLocation(latitude: 40, longitude: 0)
+            .distance(from: CLLocation(latitude: 40, longitude: 0.0001)), accuracy: 1)
+        XCTAssertEqual(payload.maxAltitude, 30)
+        XCTAssertEqual(payload.elevation, 18)
+        XCTAssertEqual(payload.averageSpeed, payload.distance / 1_800, accuracy: 0.01)
+    }
+
+    func testFullyHiddenVisibleOnlyTripDoesNotPublishFullMaximumAltitude() {
+        let context = container.viewContext
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let points = (0..<6).map { index in
+            TrackPoint(latitude: 40, longitude: Double(index) * 0.001,
+                       altitude: Double(index) * 100, speed: 10,
+                       timestamp: start.addingTimeInterval(Double(index) * 60))
+        }
+        let trip = Trip(
+            id: UUID(), startDate: start, endDate: points.last?.timestamp,
+            distance: 3_000, maxSpeed: 20, averageSpeed: 10,
+            trackPoints: points,
+            hiddenParts: TripHiddenParts(
+                sections: [HiddenSection(id: UUID(), from: points[0].timestamp,
+                                         to: points[5].timestamp)],
+                numbersVisibleOnly: true))
+        let entity = TripEntity(context: context)
+        entity.id = trip.id
+        entity.startDate = start
+
+        let payload = TripSyncPayload(trip: trip, entity: entity, zone: nil)
+
+        XCTAssertTrue(payload.trackPoints?.isEmpty == true)
+        XCTAssertEqual(payload.maxAltitude, 0, "zero, not nil: nil leaves the key out and the server keeps the old full maximum")
     }
 }

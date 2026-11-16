@@ -18,6 +18,29 @@ final class SpeedPolyline: MKPolyline {
     var endFraction: Double = 1
 }
 
+final class HiddenRoutePolyline: MKPolyline {}
+
+final class HiddenLockAnnotation: MKPointAnnotation {}
+
+final class HiddenRouteRenderer: MKPolylineRenderer {
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        guard let points = polyline.points() as UnsafeMutablePointer<MKMapPoint>? else { return }
+        let path = CGMutablePath()
+        path.move(to: point(for: points[0]))
+        for index in 1..<polyline.pointCount { path.addLine(to: point(for: points[index])) }
+        context.saveGState()
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.setLineWidth((lineWidth + 2) / zoomScale)
+        context.setLineDash(phase: 0, lengths: [0.1 / zoomScale, 7.2 / zoomScale])
+        context.setStrokeColor(UIColor.white.cgColor)
+        context.addPath(path)
+        context.strokePath()
+        context.restoreGState()
+        super.draw(mapRect, zoomScale: zoomScale, in: context)
+    }
+}
+
 /// Линия маршрута с тёмной обводкой — для карты под туманом.
 ///
 /// Обводка не украшение: внутри прочищенного коридора лежит живая карта Apple,
@@ -175,6 +198,7 @@ final class CheckpointAnnotation: NSObject, MKAnnotation {
 
 final class PlaybackCarAnnotation: NSObject, MKAnnotation {
     @objc dynamic var coordinate: CLLocationCoordinate2D
+    var opacity: CGFloat = 1
     init(coordinate: CLLocationCoordinate2D) { self.coordinate = coordinate }
 }
 
@@ -201,6 +225,21 @@ struct PhotoPin: Equatable {
 struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []
+    var routeBreaks: [Int] = []
+    var hiddenRuns: [[CLLocationCoordinate2D]] = []
+    var hiddenLockPoints: [CLLocationCoordinate2D] = []
+    var hiddenLockAccessibilityLabel: String = "Hidden route boundary"
+    var hiddenHandles: [HiddenHandle] = []
+    var hiddenHandlePanelHeight: CGFloat = 0
+    var handleNudgeID: String?
+    var onHiddenHandleGesture: ((HiddenHandleGesture) -> Int?)?
+    var onHiddenHandleAdjust: ((String, Int) -> Void)?
+    var onRouteLongPress: ((CLLocationCoordinate2D, Int, Double, CGPoint) -> String?)?
+    var routeLongPressCoordinates: [CLLocationCoordinate2D]?
+    var routeLongPressIndices: [Int]?
+    var routeLongPressBreaks: [Int]?
+    var hiddenHandleRouteCoordinates: [CLLocationCoordinate2D]?
+    var onHiddenLockTap: ((CLLocationCoordinate2D) -> Void)?
     var isInteractive: Bool = false
     /// Отметки на маршруте — с подписью и снимком.
     var checkpointMarkers: [CheckpointMarker] = []
@@ -252,6 +291,7 @@ struct RouteMapView: UIViewRepresentable {
     /// passed through here — the view does not interpolate, it only
     /// renders. Driven by CADisplayLink at the display's native rate.
     var playbackCarCoord: CLLocationCoordinate2D? = nil
+    var playbackCarOpacity: Double = 1
     /// Index of the last original GPS coordinate the playback head has
     /// passed. The view checks this against its remembered last value
     /// before swapping the trail polyline overlay — replacing the
@@ -450,13 +490,22 @@ struct RouteMapView: UIViewRepresentable {
             // Preview polylines are treated as one solid segment — their
             // points are sparsely sampled so gap detection would shred
             // them into singleton segments that render as nothing.
+            let starts = ([0] + routeBreaks.filter { $0 > 0 && $0 < coordinates.count }.sorted())
+            let ends = Array(starts.dropFirst()) + [coordinates.count]
+            let coordinateRuns = zip(starts, ends).map { Array(coordinates[$0..<$1]) }
             let segments: [([CLLocationCoordinate2D], [Double])]
             if treatAsPreview {
-                segments = [(coordinates, speeds.count == coordinates.count ? speeds : [])]
+                segments = zip(starts, ends).map { start, end in
+                    (Array(coordinates[start..<end]), speeds.count == coordinates.count ? Array(speeds[start..<end]) : [])
+                }
             } else if speeds.count == coordinates.count {
-                segments = Self.splitIntoSegments(coordinates, speeds: speeds, gapThreshold: Self.gapThreshold)
+                segments = zip(coordinateRuns, zip(starts, ends)).flatMap { run, bounds in
+                    Self.splitIntoSegments(run, speeds: Array(speeds[bounds.0..<bounds.1]), gapThreshold: Self.gapThreshold)
+                }
             } else {
-                segments = Self.splitIntoSegments(coordinates, speeds: [], gapThreshold: Self.gapThreshold)
+                segments = coordinateRuns.flatMap {
+                    Self.splitIntoSegments($0, speeds: [], gapThreshold: Self.gapThreshold)
+                }
             }
 
             var unionRect: MKMapRect = .null
@@ -601,11 +650,22 @@ struct RouteMapView: UIViewRepresentable {
         // обновление приходит в оба.
         let owns = mapView.superview === slot
         if owns {
-            applyInteractivity(to: mapView)
+            context.coordinator.setMapInteractivity(interactive: isInteractive, showsFog: showsFog, on: mapView)
             applyLayoutMargins(to: mapView, coordinator: context.coordinator)
         }
         context.coordinator.onRouteTap = onRouteTap
         context.coordinator.installTapRecognizerIfNeeded(on: mapView, wanted: onRouteTap != nil)
+        context.coordinator.onHiddenHandleGesture = onHiddenHandleGesture
+        context.coordinator.onHiddenHandleAdjust = onHiddenHandleAdjust
+        context.coordinator.onRouteLongPress = onRouteLongPress
+        context.coordinator.routeLongPressCoordinates = routeLongPressCoordinates ?? coordinates
+        context.coordinator.routeLongPressIndices = routeLongPressIndices
+        context.coordinator.routeLongPressBreaks = routeLongPressBreaks ?? routeBreaks
+        context.coordinator.hiddenHandleRouteCoordinates = hiddenHandleRouteCoordinates ?? coordinates
+        context.coordinator.hiddenHandlePanelHeight = hiddenHandlePanelHeight
+        context.coordinator.onHiddenLockTap = onHiddenLockTap
+        context.coordinator.installHiddenGestureRecognizers(
+            on: mapView, handlesEnabled: !hiddenHandles.isEmpty, routeEnabled: onRouteLongPress != nil)
         context.coordinator.syncCheckpoints(checkpointMarkers, style: checkpointMarkerStyle, on: mapView)
         context.coordinator.playbackFollowing = playbackFollow
         context.coordinator.syncCandidates(checkpointCandidates, on: mapView)
@@ -613,6 +673,10 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.onCheckpointTap = onCheckpointTap
         context.coordinator.syncFocus(focusCoordinate, on: mapView)
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
+        context.coordinator.syncHiddenRuns(hiddenRuns, locks: hiddenLockPoints, on: mapView)
+        context.coordinator.syncHiddenHandles(hiddenHandles, on: mapView)
+        if let handleNudgeID { context.coordinator.nudgeHandle(handleNudgeID, on: mapView) }
+        context.coordinator.hiddenLockAccessibilityLabel = hiddenLockAccessibilityLabel
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
         if owns {
             context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView, animated: animatesFit)
@@ -620,6 +684,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
+            carOpacity: playbackCarOpacity,
             trailIndex: playbackTrailIndex,
             coords: playbackCoords ?? coordinates,
             mapView: mapView
@@ -1505,6 +1570,7 @@ struct RouteMapView: UIViewRepresentable {
         /// MapKit вправе выбросить и создать заново, и вместе с ним пропал бы
         /// весь набранный поворот.
         private var carCourse: Double = 0
+        private var carOpacity: CGFloat = 1
         /// Был ли курс хоть раз достоверным. Пока не был — держать нечего, и
         /// первый же ответ геометрии ставится без доводки.
         private var carHasCourse = false
@@ -1621,6 +1687,7 @@ struct RouteMapView: UIViewRepresentable {
 
         func applyPlayback(
             carCoord: CLLocationCoordinate2D?,
+            carOpacity: Double,
             trailIndex: Int,
             coords: [CLLocationCoordinate2D],
             mapView: MKMapView,
@@ -1649,6 +1716,7 @@ struct RouteMapView: UIViewRepresentable {
             // момент рвала картинку.
             let fraction = progressFraction(car: car, trailIndex: trailIndex, coords: coords)
             relight(to: fraction, mapView: mapView)
+            self.carOpacity = CGFloat(min(1, max(0, carOpacity)))
 
             // Car position — KVO-observed `@objc dynamic coordinate` on
             // PlaybackCarAnnotation lets MapKit reposition the view
@@ -1659,8 +1727,11 @@ struct RouteMapView: UIViewRepresentable {
             updateCarHeading(at: car, passed: trailIndex, coords: coords, mapView: mapView)
             if let annotation = playbackCar {
                 annotation.coordinate = car
+                annotation.opacity = self.carOpacity
+                mapView.view(for: annotation)?.alpha = self.carOpacity
             } else {
                 let annotation = PlaybackCarAnnotation(coordinate: car)
+                annotation.opacity = self.carOpacity
                 mapView.addAnnotation(annotation)
                 playbackCar = annotation
             }
@@ -1715,6 +1786,7 @@ struct RouteMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             updateDashScale(on: mapView)
+            clampVisibleHandleBubbles(on: mapView)
             // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
             veilSeat?.settle(on: mapView)
             // Металу заказывать нечего: он и так рисует каждый кадр, ему нужен
@@ -1724,6 +1796,7 @@ struct RouteMapView: UIViewRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             updateDashScale(on: mapView)
+            clampVisibleHandleBubbles(on: mapView)
             // Ловит и жест, и программный полёт камеры (реплей ведёт её сам,
             // без `regionWillChange`): `startTracking` заводит `CADisplayLink`,
             // если его нет, и продлевает хвост, если есть.
@@ -1740,6 +1813,14 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let veil = overlay as? FogVeilOverlay {
                 return FogVeilRenderer(veil: veil)
+            }
+            if let hidden = overlay as? HiddenRoutePolyline {
+                let renderer = HiddenRouteRenderer(polyline: hidden)
+                renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
+                renderer.strokeColor = UIColor.label.withAlphaComponent(0.55)
+                renderer.lineCap = .round
+                renderer.lineDashPattern = [NSNumber(value: 0.1), NSNumber(value: 7.2)]
+                return renderer
             }
             if let speedLine = overlay as? SpeedPolyline {
                 // Неизвестная скорость — достройка: серый пунктир без обводки
@@ -1788,12 +1869,342 @@ struct RouteMapView: UIViewRepresentable {
         // MARK: Отметки
 
         var onRouteTap: ((CLLocationCoordinate2D, Double) -> Void)?
+        var onHiddenHandleGesture: ((HiddenHandleGesture) -> Int?)?
+        var onHiddenHandleAdjust: ((String, Int) -> Void)?
+        var onRouteLongPress: ((CLLocationCoordinate2D, Int, Double, CGPoint) -> String?)?
+        var onHiddenLockTap: ((CLLocationCoordinate2D) -> Void)?
+        var routeLongPressCoordinates: [CLLocationCoordinate2D] = []
+        var routeLongPressIndices: [Int]?
+        var routeLongPressBreaks: [Int]?
+        var hiddenHandleRouteCoordinates: [CLLocationCoordinate2D] = []
+        var hiddenHandlePanelHeight: CGFloat = 0
+        private var interactive = false
+        private var activeHandleID: String?
+        private var routePressStartFinger: CGPoint?
+        private var routePressHandleOffset: CGPoint?
+        private var handlePressRecognizer: UILongPressGestureRecognizer?
+        private var routePressRecognizer: UILongPressGestureRecognizer?
+        private var handleAnnotations: [String: HiddenHandleAnnotation] = [:]
+        private var isDraggingHiddenHandle = false
+        private var lastNudgeID: String?
+        private var pendingNudgeID: String?
         private var tapRecognizer: UITapGestureRecognizer?
         private var checkpointAnnotations: [CheckpointAnnotation] = []
         private var candidateAnnotations: [CheckpointCandidateAnnotation] = []
         /// Пока камера едет за машиной, подъезжать к кандидату нельзя — два
         /// `setCenter` спорят покадрово, и побеждает реплей.
         var playbackFollowing = false
+
+        func setMapInteractivity(interactive: Bool, showsFog: Bool, on mapView: MKMapView) {
+            self.interactive = interactive
+            self.showsFog = showsFog
+            applyInteractivity(on: mapView)
+        }
+
+        func applyInteractivity(on mapView: MKMapView) {
+            RouteMapView.applyInteractivity(to: mapView,
+                                            interactive: interactive && !isDraggingHiddenHandle,
+                                            showsFog: showsFog)
+        }
+
+        func installHiddenGestureRecognizers(on mapView: MKMapView, handlesEnabled: Bool, routeEnabled: Bool) {
+            if handlesEnabled, handlePressRecognizer == nil {
+                let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleHiddenPress(_:)))
+                recognizer.minimumPressDuration = 0
+                recognizer.allowableMovement = .greatestFiniteMagnitude
+                recognizer.delegate = self
+                mapView.addGestureRecognizer(recognizer)
+                handlePressRecognizer = recognizer
+            } else if !handlesEnabled, let recognizer = handlePressRecognizer {
+                mapView.removeGestureRecognizer(recognizer)
+                handlePressRecognizer = nil
+            }
+
+            if routeEnabled, routePressRecognizer == nil {
+                let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleRoutePress(_:)))
+                recognizer.minimumPressDuration = 0.45
+                recognizer.allowableMovement = 16
+                recognizer.delegate = self
+                mapView.addGestureRecognizer(recognizer)
+                routePressRecognizer = recognizer
+            } else if !routeEnabled, let recognizer = routePressRecognizer {
+                mapView.removeGestureRecognizer(recognizer)
+                routePressRecognizer = nil
+            }
+        }
+
+        func syncHiddenHandles(_ handles: [HiddenHandle], on mapView: MKMapView) {
+            let ids = Set(handles.map(\.id))
+            if Set(handleAnnotations.keys) != ids {
+                mapView.removeAnnotations(Array(handleAnnotations.values))
+                handleAnnotations = Dictionary(uniqueKeysWithValues: handles.map { handle in
+                    (handle.id, HiddenHandleAnnotation(handle: handle))
+                })
+                mapView.addAnnotations(Array(handleAnnotations.values))
+            }
+
+            for handle in handles {
+                guard let annotation = handleAnnotations[handle.id] else { continue }
+                annotation.handle = handle
+                if annotation.coordinate.latitude != handle.coordinate.latitude ||
+                    annotation.coordinate.longitude != handle.coordinate.longitude {
+                    annotation.coordinate = handle.coordinate
+                }
+                if let view = mapView.view(for: annotation) as? HiddenHandleAnnotationView {
+                    view.configure(handle) { [weak self] delta in self?.onHiddenHandleAdjust?(handle.id, delta) }
+                    view.clampBubble(in: visibleHandleBounds(on: mapView),
+                                     coordinatePoint: mapView.convert(handle.coordinate, toPointTo: mapView))
+                }
+            }
+        }
+
+        func nudgeHandle(_ id: String, on mapView: MKMapView) {
+            guard lastNudgeID != id, !UIAccessibility.isReduceMotionEnabled,
+                  UIView.areAnimationsEnabled, !isDraggingHiddenHandle,
+                  let annotation = handleAnnotations[id] else { return }
+            guard let view = mapView.view(for: annotation) else {
+                pendingNudgeID = id
+                return
+            }
+            pendingNudgeID = nil
+            lastNudgeID = id
+            let direction = annotation.handle.kind == .start ? 1 : -1
+            let route = hiddenHandleRouteCoordinates
+            let current = mapView.convert(annotation.coordinate, toPointTo: mapView)
+            var adjacentIndex = annotation.handle.index + direction
+            var delta = CGPoint.zero
+            var length: CGFloat = 0
+            while route.indices.contains(adjacentIndex) {
+                let adjacent = mapView.convert(route[adjacentIndex], toPointTo: mapView)
+                delta = CGPoint(x: adjacent.x - current.x, y: adjacent.y - current.y)
+                length = hypot(delta.x, delta.y)
+                if length > 0.5 { break }
+                adjacentIndex += direction
+            }
+            guard length > 0 else { return }
+            let transform = CGAffineTransform(translationX: delta.x / length * 25,
+                                              y: delta.y / length * 25)
+            UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                view.transform = transform
+            } completion: { _ in
+                UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                    view.transform = .identity
+                }
+            }
+        }
+
+        @objc private func handleHiddenPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard let mapView = recognizer.view as? MKMapView else { return }
+            let finger = recognizer.location(in: mapView)
+            switch recognizer.state {
+            case .began:
+                guard let annotation = nearestHandle(to: finger, in: mapView, maximumDistance: 22) else { return }
+                if let view = mapView.view(for: annotation) {
+                    view.layer.removeAllAnimations()
+                    view.transform = .identity
+                }
+                activeHandleID = annotation.handle.id
+                routePressStartFinger = nil
+                routePressHandleOffset = .zero
+                isDraggingHiddenHandle = true
+                applyInteractivity(on: mapView)
+                sendHandleGesture(.began, annotation: annotation, finger: finger, on: mapView)
+            case .changed:
+                guard let annotation = activeHandleID.flatMap({ handleAnnotations[$0] }) else { return }
+                sendHandleGesture(.changed, annotation: annotation, finger: finger, on: mapView)
+            case .ended:
+                finishHandleGesture(.ended, finger: finger, on: mapView)
+            case .cancelled, .failed:
+                finishHandleGesture(.cancelled, finger: finger, on: mapView)
+            default: break
+            }
+        }
+
+        @objc private func handleRoutePress(_ recognizer: UILongPressGestureRecognizer) {
+            guard let mapView = recognizer.view as? MKMapView else { return }
+            let finger = recognizer.location(in: mapView)
+            switch recognizer.state {
+            case .began:
+                guard activeHandleID == nil,
+                      let hit = nearestLongPressRoutePoint(to: finger, in: mapView),
+                      let onRouteLongPress else { return }
+                let index = hit.index
+                let coordinate = hit.coordinate
+                guard let id = onRouteLongPress(coordinate, index, metersPerPoint(in: mapView), finger) else { return }
+                activeHandleID = id
+                routePressStartFinger = finger
+                routePressHandleOffset = nil
+                isDraggingHiddenHandle = true
+                applyInteractivity(on: mapView)
+                if let annotation = handleAnnotations[id] {
+                    sendHandleGesture(.began, annotation: annotation, finger: finger, on: mapView)
+                } else if hiddenHandleRouteCoordinates.indices.contains(index) {
+                    _ = onHiddenHandleGesture?(HiddenHandleGesture(
+                        phase: .began, handleID: id, coordinate: hiddenHandleRouteCoordinates[index],
+                        snappedIndex: index, fingerPoint: finger, handlePoint: finger,
+                        metresPerPoint: metersPerPoint(in: mapView), outsideEndpoint: false))
+                }
+            case .changed:
+                guard let annotation = activeHandleID.flatMap({ handleAnnotations[$0] }) else { return }
+                sendHandleGesture(.changed, annotation: annotation, finger: finger, on: mapView)
+            case .ended:
+                finishHandleGesture(.ended, finger: finger, on: mapView)
+            case .cancelled, .failed:
+                finishHandleGesture(.cancelled, finger: finger, on: mapView)
+            default: break
+            }
+        }
+
+        private func sendHandleGesture(_ phase: HiddenHandleGesture.Phase,
+                                       annotation: HiddenHandleAnnotation,
+                                       finger: CGPoint, on mapView: MKMapView) {
+            let handle = annotation.handle
+            let route = hiddenHandleRouteCoordinates
+            guard !route.isEmpty else { return }
+            let lower = min(route.count - 1, max(0, handle.allowedIndices.lowerBound))
+            let upper = min(route.count - 1, max(lower, handle.allowedIndices.upperBound))
+            let range = lower...upper
+            let originalHandlePoint = mapView.convert(annotation.coordinate, toPointTo: mapView)
+            if let startFinger = routePressStartFinger, routePressHandleOffset == nil {
+                routePressHandleOffset = CGPoint(x: originalHandlePoint.x - startFinger.x,
+                                                 y: originalHandlePoint.y - startFinger.y)
+            }
+            let searchFinger: CGPoint
+            if let offset = routePressHandleOffset {
+                searchFinger = CGPoint(x: finger.x + offset.x, y: finger.y + offset.y)
+            } else {
+                searchFinger = finger
+            }
+            let index: Int
+            if phase == .began {
+                index = handle.index
+            } else {
+                index = HiddenPartsGeometry.nearestIndex(to: searchFinger, currentIndex: handle.index,
+                    allowed: range, pointAtIndex: { [weak mapView] index in
+                        guard let mapView, route.indices.contains(index) else { return .zero }
+                        return mapView.convert(route[index], toPointTo: mapView)
+                    })
+            }
+            guard route.indices.contains(index) else { return }
+            let point = originalHandlePoint
+            let updatedCoordinate = route[index]
+            if annotation.coordinate.latitude != updatedCoordinate.latitude ||
+                annotation.coordinate.longitude != updatedCoordinate.longitude {
+                annotation.coordinate = updatedCoordinate
+            }
+            var updatedHandle = annotation.handle
+            updatedHandle.index = index
+            updatedHandle.coordinate = updatedCoordinate
+            annotation.handle = updatedHandle
+            let outsideEndpoint: Bool
+            if phase != .began, let endpointIndex = handle.specialIndex,
+               route.indices.contains(endpointIndex) {
+                let endpointPoint = mapView.convert(route[endpointIndex], toPointTo: mapView)
+                let behindIndex = handle.kind == .start ? min(route.count - 1, endpointIndex + 1)
+                    : max(0, endpointIndex - 1)
+                let behindPoint = mapView.convert(route[behindIndex], toPointTo: mapView)
+                outsideEndpoint = distance(from: finger, to: endpointPoint) > 32 &&
+                    distance(from: finger, to: behindPoint) > distance(from: finger, to: endpointPoint)
+            } else {
+                outsideEndpoint = false
+            }
+            let event = HiddenHandleGesture(
+                phase: phase, handleID: handle.id, coordinate: updatedCoordinate,
+                snappedIndex: index, fingerPoint: finger, handlePoint: point,
+                metresPerPoint: metersPerPoint(in: mapView), outsideEndpoint: outsideEndpoint)
+            if let normalizedIndex = onHiddenHandleGesture?(event), route.indices.contains(normalizedIndex) {
+                let normalizedCoordinate = route[normalizedIndex]
+                if annotation.coordinate.latitude != normalizedCoordinate.latitude ||
+                    annotation.coordinate.longitude != normalizedCoordinate.longitude {
+                    annotation.coordinate = normalizedCoordinate
+                }
+                updatedHandle.index = normalizedIndex
+                updatedHandle.coordinate = normalizedCoordinate
+                annotation.handle = updatedHandle
+            }
+        }
+
+        private func finishHandleGesture(_ phase: HiddenHandleGesture.Phase, finger: CGPoint, on mapView: MKMapView) {
+            guard let id = activeHandleID else { return }
+            if let annotation = handleAnnotations[id] {
+                sendHandleGesture(phase, annotation: annotation, finger: finger, on: mapView)
+            }
+            activeHandleID = nil
+            routePressStartFinger = nil
+            routePressHandleOffset = nil
+            isDraggingHiddenHandle = false
+            applyInteractivity(on: mapView)
+        }
+
+        private func nearestHandle(to point: CGPoint, in mapView: MKMapView,
+                                   maximumDistance: CGFloat) -> HiddenHandleAnnotation? {
+            handleAnnotations.values.min { lhs, rhs in
+                distance(from: point, to: mapView.convert(lhs.coordinate, toPointTo: mapView)) <
+                    distance(from: point, to: mapView.convert(rhs.coordinate, toPointTo: mapView))
+            }.flatMap { annotation in
+                distance(from: point, to: mapView.convert(annotation.coordinate, toPointTo: mapView)) <= maximumDistance
+                    ? annotation : nil
+            }
+        }
+
+        private func nearestLongPressRoutePoint(to point: CGPoint, in mapView: MKMapView)
+            -> (coordinate: CLLocationCoordinate2D, index: Int)? {
+            guard !routeLongPressCoordinates.isEmpty else { return nil }
+            var bestIndex = 0
+            var bestDistance = CGFloat.greatestFiniteMagnitude
+            for (index, coordinate) in routeLongPressCoordinates.enumerated() {
+                let projected = mapView.convert(coordinate, toPointTo: mapView)
+                let distance = distance(from: point, to: projected)
+                if distance < bestDistance { bestDistance = distance; bestIndex = index }
+            }
+            if routeLongPressCoordinates.count > 1 {
+                for index in 0..<(routeLongPressCoordinates.count - 1) {
+                    let routeIndex = routeLongPressIndices.flatMap { $0.indices.contains(index) ? $0[index] : nil } ?? index
+                    let nextRouteIndex = routeLongPressIndices.flatMap { $0.indices.contains(index + 1) ? $0[index + 1] : nil } ?? index + 1
+                    guard nextRouteIndex == routeIndex + 1,
+                          !(routeLongPressBreaks ?? []).contains(nextRouteIndex) else { continue }
+                    let start = mapView.convert(routeLongPressCoordinates[index], toPointTo: mapView)
+                    let end = mapView.convert(routeLongPressCoordinates[index + 1], toPointTo: mapView)
+                    let dx = end.x - start.x
+                    let dy = end.y - start.y
+                    let lengthSquared = dx * dx + dy * dy
+                    guard lengthSquared > 0 else { continue }
+                    let fraction = min(1, max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+                    let projection = CGPoint(x: start.x + fraction * dx, y: start.y + fraction * dy)
+                    let distance = distance(from: point, to: projection)
+                    if distance < bestDistance {
+                        bestDistance = distance
+                        bestIndex = fraction < 0.5 ? index : index + 1
+                    }
+                }
+            }
+            guard bestDistance <= 16 else { return nil }
+            let routeIndex = routeLongPressIndices.flatMap { $0.indices.contains(bestIndex) ? $0[bestIndex] : nil }
+                ?? bestIndex
+            return (routeLongPressCoordinates[bestIndex], routeIndex)
+        }
+
+        private func metersPerPoint(in mapView: MKMapView) -> Double {
+            let mapPointsPerScreenPoint = mapView.visibleMapRect.size.width / Double(max(1, mapView.bounds.width))
+            return mapPointsPerScreenPoint * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
+        }
+
+        private func distance(from lhs: CGPoint, to rhs: CGPoint) -> CGFloat {
+            hypot(lhs.x - rhs.x, lhs.y - rhs.y)
+        }
+
+        private func visibleHandleBounds(on mapView: MKMapView) -> CGRect {
+            CGRect(x: 8, y: 84, width: max(0, mapView.bounds.width - 16),
+                   height: max(0, mapView.bounds.height - hiddenHandlePanelHeight - 84))
+        }
+
+        private func clampVisibleHandleBubbles(on mapView: MKMapView) {
+            let bounds = visibleHandleBounds(on: mapView)
+            for annotation in handleAnnotations.values where annotation.handle.bubbleVisible {
+                guard let view = mapView.view(for: annotation) as? HiddenHandleAnnotationView else { continue }
+                view.clampBubble(in: bounds, coordinatePoint: mapView.convert(annotation.coordinate, toPointTo: mapView))
+            }
+        }
 
         func installTapRecognizerIfNeeded(on mapView: MKMapView, wanted: Bool) {
             if wanted, tapRecognizer == nil {
@@ -1810,6 +2221,16 @@ struct RouteMapView: UIViewRepresentable {
         /// Тап по булавке или маркеру — это выбор булавки, а не «поставить
         /// отметку под ней»: без этой проверки по фото прилетали оба события.
         func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if recognizer === handlePressRecognizer {
+                guard let mapView = recognizer.view as? MKMapView else { return false }
+                return nearestHandle(to: touch.location(in: mapView), in: mapView, maximumDistance: 22) != nil
+            }
+            if recognizer === routePressRecognizer {
+                guard let mapView = recognizer.view as? MKMapView,
+                      nearestHandle(to: touch.location(in: mapView), in: mapView, maximumDistance: 22) == nil,
+                      !isTouchingLock(at: touch.location(in: mapView), in: mapView) else { return false }
+                return nearestLongPressRoutePoint(to: touch.location(in: mapView), in: mapView) != nil
+            }
             guard recognizer === tapRecognizer, let mapView = recognizer.view else { return true }
             var hit = mapView.hitTest(touch.location(in: mapView), with: nil)
             while let view = hit, view !== mapView {
@@ -1819,10 +2240,25 @@ struct RouteMapView: UIViewRepresentable {
             return true
         }
 
+        private func isTouchingLock(at point: CGPoint, in mapView: MKMapView) -> Bool {
+            var hit = mapView.hitTest(point, with: nil)
+            while let view = hit, view !== mapView {
+                if let annotationView = view as? MKAnnotationView,
+                   (annotationView.annotation is HiddenLockAnnotation ||
+                    annotationView.annotation is HiddenHandleAnnotation) {
+                    return true
+                }
+                hit = view.superview
+            }
+            return false
+        }
+
         /// Не отбирать у карты её собственные жесты.
         func gestureRecognizer(_ recognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            true
+            if recognizer === handlePressRecognizer || other === handlePressRecognizer ||
+                recognizer === routePressRecognizer || other === routePressRecognizer { return false }
+            return true
         }
 
         @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
@@ -1896,6 +2332,30 @@ struct RouteMapView: UIViewRepresentable {
 
         var onPhotoTap: ((UUID) -> Void)?
         private var photoAnnotations: [PhotoAnnotation] = []
+        private var hiddenOverlays: [HiddenRoutePolyline] = []
+        private var hiddenAnnotations: [HiddenLockAnnotation] = []
+        private var hiddenSignature = ""
+        var hiddenLockAccessibilityLabel = "Hidden route boundary"
+
+        func syncHiddenRuns(_ runs: [[CLLocationCoordinate2D]], locks: [CLLocationCoordinate2D], on mapView: MKMapView) {
+            let signature = (runs.flatMap { $0 } + locks).map { "\($0.latitude),\($0.longitude)" }.joined(separator: ";")
+            guard signature != hiddenSignature else { return }
+            hiddenSignature = signature
+            mapView.removeOverlays(hiddenOverlays)
+            mapView.removeAnnotations(hiddenAnnotations)
+            hiddenOverlays = runs.compactMap { run in
+                guard run.count > 1 else { return nil }
+                var coordinates = run
+                return HiddenRoutePolyline(coordinates: &coordinates, count: coordinates.count)
+            }
+            hiddenAnnotations = locks.map { coordinate in
+                let marker = HiddenLockAnnotation()
+                marker.coordinate = coordinate
+                return marker
+            }
+            mapView.addOverlays(hiddenOverlays, level: .aboveRoads)
+            mapView.addAnnotations(hiddenAnnotations)
+        }
 
         func syncPhotoPins(_ pins: [PhotoPin], on mapView: MKMapView) {
             // Сравниваем и по картинкам: миниатюры доезжают позже координат, и
@@ -1917,8 +2377,8 @@ struct RouteMapView: UIViewRepresentable {
         /// как велит CLAUDE.md). Только для отметок и кандидатов: точки старта
         /// и финиша ставятся один раз при сборке, им анимация ни к чему.
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
-            guard !UIAccessibility.isReduceMotionEnabled else { return }
             for view in views where view.annotation is CheckpointAnnotation || view.annotation is CheckpointCandidateAnnotation {
+                guard !UIAccessibility.isReduceMotionEnabled else { continue }
                 view.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
                 view.alpha = 0
                 UIView.animate(springDuration: 0.45, bounce: 0.3) {
@@ -1926,6 +2386,7 @@ struct RouteMapView: UIViewRepresentable {
                     view.alpha = 1
                 }
             }
+            if let pendingNudgeID { nudgeHandle(pendingNudgeID, on: mapView) }
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -1937,10 +2398,43 @@ struct RouteMapView: UIViewRepresentable {
                 // при выделении поднимает вид и меняет коллизии соседей.
                 mapView.deselectAnnotation(view.annotation, animated: false)
                 onCheckpointTap?(checkpoint.marker.id)
+            } else if let lock = view.annotation as? HiddenLockAnnotation {
+                mapView.deselectAnnotation(view.annotation, animated: false)
+                onHiddenLockTap?(lock.coordinate)
+            } else if view.annotation is HiddenHandleAnnotation {
+                mapView.deselectAnnotation(view.annotation, animated: false)
             }
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let handle = annotation as? HiddenHandleAnnotation {
+                let identifier = "HiddenDraggableHandle"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? HiddenHandleAnnotationView
+                    ?? HiddenHandleAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.configure(handle.handle) { [weak self] delta in
+                    self?.onHiddenHandleAdjust?(handle.handle.id, delta)
+                }
+                view.clampBubble(in: visibleHandleBounds(on: mapView),
+                                 coordinatePoint: mapView.convert(handle.coordinate, toPointTo: mapView))
+                view.displayPriority = .required
+                view.zPriority = MKAnnotationViewZPriority(rawValue: 1_000)
+                return view
+            }
+            if annotation is HiddenLockAnnotation {
+                let identifier = "HiddenRouteLock"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.image = Self.hiddenLockImage()
+                view.isAccessibilityElement = true
+                view.accessibilityLabel = hiddenLockAccessibilityLabel
+                view.displayPriority = .required
+                view.collisionMode = .circle
+                view.zPriority = MKAnnotationViewZPriority(rawValue: 995)
+                return view
+            }
             if let candidate = annotation as? CheckpointCandidateAnnotation {
                 let id = "CheckpointCandidate"
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
@@ -2026,6 +2520,7 @@ struct RouteMapView: UIViewRepresentable {
                 view.setState(carState)
                 view.setScale(metersPerPoint: mapView.metersPerScreenPoint)
                 view.apply(course: carCourse, cameraHeading: mapView.camera.heading)
+                view.alpha = (annotation as? PlaybackCarAnnotation)?.opacity ?? 1
                 view.displayPriority = .required
                 view.collisionMode = .none
                 view.zPriority = .max
@@ -2053,6 +2548,21 @@ struct RouteMapView: UIViewRepresentable {
             }
             view.centerOffset = .zero
             return view
+        }
+
+        private static func hiddenLockImage() -> UIImage {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 21, height: 21))
+            return renderer.image { context in
+                let rect = CGRect(x: 0, y: 0, width: 21, height: 21)
+                UIColor.white.setFill()
+                context.cgContext.fillEllipse(in: rect)
+                UIColor(AppTheme.mapLockInk).withAlphaComponent(0.18).setStroke()
+                context.cgContext.setLineWidth(1)
+                context.cgContext.strokeEllipse(in: rect.insetBy(dx: 0.5, dy: 0.5))
+                let symbol = UIImage(systemName: "lock.fill")?
+                    .withTintColor(UIColor(AppTheme.mapLockInk), renderingMode: .alwaysOriginal)
+                symbol?.draw(in: CGRect(x: 6.3, y: 5.5, width: 8.4, height: 10))
+            }
         }
     }
 }

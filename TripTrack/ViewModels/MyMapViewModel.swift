@@ -45,6 +45,11 @@ final class MyMapViewModel: ObservableObject {
     /// Открытый мир, как он лежит в базе (0.7.0). Из него строятся ОБА
     /// оверлея — и дыра, и линия в ней, — поэтому разъехаться им нечем.
     @Published private(set) var revealed = RevealedLayer.empty
+    @Published private(set) var filmingRevealed = RevealedLayer.empty
+    @Published private(set) var filmingExploration = MapExploration()
+    @Published private(set) var filmingFogVeil: FogVeilOverlay?
+    @Published private(set) var filmingRouteVein: RouteVeinOverlay?
+    @Published private(set) var isPreparingFilmingLayer = true
     /// Непрозрачный туман поверх всего мира.
     @Published private(set) var fogVeil: FogVeilOverlay?
     /// Тонкая тёплая линия по оси коридоров.
@@ -131,7 +136,47 @@ final class MyMapViewModel: ObservableObject {
     @Published private(set) var overview = AtlasOverviewIndex.empty
     var countryCount: Int { overview.countries.count }
 
+    var displayRevealed: RevealedLayer {
+        FilmingModeManager.shared.isActive ? filmingRevealed : revealed
+    }
+
+    var displayFogVeil: FogVeilOverlay? {
+        FilmingModeManager.shared.isActive ? filmingFogVeil : fogVeil
+    }
+
+    var displayRouteVein: RouteVeinOverlay? {
+        FilmingModeManager.shared.isActive ? filmingRouteVein : routeVein
+    }
+
+    var displayExploration: MapExploration {
+        FilmingModeManager.shared.isActive ? filmingExploration : exploration
+    }
+
+    var displayOverview: AtlasOverviewIndex {
+        guard FilmingModeManager.shared.isActive else { return overview }
+        return AtlasOverviewIndex(
+            exploration: filmingExploration,
+            catalogRegions: RegionAtlas.shared.regions,
+            catalogCities: RegionAtlas.shared.citiesByRegion.values.flatMap { $0 }
+        )
+    }
+
+    var displayHomePin: CLLocationCoordinate2D? {
+        FilmingModeManager.shared.isActive ? nil : homePin
+    }
+
+    var displayPlacePins: [AtlasPlacePin] {
+        guard FilmingModeManager.shared.isActive else { return placePins }
+        let zone = HomeSettings.load().activeZone
+        let edge = PrivacySettings.load().edgeMetres
+        return placePins.filter {
+            !FilmingModeFilters.hidesPlace($0.coordinate, trips: filmingHiddenTrips,
+                                           homeZone: zone, defaultEdgeMetres: edge)
+        }
+    }
+
     private var cachedTrips: [Trip] = []
+    private var filmingHiddenTrips: [Trip] = []
     /// Даты проездов поднимаются ОДИН раз на смену данных: `passes(for:)`
     /// ходит в CoreData на каждое место, а период человек крутит пальцем.
     private var placeSeeds: [AtlasPlaces.Seed] = []
@@ -492,6 +537,7 @@ final class MyMapViewModel: ObservableObject {
 
         cachedTrips = trips
         cachedAllTime = (built.0, built.1)
+        await buildFilmingLayer(trips: trips, tripManager: tripManager)
         _ = await applyCurrentPeriod()
         reloadPlaces()
         StartupTrace.mark("MyMapViewModel.reload apply done")
@@ -531,24 +577,93 @@ final class MyMapViewModel: ObservableObject {
         let now = Date()
         let calendar = Calendar.current
         let atlas = RegionAtlas.shared
+        let periodTrips = allTrips.filter {
+            $0.previewPolyline?.isEmpty == false
+                && selectedPeriod.contains($0.startDate, now: now, calendar: calendar)
+        }
         let built = await Task.detached(priority: .userInitiated) {
-            let trips = allTrips.filter {
-                $0.previewPolyline?.isEmpty == false
-                    && selectedPeriod.contains($0.startDate, now: now, calendar: calendar)
-            }
-            let layer = AtlasPreviewLayer.build(trips: trips, atlas: atlas)
+            let layer = AtlasPreviewLayer.build(trips: periodTrips, atlas: atlas)
             let hashes = TerritoryManager.geohashes(
-                fromTrips: trips.map(\.previewCoordinates), precision: 6)
+                fromTrips: periodTrips.map(\.previewCoordinates), precision: 6)
             let exploration = MapExploration.build(
-                trips: trips, visitedHashes: hashes, atlas: atlas,
+                trips: periodTrips, visitedHashes: hashes, atlas: atlas,
                 openedKmByRegion: layer.regionKm)
             return (exploration, layer)
         }.value
         guard generation == filterGeneration else { return false }
         apply(exploration: built.0, layer: built.1)
+        if let tripManagerRef {
+            await buildFilmingLayer(trips: periodTrips, tripManager: tripManagerRef)
+        }
         isFiltering = false
         finishLoading()
         return true
+    }
+
+    private func buildFilmingLayer(trips: [Trip], tripManager: TripManager) async {
+        isPreparingFilmingLayer = true
+        let defaultEdge = PrivacySettings.load().edgeMetres ?? 0
+        let homeZone = HomeSettings.load().activeZone
+        let detailsNeeded = trips.filter { trip in
+            let parts = trip.hiddenParts ?? TripHiddenParts()
+            return defaultEdge > 0 || (parts.startMetres ?? 0) > 0
+                || (parts.endMetres ?? 0) > 0 || !parts.sections.isEmpty
+                || homeZone != nil
+        }
+        var detailsById: [UUID: Trip] = [:]
+        for summary in detailsNeeded {
+            if let detail = await tripManager.tripDetailAsync(id: summary.id) {
+                detailsById[summary.id] = detail
+            }
+        }
+        let sourceTrips = trips
+        let atlas = RegionAtlas.shared
+        let built = await Task.detached(priority: .userInitiated) {
+            let publicTrips = sourceTrips.map { summary -> Trip in
+                let parts = summary.hiddenParts ?? TripHiddenParts()
+                let needsMask = defaultEdge > 0 || (parts.startMetres ?? 0) > 0
+                    || (parts.endMetres ?? 0) > 0 || !parts.sections.isEmpty
+                    || homeZone != nil
+                guard needsMask else { return summary }
+                guard let full = detailsById[summary.id], !full.trackPoints.isEmpty else {
+                    var unavailable = summary
+                    unavailable.previewPolyline = nil
+                    unavailable.previewBreaks = nil
+                    return unavailable
+                }
+                let resolution = HiddenPartsResolver.resolve(
+                    points: full.trackPoints, recordingBreaks: full.recordingBreaks,
+                    startMetres: parts.startMetres ?? defaultEdge,
+                    endMetres: parts.endMetres ?? defaultEdge,
+                    sections: parts.sections, zone: homeZone)
+                guard !resolution.hiddenRuns.isEmpty else { return summary }
+                var publicTrip = summary
+                publicTrip.previewPolyline = Trip.encodePolyline(resolution.previewPoints)
+                publicTrip.previewBreaks = resolution.previewBreaks
+                publicTrip.photos = FilmingModeFilters.visiblePhotos(
+                    full.photos, points: full.trackPoints, resolution: resolution,
+                    homeZone: homeZone)
+                return publicTrip
+            }
+            let hiddenTrips = detailsById.values.filter { trip in
+                let parts = trip.hiddenParts ?? TripHiddenParts()
+                return defaultEdge > 0 || (parts.startMetres ?? 0) > 0
+                    || (parts.endMetres ?? 0) > 0 || !parts.sections.isEmpty
+            }
+            let layer = AtlasPreviewLayer.build(trips: publicTrips, atlas: atlas)
+            let hashes = TerritoryManager.geohashes(
+                fromTrips: publicTrips.map(\.previewCoordinates), precision: 6)
+            let exploration = MapExploration.build(
+                trips: publicTrips, visitedHashes: hashes, atlas: atlas,
+                openedKmByRegion: layer.regionKm)
+            return (exploration, layer, hiddenTrips)
+        }.value
+        filmingExploration = built.0
+        filmingRevealed = built.1
+        filmingHiddenTrips = built.2
+        filmingFogVeil = FogVeilOverlay(layer: built.1)
+        filmingRouteVein = built.1.isEmpty ? nil : RouteVeinOverlay(layer: built.1)
+        isPreparingFilmingLayer = false
     }
 
     private func reloadSelectedRegionTrips() {

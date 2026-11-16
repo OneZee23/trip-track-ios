@@ -2024,7 +2024,7 @@ struct PublicProfileView: View {
             // cropping to a tile is what put the start dot and the finish flag
             // hard against the edges.
             MapSnapshotPreview(
-                coordinates: coords, tripId: trip.id, height: 84, width: 168
+                coordinates: coords, tripId: trip.id, breaks: trip.previewBreaks ?? [], height: 84, width: 168
             )
             .frame(maxWidth: .infinity)
             .frame(height: 84)

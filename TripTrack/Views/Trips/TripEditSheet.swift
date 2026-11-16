@@ -17,6 +17,7 @@ struct TripEditSheet: View {
     let trip: Trip
     /// Cars to choose from — the garage, in its own order.
     let vehicles: [Vehicle]
+    var onEditHiddenParts: () -> Void = {}
     let onSave: (_ title: String, _ description: String, _ vehicleId: UUID?, _ isPrivate: Bool, _ isTransfer: Bool) -> Void
 
     /// The server's own limit for a trip note.
@@ -163,6 +164,21 @@ struct TripEditSheet: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("edit_access_row")
                     }
+
+                    Button {
+                        Haptics.tap()
+                        dismiss()
+                        onEditHiddenParts()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "eye.slash").foregroundStyle(AppTheme.accent).frame(width: 22)
+                            Text(AppStrings.hiddenEditorTitle(lang.language)).font(.inter(15, weight: .semibold)).foregroundStyle(c.text)
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(c.textTertiary)
+                        }.padding(14).background(c.card, in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityIdentifier("edit_hidden_parts_row")
                 }
                 .padding(16)
                 // The form's OWN height, never its position on screen. Measured

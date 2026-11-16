@@ -263,6 +263,33 @@ struct ProfileHeroCard: View {
         }
     }
 
+    private func nameText(_ scale: CGFloat, _ text: String? = nil) -> some View {
+        Text(text ?? name)
+            .font(.interScaled(21 * scale, weight: .bold, relativeTo: .title3))
+            .tracking(-0.3 * scale)
+            .foregroundStyle(isNamePlaceholder ? secondaryInk : ink)
+    }
+
+    private func twoLineName(_ lines: (String, String), _ scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            nameText(scale, lines.0).lineLimit(1)
+            nameText(scale, lines.1).lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The name split at the space that makes its two lines closest in
+    /// length; nil for a single word.
+    static func nameLines(_ name: String) -> (String, String)? {
+        let words = name.split(separator: " ").map(String.init)
+        guard words.count > 1 else { return nil }
+        let split = (1..<words.count).min { a, b in
+            abs(words[..<a].joined(separator: " ").count - words[a...].joined(separator: " ").count)
+                < abs(words[..<b].joined(separator: " ").count - words[b...].joined(separator: " ").count)
+        } ?? 1
+        return (words[..<split].joined(separator: " "), words[split...].joined(separator: " "))
+    }
+
     private var identityText: some View {
         VStack(alignment: .leading, spacing: 2) {
             Button {
@@ -270,12 +297,28 @@ struct ProfileHeroCard: View {
                 if isForeign { onCopyName?() } else { onTapProfile() }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(name)
-                        .accessibilityIdentifier(isForeign ? "profile_display_name" : "profile_name_text")
-                        .font(.interScaled(21, weight: .bold, relativeTo: .title3))
-                        .tracking(-0.3)
-                        .foregroundStyle(isNamePlaceholder ? secondaryInk : ink)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // One line that shrinks in steps to half size; a name too
+                    // long even then wraps at the space, never inside a word.
+                    // A long surname broke by letter onto a third line (owner,
+                    // 5 Nov 2026).
+                    ViewThatFits(in: .horizontal) {
+                        nameText(1).lineLimit(1)
+                        nameText(0.9).lineLimit(1)
+                        nameText(0.8).lineLimit(1)
+                        nameText(0.7).lineLimit(1)
+                        nameText(0.6).lineLimit(1)
+                        nameText(0.5).lineLimit(1)
+                        if let lines = Self.nameLines(name) {
+                            twoLineName(lines, 1)
+                            twoLineName(lines, 0.9)
+                            twoLineName(lines, 0.8)
+                            twoLineName(lines, 0.7)
+                            twoLineName(lines, 0.6)
+                            twoLineName(lines, 0.5)
+                        }
+                        nameText(0.5).lineLimit(2)
+                    }
+                    .accessibilityIdentifier(isForeign ? "profile_display_name" : "profile_name_text")
                     if showsBadge {
                         ProBadge(height: 16)
                     }

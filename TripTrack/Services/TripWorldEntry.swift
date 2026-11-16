@@ -7,7 +7,8 @@ import Foundation
 /// ровно то же, что финиш неделю назад.
 enum TripWorldEntry {
     enum Route: Equatable {
-        /// < 500 м и < 2 мин — удалить молча (Review Focus 2).
+        /// < 500 м и < 2 мин — удалить молча (Review Focus 2). Сюда же
+        /// запись без единой точки GPS (`Trip.finishDiscardReason`).
         case discardJunk
         /// Черновик: итог без наград и вопрос «Твоя?».
         case awaitConfirmation
@@ -18,7 +19,7 @@ enum TripWorldEntry {
     /// Куда идёт только что законченная поездка. Мусор побеждает черновик:
     /// спрашивать про поездку по парковке нечего.
     static func route(for trip: Trip) -> Route {
-        if trip.isJunk { return .discardJunk }
+        if trip.finishDiscardReason != nil { return .discardJunk }
         return trip.isDraft ? .awaitConfirmation : .enterWorld
     }
 

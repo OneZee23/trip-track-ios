@@ -2,6 +2,14 @@ import Foundation
 
 enum AppConfig {
     static var apiBaseURL: URL {
+        #if DEBUG && targetEnvironment(simulator)
+        // UI captures must never use a developer's real session or backend.
+        // Point app API traffic at a closed local port so it fails locally.
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing")
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return URL(string: "http://127.0.0.1:9")!
+        }
+        #endif
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String,
               let url = URL(string: raw) else {
             #if DEBUG

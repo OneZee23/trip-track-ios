@@ -700,6 +700,17 @@ struct ProfileView: View {
 
     private var stage: some View {
         stageRoutingWatchers
+        .onReceive(NotificationCenter.default.publisher(for: .openPrivacySettings)) { _ in
+            opensPrivacyFromNotice = true
+            showSettings = true
+        }
+#if DEBUG
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("-open-privacy-settings") else { return }
+            opensPrivacyFromNotice = true
+            showSettings = true
+        }
+#endif
         // Одноразовый флаг: без сброса КАЖДОЕ следующее открытие настроек до
         // конца сессии само прыгало бы в «Приватность».
         .sheet(isPresented: $showSettings, onDismiss: { opensPrivacyFromNotice = false }) {

@@ -530,7 +530,8 @@ final class AutoTripService: ObservableObject {
         let stale5 = isStaleByMovement(threshold: AutoTripPolicy.bluetoothDisconnectFastStopIdleThreshold)
         let tripDist = vm.tripManager.activeTrip?.distance ?? 0
         let tripDur = vm.tripManager.activeTrip?.duration ?? 0
-        autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.effectiveStopMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
+        let driving = vm.speed >= AutoTripPolicy.bluetoothDisconnectDrivingSpeed
+        autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.effectiveStopMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) driving=\(driving, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
 
         // Само правило живёт в `AutoTripPolicy.onBluetoothDisconnect` — чистой
         // функцией, которую можно проверить тестом. Здесь остаётся только его
@@ -539,6 +540,7 @@ final class AutoTripService: ObservableObject {
             mode: effectiveStopMode,
             isRecording: vm.isRecording,
             isPaused: vm.isPaused,
+            isDriving: driving,
             isIdleBeyondFastStop: stale5,
             tripDistance: tripDist,
             tripDuration: tripDur,
@@ -547,7 +549,7 @@ final class AutoTripService: ObservableObject {
 
         switch decision {
         case .ignore:
-            autoLog.notice("[auto.bt_disconnect.path] taken=ignore recording=\(vm.isRecording, privacy: .public) paused=\(vm.isPaused, privacy: .public)")
+            autoLog.notice("[auto.bt_disconnect.path] taken=ignore recording=\(vm.isRecording, privacy: .public) paused=\(vm.isPaused, privacy: .public) driving=\(driving, privacy: .public)")
 
         case .stopNow:
             autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop")

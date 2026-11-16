@@ -58,6 +58,7 @@ enum AutoTripPolicy {
         mode: AutoRecordMode,
         isRecording: Bool,
         isPaused: Bool,
+        isDriving: Bool,
         isIdleBeyondFastStop: Bool,
         tripDistance: Double,
         tripDuration: TimeInterval,
@@ -69,6 +70,12 @@ enum AutoTripPolicy {
         // дать приложению. Сильнее любого датчика: магнитола знает только про
         // зажигание, а пауза — про намерение.
         guard !isPaused else { return .ignore }
+
+        // На ходу пропавшая магнитола не значит «приехали»: машина едет, а
+        // Bluetooth отвалился или звук забрало чужое приложение. Ни закрывать
+        // поездку, ни спрашивать водителя за рулём. Конец поездки найдёт
+        // стоянка: бездействие и восстановление стоячей поездки.
+        guard !isDriving else { return .ignore }
 
         switch mode {
         case .off:
@@ -160,6 +167,11 @@ enum AutoTripPolicy {
     /// On BT off, end immediately if the trip is at least this long (s).
     static let immediateEndOnBtDisconnectMinDuration: TimeInterval = 180
 
+    /// Speed (m/s, ~14 km/h) above which a lost stereo is ignored: the car is
+    /// clearly driving. Compared with the HUD speed, which reads 0 within ~2 s
+    /// of a real stop, so parking and turning the engine off still end the trip.
+    static let bluetoothDisconnectDrivingSpeed: Double = 4.0
+
     // MARK: - Junk-trip classification
 
     /// Trips below `(minDistance AND minDuration)` are treated as parking-
@@ -183,7 +195,7 @@ enum AutoTripPolicy {
 
     /// Wait this long after `didBecomeActive` before re-checking the audio
     /// route. At unlock, iOS can briefly show a non-BT output for one tick
-    /// before the route settles back; without this delay we'd interpret
-    /// the transient state as a disconnect and fire a stop prompt.
+    /// before the route settles back; the check would miss the stereo there.
+    /// A missing stereo is never a disconnect (`AudioRouteDetector`).
     static let audioRouteSettleDelay: TimeInterval = 1.0
 }

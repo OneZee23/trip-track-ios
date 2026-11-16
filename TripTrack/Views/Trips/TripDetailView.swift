@@ -41,6 +41,7 @@ struct TripDetailView: View {
     /// speed while the owner of the same trip got all three. `/social/trip`
     /// serves the points; this is where they land.
     @State private var remoteTrack: [SocialTrackPoint] = []
+    @State private var remotePlaybackBreaks: [Date] = []
     @State private var trip: Trip?
     @State private var openingTransitionFinished = false
     /// Photos of someone else's trip live on the server, not in Documents.
@@ -89,6 +90,9 @@ struct TripDetailView: View {
     @State private var toastItem: ToastItem?
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
+    @State private var cachedRouteBreaks: [Int] = []
+    @State private var cachedHiddenRuns: [[CLLocationCoordinate2D]] = []
+    @State private var cachedHiddenLocks: [CLLocationCoordinate2D] = []
     /// Shape selection happens on data load, never during map expansion.
     @State private var localReplayInput = TripReplayInput.empty
     @State private var remoteReplayInput = TripReplayInput.empty
@@ -115,6 +119,9 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    @State private var showHiddenPartsEditor = false
+    @State private var hiddenEditorFocusCoordinate: CLLocationCoordinate2D?
+    @State private var didHandleDebugScreenLaunch = false
     /// Открытая отметка — лист с именем, снимком и удалением.
     @State private var selectedCheckpoint: TripCheckpoint?
     /// Открытый отрезок — лист с именем и удалением (0.6.8).
@@ -201,6 +208,8 @@ struct TripDetailView: View {
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
     @State private var showPublishSheet = false
+    @State private var debugPublishTrip: Trip?
+    @State private var showHiddenQuestionForPublish = false
     /// Drives the «Публикуется…» / publish-error toast overlay after the
     /// user confirms a publish. Watches SyncQueue for the trip's upload op.
     @State private var publishWatchActive = false
@@ -237,6 +246,7 @@ struct TripDetailView: View {
     /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
     /// own trips only; preview-only trips fall back to the inline crawl.
     @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var filmingMode = FilmingModeManager.shared
     /// Reacting goes through the same store the feed uses, so a reaction left
     /// here shows on the card you came from.
     @ObservedObject private var socialFeed = SocialFeedStore.shared
@@ -536,6 +546,12 @@ struct TripDetailView: View {
             }
         }
         var items: [ActionPopoverList.Item] = [
+            .init(
+                title: AppStrings.hiddenEditorTitle(lang.language), systemImage: "eye.slash",
+                accessibilityId: "detail_action_hidden_parts"
+            ) {
+                present { showHiddenPartsEditor = true }
+            },
             .init(
                 title: AppStrings.edit(lang.language), systemImage: "pencil",
                 accessibilityId: "detail_action_edit"
@@ -915,6 +931,7 @@ struct TripDetailView: View {
         // таймауту, причём в случайном месте, а не там, где добавили строку.
         // Разбиение на два выражения возвращает компилятору дыхание.
         tripDetailBody
+        .onChange(of: trip?.id) { _, _ in handleDebugScreenLaunchIfRequested() }
         .sheet(item: $selectedCheckpoint) { checkpointPresentation($0) }
         .sheet(item: $selectedSegment) { segmentPresentation($0) }
         .sheet(isPresented: $showJourneyComposer) { journeyPresentation() }
@@ -935,6 +952,26 @@ struct TripDetailView: View {
         // после этой строки и подумай, кто кого закрывает.
         .overlay { photoViewerLayer() }
         .environment(\.colorScheme, scheme)
+        .onChange(of: filmingMode.isActive) { _, _ in
+            guard isOwn, let trip else { return }
+            buildCaches(for: trip)
+            photoGeometryRevision &+= 1
+        }
+    }
+
+    private func handleDebugScreenLaunchIfRequested() {
+        #if DEBUG
+        guard !didHandleDebugScreenLaunch, trip != nil else { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-open-hidden-editor") || arguments.contains("-open-publish-sheet") || arguments.contains("-open-trip-map") else { return }
+        didHandleDebugScreenLaunch = true
+        if arguments.contains("-open-hidden-editor") { showHiddenPartsEditor = true }
+        else if arguments.contains("-open-publish-sheet") {
+            debugPublishTrip = trip
+            showPublishSheet = true
+        }
+        else if !arguments.contains("-open-trip-map") { expandMap() }
+        #endif
     }
 
     /// Просмотрщик снимков — слой поверх всего, включая раскрытую карту.
@@ -1261,10 +1298,7 @@ struct TripDetailView: View {
         }
         // Имя отметки дозревает из геокодера уже после того, как она встала
         // на карту, — без этого маркер до выхода с экрана звался бы «#1».
-        .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged)) { note in
-            guard let changed = note.object as? UUID, changed == tripId else { return }
-            reloadCheckpoints()
-        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged), perform: handleCheckpointChange)
         // Место переименовали или удалили во вкладке «Места», либо досчитался
         // новый проезд — чип у отметки обновляется без перезахода на экран.
         .onReceive(NotificationCenter.default.publisher(for: .placesChanged)) { _ in
@@ -1365,9 +1399,60 @@ struct TripDetailView: View {
                 language: lang.language,
                 message: publishConfirmMessage,
                 descriptionText: trip?.tripDescription ?? "",
+                trip: debugPublishTrip ?? trip,
+                onEditHidden: {
+                    showPublishSheet = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        showHiddenPartsEditor = true
+                    }
+                },
+                onQuickHide: { edge in
+                    guard let trip else { return }
+                    var parts = trip.hiddenParts ?? TripHiddenParts()
+                    if edge == .start { parts.startMetres = 500 } else { parts.endMetres = 500 }
+                    CoreDataTripRepository(persistenceController: .shared).updateHiddenParts(for: trip.id, parts: parts)
+                    reloadAfterHiddenPartsEdit(tripId: trip.id)
+                },
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
             .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: $showHiddenPartsEditor, onDismiss: { hiddenEditorFocusCoordinate = nil }) {
+            if let trip {
+                HiddenPartsEditorView(
+                    trip: trip,
+                    onSave: { parts in
+                        CoreDataTripRepository(persistenceController: .shared)
+                            .updateHiddenParts(for: trip.id, parts: parts)
+                        reloadAfterHiddenPartsEdit(tripId: trip.id)
+                    },
+                    onRename: {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            showEditSheet = true
+                        }
+                    },
+                    initialFocusCoordinate: hiddenEditorFocusCoordinate
+                )
+                .environmentObject(lang)
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .sheet(isPresented: $showHiddenQuestionForPublish) {
+            HiddenEdgesQuestionSheet(onboarding: false) { metres in
+                var settings = PrivacySettings.load()
+                settings.edgeMetres = metres
+                settings.save()
+                UserDefaults.standard.set(true, forKey: "privacy.edgeQuestionAnswered")
+                UserDefaults.standard.set(false, forKey: "privacy.edgeQuestionPendingOnPublish")
+                showHiddenQuestionForPublish = false
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 260_000_000)
+                    showPublishSheet = true
+                }
+            }
+            .environmentObject(lang)
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -1413,6 +1498,12 @@ struct TripDetailView: View {
                 TripEditSheet(
                     trip: t,
                     vehicles: settings.vehicles,
+                    onEditHiddenParts: {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            showHiddenPartsEditor = true
+                        }
+                    },
                     onSave: { newTitle, newNotes, newVehicleId, newIsPrivate, newIsTransfer in
                         let saved = applyEdits(
                             title: newTitle, notes: newNotes,
@@ -1466,6 +1557,11 @@ struct TripDetailView: View {
         )
     }
 
+    private func handleCheckpointChange(_ note: Notification) {
+        guard let changed = note.object as? UUID, changed == tripId else { return }
+        reloadCheckpoints()
+    }
+
     // MARK: - Caches
 
     /// A full re-read may carry new route points even if its id, dates and
@@ -1478,11 +1574,54 @@ struct TripDetailView: View {
         // The keyed task schedules the next rebuild after the view updates.
     }
 
+    /// The map draws hidden runs and locks from caches built off the trip, so
+    /// an edit rebuilds them at once. In TestFlight 101 they waited for the
+    /// next opening of the screen, and «Готово» looked like it did nothing.
+    private func reloadAfterHiddenPartsEdit(tripId: UUID) {
+        guard let updated = viewModel.tripDetail(id: tripId) else { return }
+        replaceTrip(with: updated)
+        buildCaches(for: updated)
+    }
+
+    private func openHiddenEditor(at coordinate: CLLocationCoordinate2D) {
+        guard isOwn else { return }
+        Haptics.selection()
+        hiddenEditorFocusCoordinate = coordinate
+        showHiddenPartsEditor = true
+    }
+
     /// One-pass derivation of everything the body must not recompute per
     /// frame: full coords for the fullscreen map, downsampled poster/
     /// playback series, chart series and the movement/altitude stats.
     private func buildCaches(for t: Trip, replay: TripReplayInput? = nil) {
-        let pts = t.trackPoints
+        let shouldMaskForFilming = isOwn && filmingMode.isActive
+        let privacyResolution = isOwn ? HiddenPartsResolver.resolve(
+            points: t.trackPoints, recordingBreaks: t.recordingBreaks,
+            startMetres: t.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: t.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: t.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone) : nil
+        cachedHiddenRuns = (isOwn && !shouldMaskForFilming) ? (privacyResolution?.hiddenRuns.map { $0.map(\.coordinate) } ?? []) : []
+        cachedHiddenLocks = (isOwn && !shouldMaskForFilming) ? (privacyResolution?.lockPoints ?? []) : []
+        let mask = shouldMaskForFilming ? privacyResolution : nil
+        let routeRuns: [[TrackPoint]]
+        if let mask { routeRuns = mask.visibleRuns }
+        else {
+            let annotated = RecordingBreaks.annotate(t.trackPoints, breaks: t.recordingBreaks)
+            var runs: [[TrackPoint]] = []
+            for point in annotated {
+                if runs.last?.last?.recordingSegmentIndex != point.recordingSegmentIndex { runs.append([]) }
+                runs[runs.count - 1].append(point)
+            }
+            routeRuns = runs
+        }
+        var breakOffsets: [Int] = []
+        var routePointCount = 0
+        for (index, run) in routeRuns.enumerated() {
+            if index > 0 { breakOffsets.append(routePointCount) }
+            routePointCount += run.count
+        }
+        cachedRouteBreaks = breakOffsets
+        let pts = routeRuns.flatMap { $0 }
         if pts.count > 1 {
             localReplayInput = replay ?? TripReplayInput(points: pts)
             cachedCoordinates = pts.map(\.coordinate)
@@ -1531,6 +1670,21 @@ struct TripDetailView: View {
             // trip opened onto a world map with two pins on it.
             isPreviewRoute = true
         }
+    }
+
+    private func hiddenPartsSummary(_ trip: Trip) -> String {
+        let defaults = PrivacySettings.load().edgeMetres ?? 0
+        func formatted(_ value: Int?) -> String {
+            let metres = value ?? defaults
+            return metres == 0 ? "" :
+                Measure.radius(metres: Double(metres), unit: distanceUnit, lang: lang.language)
+        }
+        return AppStrings.hiddenSummary(
+            lang.language,
+            start: formatted(trip.hiddenParts?.startMetres),
+            end: formatted(trip.hiddenParts?.endMetres),
+            sections: trip.hiddenParts?.sections.count ?? 0
+        )
     }
 
     /// Ряд графика по своим точкам. Километры считаются по координатам
@@ -1619,6 +1773,7 @@ struct TripDetailView: View {
         }
         if let track = res.track {
             remoteTrack = track
+            remotePlaybackBreaks = res.breaks ?? []
             remoteReplayInput = TripReplayInput(
                 coords: track.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) },
                 speeds: track.map(\.speed), timestamps: track.map(\.t))
@@ -1871,13 +2026,30 @@ isOwn
             segmentHistory = [:]
             return
         }
+        let shouldMaskForFilming = filmingMode.isActive
+        let mask = shouldMaskForFilming ? HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone) : nil
+        let photos = trip.photos.filter { photo in
+            guard let mask else { return true }
+            return !HiddenPartsResolver.photoIsHidden(
+                capturedAt: photo.capturedAt, coordinate: photo.exifCoordinate,
+                resolution: mask, points: trip.trackPoints, zone: HomeSettings.load().activeZone)
+        }
+        let checkpoints = trip.checkpoints.filter { checkpoint in
+            guard let mask else { return true }
+            return !mask.hiddenRanges.contains { $0.from <= checkpoint.timestamp && checkpoint.timestamp <= $0.to }
+        }
+        let points = mask?.visiblePoints ?? trip.trackPoints
 
         // Geometry uses one immutable snapshot off the main actor. A photo's
         // distance prefix and reading are shared by its pin and its moment.
         let geometryRevision = photoGeometryRevision
         guard let prepared = try? await TripPhotoPlacement.prepareAsync(
-            photos: trip.photos, checkpoints: trip.checkpoints,
-            points: trip.trackPoints, startDate: trip.startDate) else { return }
+            photos: photos, checkpoints: checkpoints,
+            points: points, startDate: trip.startDate) else { return }
         func isCurrentSnapshot() -> Bool {
             !Task.isCancelled && isOwn && self.trip?.id == trip.id
                 && photoGeometryRevision == geometryRevision && self.trip?.startDate == trip.startDate
@@ -1903,7 +2075,7 @@ isOwn
                 reading: reading, filename: item.filename))
         }
         var markers: [CheckpointMarker] = []
-        for (index, checkpoint) in trip.checkpoints.enumerated() {
+        for (index, checkpoint) in checkpoints.enumerated() {
             // Отметка без места на карту не идёт (0.8.3): она вернулась с
             // сервера обрезанной приватной зоной, и рисовать её в Гвинейском
             // заливе значило бы соврать координатой. В «Моментах» она есть.
@@ -1936,7 +2108,7 @@ isOwn
 
         // Свободные снимки для ленты — те же, что стоят булавками на карте,
         // но с «сколько до сюда»: ленте нужны время и километры, не координата.
-        let photosByID = Dictionary(trip.photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let photosByID = Dictionary(photos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let loose: [TripMoments.PlacedPhoto] = placed.compactMap { item in
             guard let photo = photosByID[item.id], let fix = prepared.fixes[item.id] else { return nil }
             return TripMoments.PlacedPhoto(photo: photo, fix: fix)
@@ -2197,6 +2369,11 @@ isOwn
                     RouteMapView(
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
+                        routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
+                        hiddenRuns: isOwn ? cachedHiddenRuns : [],
+                        hiddenLockPoints: isOwn ? cachedHiddenLocks : [],
+                        hiddenLockAccessibilityLabel: AppStrings.hiddenRouteLockAccessibility(lang.language),
+                        onHiddenLockTap: isOwn ? { openHiddenEditor(at: $0) } : nil,
                         // Deliberately NOT interactive, and the expand button
                         // below is why: panning happens fullscreen. While this
                         // map took drags it also ate the only one that could
@@ -2240,9 +2417,17 @@ isOwn
                 } else {
                     c.cardAlt
                         .overlay {
-                            Image(systemName: "map")
-                                .font(.largeTitle)
-                                .foregroundStyle(c.textTertiary)
+                            if !isOwn, (liveSocial?.distance ?? 0) > 0 {
+                                Text(AppStrings.routeHiddenByAuthor(lang.language))
+                                    .font(.inter(13, weight: .semibold))
+                                    .foregroundStyle(c.textSecondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
+                            } else {
+                                Image(systemName: "map")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(c.textTertiary)
+                            }
                         }
                 }
             }
@@ -2358,6 +2543,10 @@ isOwn
         FullscreenMapSheet(
             coordinates: cachedCoordinates,
             speeds: cachedSpeeds,
+            routeBreaks: isOwn ? cachedRouteBreaks : (liveSocial?.previewBreaks ?? []),
+            hiddenRuns: isOwn ? cachedHiddenRuns : [],
+            hiddenLockPoints: isOwn ? cachedHiddenLocks : [],
+            playbackBreaks: isOwn ? (trip?.recordingBreaks ?? []) : remotePlaybackBreaks,
             timestamps: replayInput.timestamps,
             replayCoordinates: replayInput.coords,
             replaySpeeds: replayInput.speeds,
@@ -2366,6 +2555,7 @@ isOwn
             checkpointMarkers: checkpointMarkers,
             photoPins: photoPins,
             onPhotoTap: { openPhoto(id: $0) },
+            onHiddenLockTap: isOwn ? { openHiddenEditor(at: $0) } : nil,
             // Отмечать можно только СВОЮ поездку и только когда есть трек:
             // «сколько до сюда» считается по нему, а у чужой поездки его нет.
             trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],
@@ -2555,6 +2745,23 @@ isOwn
             companionsSection(trip: trip)
 
             notesSection(trip: trip, c: c)
+
+            if isOwn, !cachedHiddenRuns.isEmpty {
+                Button { Haptics.tap(); showHiddenPartsEditor = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "eye.slash").foregroundStyle(AppTheme.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(AppStrings.hiddenEditorTitle(lang.language)).font(.inter(15, weight: .bold)).foregroundStyle(c.text)
+                            Text(hiddenPartsSummary(trip))
+                                .font(.inter(12)).foregroundStyle(c.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(c.textTertiary)
+                    }.padding(14).background(c.card, in: RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("trip_hidden_parts_card")
+            }
 
             photosSection(c)
 
@@ -3229,6 +3436,12 @@ isOwn
     private func requestPublish() {
         guard auth.isSignedIn else {
             signInPrompt = .publish
+            return
+        }
+        if HiddenEdgesQuestionPolicy.shouldAskBeforePublish(
+            pending: UserDefaults.standard.bool(forKey: "privacy.edgeQuestionPendingOnPublish"),
+            answered: UserDefaults.standard.bool(forKey: "privacy.edgeQuestionAnswered")) {
+            showHiddenQuestionForPublish = true
             return
         }
         showPublishSheet = true
@@ -4007,8 +4220,9 @@ isOwn
     /// `OwnTripPhotosModel.merge`. `PhotoStorageService.localFileExists`
     /// caches, so asking once per body pass is a dictionary hit.
     private var ownPhotoItems: [OwnTripPhotosModel.Item] {
+        let tripPhotos = trip?.photos ?? []
         let merged = OwnTripPhotosModel.merge(
-            local: trip?.photos ?? [],
+            local: tripPhotos,
             remote: remotePhotos,
             localFileExists: { PhotoStorageService.localFileExists(filename: $0) }
         )
@@ -4019,8 +4233,26 @@ isOwn
         // (taking a trip private does exactly that), and a row is the last
         // record that the photo was ever there. Hiding is reversible; deleting
         // is not, and this is not the code that gets to decide.
-        guard canJudgeMissingPhotos else { return merged }
-        return merged.filter { if case .missing = $0.source { return false } else { return true } }
+        let available = canJudgeMissingPhotos
+            ? merged.filter { if case .missing = $0.source { return false } else { return true } }
+            : merged
+        guard filmingMode.isActive, let trip else { return available }
+        let resolution = HiddenPartsResolver.resolve(
+            points: trip.trackPoints, recordingBreaks: trip.recordingBreaks,
+            startMetres: trip.hiddenParts?.startMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            endMetres: trip.hiddenParts?.endMetres ?? PrivacySettings.load().edgeMetres ?? 0,
+            sections: trip.hiddenParts?.sections ?? [], zone: HomeSettings.load().activeZone)
+        let hiddenIds = Set(tripPhotos.filter {
+            HiddenPartsResolver.photoIsHidden(capturedAt: $0.capturedAt,
+                coordinate: $0.exifCoordinate, resolution: resolution,
+                points: trip.trackPoints, zone: HomeSettings.load().activeZone)
+        }.map(\.id))
+        let knownPhotoIds = Set(tripPhotos.map(\.id))
+        return available.filter { item in
+            guard !hiddenIds.contains(item.id) else { return false }
+            if case .remote = item.source { return knownPhotoIds.contains(item.id) }
+            return true
+        }
     }
 
     /// Whether "the server does not have this picture" is something this

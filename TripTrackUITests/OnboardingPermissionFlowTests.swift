@@ -65,6 +65,7 @@ final class OnboardingPermissionFlowTests: XCTestCase {
     }
 
     private func finishNotifications() {
+        answerHiddenEdges()
         // Motion & Fitness is unavailable in Simulator; coordinator unit tests
         // cover its granted/denied callbacks and ordering on physical devices.
         assertSingleContinue("notifications")
@@ -75,6 +76,20 @@ final class OnboardingPermissionFlowTests: XCTestCase {
         if deny.waitForExistence(timeout: 3) { deny.tap() }
         XCTAssertTrue(app.buttons["tab_home"].waitForExistence(timeout: 15),
                       "Refusing permissions must still finish onboarding")
+    }
+
+    /// 0.9.4: the start-and-end question sits between background location and notifications. It is
+    /// not a permission: nothing is preselected, «Сохранить» waits for a choice, any answer goes on.
+    private func answerHiddenEdges() {
+        let none = app.buttons["onboarding_hidden_option_0"]
+        XCTAssertTrue(none.waitForExistence(timeout: 15), "Missing the start-and-end question")
+        capture("hidden-edges-question")
+        let save = app.buttons["onboarding_hidden_save"]
+        XCTAssertTrue(save.exists, "Missing «Сохранить»")
+        XCTAssertFalse(save.isEnabled, "Nothing is preselected")
+        none.tap()
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
     }
 
     private func assertSingleContinue(_ step: String) {

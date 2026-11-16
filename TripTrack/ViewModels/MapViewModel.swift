@@ -210,9 +210,15 @@ final class MapViewModel: ObservableObject {
         // screen with no recording behind it. Pressing either used to do
         // nothing whatsoever — the card sat there, counting, until iOS aged it
         // out. If there is no trip, the honest response is to retire the card.
-        TripIntentHandler.shared.onPause = { [weak self] in
+        TripIntentHandler.shared.onPause = { [weak self] target in
             guard let self, self.isRecording else {
                 LiveActivityManager.shared.endActivity()
+                return
+            }
+            guard PauseIntentDecision.shouldToggle(target: target, isPaused: self.isPaused) else {
+                // A card that had not caught up: redraw it, change nothing.
+                recLog.notice("pause: stale_card target=\(target ?? false, privacy: .public) paused=\(self.isPaused, privacy: .public)")
+                self.publishPauseToLiveActivity()
                 return
             }
             self.togglePause(source: .liveActivity)
@@ -584,7 +590,14 @@ final class MapViewModel: ObservableObject {
                     self?.updateDuration()
                 }
         }
-        // Update Live Activity with pause state
+        publishPauseToLiveActivity()
+
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    /// The pause state on the Live Activity, frozen clock while paused.
+    private func publishPauseToLiveActivity() {
         var elapsed: TimeInterval?
         if isPaused, let start = recordingStartDate {
             elapsed = Date().timeIntervalSince(start) - pausedAccumulated
@@ -596,9 +609,6 @@ final class MapViewModel: ObservableObject {
             pausedDuration: pausedAccumulated,
             elapsedAtPause: elapsed
         )
-
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
     }
 
     // MARK: - Recording Recovery
@@ -997,9 +1007,7 @@ final class MapViewModel: ObservableObject {
         if let trip = completedTrip, route == .discardJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
-            discardedJunkTripReason = TripJunkClassifier.reason(
-                distanceMeters: trip.distance, durationSeconds: trip.duration, maxSpeedMS: trip.maxSpeed
-            )
+            discardedJunkTripReason = trip.finishDiscardReason
             discardedJunkTrip = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.warning)

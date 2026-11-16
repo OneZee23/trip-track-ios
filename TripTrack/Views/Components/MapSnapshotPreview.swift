@@ -6,6 +6,9 @@ import MapKit
 struct MapSnapshotPreview: View {
     let coordinates: [CLLocationCoordinate2D]
     let tripId: UUID
+    var breaks: [Int] = []
+    var hiddenRuns: [[CLLocationCoordinate2D]] = []
+    var hiddenLockPoints: [CLLocationCoordinate2D] = []
     var height: CGFloat = 80
     /// Render width for the MKMapSnapshotter image. Defaults to a
     /// feed-card-sized 340pt; callers presenting in a wider slot (the share
@@ -89,7 +92,20 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v5"
+        "\(tripId.uuidString)-\(Self.contentKey(coordinates, breaks: breaks, hiddenRuns: hiddenRuns, hiddenLockPoints: hiddenLockPoints))-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v7"
+    }
+
+    static func contentKey(_ coordinates: [CLLocationCoordinate2D], breaks: [Int] = [],
+                           hiddenRuns: [[CLLocationCoordinate2D]] = [],
+                           hiddenLockPoints: [CLLocationCoordinate2D] = []) -> Int {
+        var hasher = Hasher()
+        hasher.combine(coordinates.count)
+        hasher.combine(breaks)
+        for coordinate in coordinates + hiddenRuns.flatMap({ $0 }) + hiddenLockPoints {
+            hasher.combine(coordinate.latitude.bitPattern)
+            hasher.combine(coordinate.longitude.bitPattern)
+        }
+        return hasher.finalize()
     }
 
     @MainActor
@@ -129,6 +145,9 @@ struct MapSnapshotPreview: View {
             image = await Task.detached(priority: .userInitiated) {
                 await Self.renderSnapshot(
                     coordinates: coordinates,
+                    breaks: breaks,
+                    hiddenRuns: hiddenRuns,
+                    hiddenLockPoints: hiddenLockPoints,
                     region: region,
                     size: snapshotSize,
                     scale: scale,
@@ -158,6 +177,9 @@ struct MapSnapshotPreview: View {
 
     private static func renderSnapshot(
         coordinates: [CLLocationCoordinate2D],
+        breaks: [Int],
+        hiddenRuns: [[CLLocationCoordinate2D]],
+        hiddenLockPoints: [CLLocationCoordinate2D],
         region: MKCoordinateRegion,
         size: CGSize,
         scale: CGFloat,
@@ -201,12 +223,48 @@ struct MapSnapshotPreview: View {
             gc.setLineJoin(.round)
 
             let points = coordinates.map { result.point(for: $0) }
-            gc.beginPath()
-            gc.move(to: points[0])
-            for i in 1..<points.count {
-                gc.addLine(to: points[i])
+            let runStarts = [0] + breaks.filter { $0 > 0 && $0 < points.count }.sorted()
+            let runEnds = runStarts.dropFirst() + [points.count]
+            for (start, end) in zip(runStarts, runEnds) where end - start > 1 {
+                gc.beginPath()
+                gc.move(to: points[start])
+                for i in (start + 1)..<end {
+                    gc.addLine(to: points[i])
+                }
+                gc.strokePath()
             }
-            gc.strokePath()
+
+            for run in hiddenRuns where run.count > 1 {
+                let hidden = run.map { result.point(for: $0) }
+                gc.saveGState()
+                gc.setLineCap(.round)
+                gc.setLineJoin(.round)
+                gc.setLineWidth(4)
+                gc.setLineDash(phase: 0, lengths: [0.2, 4.5])
+                gc.setStrokeColor(UIColor.white.withAlphaComponent(0.92).cgColor)
+                gc.beginPath()
+                gc.move(to: hidden[0])
+                for point in hidden.dropFirst() { gc.addLine(to: point) }
+                gc.strokePath()
+                gc.setLineWidth(2)
+                gc.setLineDash(phase: 0, lengths: [0.2, 4.5])
+                gc.setStrokeColor(UIColor.label.withAlphaComponent(0.55).resolvedColor(with: traits).cgColor)
+                gc.beginPath()
+                gc.move(to: hidden[0])
+                for point in hidden.dropFirst() { gc.addLine(to: point) }
+                gc.strokePath()
+                gc.restoreGState()
+            }
+
+            for coordinate in hiddenLockPoints {
+                let point = result.point(for: coordinate)
+                let rect = CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)
+                gc.setFillColor(UIColor.white.cgColor)
+                gc.fillEllipse(in: rect)
+                let symbol = UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 5, weight: .bold))?
+                    .withTintColor(.label, renderingMode: .alwaysOriginal)
+                symbol?.draw(in: CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5))
+            }
 
             // Start dot (green)
             let dotRadius: CGFloat = 2.5

@@ -21,6 +21,8 @@ struct BluetoothScanSheet: View {
     /// connects, which is exactly the case it missed.
     @State private var currentAudioOutput: String?
     @State private var currentAudioIsCarPlay = false
+    /// Bumped on every route change; the read itself runs off the main thread.
+    @State private var routeChanges = 0
 
     // The two states want opposite sizing, so each carries its own: the scan
     // list keeps a fixed detent, the BT-off message is measured. Flipping
@@ -56,12 +58,12 @@ struct BluetoothScanSheet: View {
         }
         .presentationDragIndicator(.visible)
         .task {
-            readCurrentAudioOutput()
             bluetoothDetector.startScanning()
         }
+        .task(id: routeChanges) { await readCurrentAudioOutput() }
         .onReceive(NotificationCenter.default.publisher(
-            for: AudioRouteDetector.routeChangeNotification)) { _ in
-            readCurrentAudioOutput()
+            for: AudioRouteDetector.routeChangeNotification).receive(on: RunLoop.main)) { _ in
+            routeChanges &+= 1
         }
     }
 
@@ -155,9 +157,11 @@ struct BluetoothScanSheet: View {
 
     // MARK: - Current Audio Output (Bluetooth or CarPlay)
 
-    private func readCurrentAudioOutput() {
-        currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
-        currentAudioIsCarPlay = AudioRouteDetector.currentOutputIsCarPlay()
+    private func readCurrentAudioOutput() async {
+        let output = await AudioRouteDetector.stereoOutput()
+        guard !Task.isCancelled else { return }
+        currentAudioOutput = output?.name
+        currentAudioIsCarPlay = output?.isCarPlay ?? false
     }
 
     @ViewBuilder

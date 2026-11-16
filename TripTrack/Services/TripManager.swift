@@ -272,7 +272,7 @@ final class TripManager: ObservableObject {
         if let id = entity.id {
             ProductAnalytics.shared.recordingFinished(
                 id: id, saved: savedLocally,
-                eligible: completedTrip.map { !$0.isJunk } ?? false,
+                eligible: completedTrip.map { $0.finishDiscardReason == nil } ?? false,
                 elapsed: max(0, Date().timeIntervalSince(saveStartedAt)))
         }
 
@@ -296,7 +296,8 @@ final class TripManager: ObservableObject {
         let stats = finalRecordingStats(entity)
         return RecordingFinishPreview(tripID: id, endDate: end, distance: stats.distance,
                                       duration: end.timeIntervalSince(entity.startDate ?? end),
-                                      maxSpeed: stats.maxSpeed)
+                                      maxSpeed: stats.maxSpeed,
+                                      trackPointCount: entity.trackPoints?.count ?? 0)
     }
 
     private func recordingEndDate(for entity: TripEntity, suggested: Date?, now: Date) -> Date {
@@ -556,7 +557,9 @@ final class TripManager: ObservableObject {
         // Runs even with zero orphans (the clean-stop case), which the old
         // early-return skipped. When we DID restore a recording above,
         // isRecording is true, so the live card is correctly left intact.
-        // `endActivity()` walks `Activity<TripActivityAttributes>.activities`.
+        // `endActivity()` walks `Activity<TripActivityAttributes>.activities`
+        // off the main thread: at cold start ActivityKit can take seconds to
+        // answer (see `LiveActivityManager.sweepLingering`).
         if !isRecording {
             Task { @MainActor in
                 LiveActivityManager.shared.endActivity()
